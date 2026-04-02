@@ -225,7 +225,7 @@ export async function saveCardsBatch(cards: CardRow[]): Promise<void> {
   }
 
   if (cards.length === 0) return;
-  const projectId = cards[0].project_id;
+  const projectId = cards[0]!.project_id;
   const existing = lsGet<CardRow[]>("cards_" + projectId, []);
   const map = new Map(existing.map((c) => [c.id, c]));
   for (const card of cards) map.set(card.id, card);

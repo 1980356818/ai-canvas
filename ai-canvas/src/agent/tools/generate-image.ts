@@ -38,7 +38,7 @@ export const generateImageTool: ToolDefinition = {
       quality: "standard",
     })) as { url: string; revisedPrompt?: string };
 
-    const [w, h] = size.split("x").map(Number);
+    const [w = 1024, h = 1024] = size.split("x").map(Number);
     const scale = 400 / Math.max(w, h);
 
     ctx.createCard({

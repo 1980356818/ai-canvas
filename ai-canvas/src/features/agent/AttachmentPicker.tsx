@@ -36,7 +36,7 @@ export default function AttachmentPicker({
 
         if (!selected) return;
         const filePath =
-          typeof selected === "string" ? selected : selected.path;
+          typeof selected === "string" ? selected : (selected as { path: string }).path;
 
         const saved = await saveMedia(filePath);
         const dataUrl = await readMediaBase64(saved.localPath);

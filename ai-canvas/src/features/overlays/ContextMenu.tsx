@@ -8,7 +8,7 @@ import {
 import { useProjectStore } from "@/stores/projectStore";
 import { deleteCard } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
-import { recordDelete, recordBatchDelete } from "@/lib/history";
+import { recordBatchDelete } from "@/lib/history";
 import { cn } from "@/lib/utils";
 import { CARD_DEFAULTS } from "@/shared/constants";
 import type { CardType } from "@/shared/types";

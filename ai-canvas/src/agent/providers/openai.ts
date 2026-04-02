@@ -139,7 +139,7 @@ export class OpenAIProvider implements AIProvider {
     const data = JSON.parse(raw.body);
 
     if (data.task_id || taskIdMatch) {
-      const taskId = taskIdMatch ? taskIdMatch[1] : String(data.task_id);
+      const taskId = taskIdMatch ? taskIdMatch[1]! : String(data.task_id);
       const result = await waitForTask(taskId);
       const failed = result.status.toLowerCase();
       if (failed === "failed" || failed === "error" || failed === "cancelled") {

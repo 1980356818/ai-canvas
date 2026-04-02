@@ -1,5 +1,4 @@
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
-import { useCanvasStore } from "@/stores/canvasStore";
 import { deleteCard as deleteCardFromDb } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 
@@ -80,7 +79,7 @@ class HistoryManager {
       case "batch": {
         const reverseActions: UndoAction[] = [];
         for (let i = action.actions.length - 1; i >= 0; i--) {
-          const r = this.apply(action.actions[i]);
+          const r = this.apply(action.actions[i]!);
           if (r) reverseActions.push(r);
         }
         return reverseActions.length > 0
@@ -107,7 +106,7 @@ export function recordUpdate(cardId: string, prev: Partial<CanvasCard>) {
 
 export function recordBatchDelete(cards: CanvasCard[]) {
   if (cards.length === 1) {
-    recordDelete(cards[0]);
+    recordDelete(cards[0]!);
   } else if (cards.length > 1) {
     history.push({
       type: "batch",

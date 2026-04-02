@@ -16,6 +16,7 @@ import AgentPanel from "@/features/agent/AgentPanel";
 import { Toast } from "@/features/overlays/Toast";
 import { ContextMenu } from "@/features/overlays/ContextMenu";
 import SettingsDialog from "@/features/overlays/SettingsDialog";
+import SideCapsule from "@/features/overlays/SideCapsule";
 import type { CardType } from "@/shared/types";
 
 export default function App() {
@@ -96,6 +97,7 @@ export default function App() {
           </div>
         )}
       </ErrorBoundary>
+      <SideCapsule />
       <Toast />
       <ContextMenu />
       <SettingsDialog />

@@ -64,7 +64,7 @@ export interface AIProvider {
   readonly descriptor: {
     id: string;
     name: string;
-    capabilities: ProviderCapability[];
+    capabilities: readonly ProviderCapability[];
   };
 
   chat(req: ChatRequest): Promise<ChatResponse>;
