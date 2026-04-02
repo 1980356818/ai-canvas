@@ -17,7 +17,7 @@ export function useSelection() {
 
   const onCanvasPointerDown = useCallback(
     (e: React.PointerEvent, isCanvasBackground: boolean) => {
-      if (!isCanvasBackground || e.button !== 0) return;
+      if (!isCanvasBackground || e.button !== 0 || !e.shiftKey) return;
 
       dragging.current = true;
       start.current = { x: e.clientX, y: e.clientY };

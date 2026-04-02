@@ -3,9 +3,15 @@ import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
-import { deleteCard } from "@/lib/tauri";
+import { deleteCard, updateProjectMeta } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { history, recordBatchDelete } from "@/lib/history";
+
+function syncNodeCount(projectId: string) {
+  const count = useCardStore.getState().getCardsByProject(projectId).length;
+  useProjectStore.getState().updateProject(projectId, { nodeCount: count });
+  void updateProjectMeta(projectId, { nodeCount: count });
+}
 
 const CLIPBOARD_KIND = "ai-canvas-card/v1";
 
@@ -35,6 +41,8 @@ async function deleteSelected() {
   }
   useCanvasStore.getState().clearSelection();
   autoSave.markDirty();
+  const pid = useProjectStore.getState().currentProjectId;
+  if (pid) syncNodeCount(pid);
 }
 
 async function copySelected() {
@@ -74,12 +82,14 @@ async function pasteCards() {
       const card = createTextCard(projectId, text);
       useCardStore.getState().addCard(card);
       autoSave.markDirty(card.id);
+      syncNodeCount(projectId);
       return;
     }
     if (parsed.kind !== CLIPBOARD_KIND) {
       const card = createTextCard(projectId, text);
       useCardStore.getState().addCard(card);
       autoSave.markDirty(card.id);
+      syncNodeCount(projectId);
       return;
     }
 
@@ -106,6 +116,7 @@ async function pasteCards() {
       useCardStore.getState().addCard(card);
       autoSave.markDirty(card.id);
     }
+    syncNodeCount(projectId);
   } catch {
     /* clipboard denied */
   }

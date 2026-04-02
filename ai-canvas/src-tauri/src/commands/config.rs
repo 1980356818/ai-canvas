@@ -22,7 +22,7 @@ pub fn read_api_config(db: &Connection, provider: &str) -> Result<ApiConfig, Str
             )
         })?;
 
-    let base_url = db
+    let raw_url = db
         .query_row(
             "SELECT value FROM settings WHERE key = ?1",
             rusqlite::params![url_setting],
@@ -30,6 +30,7 @@ pub fn read_api_config(db: &Connection, provider: &str) -> Result<ApiConfig, Str
         )
         .unwrap_or_else(|_| default_base_url(provider));
 
+    let base_url = normalize_base_url(&raw_url);
     Ok(ApiConfig { api_key, base_url })
 }
 
@@ -39,4 +40,10 @@ fn default_base_url(provider: &str) -> String {
         "anthropic" => "https://api.anthropic.com".to_string(),
         _ => String::new(),
     }
+}
+
+fn normalize_base_url(url: &str) -> String {
+    let trimmed = url.trim().trim_end_matches('/');
+    let trimmed = trimmed.strip_suffix("/v1").unwrap_or(trimmed);
+    trimmed.trim_end_matches('/').to_string()
 }

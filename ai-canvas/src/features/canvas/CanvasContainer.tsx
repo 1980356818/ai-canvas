@@ -15,6 +15,7 @@ export default function CanvasContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const {
     viewport,
+    isPanning,
     onWheel,
     onPointerDown: vpPointerDown,
     onPointerMove: vpPointerMove,
@@ -118,6 +119,7 @@ export default function CanvasContainer() {
       data-canvas-viewport
       className="relative flex-1 overflow-hidden bg-background"
       style={{
+        cursor: isPanning ? "grabbing" : "grab",
         backgroundImage:
           "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
         backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px`,

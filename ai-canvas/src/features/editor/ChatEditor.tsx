@@ -33,6 +33,18 @@ function parseStreamChunk(raw: string): string {
   }
 }
 
+function friendlyError(raw: string): string {
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      const obj = JSON.parse(jsonMatch[0]);
+      const msg = obj.message || obj.error?.message;
+      if (msg) return msg;
+    } catch { /* use raw */ }
+  }
+  return raw;
+}
+
 export default function ChatEditor({ card }: ChatEditorProps) {
   const updateCard = useCardStore((s) => s.updateCard);
   const [input, setInput] = useState("");
@@ -154,7 +166,7 @@ export default function ChatEditor({ card }: ChatEditorProps) {
             } else {
               const errorMessages: ChatMessage[] = [
                 ...userMessages,
-                { role: "assistant", content: `错误: ${error}` },
+                { role: "assistant", content: `错误: ${friendlyError(error)}` },
               ];
               useCardStore.getState().updateCard(card.id, {
                 data: { ...data, messages: errorMessages },
@@ -175,7 +187,7 @@ export default function ChatEditor({ card }: ChatEditorProps) {
       const errMsg = err instanceof Error ? err.message : String(err);
       const errorMessages: ChatMessage[] = [
         ...userMessages,
-        { role: "assistant", content: `错误: ${errMsg}` },
+        { role: "assistant", content: `错误: ${friendlyError(errMsg)}` },
       ];
       updateCard(card.id, { data: { ...data, messages: errorMessages } });
       autoSave.markDirty(card.id);

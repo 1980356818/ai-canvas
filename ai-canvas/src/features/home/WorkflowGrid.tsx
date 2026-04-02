@@ -7,7 +7,7 @@ import {
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useCardStore } from "@/stores/cardStore";
-import { createProject } from "@/lib/tauri";
+import { createProject, updateProjectMeta } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { cn } from "@/lib/utils";
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "@/shared/constants";
@@ -39,8 +39,8 @@ function WorkflowCard({ workflow }: { workflow: WorkflowTemplate }) {
           id: crypto.randomUUID(),
           projectId: project.id,
           type: preset.type,
-          x: 100 + preset.relativeX,
-          y: 100 + preset.relativeY,
+          x: 320 + preset.relativeX,
+          y: 80 + preset.relativeY,
           width: preset.width,
           height: preset.height,
           zIndex: useCardStore.getState().maxZIndex + 1,
@@ -55,6 +55,10 @@ function WorkflowCard({ workflow }: { workflow: WorkflowTemplate }) {
         autoSave.markDirty(card.id);
       }
 
+      await autoSave.forceSave();
+      const meta = { nodeCount: workflow.cards.length };
+      useProjectStore.getState().updateProject(project.id, meta);
+      await updateProjectMeta(project.id, meta);
       useUIStore.getState().setAppView("canvas");
     } catch (err) {
       useUIStore.getState().addToast({

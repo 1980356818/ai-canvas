@@ -1,12 +1,14 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { MessageSquare, ImageIcon, SendHorizonal } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useCardStore } from "@/stores/cardStore";
-import { createProject, hasApiKey } from "@/lib/tauri";
+import { createProject, hasApiKey, updateProjectMeta } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
+import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
 import { CARD_DEFAULTS } from "@/shared/constants";
+import ModelSelector from "@/features/editor/ModelSelector";
 import type { CardType } from "@/shared/types";
 
 type InputMode = "chat" | "image";
@@ -39,8 +41,16 @@ export default function AIPromptInput() {
   const [mode, setMode] = useState<InputMode>("chat");
   const [prompt, setPrompt] = useState("");
   const [sending, setSending] = useState(false);
+  const [selectedModel, setSelectedModel] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const config = MODE_CONFIG[mode];
+
+  useEffect(() => {
+    const loadDefault = mode === "chat"
+      ? modelService.getDefaultChatModel()
+      : modelService.getDefaultImageModel();
+    loadDefault.then(setSelectedModel);
+  }, [mode]);
 
   const handleSend = useCallback(async () => {
     const trimmed = prompt.trim();
@@ -72,15 +82,15 @@ export default function AIPromptInput() {
       const defaults = CARD_DEFAULTS[cardType];
       const cardData =
         cardType === "ai_chat"
-          ? { messages: [{ role: "user", content: trimmed }] }
-          : { content: trimmed };
+          ? { messages: [{ role: "user", content: trimmed }], model: selectedModel || undefined }
+          : { content: trimmed, model: selectedModel || undefined };
 
       const card = {
         id: crypto.randomUUID(),
         projectId: project.id,
         type: cardType,
-        x: 100,
-        y: 100,
+        x: 320,
+        y: 80,
         width: defaults.width,
         height: defaults.height,
         zIndex: 1,
@@ -93,6 +103,10 @@ export default function AIPromptInput() {
 
       useCardStore.getState().addCard(card);
       autoSave.markDirty(card.id);
+      await autoSave.forceSave();
+      const meta = { nodeCount: 1 };
+      useProjectStore.getState().updateProject(project.id, meta);
+      await updateProjectMeta(project.id, meta);
       useUIStore.getState().setAppView("canvas");
       setPrompt("");
     } catch (err) {
@@ -156,6 +170,14 @@ export default function AIPromptInput() {
               </button>
             );
           })}
+
+          <div className="mx-1.5 h-4 w-px bg-border" />
+
+          <ModelSelector
+            capability={mode === "chat" ? "CHAT" : "IMAGE"}
+            value={selectedModel}
+            onChange={setSelectedModel}
+          />
 
           <div className="flex-1" />
 

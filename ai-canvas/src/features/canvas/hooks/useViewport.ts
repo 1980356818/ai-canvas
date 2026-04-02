@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { useCanvasStore } from "@/stores/canvasStore";
 
 export function useViewport(
@@ -8,6 +8,7 @@ export function useViewport(
   const viewport = useCanvasStore((s) => s.viewport);
   const spaceHeld = useRef(false);
   const panning = useRef(false);
+  const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0, vx: 0, vy: 0 });
 
   useEffect(() => {
@@ -63,8 +64,17 @@ export function useViewport(
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
-      if (e.button === 1 || (e.button === 0 && spaceHeld.current)) {
+      const isMiddle = e.button === 1;
+      const isLeftWithSpace = e.button === 0 && spaceHeld.current;
+      const isLeftOnBackground =
+        e.button === 0 &&
+        !e.shiftKey &&
+        ((e.target as HTMLElement) === (e.currentTarget as HTMLElement) ||
+          (e.target as HTMLElement).dataset.canvasBackground !== undefined);
+
+      if (isMiddle || isLeftWithSpace || isLeftOnBackground) {
         panning.current = true;
+        setIsPanning(true);
         const vp = useCanvasStore.getState().viewport;
         panStart.current = { x: e.clientX, y: e.clientY, vx: vp.x, vy: vp.y };
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -89,6 +99,7 @@ export function useViewport(
 
   const onPointerUp = useCallback(() => {
     panning.current = false;
+    setIsPanning(false);
   }, []);
 
   const screenToCanvas = useCallback(
@@ -106,6 +117,7 @@ export function useViewport(
 
   return {
     viewport,
+    isPanning,
     onWheel,
     onPointerDown,
     onPointerMove,

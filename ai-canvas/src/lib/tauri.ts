@@ -206,6 +206,22 @@ export async function renameProject(
   }
 }
 
+export async function updateProjectMeta(
+  id: string,
+  partial: Partial<ProjectInfo>,
+): Promise<void> {
+  if (isTauri) {
+    return;
+  }
+
+  const projects = lsGet<ProjectInfo[]>("projects", []);
+  const p = projects.find((x) => x.id === id);
+  if (p) {
+    Object.assign(p, partial, { updatedAt: new Date().toISOString() });
+    lsSet("projects", projects);
+  }
+}
+
 // ── Card Commands ────────────────────────────────────────────
 
 export async function loadCards(projectId: string): Promise<CardRow[]> {

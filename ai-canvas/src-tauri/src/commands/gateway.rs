@@ -67,8 +67,8 @@ pub async fn poll_task(
         .map_err(|e| format!("解析任务状态失败: {}", e))
 }
 
-/// Validate the API connection by making a lightweight request to /v1/models.
-/// Returns true on success; returns an error string on failure.
+/// Validate the API connection by trying /v1/models first, then falling back
+/// to a minimal /v1/chat/completions call for providers that don't support /v1/models.
 #[tauri::command]
 pub async fn validate_connection(
     state: State<'_, AppState>,
@@ -78,23 +78,54 @@ pub async fn validate_connection(
         read_api_config(&db, "openai")?
     };
 
-    let url = format!("{}/v1/models", config.base_url.trim_end_matches('/'));
+    let base = config.base_url.trim_end_matches('/');
+
+    let models_url = format!("{}/v1/models", base);
     let resp = state
         .http_client
-        .get(&url)
+        .get(&models_url)
         .header("Authorization", format!("Bearer {}", config.api_key))
         .send()
         .await
         .map_err(|e| format!("连接失败: {}", e))?;
 
+    let status = resp.status().as_u16();
     if resp.status().is_success() {
-        Ok(true)
-    } else {
-        let status = resp.status().as_u16();
-        Err(match status {
-            401 => "API Key 无效或已过期".to_string(),
-            403 => "API Key 缺少所需权限".to_string(),
-            _ => format!("服务器返回错误 (HTTP {})", status),
-        })
+        return Ok(true);
+    }
+
+    if status == 401 {
+        return Err("API Key 无效或已过期".to_string());
+    }
+    if status == 403 {
+        return Err("API Key 缺少所需权限".to_string());
+    }
+
+    // /v1/models may not be supported; try a minimal chat completions call
+    let chat_url = format!("{}/v1/chat/completions", base);
+    let chat_body = serde_json::json!({
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "user", "content": "hi"}],
+        "max_tokens": 1,
+    });
+
+    let chat_resp = state
+        .http_client
+        .post(&chat_url)
+        .header("Authorization", format!("Bearer {}", config.api_key))
+        .header("Content-Type", "application/json")
+        .json(&chat_body)
+        .send()
+        .await
+        .map_err(|e| format!("连接失败: {}", e))?;
+
+    let chat_status = chat_resp.status().as_u16();
+    if chat_resp.status().is_success() || chat_status == 200 {
+        return Ok(true);
+    }
+    match chat_status {
+        401 => Err("API Key 无效或已过期".to_string()),
+        403 => Err("API Key 缺少所需权限".to_string()),
+        _ => Err(format!("服务器返回错误 (HTTP {})", chat_status)),
     }
 }

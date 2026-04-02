@@ -83,8 +83,10 @@ function RecentProjects() {
   const setProjects = useProjectStore((s) => s.setProjects);
 
   useEffect(() => {
-    listProjects().then(setProjects).catch(console.error);
-  }, [setProjects]);
+    if (projects.length === 0) {
+      listProjects().then(setProjects).catch(console.error);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (projects.length === 0) return null;
 

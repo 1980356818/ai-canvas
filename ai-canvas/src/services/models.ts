@@ -1,5 +1,21 @@
 import { listModels, type ModelInfo } from "@/lib/tauri";
 
+const FALLBACK_CHAT: ModelInfo[] = [
+  { id: "gpt-4o", capability: "CHAT" },
+  { id: "gpt-4o-mini", capability: "CHAT" },
+  { id: "gpt-4.1", capability: "CHAT" },
+  { id: "gpt-4.1-mini", capability: "CHAT" },
+  { id: "o4-mini", capability: "CHAT" },
+  { id: "o3-mini", capability: "CHAT" },
+  { id: "deepseek-chat", capability: "CHAT" },
+];
+
+const FALLBACK_IMAGE: ModelInfo[] = [
+  { id: "dall-e-3", capability: "IMAGE" },
+  { id: "gpt-image-1", capability: "IMAGE" },
+  { id: "flux-1-dev", capability: "IMAGE" },
+];
+
 let cachedModels: ModelInfo[] | null = null;
 let fetchPromise: Promise<ModelInfo[]> | null = null;
 
@@ -11,11 +27,12 @@ async function ensureLoaded(): Promise<ModelInfo[]> {
     .then((models) => {
       cachedModels = models;
       fetchPromise = null;
-      return models;
+      return cachedModels;
     })
-    .catch((err) => {
+    .catch(() => {
+      cachedModels = [];
       fetchPromise = null;
-      throw err;
+      return cachedModels;
     });
 
   return fetchPromise;
@@ -29,9 +46,18 @@ export const modelService = {
   async getByCapability(capability: string): Promise<ModelInfo[]> {
     const all = await ensureLoaded();
     const cap = capability.toUpperCase();
-    return all.filter(
-      (m) => !m.capability || m.capability.toUpperCase() === cap,
+
+    const matched = all.filter(
+      (m) => m.capability && m.capability.toUpperCase() === cap,
     );
+    const untagged = all.filter((m) => !m.capability);
+
+    if (matched.length > 0) return matched;
+
+    if (untagged.length > 0) return untagged;
+
+    const fallback = cap === "IMAGE" ? FALLBACK_IMAGE : FALLBACK_CHAT;
+    return fallback;
   },
 
   async getChatModels(): Promise<ModelInfo[]> {

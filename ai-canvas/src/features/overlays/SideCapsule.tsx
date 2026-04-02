@@ -7,7 +7,10 @@ export default function SideCapsule() {
   const appView = useUIStore((s) => s.appView);
   const setAppView = useUIStore((s) => s.setAppView);
   const addToast = useUIStore((s) => s.addToast);
+  const sidebarVisible = useUIStore((s) => s.sidebarVisible);
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
+
+  const sidebarPush = appView === "canvas" && sidebarVisible;
 
   const handleCanvasClick = () => {
     if (currentProjectId) {
@@ -22,7 +25,10 @@ export default function SideCapsule() {
   };
 
   return (
-    <div className="fixed left-0 top-1/2 z-50 -translate-y-1/2">
+    <div
+      className="fixed top-1/2 z-50 -translate-y-1/2 transition-[left] duration-200"
+      style={{ left: sidebarPush ? 278 : 0 }}
+    >
       <div className="ml-1.5 flex flex-col gap-1 rounded-full border border-border bg-card/80 p-1 shadow-lg backdrop-blur-md">
         <button
           onClick={() => setAppView("home")}

@@ -6,7 +6,7 @@ import {
   type CanvasCard,
 } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
-import { deleteCard } from "@/lib/tauri";
+import { deleteCard, updateProjectMeta } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { recordBatchDelete } from "@/lib/history";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,12 @@ import { CARD_DEFAULTS } from "@/shared/constants";
 import type { CardType } from "@/shared/types";
 
 const CLIPBOARD_KIND = "ai-canvas-card/v1";
+
+function syncNodeCount(projectId: string) {
+  const count = useCardStore.getState().getCardsByProject(projectId).length;
+  useProjectStore.getState().updateProject(projectId, { nodeCount: count });
+  void updateProjectMeta(projectId, { nodeCount: count });
+}
 
 function getCanvasViewportEl(): HTMLElement | null {
   return document.querySelector("[data-canvas-viewport]");
@@ -162,6 +168,7 @@ function ContextMenuPanel({
     const card = buildCard(type, projectId, x, y);
     useCardStore.getState().addCard(card);
     autoSave.markDirty(card.id);
+    syncNodeCount(projectId);
     hide();
   };
 
@@ -206,6 +213,7 @@ function ContextMenuPanel({
         useCardStore.getState().addCard(card);
         autoSave.markDirty(card.id);
       }
+      syncNodeCount(projectId);
     } catch {
       /* clipboard denied or invalid */
     }
@@ -312,6 +320,7 @@ function ContextMenuPanel({
     }
     useCanvasStore.getState().clearSelection();
     autoSave.markDirty();
+    if (projectId) syncNodeCount(projectId);
     hide();
   };
 
