@@ -1,19 +1,23 @@
 import { listModels, type ModelInfo } from "@/lib/tauri";
 
 const FALLBACK_CHAT: ModelInfo[] = [
-  { id: "gpt-4o", capability: "CHAT" },
-  { id: "gpt-4o-mini", capability: "CHAT" },
-  { id: "gpt-4.1", capability: "CHAT" },
-  { id: "gpt-4.1-mini", capability: "CHAT" },
-  { id: "o4-mini", capability: "CHAT" },
-  { id: "o3-mini", capability: "CHAT" },
-  { id: "deepseek-chat", capability: "CHAT" },
+  { id: "gpt-5.4", capability: "CHAT" },
+  { id: "gpt-5-nano", capability: "CHAT" },
+  { id: "claude-sonnet-4-6", capability: "CHAT" },
+  { id: "claude-haiku-4-5-20251001", capability: "CHAT" },
+  { id: "deepseek-v3.2", capability: "CHAT" },
+  { id: "gemini-2.0-flash", capability: "CHAT" },
+  { id: "qwen3-max", capability: "CHAT" },
+  { id: "kimi-k2.5", capability: "CHAT" },
+  { id: "glm-5", capability: "CHAT" },
 ];
 
 const FALLBACK_IMAGE: ModelInfo[] = [
-  { id: "dall-e-3", capability: "IMAGE" },
-  { id: "gpt-image-1", capability: "IMAGE" },
-  { id: "flux-1-dev", capability: "IMAGE" },
+  { id: "gpt-image-1.5", capability: "IMAGE" },
+  { id: "grok-4.2-image", capability: "IMAGE" },
+  { id: "jimeng-5.0-lite", capability: "IMAGE" },
+  { id: "nano-banana-pro", capability: "IMAGE" },
+  { id: "flux2-klein-9b", capability: "IMAGE" },
 ];
 
 let cachedModels: ModelInfo[] | null = null;
@@ -71,18 +75,18 @@ export const modelService = {
   async getDefaultChatModel(): Promise<string> {
     try {
       const models = await this.getChatModels();
-      return models[0]?.id ?? "gpt-4o";
+      return models[0]?.id ?? "deepseek-v3.2";
     } catch {
-      return "gpt-4o";
+      return "deepseek-v3.2";
     }
   },
 
   async getDefaultImageModel(): Promise<string> {
     try {
       const models = await this.getImageModels();
-      return models[0]?.id ?? "dall-e-3";
+      return models[0]?.id ?? "gpt-image-1.5";
     } catch {
-      return "dall-e-3";
+      return "gpt-image-1.5";
     }
   },
 

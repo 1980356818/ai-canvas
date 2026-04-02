@@ -124,7 +124,7 @@ export class OpenAIProvider implements AIProvider {
     const size = toAspectRatio(rawSize);
 
     const body: Record<string, unknown> = {
-      model: req.model ?? "dall-e-3",
+      model: req.model ?? "gpt-image-1.5",
       prompt: req.prompt,
       size,
       quality: req.quality || "standard",

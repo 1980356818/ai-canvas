@@ -24,12 +24,15 @@ interface ChatEditorProps {
   card: CanvasCard;
 }
 
-function parseStreamChunk(raw: string): string {
+function parseStreamChunk(raw: string): { content: string; error?: string } {
   try {
     const json = JSON.parse(raw);
-    return json?.choices?.[0]?.delta?.content ?? "";
+    if (json?.error) {
+      return { content: "", error: json.error.message || JSON.stringify(json.error) };
+    }
+    return { content: json?.choices?.[0]?.delta?.content ?? "" };
   } catch {
-    return "";
+    return { content: "" };
   }
 }
 
@@ -114,7 +117,7 @@ export default function ChatEditor({ card }: ChatEditorProps) {
     setStreaming(false);
     setStreamContent("");
 
-    const model = currentModel || "gpt-4o";
+    const model = currentModel || "deepseek-v3.2";
     const systemPrompt =
       data.systemPrompt ?? "你是一个有帮助的 AI 助手，请用中文回复。";
 
@@ -124,6 +127,7 @@ export default function ChatEditor({ card }: ChatEditorProps) {
     ];
 
     let accumulated = "";
+    let hasStreamError = false;
 
     try {
       const { abort } = await aiProxyStream(
@@ -132,7 +136,23 @@ export default function ChatEditor({ card }: ChatEditorProps) {
         { model, messages: apiMessages },
         {
           onChunk(raw) {
-            const token = parseStreamChunk(raw);
+            const { content: token, error: chunkError } = parseStreamChunk(raw);
+            if (chunkError) {
+              hasStreamError = true;
+              const errMessages: ChatMessage[] = [
+                ...userMessages,
+                { role: "assistant", content: `错误: ${chunkError}` },
+              ];
+              useCardStore.getState().updateCard(card.id, {
+                data: { ...data, messages: errMessages },
+              });
+              autoSave.markDirty(card.id);
+              setLoading(false);
+              setStreaming(false);
+              setStreamContent("");
+              abortRef.current = null;
+              return;
+            }
             if (token) {
               accumulated += token;
               setStreamContent(accumulated);
@@ -140,6 +160,7 @@ export default function ChatEditor({ card }: ChatEditorProps) {
             }
           },
           onDone() {
+            if (hasStreamError) return;
             const final_content = accumulated || "（无回复）";
             const assistantMessages: ChatMessage[] = [
               ...userMessages,
