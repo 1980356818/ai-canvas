@@ -11,6 +11,7 @@ export interface CardDefaults {
 export const CARD_DEFAULTS: Record<CardType, CardDefaults> = {
   ai_chat: { width: 380, height: 480, label: "AI 对话", data: { messages: [] } },
   ai_image: { width: 360, height: 400, label: "AI 图片", data: { content: "" } },
+  ai_tryon: { width: 400, height: 460, label: "AI 换装", data: { content: "" } },
   text: { width: 320, height: 240, label: "文本", data: { content: "" } },
   sticky_note: { width: 240, height: 200, label: "便签", data: { content: "" } },
 };
@@ -18,6 +19,7 @@ export const CARD_DEFAULTS: Record<CardType, CardDefaults> = {
 export const TYPE_COLORS: Record<CardType, string> = {
   ai_chat: "#3B82F6",
   ai_image: "#8B5CF6",
+  ai_tryon: "#EC4899",
   text: "#6B7280",
   sticky_note: "#F59E0B",
 };

@@ -2,6 +2,7 @@ import type { CanvasCard } from "@/stores/cardStore";
 import TextEditor from "./TextEditor";
 import ChatEditor from "./ChatEditor";
 import MediaEditor from "./MediaEditor";
+import TryOnEditor from "./TryOnEditor";
 
 export default function EditorSwitch({ card }: { card: CanvasCard }) {
   switch (card.type) {
@@ -12,6 +13,8 @@ export default function EditorSwitch({ card }: { card: CanvasCard }) {
       return <ChatEditor card={card} />;
     case "ai_image":
       return <MediaEditor card={card} />;
+    case "ai_tryon":
+      return <TryOnEditor card={card} />;
     default:
       return (
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

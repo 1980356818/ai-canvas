@@ -45,12 +45,22 @@ export interface ChatResponse {
 
 // ── Image Generation ────────────────────────────────────────
 
+export interface ImageGenProgress {
+  /** 0-100 */
+  percent: number;
+  /** Machine-readable phase key */
+  phase: "submitting" | "queued" | "generating" | "saving";
+  /** Human-readable label (Chinese) */
+  label: string;
+}
+
 export interface ImageGenRequest {
   prompt: string;
   size: string;
   model?: string;
   quality?: string;
   n?: number;
+  onProgress?: (progress: ImageGenProgress) => void;
 }
 
 export interface ImageGenResponse {

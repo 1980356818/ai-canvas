@@ -346,6 +346,12 @@ function ContextMenuPanel({
       },
       {
         type: "item",
+        label: "新建 AI 换装",
+        disabled: noProject,
+        onSelect: () => addCardAtClick("ai_tryon"),
+      },
+      {
+        type: "item",
         label: "新建文本卡片",
         disabled: noProject,
         onSelect: () => addCardAtClick("text"),

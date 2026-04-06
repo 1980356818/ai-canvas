@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from "react";
-import { MessageSquare, ImageIcon, Type, StickyNote } from "lucide-react";
+import { MessageSquare, ImageIcon, Shirt, Type, StickyNote } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import { autoSave } from "@/lib/autoSave";
@@ -9,6 +9,7 @@ import { CARD_DEFAULTS, type QuickCreateItem } from "@/shared/constants";
 const QUICK_CREATE_ITEMS: QuickCreateItem[] = [
   { type: "ai_chat", icon: MessageSquare, label: CARD_DEFAULTS.ai_chat.label },
   { type: "ai_image", icon: ImageIcon, label: CARD_DEFAULTS.ai_image.label },
+  { type: "ai_tryon", icon: Shirt, label: CARD_DEFAULTS.ai_tryon.label },
   { type: "text", icon: Type, label: CARD_DEFAULTS.text.label },
   { type: "sticky_note", icon: StickyNote, label: CARD_DEFAULTS.sticky_note.label },
 ];

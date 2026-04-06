@@ -31,7 +31,7 @@ pub fn read_api_config(db: &Connection, provider: &str) -> Result<ApiConfig, Str
         .unwrap_or_else(|_| default_base_url(provider));
 
     let base_url = normalize_base_url(&raw_url);
-    Ok(ApiConfig { api_key, base_url })
+    Ok(ApiConfig { api_key: api_key.trim().to_string(), base_url })
 }
 
 fn default_base_url(provider: &str) -> String {

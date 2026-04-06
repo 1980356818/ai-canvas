@@ -5,14 +5,12 @@ const isTauri =
   ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
 
 let _invoke: typeof import("@tauri-apps/api/core").invoke;
-let _convertFileSrc: typeof import("@tauri-apps/api/core").convertFileSrc;
 let _listen: typeof import("@tauri-apps/api/event").listen;
 
 async function ensureTauriAPIs() {
   if (!_invoke) {
     const core = await import("@tauri-apps/api/core");
     _invoke = core.invoke;
-    _convertFileSrc = core.convertFileSrc;
   }
   if (!_listen) {
     const event = await import("@tauri-apps/api/event");
@@ -301,17 +299,17 @@ export async function aiProxy(
 export async function saveMedia(
   source: string,
   _filename?: string,
-): Promise<{ localPath: string; assetUrl: string }> {
+): Promise<{ localPath: string }> {
   if (isTauri) {
     await ensureTauriAPIs();
     const r = await _invoke<SaveMediaResult>("save_media", {
       source,
       filename: _filename,
     });
-    return { localPath: r.local_path, assetUrl: _convertFileSrc(r.local_path) };
+    return { localPath: r.local_path };
   }
 
-  return { localPath: source, assetUrl: source };
+  return { localPath: source };
 }
 
 export async function readMediaBase64(path: string): Promise<string> {
@@ -320,6 +318,44 @@ export async function readMediaBase64(path: string): Promise<string> {
     return _invoke<string>("read_media_base64", { path });
   }
   return path;
+}
+
+const imageUrlCache = new Map<string, string>();
+
+function dataUrlToBlobUrl(dataUrl: string): string {
+  const commaIdx = dataUrl.indexOf(",");
+  if (commaIdx === -1) return dataUrl;
+  const meta = dataUrl.slice(0, commaIdx);
+  const b64 = dataUrl.slice(commaIdx + 1);
+  const mime = meta.match(/:(.*?);/)?.[1] || "image/png";
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return URL.createObjectURL(new Blob([arr], { type: mime }));
+}
+
+/**
+ * Resolve an image path to a short Blob URL for display.
+ * Local paths are read via Rust IPC; results are cached as Blob URLs
+ * so React reconciliation never compares multi-MB base64 strings.
+ */
+export async function resolveImageUrl(path: string): Promise<string> {
+  if (!path) return "";
+  if (path.startsWith("blob:") || path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
+  const cached = imageUrlCache.get(path);
+  if (cached) return cached;
+
+  let blobUrl: string;
+  if (path.startsWith("data:")) {
+    blobUrl = dataUrlToBlobUrl(path);
+  } else {
+    const dataUrl = await readMediaBase64(path);
+    blobUrl = dataUrlToBlobUrl(dataUrl);
+  }
+  imageUrlCache.set(path, blobUrl);
+  return blobUrl;
 }
 
 // ── Streaming AI Proxy ───────────────────────────────────────
@@ -459,16 +495,31 @@ export async function listModels(): Promise<ModelInfo[]> {
   return data.data ?? [];
 }
 
+function normalizeTaskInfo(raw: Record<string, unknown>): TaskInfo {
+  return {
+    id: String(raw.id ?? ""),
+    status: String(raw.status ?? ""),
+    progress: Number(raw.progress ?? 0),
+    resultUrl: (raw.resultUrl ?? raw.result_url) as string | undefined,
+    thumbnailUrl: (raw.thumbnailUrl ?? raw.thumbnail_url) as string | undefined,
+    errorMessage: (raw.errorMessage ?? raw.error_message) as string | undefined,
+    createdAt: (raw.createdAt ?? raw.created_at) as string | undefined,
+    finishedAt: (raw.finishedAt ?? raw.finished_at) as string | undefined,
+  };
+}
+
 export async function pollTask(taskId: string): Promise<TaskInfo> {
   if (isTauri) {
     await ensureTauriAPIs();
-    return _invoke<TaskInfo>("poll_task", { taskId });
+    const raw = await _invoke<Record<string, unknown>>("poll_task", { taskId });
+    return normalizeTaskInfo(raw);
   }
 
   const url = buildProxyUrl(`/v1/tasks/${taskId}`);
   const resp = await fetch(url, { headers: getAuthHeaders() });
   if (!resp.ok) throw new Error(`Failed to poll task: ${resp.status}`);
-  return resp.json();
+  const raw = await resp.json();
+  return normalizeTaskInfo(raw);
 }
 
 export async function validateConnection(): Promise<boolean> {
@@ -514,4 +565,15 @@ export async function hasApiKey(): Promise<boolean> {
 
 export function invalidateApiKeyCache() {
   _apiKeyCache = undefined;
+}
+
+// ── Dialog helpers ───────────────────────────────────────────
+
+export async function pickDirectory(): Promise<string | null> {
+  if (isTauri) {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const selected = await open({ directory: true, multiple: false, title: "选择图片保存目录" });
+    return typeof selected === "string" ? selected : null;
+  }
+  return null;
 }

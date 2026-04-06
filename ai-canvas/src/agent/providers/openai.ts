@@ -122,6 +122,9 @@ export class OpenAIProvider implements AIProvider {
   async generateImage(req: ImageGenRequest): Promise<ImageGenResponse> {
     const rawSize = req.size || "1024x1024";
     const size = toAspectRatio(rawSize);
+    const emit = req.onProgress;
+
+    emit?.({ percent: 0, phase: "submitting", label: "正在提交请求…" });
 
     const body: Record<string, unknown> = {
       model: req.model ?? "gpt-image-1.5",
@@ -140,7 +143,19 @@ export class OpenAIProvider implements AIProvider {
 
     if (data.task_id || taskIdMatch) {
       const taskId = taskIdMatch ? taskIdMatch[1]! : String(data.task_id);
-      const result = await waitForTask(taskId);
+
+      emit?.({ percent: 5, phase: "queued", label: "已提交，排队中…" });
+
+      const result = await waitForTask(taskId, (progress, status) => {
+        const st = status.toLowerCase();
+        if (st === "queued" || st === "pending") {
+          emit?.({ percent: Math.max(5, progress), phase: "queued", label: "排队中…" });
+        } else {
+          const pct = progress > 0 ? Math.min(progress, 90) : 10;
+          emit?.({ percent: pct, phase: "generating", label: `生成中${progress > 0 ? ` ${progress}%` : "…"}` });
+        }
+      });
+
       const failed = result.status.toLowerCase();
       if (failed === "failed" || failed === "error" || failed === "cancelled") {
         throw new Error(result.errorMessage || "图片生成失败");
@@ -148,13 +163,18 @@ export class OpenAIProvider implements AIProvider {
       if (!result.resultUrl) {
         throw new Error("图片生成完成但未返回结果地址");
       }
+
+      emit?.({ percent: 92, phase: "saving", label: "正在保存图片…" });
       const saved = await saveMedia(result.resultUrl);
-      return { url: saved.assetUrl };
+      emit?.({ percent: 100, phase: "saving", label: "完成" });
+      return { url: saved.localPath };
     }
 
+    emit?.({ percent: 80, phase: "saving", label: "正在保存图片…" });
     const img = data.data?.[0];
     if (!img?.url) throw new Error("No image returned");
     const saved = await saveMedia(img.url);
-    return { url: saved.assetUrl, revisedPrompt: img.revised_prompt };
+    emit?.({ percent: 100, phase: "saving", label: "完成" });
+    return { url: saved.localPath, revisedPrompt: img.revised_prompt };
   }
 }

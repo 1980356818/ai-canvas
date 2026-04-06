@@ -1,7 +1,12 @@
 import { create } from "zustand";
 
 export type SaveStatus = "saved" | "unsaved" | "saving" | "error";
-export type AppView = "home" | "canvas";
+export type AppView = "home" | "canvas" | "projects";
+
+export interface CardGenProgress {
+  percent: number;
+  label: string;
+}
 
 export interface ToastItem {
   id: string;
@@ -26,6 +31,7 @@ interface UIState {
     targetId?: string;
   };
   appView: AppView;
+  generatingCards: Map<string, CardGenProgress>;
 
   toggleSidebar: () => void;
   toggleAgentPanel: () => void;
@@ -44,6 +50,7 @@ interface UIState {
   hideContextMenu: () => void;
 
   setAppView: (view: AppView) => void;
+  setCardProgress: (cardId: string, progress: CardGenProgress | null) => void;
 }
 
 let toastCounter = 0;
@@ -56,6 +63,7 @@ export const useUIStore = create<UIState>((set) => ({
   toasts: [],
   contextMenu: { visible: false, x: 0, y: 0, target: "canvas" },
   appView: "home",
+  generatingCards: new Map(),
 
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   toggleAgentPanel: () =>
@@ -88,4 +96,12 @@ export const useUIStore = create<UIState>((set) => ({
     })),
 
   setAppView: (view) => set({ appView: view }),
+
+  setCardProgress: (cardId, progress) =>
+    set((s) => {
+      const next = new Map(s.generatingCards);
+      if (progress) next.set(cardId, progress);
+      else next.delete(cardId);
+      return { generatingCards: next };
+    }),
 }));

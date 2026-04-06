@@ -1,1 +1,1 @@
-export type CardType = "ai_chat" | "ai_image" | "text" | "sticky_note";
+export type CardType = "ai_chat" | "ai_image" | "ai_tryon" | "text" | "sticky_note";

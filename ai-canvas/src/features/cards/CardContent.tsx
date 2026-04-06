@@ -1,41 +1,124 @@
-import { memo } from "react";
-import { ImageIcon } from "lucide-react";
+import { memo, useState, useEffect } from "react";
+import { ImageIcon, Loader2, Shirt } from "lucide-react";
 import type { CanvasCard } from "@/stores/cardStore";
+import { useUIStore } from "@/stores/uiStore";
+import { resolveImageUrl } from "@/lib/tauri";
 import AIChatCard from "./AIChatCard";
 import TextCard from "./TextCard";
 import StickyNoteCard from "./StickyNoteCard";
 
 function ImagePreview({ card }: { card: CanvasCard }) {
   const data = card.data as { content?: string; imageUrl?: string };
-  if (data.imageUrl) {
+  const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
+  const [displayUrl, setDisplayUrl] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (!data.imageUrl) { setDisplayUrl(undefined); return; }
+    let stale = false;
+    resolveImageUrl(data.imageUrl).then((url) => { if (!stale) setDisplayUrl(url); });
+    return () => { stale = true; };
+  }, [data.imageUrl]);
+
+  if (genProgress) {
     return (
-      <div className="flex h-full w-full flex-col">
-        <div className="min-h-0 flex-1">
-          <img
-            src={data.imageUrl}
-            alt=""
-            className="h-full w-full object-cover"
-          />
-        </div>
-        {data.content && (
-          <div className="shrink-0 border-t border-border/40 bg-card/80 px-3 py-1.5">
-            <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground">
-              {data.content}
-            </p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary/60" />
+        <div className="w-full max-w-[80%] space-y-1.5">
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            {genProgress.percent > 0 ? (
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+                style={{ width: `${genProgress.percent}%` }}
+              />
+            ) : (
+              <div className="h-full w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full bg-primary/60" />
+            )}
           </div>
-        )}
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] text-muted-foreground">{genProgress.label}</p>
+            {genProgress.percent > 0 && (
+              <p className="text-[10px] tabular-nums text-muted-foreground">{genProgress.percent}%</p>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
+
+  if (displayUrl) {
+    return (
+      <img
+        src={displayUrl}
+        alt=""
+        className="h-full w-full object-cover"
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground/50">
       <ImageIcon className="h-8 w-8" />
       <span className="text-xs">{data.content ? "等待生成" : "AI 图片"}</span>
-      {data.content && (
-        <p className="max-w-[80%] text-center text-[10px] leading-snug text-muted-foreground/40 line-clamp-2">
-          {data.content}
-        </p>
-      )}
+    </div>
+  );
+}
+
+function TryOnPreview({ card }: { card: CanvasCard }) {
+  const data = card.data as { personImageUrl?: string; garmentImageUrl?: string; resultImageUrl?: string };
+  const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
+  const [displayUrl, setDisplayUrl] = useState<string | undefined>();
+
+  useEffect(() => {
+    const url = data.resultImageUrl || data.personImageUrl;
+    if (!url) { setDisplayUrl(undefined); return; }
+    let stale = false;
+    resolveImageUrl(url).then((u) => { if (!stale) setDisplayUrl(u); });
+    return () => { stale = true; };
+  }, [data.resultImageUrl, data.personImageUrl]);
+
+  if (genProgress) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary/60" />
+        <div className="w-full max-w-[80%] space-y-1.5">
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            {genProgress.percent > 0 ? (
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+                style={{ width: `${genProgress.percent}%` }}
+              />
+            ) : (
+              <div className="h-full w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full bg-primary/60" />
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] text-muted-foreground">{genProgress.label}</p>
+            {genProgress.percent > 0 && (
+              <p className="text-[10px] tabular-nums text-muted-foreground">{genProgress.percent}%</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (displayUrl) {
+    return (
+      <div className="relative h-full w-full">
+        <img src={displayUrl} alt="" className="h-full w-full object-cover" />
+        {data.resultImageUrl && (
+          <span className="absolute left-2 top-2 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white">
+            换装结果
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground/50">
+      <Shirt className="h-8 w-8" />
+      <span className="text-xs">AI 换装</span>
     </div>
   );
 }
@@ -50,6 +133,8 @@ export default memo(function CardContent({ card }: { card: CanvasCard }) {
       return <StickyNoteCard card={card} />;
     case "ai_image":
       return <ImagePreview card={card} />;
+    case "ai_tryon":
+      return <TryOnPreview card={card} />;
     default:
       return (
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

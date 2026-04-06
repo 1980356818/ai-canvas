@@ -205,7 +205,8 @@ pub struct SaveMediaResult {
 }
 
 /// Save media from a remote URL, base64 data-URL, or local path into
-/// `app_data_dir/media/images/{uuid}.{ext}`.  Returns the persisted path.
+/// `app_data_dir/media/images/{uuid}.{ext}`.  When `image_save_path` is set,
+/// a copy is also written to that user-chosen directory.  Returns the persisted path.
 #[tauri::command]
 pub async fn save_media(
     app: AppHandle,
@@ -215,6 +216,8 @@ pub async fn save_media(
 ) -> Result<SaveMediaResult, String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let media_dir = app_data_dir.join("media/images");
+    std::fs::create_dir_all(&media_dir)
+        .map_err(|e| format!("创建媒体目录失败: {}", e))?;
 
     let ext = detect_extension(&source, &filename);
     let file_id = uuid::Uuid::new_v4().to_string();
@@ -247,6 +250,28 @@ pub async fn save_media(
     };
 
     std::fs::write(&dest, &bytes).map_err(|e| format!("写入文件失败: {}", e))?;
+
+    let user_dir = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        db.query_row(
+            "SELECT value FROM settings WHERE key = 'image_save_path'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+    };
+
+    if let Some(dir) = user_dir {
+        let user_dest = std::path::Path::new(&dir).join(format!("{}.{}", file_id, ext));
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            tracing::warn!("创建用户图片目录失败: {}", e);
+        } else if let Err(e) = std::fs::copy(&dest, &user_dest) {
+            tracing::warn!("复制图片到用户目录失败: {}", e);
+        } else {
+            tracing::info!("图片已保存到用户目录: {:?}", user_dest);
+        }
+    }
 
     Ok(SaveMediaResult {
         local_path: dest.to_string_lossy().to_string(),

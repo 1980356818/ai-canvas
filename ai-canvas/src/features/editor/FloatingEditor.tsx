@@ -1,11 +1,15 @@
-import { useRef, useState, useCallback, useEffect } from "react";
-import { X } from "lucide-react";
+import { useRef, useCallback, useEffect } from "react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import EditorSwitch from "./EditorSwitch";
 
-const EDITOR_HEIGHT = 220;
-const GAP = 8;
+const GAP = 12;
+
+const EDITOR_SIZES: Record<string, { height: number; minWidth: number }> = {
+  ai_image: { height: 200, minWidth: 440 },
+  ai_tryon: { height: 280, minWidth: 460 },
+};
+const DEFAULT_SIZE = { height: 220, minWidth: 320 };
 
 export default function FloatingEditor() {
   const editingCardId = useCanvasStore((s) => s.editingCardId);
@@ -14,7 +18,6 @@ export default function FloatingEditor() {
     editingCardId ? s.cards.get(editingCardId) : undefined,
   );
   const panelRef = useRef<HTMLDivElement>(null);
-  const [height] = useState(EDITOR_HEIGHT);
 
   const close = useCallback(() => {
     useCanvasStore.getState().setEditingCardId(null);
@@ -31,38 +34,32 @@ export default function FloatingEditor() {
 
   if (!card) return null;
 
+  const { height, minWidth } = EDITOR_SIZES[card.type] ?? DEFAULT_SIZE;
+
   const cardScreenLeft = card.x * viewport.zoom + viewport.x;
   const cardScreenWidth = card.width * viewport.zoom;
   const cardScreenCenterX = cardScreenLeft + cardScreenWidth / 2;
 
-  const editorWidth = Math.max(320, cardScreenWidth);
+  const editorWidth = Math.max(minWidth, cardScreenWidth);
   const screenLeft = cardScreenCenterX - editorWidth / 2;
   const screenTop = (card.y + card.height) * viewport.zoom + viewport.y + GAP;
-  const screenWidth = editorWidth;
 
   return (
     <div
       ref={panelRef}
       className="absolute z-40 overflow-hidden rounded-xl border border-border bg-card shadow-xl"
+      data-floating-editor
       style={{
         left: screenLeft,
         top: screenTop,
-        width: screenWidth,
+        width: editorWidth,
         height,
+        transform: "none",
       }}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="flex h-7 items-center justify-end border-b border-border px-2">
-        <button
-          onClick={close}
-          className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      <div className="overflow-auto" style={{ height: height - 28 }}>
+      <div className="h-full overflow-auto">
         <EditorSwitch card={card} />
       </div>
     </div>

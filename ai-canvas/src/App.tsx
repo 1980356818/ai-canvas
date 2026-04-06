@@ -10,6 +10,7 @@ import { useKeyboardShortcuts } from "@/features/canvas/hooks/useKeyboardShortcu
 import TitleBar from "@/app/TitleBar";
 import ErrorBoundary from "@/app/ErrorBoundary";
 import HomePage from "@/features/home/HomePage";
+import ProjectsPage from "@/features/projects/ProjectsPage";
 import CanvasContainer from "@/features/canvas/CanvasContainer";
 import { SidebarContainer } from "@/features/sidebar/SidebarContainer";
 import AgentPanel from "@/features/agent/AgentPanel";
@@ -89,6 +90,8 @@ export default function App() {
       <ErrorBoundary>
         {appView === "home" ? (
           <HomePage />
+        ) : appView === "projects" ? (
+          <ProjectsPage />
         ) : (
           <div className="relative flex flex-1 overflow-hidden">
             <CanvasContainer />

@@ -35,7 +35,6 @@ export default function TitleBar() {
   const saveStatus = useUIStore((s) => s.saveStatus);
   const sidebarVisible = useUIStore((s) => s.sidebarVisible);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
-  const toggleSettings = useUIStore((s) => s.toggleSettings);
   const isCanvas = appView === "canvas";
 
   return (
@@ -84,16 +83,6 @@ export default function TitleBar() {
           </button>
           <div className="mx-1.5 h-4 w-px bg-border" />
         </>
-      )}
-
-      {!isCanvas && (
-        <button
-          onClick={toggleSettings}
-          title="设置"
-          className="mr-2 flex h-7 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          ⚙ 设置
-        </button>
       )}
 
       {isTauri && (

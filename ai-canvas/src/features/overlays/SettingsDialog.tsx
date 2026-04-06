@@ -8,8 +8,9 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  FolderOpen,
 } from "lucide-react";
-import { getSetting, setSetting, validateConnection, invalidateApiKeyCache } from "@/lib/tauri";
+import { getSetting, setSetting, validateConnection, invalidateApiKeyCache, pickDirectory } from "@/lib/tauri";
 import { modelService } from "@/services/models";
 import { useUIStore } from "@/stores/uiStore";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ export default function SettingsDialog() {
 
   const [apiKey, setApiKey] = useState<FieldState>({ value: "", show: false });
   const [baseUrl, setBaseUrl] = useState("");
+  const [imageSavePath, setImageSavePath] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [connStatus, setConnStatus] = useState<ConnectionStatus>("idle");
@@ -39,11 +41,18 @@ export default function SettingsDialog() {
     Promise.all([
       getSetting("openai_api_key"),
       getSetting("openai_base_url"),
-    ]).then(([key, url]) => {
+      getSetting("image_save_path"),
+    ]).then(([key, url, savePath]) => {
       setApiKey({ value: key ?? "", show: false });
       setBaseUrl(url ?? "");
+      setImageSavePath(savePath ?? "");
     });
   }, [visible]);
+
+  const handlePickDirectory = useCallback(async () => {
+    const dir = await pickDirectory();
+    if (dir) setImageSavePath(dir);
+  }, []);
 
   const handleTestConnection = useCallback(async () => {
     setConnStatus("testing");
@@ -60,12 +69,20 @@ export default function SettingsDialog() {
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      if (apiKey.value) {
-        await setSetting("openai_api_key", apiKey.value);
+      const trimmedKey = apiKey.value.trim();
+      const trimmedUrl = baseUrl.trim();
+      const trimmedPath = imageSavePath.trim();
+      if (trimmedKey) {
+        await setSetting("openai_api_key", trimmedKey);
+        setApiKey((s) => ({ ...s, value: trimmedKey }));
       }
-      if (baseUrl) {
-        await setSetting("openai_base_url", baseUrl);
+      if (trimmedUrl) {
+        await setSetting("openai_base_url", trimmedUrl);
+        setBaseUrl(trimmedUrl);
       }
+      await setSetting("image_save_path", trimmedPath);
+      setImageSavePath(trimmedPath);
+
       invalidateApiKeyCache();
       modelService.invalidateCache();
       setSaved(true);
@@ -83,7 +100,7 @@ export default function SettingsDialog() {
     } finally {
       setSaving(false);
     }
-  }, [apiKey.value, baseUrl]);
+  }, [apiKey.value, baseUrl, imageSavePath]);
 
   if (!visible) return null;
 
@@ -103,7 +120,7 @@ export default function SettingsDialog() {
           </button>
         </div>
 
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void handleSave(); }} autoComplete="off">
           <div>
             <label className="mb-1.5 block text-sm font-medium">API Key</label>
             <div className="relative">
@@ -148,6 +165,43 @@ export default function SettingsDialog() {
             />
           </div>
 
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">
+              图片保存路径
+              <span className="ml-1 text-xs text-muted-foreground">
+                (生成的图片自动保存到此目录)
+              </span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={imageSavePath}
+                onChange={(e) => setImageSavePath(e.target.value)}
+                placeholder="未设置则仅保存到应用内部"
+                className="min-w-0 flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+                readOnly
+              />
+              <button
+                type="button"
+                onClick={handlePickDirectory}
+                className="flex items-center gap-1.5 rounded-lg border border-input px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                title="选择文件夹"
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+                选择
+              </button>
+            </div>
+            {imageSavePath && (
+              <button
+                type="button"
+                onClick={() => setImageSavePath("")}
+                className="mt-1 text-[11px] text-muted-foreground hover:text-destructive"
+              >
+                清除路径
+              </button>
+            )}
+          </div>
+
           {connStatus !== "idle" && (
             <div
               className={cn(
@@ -177,40 +231,42 @@ export default function SettingsDialog() {
               )}
             </div>
           )}
-        </div>
 
-        <div className="mt-6 flex items-center justify-between">
-          <button
-            onClick={handleTestConnection}
-            disabled={connStatus === "testing" || !apiKey.value}
-            className="rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent disabled:opacity-40"
-          >
-            测试连接
-          </button>
-
-          <div className="flex items-center gap-2">
-            {saved && (
-              <span className="text-xs text-emerald-500">已保存</span>
-            )}
+          <div className="mt-6 flex items-center justify-between">
             <button
-              onClick={toggleSettings}
-              className="rounded-lg px-4 py-2 text-sm text-muted-foreground hover:bg-accent"
+              type="button"
+              onClick={handleTestConnection}
+              disabled={connStatus === "testing" || !apiKey.value}
+              className="rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent disabled:opacity-40"
             >
-              取消
+              测试连接
             </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90",
-                saving && "opacity-60",
+
+            <div className="flex items-center gap-2">
+              {saved && (
+                <span className="text-xs text-emerald-500">已保存</span>
               )}
-            >
-              <Save className="h-3.5 w-3.5" />
-              {saving ? "保存中..." : "保存"}
-            </button>
+              <button
+                type="button"
+                onClick={toggleSettings}
+                className="rounded-lg px-4 py-2 text-sm text-muted-foreground hover:bg-accent"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90",
+                  saving && "opacity-60",
+                )}
+              >
+                <Save className="h-3.5 w-3.5" />
+                {saving ? "保存中..." : "保存"}
+              </button>
+            </div>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );

@@ -32,12 +32,19 @@ export default memo(
       (e: React.PointerEvent) => {
         if (card.locked || e.button !== 0) return;
         e.stopPropagation();
+        e.preventDefault();
 
-        bringToFront(card.id);
+        const el = cardRef.current;
+        if (!el) return;
+
+        el.setPointerCapture(e.pointerId);
+        el.style.zIndex = String(useCardStore.getState().maxZIndex + 1);
+        el.style.willChange = "transform";
 
         dragging.current = true;
         didDrag.current = false;
         const zoom = useCanvasStore.getState().viewport.zoom;
+        const pid = e.pointerId;
         dragStart.current = {
           mx: e.clientX,
           my: e.clientY,
@@ -45,21 +52,33 @@ export default memo(
           cy: card.y,
         };
 
-        const el = cardRef.current;
+        const editorEl = document.querySelector(
+          "[data-floating-editor]",
+        ) as HTMLElement | null;
 
         const onMove = (ev: PointerEvent) => {
-          if (!dragging.current) return;
+          if (ev.pointerId !== pid || !dragging.current) return;
           const dx = (ev.clientX - dragStart.current.mx) / zoom;
           const dy = (ev.clientY - dragStart.current.my) / zoom;
           if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didDrag.current = true;
-          if (el) {
-            el.style.transform = `translate(${dx}px, ${dy}px)`;
+          el.style.transform = `translate(${dx}px, ${dy}px)`;
+          if (editorEl) {
+            const sx = dx * zoom;
+            const sy = dy * zoom;
+            editorEl.style.transform = `translate(${sx}px, ${sy}px)`;
           }
         };
 
         const onUp = (ev: PointerEvent) => {
+          if (ev.pointerId !== pid || !dragging.current) return;
           dragging.current = false;
-          if (el) el.style.transform = "";
+          el.style.transform = "";
+          el.style.willChange = "";
+          if (editorEl) editorEl.style.transform = "none";
+          el.removeEventListener("pointermove", onMove);
+          el.removeEventListener("pointerup", onUp);
+          el.removeEventListener("lostpointercapture", onUp);
+          bringToFront(card.id);
           if (didDrag.current) {
             const dx = (ev.clientX - dragStart.current.mx) / zoom;
             const dy = (ev.clientY - dragStart.current.my) / zoom;
@@ -73,12 +92,11 @@ export default memo(
             });
             autoSave.markDirty(card.id);
           }
-          window.removeEventListener("pointermove", onMove);
-          window.removeEventListener("pointerup", onUp);
         };
 
-        window.addEventListener("pointermove", onMove);
-        window.addEventListener("pointerup", onUp);
+        el.addEventListener("pointermove", onMove);
+        el.addEventListener("pointerup", onUp);
+        el.addEventListener("lostpointercapture", onUp);
       },
       [card.id, card.locked, card.x, card.y, bringToFront, updateCard],
     );
@@ -97,16 +115,25 @@ export default memo(
           h: card.height,
         };
 
+        let rafId = 0;
+        let pendingW = card.width;
+        let pendingH = card.height;
+
+        const flush = () => {
+          rafId = 0;
+          updateCard(card.id, { width: pendingW, height: pendingH });
+        };
+
         const onMove = (ev: PointerEvent) => {
           const dw = (ev.clientX - resizeStart.current.mx) / zoom;
           const dh = (ev.clientY - resizeStart.current.my) / zoom;
-          updateCard(card.id, {
-            width: Math.max(160, resizeStart.current.w + dw),
-            height: Math.max(80, resizeStart.current.h + dh),
-          });
+          pendingW = Math.max(160, resizeStart.current.w + dw);
+          pendingH = Math.max(80, resizeStart.current.h + dh);
+          if (!rafId) rafId = requestAnimationFrame(flush);
         };
 
         const onUp = () => {
+          if (rafId) { cancelAnimationFrame(rafId); flush(); }
           setResizing(false);
           recordUpdate(card.id, {
             width: resizeStart.current.w,
@@ -134,9 +161,8 @@ export default memo(
           useCanvasStore.getState().setSelectedCardIds([card.id]);
           useCanvasStore.getState().setEditingCardId(card.id);
         }
-        bringToFront(card.id);
       },
-      [card.id, bringToFront],
+      [card.id],
     );
 
     const onContextMenu = useCallback(
@@ -159,7 +185,7 @@ export default memo(
           width: card.width,
           height: card.height,
           zIndex: card.zIndex,
-          willChange: "transform",
+          touchAction: "none",
         }}
         onPointerDown={onPointerDown}
         onClick={onCardClick}
