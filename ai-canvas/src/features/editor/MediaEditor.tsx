@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useEffect } from "react";
+import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { Sparkles, Loader2, RefreshCw } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -7,12 +7,18 @@ import { hasApiKey } from "@/lib/tauri";
 import { modelService } from "@/services/models";
 import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
+import {
+  getRefSlotsForModel,
+  type RefImageEntry,
+} from "@/config/model-ref-images";
 import ModelSelector from "./ModelSelector";
+import RefImageSlot from "./RefImageSlot";
 
 interface MediaData {
   content?: string;
   imageUrl?: string;
   model?: string;
+  refImages?: Record<string, RefImageEntry>;
 }
 
 interface MediaEditorProps {
@@ -36,6 +42,11 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     }
   }, [data.model]);
 
+  const refSlots = useMemo(
+    () => getRefSlotsForModel(currentModel),
+    [currentModel],
+  );
+
   const handleModelChange = useCallback(
     (modelId: string) => {
       setCurrentModel(modelId);
@@ -51,6 +62,25 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       updateCard(card.id, { data: { ...data, content } });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const setRefImage = useCallback(
+    (slotKey: string, entry: RefImageEntry) => {
+      const refImages = { ...data.refImages, [slotKey]: entry };
+      updateCard(card.id, { data: { ...data, refImages } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const clearRefImage = useCallback(
+    (slotKey: string) => {
+      const refImages = { ...data.refImages };
+      delete refImages[slotKey];
+      updateCard(card.id, { data: { ...data, refImages } });
+      autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
   );
@@ -82,11 +112,19 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         throw new Error("当前 Provider 不支持图片生成");
       }
 
+      const referenceImages = refSlots
+        .map((slot) => {
+          const entry = data.refImages?.[slot.key];
+          return entry ? { url: entry.url, role: slot.key } : null;
+        })
+        .filter(Boolean) as Array<{ url: string; role: string }>;
+
       const result = await provider.generateImage({
         prompt,
         size: "1024x1024",
         model: currentModel || undefined,
         quality: "standard",
+        referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
         onProgress: (p) => {
           setCardProgress(card.id, { percent: p.percent, label: p.label });
         },
@@ -102,12 +140,14 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, generating, updateCard, currentModel, setCardProgress]);
+  }, [data, card.id, generating, updateCard, currentModel, setCardProgress, refSlots]);
+
+  const hasRefImages = refSlots.some((s) => data.refImages?.[s.key]);
 
   return (
     <div className="flex h-full flex-col gap-2 p-3">
       <textarea
-        className="flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+        className="min-h-[3rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
         value={data.content ?? ""}
         onChange={onPromptChange}
         placeholder="描述你想生成的图片…"
@@ -115,12 +155,35 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         autoFocus
       />
 
+      {refSlots.length > 0 && (
+        <div className="flex min-h-0 gap-2" style={{ height: refSlots.length > 1 ? 80 : 72 }}>
+          {refSlots.map((slot) => (
+            <RefImageSlot
+              key={slot.key}
+              label={slot.label}
+              description={slot.description}
+              entry={data.refImages?.[slot.key]}
+              onImage={(entry) => setRefImage(slot.key, entry)}
+              onClear={() => clearRefImage(slot.key)}
+              disabled={generating}
+              targetCardId={card.id}
+              slotKey={slot.key}
+            />
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
         <ModelSelector
           capability="IMAGE"
           value={currentModel}
           onChange={handleModelChange}
         />
+        {hasRefImages && (
+          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+            +参考图
+          </span>
+        )}
         {error && (
           <span className="min-w-0 truncate text-[11px] text-destructive">{error}</span>
         )}

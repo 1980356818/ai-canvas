@@ -54,12 +54,18 @@ export interface ImageGenProgress {
   label: string;
 }
 
+export interface ImageRefInput {
+  url: string;
+  role: string;
+}
+
 export interface ImageGenRequest {
   prompt: string;
   size: string;
   model?: string;
   quality?: string;
   n?: number;
+  referenceImages?: ImageRefInput[];
   onProgress?: (progress: ImageGenProgress) => void;
 }
 

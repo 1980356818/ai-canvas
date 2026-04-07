@@ -8,12 +8,20 @@ export interface Viewport {
   height: number;
 }
 
+export interface PickModeState {
+  active: boolean;
+  targetCardId: string;
+  slotKey: string;
+  onPick: (sourceCardId: string, imageUrl: string) => void;
+}
+
 interface CanvasState {
   viewport: Viewport;
   selectedCardIds: Set<string>;
   editingCardId: string | null;
   tool: "select" | "pan";
   isDragging: boolean;
+  pickMode: PickModeState | null;
 
   setViewport: (viewport: Partial<Viewport>) => void;
   setTool: (tool: CanvasState["tool"]) => void;
@@ -23,6 +31,8 @@ interface CanvasState {
   clearSelection: () => void;
   setEditingCardId: (id: string | null) => void;
   setIsDragging: (dragging: boolean) => void;
+  enterPickMode: (state: Omit<PickModeState, "active">) => void;
+  exitPickMode: () => void;
 }
 
 export const useCanvasStore = create<CanvasState>((set) => ({
@@ -31,6 +41,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   editingCardId: null,
   tool: "select",
   isDragging: false,
+  pickMode: null,
 
   setViewport: (partial) =>
     set((s) => ({ viewport: { ...s.viewport, ...partial } })),
@@ -60,4 +71,9 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   setEditingCardId: (id) => set({ editingCardId: id }),
 
   setIsDragging: (dragging) => set({ isDragging: dragging }),
+
+  enterPickMode: (state) =>
+    set({ pickMode: { ...state, active: true } }),
+
+  exitPickMode: () => set({ pickMode: null }),
 }));

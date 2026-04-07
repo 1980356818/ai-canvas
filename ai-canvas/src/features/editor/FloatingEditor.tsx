@@ -6,7 +6,7 @@ import EditorSwitch from "./EditorSwitch";
 const GAP = 12;
 
 const EDITOR_SIZES: Record<string, { height: number; minWidth: number }> = {
-  ai_image: { height: 200, minWidth: 440 },
+  ai_image: { height: 290, minWidth: 460 },
   ai_tryon: { height: 280, minWidth: 460 },
 };
 const DEFAULT_SIZE = { height: 220, minWidth: 320 };

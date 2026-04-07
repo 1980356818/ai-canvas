@@ -1,14 +1,15 @@
 import { useRef, useCallback, useState, useEffect } from "react";
-import { Sparkles, Loader2, RefreshCw, Upload, X } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/lib/tauri";
 import { modelService } from "@/services/models";
 import { providerManager } from "@/stores/agentStore";
-import { resolveImageUrl } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
+import type { RefImageEntry } from "@/config/model-ref-images";
 import ModelSelector from "./ModelSelector";
+import RefImageSlot from "./RefImageSlot";
 
 interface TryOnData {
   content?: string;
@@ -16,136 +17,11 @@ interface TryOnData {
   garmentImageUrl?: string;
   resultImageUrl?: string;
   model?: string;
+  refImages?: Record<string, RefImageEntry>;
 }
 
 interface TryOnEditorProps {
   card: CanvasCard;
-}
-
-function ImageDropZone({
-  label,
-  imageUrl,
-  onImage,
-  onClear,
-  disabled,
-}: {
-  label: string;
-  imageUrl?: string;
-  onImage: (url: string) => void;
-  onClear: () => void;
-  disabled?: boolean;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [displayUrl, setDisplayUrl] = useState<string | undefined>();
-  const [dragging, setDragging] = useState(false);
-
-  useEffect(() => {
-    if (!imageUrl) {
-      setDisplayUrl(undefined);
-      return;
-    }
-    let stale = false;
-    resolveImageUrl(imageUrl).then((url) => {
-      if (!stale) setDisplayUrl(url);
-    });
-    return () => {
-      stale = true;
-    };
-  }, [imageUrl]);
-
-  const handleFile = useCallback(
-    (file: File) => {
-      if (!file.type.startsWith("image/")) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string") onImage(reader.result);
-      };
-      reader.readAsDataURL(file);
-    },
-    [onImage],
-  );
-
-  const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragging(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
-    },
-    [handleFile],
-  );
-
-  const onPaste = useCallback(
-    (e: React.ClipboardEvent) => {
-      const file = Array.from(e.clipboardData.items)
-        .find((i) => i.type.startsWith("image/"))
-        ?.getAsFile();
-      if (file) {
-        e.preventDefault();
-        handleFile(file);
-      }
-    },
-    [handleFile],
-  );
-
-  if (displayUrl) {
-    return (
-      <div className="relative flex-1 overflow-hidden rounded-lg border border-input">
-        <img
-          src={displayUrl}
-          alt={label}
-          className="h-full w-full object-cover"
-        />
-        {!disabled && (
-          <button
-            onClick={onClear}
-            className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        )}
-        <span className="absolute bottom-1 left-1 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white">
-          {label}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={cn(
-        "flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-input p-2 text-muted-foreground transition-colors",
-        dragging && "border-primary bg-primary/5",
-        !disabled && "hover:border-primary/50 hover:text-foreground",
-      )}
-      onClick={() => !disabled && inputRef.current?.click()}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragging(true);
-      }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={onDrop}
-      onPaste={onPaste}
-      tabIndex={0}
-    >
-      <Upload className="h-4 w-4" />
-      <span className="text-[10px]">{label}</span>
-      <span className="text-[9px] text-muted-foreground/60">
-        点击上传或拖拽
-      </span>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
-          e.target.value = "";
-        }}
-      />
-    </div>
-  );
 }
 
 export default function TryOnEditor({ card }: TryOnEditorProps) {
@@ -174,17 +50,31 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
     [card.id, data, updateCard],
   );
 
+  const personEntry: RefImageEntry | undefined = data.personImageUrl
+    ? (data.refImages?.person ?? { url: data.personImageUrl, sourceType: "file" })
+    : data.refImages?.person;
+
+  const garmentEntry: RefImageEntry | undefined = data.garmentImageUrl
+    ? (data.refImages?.garment ?? { url: data.garmentImageUrl, sourceType: "file" })
+    : data.refImages?.garment;
+
   const setPersonImage = useCallback(
-    (url: string) => {
-      updateCard(card.id, { data: { ...data, personImageUrl: url } });
+    (entry: RefImageEntry) => {
+      const refImages = { ...data.refImages, person: entry };
+      updateCard(card.id, {
+        data: { ...data, personImageUrl: entry.url, refImages },
+      });
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
   );
 
   const setGarmentImage = useCallback(
-    (url: string) => {
-      updateCard(card.id, { data: { ...data, garmentImageUrl: url } });
+    (entry: RefImageEntry) => {
+      const refImages = { ...data.refImages, garment: entry };
+      updateCard(card.id, {
+        data: { ...data, garmentImageUrl: entry.url, refImages },
+      });
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
@@ -262,29 +152,39 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
   return (
     <div className="flex h-full flex-col gap-2 p-3">
       <div className="flex min-h-0 flex-1 gap-2">
-        <ImageDropZone
+        <RefImageSlot
           label="人物照片"
-          imageUrl={data.personImageUrl}
+          description="上传人物图或拖入卡片"
+          entry={personEntry}
           onImage={setPersonImage}
           onClear={() => {
+            const refImages = { ...data.refImages };
+            delete refImages.person;
             updateCard(card.id, {
-              data: { ...data, personImageUrl: undefined },
+              data: { ...data, personImageUrl: undefined, refImages },
             });
             autoSave.markDirty(card.id);
           }}
           disabled={generating}
+          targetCardId={card.id}
+          slotKey="person"
         />
-        <ImageDropZone
+        <RefImageSlot
           label="服装图片"
-          imageUrl={data.garmentImageUrl}
+          description="上传服装图或拖入卡片"
+          entry={garmentEntry}
           onImage={setGarmentImage}
           onClear={() => {
+            const refImages = { ...data.refImages };
+            delete refImages.garment;
             updateCard(card.id, {
-              data: { ...data, garmentImageUrl: undefined },
+              data: { ...data, garmentImageUrl: undefined, refImages },
             });
             autoSave.markDirty(card.id);
           }}
           disabled={generating}
+          targetCardId={card.id}
+          slotKey="garment"
         />
       </div>
 

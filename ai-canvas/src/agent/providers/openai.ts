@@ -135,6 +135,10 @@ export class OpenAIProvider implements AIProvider {
       response_format: "url",
     };
 
+    if (req.referenceImages && req.referenceImages.length > 0) {
+      body.image = req.referenceImages.map((ref) => ref.url);
+    }
+
     const raw = await aiProxy("openai", "/v1/images/generations", body);
     throwIfError(raw.status, raw.body);
 

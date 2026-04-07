@@ -1,6 +1,6 @@
-import { useRef, useMemo, useState, useCallback } from "react";
+import { useRef, useMemo, useState, useCallback, useEffect } from "react";
 import { useCanvasStore } from "@/stores/canvasStore";
-import { useCardStore } from "@/stores/cardStore";
+import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useViewport } from "./hooks/useViewport";
@@ -10,6 +10,7 @@ import CardContent from "@/features/cards/CardContent";
 import FloatingEditor from "@/features/editor/FloatingEditor";
 import ZoomControls from "./ZoomControls";
 import QuickCreateMenu, { type QuickMenuPosition } from "./QuickCreateMenu";
+import type { RefImageEntry } from "@/config/model-ref-images";
 
 export default function CanvasContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -35,8 +36,19 @@ export default function CanvasContainer() {
   const selectedCardIds = useCanvasStore((s) => s.selectedCardIds);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
 
+  const pickMode = useCanvasStore((s) => s.pickMode);
+
   const [quickMenu, setQuickMenu] = useState<QuickMenuPosition | null>(null);
   const closeQuickMenu = useCallback(() => setQuickMenu(null), []);
+
+  useEffect(() => {
+    if (!pickMode?.active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") useCanvasStore.getState().exitPickMode();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pickMode?.active]);
 
   const projectCards = useMemo(() => {
     if (!currentProjectId) return [];
@@ -90,9 +102,27 @@ export default function CanvasContainer() {
       e.target === containerRef.current ||
       (e.target as HTMLElement).dataset.canvasBackground !== undefined
     ) {
+      if (useCanvasStore.getState().pickMode?.active) {
+        useCanvasStore.getState().exitPickMode();
+        return;
+      }
       useCanvasStore.getState().clearSelection();
     }
   };
+
+  const refLines = useMemo(() => {
+    const lines: Array<{ from: CanvasCard; to: CanvasCard; key: string }> = [];
+    for (const card of projectCards) {
+      const refs = (card.data as { refImages?: Record<string, RefImageEntry> }).refImages;
+      if (!refs) continue;
+      for (const [slotKey, entry] of Object.entries(refs)) {
+        if (!entry.sourceCardId) continue;
+        const src = cards.get(entry.sourceCardId);
+        if (src) lines.push({ from: src, to: card, key: `${src.id}-${card.id}-${slotKey}` });
+      }
+    }
+    return lines;
+  }, [projectCards, cards]);
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -149,7 +179,40 @@ export default function CanvasContainer() {
             <CardContent card={card} />
           </CardShell>
         ))}
+
+        {refLines.length > 0 && (
+          <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
+            <defs>
+              <marker id="ref-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                <path d="M0,0 L6,3 L0,6" fill="none" stroke="var(--color-primary)" strokeWidth="1" opacity="0.4" />
+              </marker>
+            </defs>
+            {refLines.map(({ from, to, key }) => {
+              const x1 = from.x + from.width / 2;
+              const y1 = from.y + from.height / 2;
+              const x2 = to.x + to.width / 2;
+              const y2 = to.y + to.height / 2;
+              return (
+                <line
+                  key={key}
+                  x1={x1} y1={y1} x2={x2} y2={y2}
+                  stroke="var(--color-primary)"
+                  strokeWidth={1.5}
+                  strokeDasharray="6 4"
+                  opacity={0.3}
+                  markerEnd="url(#ref-arrow)"
+                />
+              );
+            })}
+          </svg>
+        )}
       </div>
+
+      {pickMode?.active && (
+        <div className="pointer-events-none absolute left-1/2 top-4 z-50 -translate-x-1/2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary backdrop-blur-sm">
+          点击一个含图片的卡片以选取为参考图 · 按 Esc 取消
+        </div>
+      )}
 
       {selectionBox && (
         <div

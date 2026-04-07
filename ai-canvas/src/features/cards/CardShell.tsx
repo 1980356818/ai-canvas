@@ -1,4 +1,5 @@
 import { useRef, useCallback, useState, memo } from "react";
+import { GripVertical } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -6,6 +7,12 @@ import { autoSave } from "@/lib/autoSave";
 import { recordUpdate } from "@/lib/history";
 import { cn } from "@/lib/utils";
 import { TYPE_COLORS } from "@/shared/constants";
+import {
+  cardHasImage,
+  extractCardImage,
+  CARD_REF_MIME,
+  type CardRefPayload,
+} from "@/config/model-ref-images";
 
 interface CardShellProps {
   card: CanvasCard;
@@ -159,6 +166,15 @@ export default memo(
         e.stopPropagation();
         if (didDrag.current) return;
 
+        const pm = useCanvasStore.getState().pickMode;
+        if (pm?.active) {
+          const imgUrl = extractCardImage(card);
+          if (imgUrl) {
+            pm.onPick(card.id, imgUrl);
+          }
+          return;
+        }
+
         if (e.ctrlKey) {
           useCanvasStore.getState().addSelectedCardId(card.id);
         } else {
@@ -166,7 +182,29 @@ export default memo(
           useCanvasStore.getState().setEditingCardId(card.id);
         }
       },
-      [card.id],
+      [card],
+    );
+
+    const hasImage = cardHasImage(card);
+
+    const onRefDragStart = useCallback(
+      (e: React.DragEvent) => {
+        const imgUrl = extractCardImage(card);
+        if (!imgUrl) return;
+        const payload: CardRefPayload = {
+          cardId: card.id,
+          imageUrl: imgUrl,
+          title: card.title || card.type,
+        };
+        e.dataTransfer.setData(CARD_REF_MIME, JSON.stringify(payload));
+        e.dataTransfer.effectAllowed = "link";
+      },
+      [card],
+    );
+
+    const isPickTarget = useCanvasStore(
+      (s) =>
+        !!s.pickMode?.active && hasImage && card.id !== s.pickMode.targetCardId,
     );
 
     const onContextMenu = useCallback(
@@ -227,6 +265,22 @@ export default memo(
             style={{ backgroundColor: accentColor }}
           />
           <div className="h-full w-full overflow-hidden">{children}</div>
+
+          {hasImage && !card.locked && (
+            <div
+              draggable
+              onDragStart={onRefDragStart}
+              title="拖拽到参考图插槽"
+              className="absolute bottom-1.5 left-1.5 z-20 flex h-6 w-6 cursor-grab items-center justify-center rounded-md bg-black/50 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-primary/80 group-hover:opacity-100 active:cursor-grabbing"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <GripVertical className="h-3.5 w-3.5" />
+            </div>
+          )}
+
+          {isPickTarget && (
+            <div className="pointer-events-none absolute inset-0 z-10 animate-pulse rounded-xl ring-2 ring-primary ring-offset-2" />
+          )}
         </div>
 
         {!card.locked && (
@@ -265,5 +319,6 @@ export default memo(
     prev.card.height === next.card.height &&
     prev.card.zIndex === next.card.zIndex &&
     prev.card.locked === next.card.locked &&
+    prev.card.type === next.card.type &&
     prev.selected === next.selected,
 );
