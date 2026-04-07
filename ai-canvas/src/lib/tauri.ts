@@ -577,3 +577,40 @@ export async function pickDirectory(): Promise<string | null> {
   }
   return null;
 }
+
+// ── File drop (Tauri-native fallback) ────────────────────────
+
+export type FileDropCallback = (paths: string[], x: number, y: number) => void;
+
+/**
+ * Listen for Tauri-native file-drop events (fallback when browser
+ * drag/drop is intercepted by the webview). Returns an unlisten function.
+ */
+export async function onTauriFileDrop(
+  cb: FileDropCallback,
+): Promise<() => void> {
+  if (!isTauri) return () => {};
+  try {
+    await ensureTauriAPIs();
+    const { getCurrentWebviewWindow } = await import(
+      "@tauri-apps/api/webviewWindow"
+    );
+    const win = getCurrentWebviewWindow();
+    const unlisten = await win.onDragDropEvent((event) => {
+      if (event.payload.type === "drop") {
+        const pos = (event.payload as { position?: { x: number; y: number } })
+          .position ?? { x: 0, y: 0 };
+        const paths = (event.payload as { paths?: string[] }).paths ?? [];
+        const imagePaths = paths.filter((p: string) =>
+          /\.(png|jpe?g|gif|webp|bmp|svg|avif|tiff?)$/i.test(p),
+        );
+        if (imagePaths.length > 0) cb(imagePaths, pos.x, pos.y);
+      }
+    });
+    return unlisten;
+  } catch {
+    return () => {};
+  }
+}
+
+export { isTauri };

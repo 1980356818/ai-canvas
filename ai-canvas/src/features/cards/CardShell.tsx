@@ -67,6 +67,18 @@ export default memo(
             ) as HTMLElement | null)
           : null;
 
+        const thisHasImage = cardHasImage(card);
+        let lastHoveredSlot: Element | null = null;
+
+        const findSlotBelow = (cx: number, cy: number): Element | null => {
+          if (!thisHasImage) return null;
+          const prev = el.style.pointerEvents;
+          el.style.pointerEvents = "none";
+          const below = document.elementFromPoint(cx, cy);
+          el.style.pointerEvents = prev;
+          return below?.closest("[data-ref-slot]") ?? null;
+        };
+
         const onMove = (ev: PointerEvent) => {
           if (ev.pointerId !== pid || !dragging.current) return;
           const dx = (ev.clientX - dragStart.current.mx) / zoom;
@@ -77,6 +89,17 @@ export default memo(
             const sx = dx * zoom;
             const sy = dy * zoom;
             editorEl.style.transform = `translate(${sx}px, ${sy}px) scale(${zoom})`;
+          }
+
+          const slotEl = findSlotBelow(ev.clientX, ev.clientY);
+          if (slotEl !== lastHoveredSlot) {
+            lastHoveredSlot?.dispatchEvent(
+              new CustomEvent("canvas-card-hover", { detail: { active: false } }),
+            );
+            slotEl?.dispatchEvent(
+              new CustomEvent("canvas-card-hover", { detail: { active: true } }),
+            );
+            lastHoveredSlot = slotEl;
           }
         };
 
@@ -89,6 +112,27 @@ export default memo(
           el.removeEventListener("pointermove", onMove);
           el.removeEventListener("pointerup", onUp);
           el.removeEventListener("lostpointercapture", onUp);
+
+          lastHoveredSlot?.dispatchEvent(
+            new CustomEvent("canvas-card-hover", { detail: { active: false } }),
+          );
+
+          if (didDrag.current && thisHasImage) {
+            const slotEl = findSlotBelow(ev.clientX, ev.clientY);
+            if (slotEl) {
+              const imgUrl = extractCardImage(card);
+              if (imgUrl) {
+                slotEl.dispatchEvent(
+                  new CustomEvent("canvas-card-drop", {
+                    detail: { cardId: card.id, imageUrl: imgUrl },
+                  }),
+                );
+                bringToFront(card.id);
+                return;
+              }
+            }
+          }
+
           bringToFront(card.id);
           if (didDrag.current) {
             const dx = (ev.clientX - dragStart.current.mx) / zoom;
@@ -272,7 +316,9 @@ export default memo(
               onDragStart={onRefDragStart}
               title="拖拽到参考图插槽"
               className="absolute bottom-1.5 left-1.5 z-20 flex h-6 w-6 cursor-grab items-center justify-center rounded-md bg-black/50 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-primary/80 group-hover:opacity-100 active:cursor-grabbing"
+              style={{ userSelect: "auto", WebkitUserSelect: "auto" }}
               onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
             >
               <GripVertical className="h-3.5 w-3.5" />
             </div>

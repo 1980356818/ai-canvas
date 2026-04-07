@@ -28,6 +28,17 @@ export default function App() {
 
   useEffect(() => {
     useSettingsStore.getState().applyTheme();
+
+    // Prevent webview from navigating to dropped files
+    const prevent = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
+    };
+    document.addEventListener("dragover", prevent);
+    document.addEventListener("drop", prevent);
+    return () => {
+      document.removeEventListener("dragover", prevent);
+      document.removeEventListener("drop", prevent);
+    };
   }, []);
 
   useEffect(() => {

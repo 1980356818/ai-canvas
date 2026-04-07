@@ -10,6 +10,14 @@ import CardContent from "@/features/cards/CardContent";
 import FloatingEditor from "@/features/editor/FloatingEditor";
 import ZoomControls from "./ZoomControls";
 import QuickCreateMenu, { type QuickMenuPosition } from "./QuickCreateMenu";
+import { CARD_DEFAULTS } from "@/shared/constants";
+import { autoSave } from "@/lib/autoSave";
+import {
+  updateProjectMeta,
+  onTauriFileDrop,
+  readMediaBase64,
+  isTauri,
+} from "@/lib/tauri";
 import type { RefImageEntry } from "@/config/model-ref-images";
 
 export default function CanvasContainer() {
@@ -40,6 +48,77 @@ export default function CanvasContainer() {
 
   const [quickMenu, setQuickMenu] = useState<QuickMenuPosition | null>(null);
   const closeQuickMenu = useCallback(() => setQuickMenu(null), []);
+  const [fileDragOver, setFileDragOver] = useState(false);
+
+  const handleFileDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!currentProjectId) return;
+      const hasFiles = Array.from(e.dataTransfer.types).includes("Files");
+      if (!hasFiles) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      setFileDragOver(true);
+    },
+    [currentProjectId],
+  );
+
+  const handleFileDragLeave = useCallback((e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setFileDragOver(false);
+  }, []);
+
+  const handleFileDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setFileDragOver(false);
+      if (!currentProjectId) return;
+
+      const files = Array.from(e.dataTransfer.files).filter((f) =>
+        f.type.startsWith("image/"),
+      );
+      if (files.length === 0) return;
+
+      const dropPos = screenToCanvas(e.clientX, e.clientY);
+      const { width, height } = CARD_DEFAULTS.ai_image;
+      const GAP = 20;
+
+      files.forEach((file, idx) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          const now = new Date().toISOString();
+          const { maxZIndex } = useCardStore.getState();
+          const card: CanvasCard = {
+            id: crypto.randomUUID(),
+            projectId: currentProjectId,
+            type: "ai_image",
+            x: dropPos.x - width / 2 + idx * (width + GAP),
+            y: dropPos.y - height / 2,
+            width,
+            height,
+            zIndex: maxZIndex + 1 + idx,
+            locked: false,
+            collapsed: false,
+            data: { imageUrl: dataUrl, content: "" },
+            createdAt: now,
+            updatedAt: now,
+          };
+          useCardStore.getState().addCard(card);
+          autoSave.markDirty(card.id);
+        };
+        reader.readAsDataURL(file);
+      });
+
+      const count =
+        useCardStore.getState().getCardsByProject(currentProjectId).length +
+        files.length;
+      useProjectStore
+        .getState()
+        .updateProject(currentProjectId, { nodeCount: count });
+      void updateProjectMeta(currentProjectId, { nodeCount: count });
+    },
+    [currentProjectId, screenToCanvas],
+  );
 
   useEffect(() => {
     if (!pickMode?.active) return;
@@ -49,6 +128,59 @@ export default function CanvasContainer() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [pickMode?.active]);
+
+  // Tauri-native file-drop fallback (when browser drag events are intercepted)
+  useEffect(() => {
+    if (!isTauri) return;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    onTauriFileDrop(async (paths, sx, sy) => {
+      if (cancelled) return;
+      const pid = useProjectStore.getState().currentProjectId;
+      if (!pid) return;
+
+      const canvasPos = screenToCanvas(sx, sy);
+      const { width, height } = CARD_DEFAULTS.ai_image;
+      const GAP = 20;
+
+      for (let i = 0; i < paths.length; i++) {
+        try {
+          const dataUrl = await readMediaBase64(paths[i]);
+          const now = new Date().toISOString();
+          const { maxZIndex } = useCardStore.getState();
+          const card: CanvasCard = {
+            id: crypto.randomUUID(),
+            projectId: pid,
+            type: "ai_image",
+            x: canvasPos.x - width / 2 + i * (width + GAP),
+            y: canvasPos.y - height / 2,
+            width,
+            height,
+            zIndex: maxZIndex + 1 + i,
+            locked: false,
+            collapsed: false,
+            data: { imageUrl: dataUrl, content: "" },
+            createdAt: now,
+            updatedAt: now,
+          };
+          useCardStore.getState().addCard(card);
+          autoSave.markDirty(card.id);
+        } catch { /* skip unreadable files */ }
+      }
+
+      const count = useCardStore.getState().getCardsByProject(pid).length;
+      useProjectStore.getState().updateProject(pid, { nodeCount: count });
+      void updateProjectMeta(pid, { nodeCount: count });
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [screenToCanvas]);
 
   const projectCards = useMemo(() => {
     if (!currentProjectId) return [];
@@ -162,6 +294,9 @@ export default function CanvasContainer() {
       onContextMenu={handleContextMenu}
       onClick={handleCanvasClick}
       onDoubleClick={handleDoubleClick}
+      onDragOver={handleFileDragOver}
+      onDragLeave={handleFileDragLeave}
+      onDrop={handleFileDrop}
     >
       <div
         data-canvas-background
@@ -242,6 +377,18 @@ export default function CanvasContainer() {
           projectId={currentProjectId}
           onClose={closeQuickMenu}
         />
+      )}
+
+      {fileDragOver && (
+        <div className="pointer-events-none absolute inset-4 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-primary/5 backdrop-blur-[2px]">
+          <div className="flex flex-col items-center gap-2 text-primary">
+            <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+            <span className="text-lg font-medium">松开以创建图片卡片</span>
+            <span className="text-sm text-primary/60">支持拖入多张图片</span>
+          </div>
+        </div>
       )}
 
       <FloatingEditor />

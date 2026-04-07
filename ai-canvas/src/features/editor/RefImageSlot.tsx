@@ -7,7 +7,6 @@ import {
   CARD_REF_MIME,
   type CardRefPayload,
   type RefImageEntry,
-  extractCardImage,
 } from "@/config/model-ref-images";
 import { cn } from "@/lib/utils";
 
@@ -33,8 +32,10 @@ export default function RefImageSlot({
   slotKey,
 }: RefImageSlotProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const slotRef = useRef<HTMLDivElement>(null);
   const [displayUrl, setDisplayUrl] = useState<string | undefined>();
   const [dragOver, setDragOver] = useState(false);
+  const [cardDragOver, setCardDragOver] = useState(false);
   const pickMode = useCanvasStore((s) => s.pickMode);
   const isPickingThis =
     pickMode?.active &&
@@ -54,6 +55,28 @@ export default function RefImageSlot({
       stale = true;
     };
   }, [entry?.url]);
+
+  // Listen for custom events dispatched by CardShell during pointer-based drag
+  useEffect(() => {
+    const el = slotRef.current;
+    if (!el || disabled) return;
+
+    const onHover = (e: Event) => {
+      setCardDragOver((e as CustomEvent).detail.active);
+    };
+    const onCardDrop = (e: Event) => {
+      const { cardId, imageUrl } = (e as CustomEvent).detail;
+      onImage({ url: imageUrl, sourceCardId: cardId, sourceType: "card" });
+      setCardDragOver(false);
+    };
+
+    el.addEventListener("canvas-card-hover", onHover);
+    el.addEventListener("canvas-card-drop", onCardDrop);
+    return () => {
+      el.removeEventListener("canvas-card-hover", onHover);
+      el.removeEventListener("canvas-card-drop", onCardDrop);
+    };
+  }, [disabled, onImage]);
 
   const sourceCard = useCardStore((s) =>
     entry?.sourceCardId ? s.cards.get(entry.sourceCardId) : undefined,
@@ -137,9 +160,15 @@ export default function RefImageSlot({
     });
   }, [targetCardId, slotKey, onImage]);
 
+  const isHighlighted = dragOver || cardDragOver;
+
   if (displayUrl) {
     return (
-      <div className="relative flex-1 overflow-hidden rounded-lg border border-input">
+      <div
+        ref={slotRef}
+        data-ref-slot
+        className="relative flex-1 overflow-hidden rounded-lg border border-input"
+      >
         <img
           src={displayUrl}
           alt={label}
@@ -169,12 +198,15 @@ export default function RefImageSlot({
 
   return (
     <div
+      ref={slotRef}
+      data-ref-slot
       className={cn(
         "flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-input p-2 text-muted-foreground transition-all",
-        dragOver && "scale-[1.02] border-primary bg-primary/5 shadow-sm",
+        isHighlighted && "scale-[1.02] border-primary bg-primary/5 shadow-sm",
+        cardDragOver && "ring-2 ring-primary ring-offset-1",
         isPickingThis && "animate-pulse border-primary bg-primary/10",
         !disabled &&
-          !dragOver &&
+          !isHighlighted &&
           "hover:border-primary/50 hover:text-foreground",
       )}
       onClick={() => !disabled && inputRef.current?.click()}
@@ -184,27 +216,36 @@ export default function RefImageSlot({
       onPaste={onPaste}
       tabIndex={0}
     >
-      <Upload className="h-4 w-4" />
-      <span className="text-[10px] font-medium">{label}</span>
-      <span className="text-center text-[9px] text-muted-foreground/60">
-        {description}
-      </span>
-      <div className="mt-0.5 flex gap-1">
-        <span className="text-[9px] text-muted-foreground/50">
-          点击上传 / 拖入文件 / 拖入卡片
-        </span>
-      </div>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          if (!disabled) handlePickFromCanvas();
-        }}
-        className="mt-1 flex items-center gap-1 rounded-md border border-input bg-background px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-      >
-        <Link2 className="h-3 w-3" />
-        从画布选取
-      </button>
+      {cardDragOver ? (
+        <>
+          <Upload className="h-5 w-5 text-primary" />
+          <span className="text-[11px] font-medium text-primary">
+            释放以设为{label}
+          </span>
+        </>
+      ) : (
+        <>
+          <Upload className="h-4 w-4" />
+          <span className="text-[10px] font-medium">{label}</span>
+          <span className="text-center text-[9px] text-muted-foreground/60">
+            {description}
+          </span>
+          <span className="mt-0.5 text-[9px] text-muted-foreground/50">
+            点击上传 / 拖入卡片
+          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!disabled) handlePickFromCanvas();
+            }}
+            className="mt-1 flex items-center gap-1 rounded-md border border-input bg-background px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+          >
+            <Link2 className="h-3 w-3" />
+            从画布选取
+          </button>
+        </>
+      )}
       <input
         ref={inputRef}
         type="file"
