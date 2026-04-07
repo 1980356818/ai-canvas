@@ -56,7 +56,7 @@ interface UIState {
 let toastCounter = 0;
 
 export const useUIStore = create<UIState>((set) => ({
-  sidebarVisible: true,
+  sidebarVisible: false,
   agentPanelVisible: false,
   settingsVisible: false,
   saveStatus: "saved",

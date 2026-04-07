@@ -8,12 +8,21 @@ export interface CardDefaults {
   data: Record<string, unknown>;
 }
 
+export const CARD_MAX_EDGE = 340;
+
+function sizeFromRatio(ratio: number): { width: number; height: number } {
+  if (ratio >= 1) {
+    return { width: CARD_MAX_EDGE, height: Math.round(CARD_MAX_EDGE / ratio) };
+  }
+  return { width: Math.round(CARD_MAX_EDGE * ratio), height: CARD_MAX_EDGE };
+}
+
 export const CARD_DEFAULTS: Record<CardType, CardDefaults> = {
-  ai_chat: { width: 380, height: 480, label: "AI 对话", data: { messages: [] } },
-  ai_image: { width: 360, height: 400, label: "AI 图片", data: { content: "" } },
-  ai_tryon: { width: 400, height: 460, label: "AI 换装", data: { content: "" } },
-  text: { width: 320, height: 240, label: "文本", data: { content: "" } },
-  sticky_note: { width: 240, height: 200, label: "便签", data: { content: "" } },
+  ai_chat:     { ...sizeFromRatio(3 / 4), label: "AI 对话", data: { messages: [] } },
+  ai_image:    { ...sizeFromRatio(4 / 5), label: "AI 图片", data: { content: "" } },
+  ai_tryon:    { ...sizeFromRatio(3 / 4), label: "AI 换装", data: { content: "" } },
+  text:        { ...sizeFromRatio(4 / 3), label: "文本", data: { content: "" } },
+  sticky_note: { ...sizeFromRatio(5 / 4), label: "便签", data: { content: "" } },
 };
 
 export const TYPE_COLORS: Record<CardType, string> = {
@@ -73,9 +82,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         title: "AI 对话",
         relativeX: 0,
         relativeY: 0,
-        width: 380,
-        height: 480,
-        data: { messages: [] },
+        ...CARD_DEFAULTS.ai_chat,
       },
     ],
   },
@@ -91,9 +98,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         title: "AI 图片生成",
         relativeX: 0,
         relativeY: 0,
-        width: 360,
-        height: 400,
-        data: { content: "" },
+        ...CARD_DEFAULTS.ai_image,
       },
     ],
   },
@@ -109,8 +114,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         title: "内容策划",
         relativeX: 0,
         relativeY: 0,
-        width: 380,
-        height: 400,
+        width: CARD_DEFAULTS.ai_chat.width,
+        height: CARD_DEFAULTS.ai_chat.height,
         data: {
           messages: [],
           systemPrompt:
@@ -120,11 +125,9 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         type: "text",
         title: "策划备注",
-        relativeX: 420,
+        relativeX: CARD_DEFAULTS.ai_chat.width + 40,
         relativeY: 0,
-        width: 320,
-        height: 200,
-        data: { content: "在这里记录你的想法和备注..." },
+        ...CARD_DEFAULTS.text,
       },
     ],
   },

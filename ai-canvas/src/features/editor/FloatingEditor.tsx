@@ -35,26 +35,30 @@ export default function FloatingEditor() {
   if (!card) return null;
 
   const { height, minWidth } = EDITOR_SIZES[card.type] ?? DEFAULT_SIZE;
+  const zoom = viewport.zoom;
 
-  const cardScreenLeft = card.x * viewport.zoom + viewport.x;
-  const cardScreenWidth = card.width * viewport.zoom;
-  const cardScreenCenterX = cardScreenLeft + cardScreenWidth / 2;
+  const baseWidth = Math.max(minWidth, card.width);
+  const scaledWidth = baseWidth * zoom;
 
-  const editorWidth = Math.max(minWidth, cardScreenWidth);
-  const screenLeft = cardScreenCenterX - editorWidth / 2;
-  const screenTop = (card.y + card.height) * viewport.zoom + viewport.y + GAP;
+  const cardScreenLeft = card.x * zoom + viewport.x;
+  const cardScreenCenterX = cardScreenLeft + card.width * zoom / 2;
+
+  const screenLeft = cardScreenCenterX - scaledWidth / 2;
+  const screenTop = (card.y + card.height) * zoom + viewport.y + GAP;
 
   return (
     <div
       ref={panelRef}
       className="absolute z-40 overflow-hidden rounded-xl border border-border bg-card shadow-xl"
       data-floating-editor
+      data-editor-zoom={zoom}
       style={{
         left: screenLeft,
         top: screenTop,
-        width: editorWidth,
+        width: baseWidth,
         height,
-        transform: "none",
+        transform: `scale(${zoom})`,
+        transformOrigin: "top left",
       }}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}

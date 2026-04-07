@@ -52,9 +52,13 @@ export default memo(
           cy: card.y,
         };
 
-        const editorEl = document.querySelector(
-          "[data-floating-editor]",
-        ) as HTMLElement | null;
+        const isEditingThis =
+          useCanvasStore.getState().editingCardId === card.id;
+        const editorEl = isEditingThis
+          ? (document.querySelector(
+              "[data-floating-editor]",
+            ) as HTMLElement | null)
+          : null;
 
         const onMove = (ev: PointerEvent) => {
           if (ev.pointerId !== pid || !dragging.current) return;
@@ -65,7 +69,7 @@ export default memo(
           if (editorEl) {
             const sx = dx * zoom;
             const sy = dy * zoom;
-            editorEl.style.transform = `translate(${sx}px, ${sy}px)`;
+            editorEl.style.transform = `translate(${sx}px, ${sy}px) scale(${zoom})`;
           }
         };
 
@@ -74,7 +78,7 @@ export default memo(
           dragging.current = false;
           el.style.transform = "";
           el.style.willChange = "";
-          if (editorEl) editorEl.style.transform = "none";
+          if (editorEl) editorEl.style.transform = `scale(${zoom})`;
           el.removeEventListener("pointermove", onMove);
           el.removeEventListener("pointerup", onUp);
           el.removeEventListener("lostpointercapture", onUp);
