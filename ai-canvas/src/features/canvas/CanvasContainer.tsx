@@ -39,9 +39,9 @@ export default function CanvasContainer() {
     selectionBox,
     onCanvasPointerDown,
     onCanvasPointerMove,
-    onCanvasPointerUp,
+    finishSelection,
     startSelection,
-  } = useSelection();
+  } = useSelection(containerRef);
 
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
   const cards = useCardStore((s) => s.cards);
@@ -218,6 +218,7 @@ export default function CanvasContainer() {
 
   const LONG_PRESS_MS = 120;
   const bgPending = useRef(false);
+  const bgLongPress = useRef(false);
   const bgMode = useRef<"none" | "selecting" | "panning">("none");
   const bgStart = useRef({ x: 0, y: 0 });
   const longPressTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -232,15 +233,12 @@ export default function CanvasContainer() {
 
     if (isCanvasBg && e.button === 0) {
       bgPending.current = true;
+      bgLongPress.current = false;
       bgMode.current = "none";
       bgStart.current = { x: e.clientX, y: e.clientY };
       clearTimeout(longPressTimer.current);
       longPressTimer.current = setTimeout(() => {
-        if (bgPending.current) {
-          bgPending.current = false;
-          bgMode.current = "panning";
-          startPan(bgStart.current.x, bgStart.current.y);
-        }
+        bgLongPress.current = true;
       }, LONG_PRESS_MS);
     }
   };
@@ -252,8 +250,13 @@ export default function CanvasContainer() {
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
         clearTimeout(longPressTimer.current);
         bgPending.current = false;
-        bgMode.current = "selecting";
-        startSelection(bgStart.current.x, bgStart.current.y);
+        if (bgLongPress.current) {
+          bgMode.current = "panning";
+          startPan(bgStart.current.x, bgStart.current.y);
+        } else {
+          bgMode.current = "selecting";
+          startSelection(bgStart.current.x, bgStart.current.y);
+        }
       }
     }
 
@@ -263,7 +266,6 @@ export default function CanvasContainer() {
       onCanvasPointerMove(e);
     } else {
       vpPointerMove(e);
-      onCanvasPointerMove(e);
     }
   };
 
@@ -271,17 +273,53 @@ export default function CanvasContainer() {
     clearTimeout(longPressTimer.current);
     const wasPending = bgPending.current;
     bgPending.current = false;
+    bgLongPress.current = false;
 
     if (bgMode.current === "panning") {
       vpPointerUp();
     } else if (bgMode.current === "selecting") {
-      onCanvasPointerUp(e);
-    } else {
-      vpPointerUp();
-      onCanvasPointerUp(e);
-      if (wasPending) {
-        useCanvasStore.getState().clearSelection();
+      finishSelection(e.clientX, e.clientY, e.ctrlKey);
+
+      // Inline selection with debug
+      const rect = containerRef.current?.getBoundingClientRect();
+      const sx = bgStart.current.x;
+      const sy = bgStart.current.y;
+      const ex = e.clientX;
+      const ey = e.clientY;
+      const bw = Math.abs(ex - sx);
+      const bh = Math.abs(ey - sy);
+
+      if (rect && (bw > 5 || bh > 5)) {
+        const bx = Math.min(sx, ex);
+        const by = Math.min(sy, ey);
+        const vp = useCanvasStore.getState().viewport;
+        const wx = (bx - rect.left - vp.x) / vp.zoom;
+        const wy = (by - rect.top - vp.y) / vp.zoom;
+        const ww = bw / vp.zoom;
+        const wh = bh / vp.zoom;
+        const pid = useProjectStore.getState().currentProjectId;
+        const cards = useCardStore.getState().cards;
+        const hits: string[] = [];
+        let debugCards = "";
+        for (const c of cards.values()) {
+          if (c.projectId !== pid) continue;
+          debugCards += `[${c.id.slice(0,4)}: x${Math.round(c.x)},y${Math.round(c.y)},w${c.width},h${c.height}] `;
+          if (c.x < wx + ww && c.x + c.width > wx && c.y < wy + wh && c.y + c.height > wy) {
+            hits.push(c.id);
+          }
+        }
+        useUIStore.getState().addToast({
+          type: "info",
+          title: `框选调试: hits=${hits.length}`,
+          description: `screen:(${Math.round(bx)},${Math.round(by)},${Math.round(bw)}x${Math.round(bh)}) world:(${Math.round(wx)},${Math.round(wy)},${Math.round(ww)}x${Math.round(wh)}) rect:(${Math.round(rect.left)},${Math.round(rect.top)}) vp:(${Math.round(vp.x)},${Math.round(vp.y)},z${vp.zoom.toFixed(2)}) cards:${debugCards || "none"}`,
+          duration: 10000,
+        });
+        if (hits.length > 0) {
+          useCanvasStore.getState().setSelectedCardIds(hits);
+        }
       }
+    } else if (wasPending) {
+      useCanvasStore.getState().clearSelection();
     }
     bgMode.current = "none";
   };
