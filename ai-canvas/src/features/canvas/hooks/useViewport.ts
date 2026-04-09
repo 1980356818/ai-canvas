@@ -66,13 +66,8 @@ export function useViewport(
     (e: React.PointerEvent) => {
       const isMiddle = e.button === 1;
       const isLeftWithSpace = e.button === 0 && spaceHeld.current;
-      const isLeftOnBackground =
-        e.button === 0 &&
-        !e.shiftKey &&
-        ((e.target as HTMLElement) === (e.currentTarget as HTMLElement) ||
-          (e.target as HTMLElement).dataset.canvasBackground !== undefined);
 
-      if (isMiddle || isLeftWithSpace || isLeftOnBackground) {
+      if (isMiddle || isLeftWithSpace) {
         panning.current = true;
         setIsPanning(true);
         const vp = useCanvasStore.getState().viewport;
@@ -80,6 +75,16 @@ export function useViewport(
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         e.preventDefault();
       }
+    },
+    [],
+  );
+
+  const startPan = useCallback(
+    (clientX: number, clientY: number) => {
+      panning.current = true;
+      setIsPanning(true);
+      const vp = useCanvasStore.getState().viewport;
+      panStart.current = { x: clientX, y: clientY, vx: vp.x, vy: vp.y };
     },
     [],
   );
@@ -122,6 +127,7 @@ export function useViewport(
     onPointerDown,
     onPointerMove,
     onPointerUp,
+    startPan,
     screenToCanvas,
   };
 }

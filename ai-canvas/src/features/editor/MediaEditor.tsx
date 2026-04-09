@@ -9,6 +9,7 @@ import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
 import {
   getRefSlotsForModel,
+  compactRefImages,
   type RefImageEntry,
 } from "@/config/model-ref-images";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
@@ -109,10 +110,11 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       }
       const refImages = { ...data.refImages };
       delete refImages[slotKey];
-      updateCard(card.id, { data: { ...data, refImages } });
+      const compacted = compactRefImages(refImages, refSlots);
+      updateCard(card.id, { data: { ...data, refImages: compacted } });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, data, updateCard, refSlots],
   );
 
   const handleGenerate = useCallback(async () => {

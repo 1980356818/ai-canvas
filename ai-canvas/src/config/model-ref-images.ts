@@ -66,6 +66,24 @@ export interface RefImageEntry {
   sourceType: "file" | "card";
 }
 
+/**
+ * Compact ref images so there are no gaps between slots.
+ * e.g. if refImage0 and refImage2 exist, refImage2 becomes refImage1.
+ */
+export function compactRefImages(
+  refImages: Record<string, RefImageEntry>,
+  slots: RefImageSlot[],
+): Record<string, RefImageEntry> {
+  const entries = slots
+    .map((s) => refImages[s.key])
+    .filter((e): e is RefImageEntry => !!e);
+  const result: Record<string, RefImageEntry> = {};
+  entries.forEach((entry, i) => {
+    if (slots[i]) result[slots[i].key] = entry;
+  });
+  return result;
+}
+
 export function extractCardImage(card: CanvasCard): string | null {
   const d = card.data as Record<string, unknown>;
   switch (card.type) {

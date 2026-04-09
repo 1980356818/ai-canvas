@@ -31,6 +31,7 @@ export default function CanvasContainer() {
     onPointerDown: vpPointerDown,
     onPointerMove: vpPointerMove,
     onPointerUp: vpPointerUp,
+    startPan,
     screenToCanvas,
   } = useViewport(containerRef);
 
@@ -39,6 +40,7 @@ export default function CanvasContainer() {
     onCanvasPointerDown,
     onCanvasPointerMove,
     onCanvasPointerUp,
+    startSelection,
   } = useSelection();
 
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
@@ -214,23 +216,74 @@ export default function CanvasContainer() {
     );
   }, [projectCards, viewport]);
 
+  const LONG_PRESS_MS = 120;
+  const bgPending = useRef(false);
+  const bgMode = useRef<"none" | "selecting" | "panning">("none");
+  const bgStart = useRef({ x: 0, y: 0 });
+  const longPressTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
   const handlePointerDown = (e: React.PointerEvent) => {
     vpPointerDown(e);
+
     const target = e.target as HTMLElement;
     const isCanvasBg =
       target === containerRef.current ||
       target.dataset.canvasBackground !== undefined;
-    onCanvasPointerDown(e, isCanvasBg);
+
+    if (isCanvasBg && e.button === 0) {
+      bgPending.current = true;
+      bgMode.current = "none";
+      bgStart.current = { x: e.clientX, y: e.clientY };
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = setTimeout(() => {
+        if (bgPending.current) {
+          bgPending.current = false;
+          bgMode.current = "panning";
+          startPan(bgStart.current.x, bgStart.current.y);
+        }
+      }, LONG_PRESS_MS);
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    vpPointerMove(e);
-    onCanvasPointerMove(e);
+    if (bgPending.current) {
+      const dx = e.clientX - bgStart.current.x;
+      const dy = e.clientY - bgStart.current.y;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        clearTimeout(longPressTimer.current);
+        bgPending.current = false;
+        bgMode.current = "selecting";
+        startSelection(bgStart.current.x, bgStart.current.y);
+      }
+    }
+
+    if (bgMode.current === "panning") {
+      vpPointerMove(e);
+    } else if (bgMode.current === "selecting") {
+      onCanvasPointerMove(e);
+    } else {
+      vpPointerMove(e);
+      onCanvasPointerMove(e);
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    vpPointerUp();
-    onCanvasPointerUp(e);
+    clearTimeout(longPressTimer.current);
+    const wasPending = bgPending.current;
+    bgPending.current = false;
+
+    if (bgMode.current === "panning") {
+      vpPointerUp();
+    } else if (bgMode.current === "selecting") {
+      onCanvasPointerUp(e);
+    } else {
+      vpPointerUp();
+      onCanvasPointerUp(e);
+      if (wasPending) {
+        useCanvasStore.getState().clearSelection();
+      }
+    }
+    bgMode.current = "none";
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -284,7 +337,7 @@ export default function CanvasContainer() {
       data-canvas-viewport
       className="relative flex-1 overflow-hidden bg-background"
       style={{
-        cursor: isPanning ? "grabbing" : "grab",
+        cursor: isPanning ? "grabbing" : "default",
         backgroundImage:
           "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
         backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px`,
@@ -333,7 +386,7 @@ export default function CanvasContainer() {
 
       {selectionBox && (
         <div
-          className="pointer-events-none absolute border border-blue-500 bg-blue-500/10"
+          className="pointer-events-none fixed z-50 border border-blue-500 bg-blue-500/10"
           style={{
             left: selectionBox.x,
             top: selectionBox.y,

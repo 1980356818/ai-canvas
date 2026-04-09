@@ -10,18 +10,26 @@ interface SelectionBox {
   height: number;
 }
 
-export function useSelection() {
+export function useSelection(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+) {
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null);
   const dragging = useRef(false);
   const start = useRef({ x: 0, y: 0 });
 
   const onCanvasPointerDown = useCallback(
     (e: React.PointerEvent, isCanvasBackground: boolean) => {
-      if (!isCanvasBackground || e.button !== 0 || !e.shiftKey) return;
+      if (!isCanvasBackground || e.button !== 0) return;
+      startSelection(e.clientX, e.clientY);
+    },
+    [],
+  );
 
+  const startSelection = useCallback(
+    (clientX: number, clientY: number) => {
       dragging.current = true;
-      start.current = { x: e.clientX, y: e.clientY };
-      setSelectionBox({ x: e.clientX, y: e.clientY, width: 0, height: 0 });
+      start.current = { x: clientX, y: clientY };
+      setSelectionBox({ x: clientX, y: clientY, width: 0, height: 0 });
     },
     [],
   );
@@ -36,29 +44,34 @@ export function useSelection() {
     setSelectionBox({ x, y, width, height });
   }, []);
 
-  const onCanvasPointerUp = useCallback(
-    (e: React.PointerEvent) => {
+  const finishSelection = useCallback(
+    (clientX: number, clientY: number, ctrlKey: boolean) => {
       if (!dragging.current) return;
       dragging.current = false;
 
       const box = {
-        x: Math.min(start.current.x, e.clientX),
-        y: Math.min(start.current.y, e.clientY),
-        width: Math.abs(e.clientX - start.current.x),
-        height: Math.abs(e.clientY - start.current.y),
+        x: Math.min(start.current.x, clientX),
+        y: Math.min(start.current.y, clientY),
+        width: Math.abs(clientX - start.current.x),
+        height: Math.abs(clientY - start.current.y),
       };
 
       if (box.width < 5 && box.height < 5) {
-        if (!e.ctrlKey) useCanvasStore.getState().clearSelection();
+        if (!ctrlKey) useCanvasStore.getState().clearSelection();
         setSelectionBox(null);
         return;
       }
 
       const vp = useCanvasStore.getState().viewport;
-      const containerEl = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) {
+        setSelectionBox(null);
+        return;
+      }
+
       const worldBox = {
-        x: (box.x - containerEl.left - vp.x) / vp.zoom,
-        y: (box.y - containerEl.top - vp.y) / vp.zoom,
+        x: (box.x - rect.left - vp.x) / vp.zoom,
+        y: (box.y - rect.top - vp.y) / vp.zoom,
         width: box.width / vp.zoom,
         height: box.height / vp.zoom,
       };
@@ -79,7 +92,7 @@ export function useSelection() {
         }
       }
 
-      if (e.ctrlKey) {
+      if (ctrlKey) {
         const prev = useCanvasStore.getState().selectedCardIds;
         const merged = [...new Set([...prev, ...hits])];
         useCanvasStore.getState().setSelectedCardIds(merged);
@@ -89,13 +102,14 @@ export function useSelection() {
 
       setSelectionBox(null);
     },
-    [],
+    [containerRef],
   );
 
   return {
     selectionBox,
     onCanvasPointerDown,
     onCanvasPointerMove,
-    onCanvasPointerUp,
+    finishSelection,
+    startSelection,
   };
 }

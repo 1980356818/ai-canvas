@@ -2,7 +2,7 @@ import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
-import { getRefSlotsForModel, type RefImageEntry } from "@/config/model-ref-images";
+import { getRefSlotsForModel, compactRefImages, type RefImageEntry } from "@/config/model-ref-images";
 
 const IMAGE_SOURCE_TYPES = new Set(["ai_image", "ai_tryon", "ai_video"]);
 
@@ -47,7 +47,9 @@ export function removeRefImageForSource(
   }
 
   if (changed) {
-    d.refImages = refImages;
+    const model = (d.model as string) || "";
+    const slots = getRefSlotsForModel(model);
+    d.refImages = compactRefImages(refImages, slots);
     cardStore.updateCard(targetCardId, { data: d });
     autoSave.markDirty(targetCardId);
   }

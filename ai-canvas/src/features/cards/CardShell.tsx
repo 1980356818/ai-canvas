@@ -452,7 +452,7 @@ export default memo(
     return (
       <div
         ref={cardRef}
-        className="group absolute select-none"
+        className="group absolute select-none rounded-xl"
         style={{
           left: card.x,
           top: card.y,
@@ -460,6 +460,10 @@ export default memo(
           height: card.height,
           zIndex: card.zIndex,
           touchAction: "none",
+          outline: selected ? "4px solid red" : "none",
+          outlineOffset: "2px",
+          boxShadow: selected ? "0 0 20px 6px red" : "none",
+          filter: selected ? "brightness(1.3)" : "none",
         }}
         onPointerDown={onPointerDown}
         onClick={onCardClick}
@@ -469,7 +473,7 @@ export default memo(
           className={cn(
             "pointer-events-none absolute rounded-[14px] transition-opacity duration-200",
             selected
-              ? "opacity-100"
+              ? "opacity-0"
               : "opacity-[0.35] group-hover:opacity-[0.55]",
           )}
           style={{
