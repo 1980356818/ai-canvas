@@ -2,7 +2,6 @@ import { useRef, useCallback, useState, useEffect } from "react";
 import { Upload, X, Link2 } from "lucide-react";
 import { resolveImageUrl } from "@/lib/tauri";
 import { useCanvasStore } from "@/stores/canvasStore";
-import { useCardStore } from "@/stores/cardStore";
 import {
   CARD_REF_MIME,
   type CardRefPayload,
@@ -19,6 +18,7 @@ interface RefImageSlotProps {
   disabled?: boolean;
   targetCardId: string;
   slotKey: string;
+  index?: number;
 }
 
 export default function RefImageSlot({
@@ -30,6 +30,7 @@ export default function RefImageSlot({
   disabled,
   targetCardId,
   slotKey,
+  index,
 }: RefImageSlotProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const slotRef = useRef<HTMLDivElement>(null);
@@ -78,12 +79,6 @@ export default function RefImageSlot({
     };
   }, [disabled, onImage]);
 
-  const sourceCard = useCardStore((s) =>
-    entry?.sourceCardId ? s.cards.get(entry.sourceCardId) : undefined,
-  );
-  const sourceLabel = sourceCard
-    ? sourceCard.title || `卡片 #${sourceCard.id.slice(0, 4)}`
-    : undefined;
 
   const handleFile = useCallback(
     (file: File) => {
@@ -167,31 +162,28 @@ export default function RefImageSlot({
       <div
         ref={slotRef}
         data-ref-slot
-        className="relative flex-1 overflow-hidden rounded-lg border border-input"
+        className="relative aspect-square w-[96px] shrink-0"
       >
-        <img
-          src={displayUrl}
-          alt={label}
-          className="h-full w-full object-cover"
-        />
+        <div className="h-full w-full overflow-hidden rounded-lg border border-input bg-muted/30">
+          <img
+            src={displayUrl}
+            alt={label}
+            className="h-full w-full object-contain"
+          />
+        </div>
+        {index != null && (
+          <span className="absolute left-0 top-0 z-10 flex h-5 w-5 -translate-x-1/4 -translate-y-1/4 items-center justify-center rounded-full bg-black/70 text-[10px] font-bold text-white shadow-sm">
+            {index + 1}
+          </span>
+        )}
         {!disabled && (
           <button
             onClick={onClear}
-            className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+            className="absolute right-1 top-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
           >
-            <X className="h-3 w-3" />
+            <X className="h-2.5 w-2.5" />
           </button>
         )}
-        <div className="absolute bottom-1 left-1 flex items-center gap-1">
-          <span className="rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white">
-            {label}
-          </span>
-          {sourceLabel && (
-            <span className="rounded bg-primary/70 px-1.5 py-0.5 text-[10px] text-white">
-              ← {sourceLabel}
-            </span>
-          )}
-        </div>
       </div>
     );
   }
@@ -201,7 +193,7 @@ export default function RefImageSlot({
       ref={slotRef}
       data-ref-slot
       className={cn(
-        "flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-input p-2 text-muted-foreground transition-all",
+        "relative flex aspect-square w-[96px] shrink-0 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-input text-muted-foreground transition-all",
         isHighlighted && "scale-[1.02] border-primary bg-primary/5 shadow-sm",
         cardDragOver && "ring-2 ring-primary ring-offset-1",
         isPickingThis && "animate-pulse border-primary bg-primary/10",
@@ -217,33 +209,11 @@ export default function RefImageSlot({
       tabIndex={0}
     >
       {cardDragOver ? (
-        <>
-          <Upload className="h-5 w-5 text-primary" />
-          <span className="text-[11px] font-medium text-primary">
-            释放以设为{label}
-          </span>
-        </>
+        <Upload className="h-5 w-5 text-primary" />
       ) : (
         <>
           <Upload className="h-4 w-4" />
-          <span className="text-[10px] font-medium">{label}</span>
-          <span className="text-center text-[9px] text-muted-foreground/60">
-            {description}
-          </span>
-          <span className="mt-0.5 text-[9px] text-muted-foreground/50">
-            点击上传 / 拖入卡片
-          </span>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!disabled) handlePickFromCanvas();
-            }}
-            className="mt-1 flex items-center gap-1 rounded-md border border-input bg-background px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-          >
-            <Link2 className="h-3 w-3" />
-            从画布选取
-          </button>
+          <span className="text-[9px] font-medium leading-tight">{label}</span>
         </>
       )}
       <input

@@ -3,6 +3,8 @@ import { GripVertical } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useConnectionStore, type Connection } from "@/stores/connectionStore";
+import { useProjectStore } from "@/stores/projectStore";
 import { autoSave } from "@/lib/autoSave";
 import { recordUpdate } from "@/lib/history";
 import { cn } from "@/lib/utils";
@@ -13,6 +15,189 @@ import {
   CARD_REF_MIME,
   type CardRefPayload,
 } from "@/config/model-ref-images";
+import {
+  canAcceptImageConnection,
+  injectOnConnect,
+} from "@/lib/dataFlow";
+
+function getCanvasViewportEl(): HTMLElement | null {
+  return document.querySelector("[data-canvas-viewport]");
+}
+
+function screenToWorld(clientX: number, clientY: number) {
+  const vp = useCanvasStore.getState().viewport;
+  const root = getCanvasViewportEl();
+  const rect = root?.getBoundingClientRect();
+  const left = rect?.left ?? 0;
+  const top = rect?.top ?? 0;
+  return {
+    x: (clientX - left - vp.x) / vp.zoom,
+    y: (clientY - top - vp.y) / vp.zoom,
+  };
+}
+
+function findInputPortAt(
+  clientX: number,
+  clientY: number,
+  excludeCardId: string,
+): HTMLElement | null {
+  const els = document.elementsFromPoint(clientX, clientY);
+  for (const el of els) {
+    const port = el.closest("[data-port-input]") as HTMLElement | null;
+    if (port && port.dataset.cardId !== excludeCardId) return port;
+  }
+  return null;
+}
+
+function Port({
+  side,
+  cardId,
+  color,
+}: {
+  side: "input" | "output";
+  cardId: string;
+  color: string;
+}) {
+  const isOutput = side === "output";
+  const draftWire = useConnectionStore((s) => s.draftWire);
+  const isDraftTarget =
+    !isOutput && draftWire !== null && draftWire.sourceCardId !== cardId;
+
+  const onPortPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isOutput) return;
+      e.stopPropagation();
+      e.preventDefault();
+
+      const card = useCardStore.getState().getCard(cardId);
+      if (!card) return;
+      const portX = card.x + card.width;
+      const portY = card.y + card.height / 2;
+
+      useConnectionStore
+        .getState()
+        .setDraftWire({
+          sourceCardId: cardId,
+          startX: portX,
+          startY: portY,
+          endX: portX,
+          endY: portY,
+        });
+
+      let lastHighlight: HTMLElement | null = null;
+
+      const onMove = (ev: PointerEvent) => {
+        ev.preventDefault();
+        const vp = useCanvasStore.getState().viewport;
+        const current = useConnectionStore.getState().draftWire;
+        if (current) {
+          useConnectionStore
+            .getState()
+            .setDraftWire({
+              ...current,
+              endX: current.endX + ev.movementX / vp.zoom,
+              endY: current.endY + ev.movementY / vp.zoom,
+            });
+        }
+
+        const target = findInputPortAt(ev.clientX, ev.clientY, cardId);
+        if (target !== lastHighlight) {
+          lastHighlight?.classList.remove("port-drop-target");
+          target?.classList.add("port-drop-target");
+          lastHighlight = target;
+        }
+      };
+
+      const onUp = (ev: PointerEvent) => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        lastHighlight?.classList.remove("port-drop-target");
+
+        useConnectionStore.getState().setDraftWire(null);
+
+        const target = findInputPortAt(ev.clientX, ev.clientY, cardId);
+        if (target) {
+          const targetCardId = target.dataset.cardId;
+          const projectId = useProjectStore.getState().currentProjectId;
+          if (
+            targetCardId &&
+            projectId &&
+            !useConnectionStore
+              .getState()
+              .hasConnection(cardId, targetCardId)
+          ) {
+            if (!canAcceptImageConnection(targetCardId, cardId)) {
+              useUIStore.getState().addToast({
+                type: "warning",
+                title: "参考图已满",
+                description:
+                  "该卡片的参考图位已全部占用，请先移除已有参考图或断开连线",
+                duration: 3000,
+              });
+              return;
+            }
+
+            const conn: Connection = {
+              id: crypto.randomUUID(),
+              projectId,
+              sourceCardId: cardId,
+              targetCardId,
+              createdAt: new Date().toISOString(),
+            };
+            useConnectionStore.getState().addConnection(conn);
+            autoSave.markDirty();
+            injectOnConnect(cardId, targetCardId);
+          }
+        }
+      };
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    },
+    [cardId, isOutput],
+  );
+
+  return (
+    <div
+      data-port-input={!isOutput ? "" : undefined}
+      data-port-output={isOutput ? "" : undefined}
+      data-card-id={cardId}
+      className={cn(
+        "absolute top-1/2 z-20 -translate-y-1/2 transition-transform duration-150",
+        isOutput ? "right-0 translate-x-1/2" : "left-0 -translate-x-1/2",
+        isDraftTarget && "scale-[1.4]",
+      )}
+      onPointerDown={onPortPointerDown}
+    >
+      <div
+        className={cn(
+          "port-socket flex items-center justify-center rounded-full",
+          "h-[18px] w-[18px] transition-all duration-150",
+          isOutput ? "cursor-crosshair" : "cursor-default",
+          isDraftTarget && "animate-pulse",
+        )}
+        style={{
+          border: `2px solid ${color}`,
+          borderColor: isDraftTarget ? color : `color-mix(in srgb, ${color} 55%, transparent)`,
+          background: isDraftTarget
+            ? `color-mix(in srgb, ${color} 25%, transparent)`
+            : `color-mix(in srgb, ${color} 8%, transparent)`,
+          boxShadow: isDraftTarget
+            ? `0 0 12px ${color}88, inset 0 1px 3px rgba(0,0,0,0.2)`
+            : `inset 0 1px 3px rgba(0,0,0,0.2)`,
+        }}
+      >
+        <div
+          className="h-2 w-2 rounded-full transition-all duration-150"
+          style={{
+            background: color,
+            boxShadow: `0 0 5px ${color}99`,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
 
 interface CardShellProps {
   card: CanvasCard;
@@ -85,6 +270,7 @@ export default memo(
           const dy = (ev.clientY - dragStart.current.my) / zoom;
           if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didDrag.current = true;
           el.style.transform = `translate(${dx}px, ${dy}px)`;
+          useCanvasStore.getState().setDragOffset(card.id, { dx, dy });
           if (editorEl) {
             const sx = dx * zoom;
             const sy = dy * zoom;
@@ -108,6 +294,7 @@ export default memo(
           dragging.current = false;
           el.style.transform = "";
           el.style.willChange = "";
+          useCanvasStore.getState().setDragOffset(card.id, null);
           if (editorEl) editorEl.style.transform = `scale(${zoom})`;
           el.removeEventListener("pointermove", onMove);
           el.removeEventListener("pointerup", onUp);
@@ -230,6 +417,7 @@ export default memo(
     );
 
     const hasImage = cardHasImage(card);
+    const hasUpstream = !!(card.data as Record<string, unknown>).upstreamCardId;
 
     const onRefDragStart = useCallback(
       (e: React.DragEvent) => {
@@ -327,7 +515,22 @@ export default memo(
           {isPickTarget && (
             <div className="pointer-events-none absolute inset-0 z-10 animate-pulse rounded-xl ring-2 ring-primary ring-offset-2" />
           )}
+
+          {hasUpstream && (
+            <div
+              className="absolute right-2.5 top-2.5 z-10 flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-medium text-emerald-600 backdrop-blur-sm dark:text-emerald-400"
+              title="已接收上游数据"
+            >
+              <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="currentColor">
+                <path d="M1 5 L4 8 L9 2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+              </svg>
+              上游
+            </div>
+          )}
         </div>
+
+        <Port side="input" cardId={card.id} color={accentColor} />
+        <Port side="output" cardId={card.id} color={accentColor} />
 
         {!card.locked && (
           <div

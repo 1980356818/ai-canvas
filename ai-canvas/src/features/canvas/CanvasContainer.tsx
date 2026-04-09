@@ -3,11 +3,13 @@ import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useConnectionStore } from "@/stores/connectionStore";
 import { useViewport } from "./hooks/useViewport";
 import { useSelection } from "./hooks/useSelection";
 import CardShell from "@/features/cards/CardShell";
 import CardContent from "@/features/cards/CardContent";
 import FloatingEditor from "@/features/editor/FloatingEditor";
+import ConnectionLayer from "./ConnectionLayer";
 import ZoomControls from "./ZoomControls";
 import QuickCreateMenu, { type QuickMenuPosition } from "./QuickCreateMenu";
 import { CARD_DEFAULTS } from "@/shared/constants";
@@ -48,7 +50,8 @@ export default function CanvasContainer() {
 
   const [quickMenu, setQuickMenu] = useState<QuickMenuPosition | null>(null);
   const closeQuickMenu = useCallback(() => setQuickMenu(null), []);
-  const [fileDragOver, setFileDragOver] = useState(false);
+
+  const dropHandledAt = useRef(0);
 
   const handleFileDragOver = useCallback(
     (e: React.DragEvent) => {
@@ -57,20 +60,13 @@ export default function CanvasContainer() {
       if (!hasFiles) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
-      setFileDragOver(true);
     },
     [currentProjectId],
   );
 
-  const handleFileDragLeave = useCallback((e: React.DragEvent) => {
-    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-    setFileDragOver(false);
-  }, []);
-
   const handleFileDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
-      setFileDragOver(false);
       if (!currentProjectId) return;
 
       const files = Array.from(e.dataTransfer.files).filter((f) =>
@@ -78,8 +74,12 @@ export default function CanvasContainer() {
       );
       if (files.length === 0) return;
 
+      dropHandledAt.current = Date.now();
+
       const dropPos = screenToCanvas(e.clientX, e.clientY);
       const { width, height } = CARD_DEFAULTS.ai_image;
+      const dropX = dropPos.x - width / 2;
+      const dropY = dropPos.y - height / 2;
       const GAP = 20;
 
       files.forEach((file, idx) => {
@@ -92,8 +92,8 @@ export default function CanvasContainer() {
             id: crypto.randomUUID(),
             projectId: currentProjectId,
             type: "ai_image",
-            x: dropPos.x - width / 2 + idx * (width + GAP),
-            y: dropPos.y - height / 2,
+            x: dropX + idx * (width + GAP),
+            y: dropY,
             width,
             height,
             zIndex: maxZIndex + 1 + idx,
@@ -137,11 +137,20 @@ export default function CanvasContainer() {
 
     onTauriFileDrop(async (paths, sx, sy) => {
       if (cancelled) return;
+      if (Date.now() - dropHandledAt.current < 1000) return;
       const pid = useProjectStore.getState().currentProjectId;
       if (!pid) return;
 
-      const canvasPos = screenToCanvas(sx, sy);
+      const dpr = window.devicePixelRatio || 1;
+      const cssx = sx / dpr;
+      const cssy = sy / dpr;
+      const rect = containerRef.current?.getBoundingClientRect();
+      const cx = rect ? cssx - rect.left : cssx;
+      const cy = rect ? cssy - rect.top : cssy;
+      const vp = useCanvasStore.getState().viewport;
       const { width, height } = CARD_DEFAULTS.ai_image;
+      const dropX = (cx - vp.x) / vp.zoom - width / 2;
+      const dropY = (cy - vp.y) / vp.zoom - height / 2;
       const GAP = 20;
 
       for (let i = 0; i < paths.length; i++) {
@@ -153,8 +162,8 @@ export default function CanvasContainer() {
             id: crypto.randomUUID(),
             projectId: pid,
             type: "ai_image",
-            x: canvasPos.x - width / 2 + i * (width + GAP),
-            y: canvasPos.y - height / 2,
+            x: dropX + i * (width + GAP),
+            y: dropY,
             width,
             height,
             zIndex: maxZIndex + 1 + i,
@@ -180,7 +189,7 @@ export default function CanvasContainer() {
       cancelled = true;
       unlisten?.();
     };
-  }, [screenToCanvas]);
+  }, []);
 
   const projectCards = useMemo(() => {
     if (!currentProjectId) return [];
@@ -239,22 +248,16 @@ export default function CanvasContainer() {
         return;
       }
       useCanvasStore.getState().clearSelection();
+      useConnectionStore.getState().setSelectedConnectionId(null);
     }
   };
 
-  const refLines = useMemo(() => {
-    const lines: Array<{ from: CanvasCard; to: CanvasCard; key: string }> = [];
-    for (const card of projectCards) {
-      const refs = (card.data as { refImages?: Record<string, RefImageEntry> }).refImages;
-      if (!refs) continue;
-      for (const [slotKey, entry] of Object.entries(refs)) {
-        if (!entry.sourceCardId) continue;
-        const src = cards.get(entry.sourceCardId);
-        if (src) lines.push({ from: src, to: card, key: `${src.id}-${card.id}-${slotKey}` });
-      }
-    }
-    return lines;
-  }, [projectCards, cards]);
+  const handleConnectionContextMenu = useCallback(
+    (e: React.MouseEvent, connectionId: string) => {
+      showContextMenu(e.clientX, e.clientY, "connection", connectionId);
+    },
+    [showContextMenu],
+  );
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -295,7 +298,6 @@ export default function CanvasContainer() {
       onClick={handleCanvasClick}
       onDoubleClick={handleDoubleClick}
       onDragOver={handleFileDragOver}
-      onDragLeave={handleFileDragLeave}
       onDrop={handleFileDrop}
     >
       <div
@@ -315,31 +317,11 @@ export default function CanvasContainer() {
           </CardShell>
         ))}
 
-        {refLines.length > 0 && (
-          <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
-            <defs>
-              <marker id="ref-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-                <path d="M0,0 L6,3 L0,6" fill="none" stroke="var(--color-primary)" strokeWidth="1" opacity="0.4" />
-              </marker>
-            </defs>
-            {refLines.map(({ from, to, key }) => {
-              const x1 = from.x + from.width / 2;
-              const y1 = from.y + from.height / 2;
-              const x2 = to.x + to.width / 2;
-              const y2 = to.y + to.height / 2;
-              return (
-                <line
-                  key={key}
-                  x1={x1} y1={y1} x2={x2} y2={y2}
-                  stroke="var(--color-primary)"
-                  strokeWidth={1.5}
-                  strokeDasharray="6 4"
-                  opacity={0.3}
-                  markerEnd="url(#ref-arrow)"
-                />
-              );
-            })}
-          </svg>
+        {currentProjectId && (
+          <ConnectionLayer
+            projectId={currentProjectId}
+            onConnectionContextMenu={handleConnectionContextMenu}
+          />
         )}
       </div>
 
@@ -377,18 +359,6 @@ export default function CanvasContainer() {
           projectId={currentProjectId}
           onClose={closeQuickMenu}
         />
-      )}
-
-      {fileDragOver && (
-        <div className="pointer-events-none absolute inset-4 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-primary/5 backdrop-blur-[2px]">
-          <div className="flex flex-col items-center gap-2 text-primary">
-            <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-            </svg>
-            <span className="text-lg font-medium">松开以创建图片卡片</span>
-            <span className="text-sm text-primary/60">支持拖入多张图片</span>
-          </div>
-        </div>
       )}
 
       <FloatingEditor />

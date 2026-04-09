@@ -5,6 +5,7 @@ import {
   useCardStore,
   type CanvasCard,
 } from "@/stores/cardStore";
+import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { deleteCard, updateProjectMeta } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
@@ -65,6 +66,7 @@ function buildCard(
 
 type MenuEntry =
   | { type: "item"; label: string; shortcut?: string; disabled?: boolean; onSelect: () => void }
+  | { type: "submenu"; label: string; disabled?: boolean; children: MenuEntry[] }
   | { type: "sep" };
 
 function MenuSeparator() {
@@ -105,6 +107,70 @@ function MenuButton({
   );
 }
 
+function SubMenuTrigger({
+  label,
+  disabled,
+  children,
+}: {
+  label: string;
+  disabled?: boolean;
+  children: MenuEntry[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const show = () => {
+    clearTimeout(timerRef.current);
+    setOpen(true);
+  };
+  const hide = () => {
+    timerRef.current = setTimeout(() => setOpen(false), 120);
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="relative"
+      onMouseEnter={show}
+      onMouseLeave={hide}
+    >
+      <div
+        className={cn(
+          "flex w-full items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-sm",
+          disabled
+            ? "cursor-not-allowed text-muted-foreground opacity-50"
+            : "text-foreground hover:bg-accent hover:text-accent-foreground",
+        )}
+      >
+        <span>{label}</span>
+        <svg className="h-3 w-3 text-muted-foreground" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M4.5 2.5L8 6L4.5 9.5" />
+        </svg>
+      </div>
+      {open && !disabled && (
+        <div className="absolute left-full top-0 z-50 ml-1 min-w-[10rem] rounded-md border border-border bg-popover p-1 shadow-md">
+          {children.map((e, i) =>
+            e.type === "sep" ? (
+              <MenuSeparator key={`s-${i}`} />
+            ) : e.type === "submenu" ? (
+              <SubMenuTrigger key={`${e.label}-${i}`} label={e.label} disabled={e.disabled} children={e.children} />
+            ) : (
+              <MenuButton
+                key={`${e.label}-${i}`}
+                label={e.label}
+                shortcut={e.shortcut}
+                disabled={e.disabled}
+                onSelect={e.onSelect}
+              />
+            ),
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ContextMenuPanel({
   contextMenu,
   hide,
@@ -113,7 +179,7 @@ function ContextMenuPanel({
     visible: boolean;
     x: number;
     y: number;
-    target: "canvas" | "card" | "multi";
+    target: "canvas" | "card" | "multi" | "connection";
     targetId?: string;
   };
   hide: () => void;
@@ -333,34 +399,42 @@ function ContextMenuPanel({
       : [];
     entries = [
       {
-        type: "item",
-        label: "新建 AI 对话",
+        type: "submenu",
+        label: "添加节点",
         disabled: noProject,
-        onSelect: () => addCardAtClick("ai_chat"),
+        children: [
+          {
+            type: "item",
+            label: "生成文字",
+            disabled: noProject,
+            onSelect: () => addCardAtClick("ai_chat"),
+          },
+          {
+            type: "item",
+            label: "生成图片",
+            disabled: noProject,
+            onSelect: () => addCardAtClick("ai_image"),
+          },
+          {
+            type: "item",
+            label: "生成视频",
+            disabled: noProject,
+            onSelect: () => addCardAtClick("ai_video"),
+          },
+        ],
       },
       {
-        type: "item",
-        label: "新建 AI 图片",
+        type: "submenu",
+        label: "添加模板",
         disabled: noProject,
-        onSelect: () => addCardAtClick("ai_image"),
-      },
-      {
-        type: "item",
-        label: "新建 AI 换装",
-        disabled: noProject,
-        onSelect: () => addCardAtClick("ai_tryon"),
-      },
-      {
-        type: "item",
-        label: "新建文本卡片",
-        disabled: noProject,
-        onSelect: () => addCardAtClick("text"),
-      },
-      {
-        type: "item",
-        label: "新建便签",
-        disabled: noProject,
-        onSelect: () => addCardAtClick("sticky_note"),
+        children: [
+          {
+            type: "item",
+            label: "AI换衣",
+            disabled: noProject,
+            onSelect: () => addCardAtClick("ai_tryon"),
+          },
+        ],
       },
       { type: "sep" },
       {
@@ -373,7 +447,7 @@ function ContextMenuPanel({
       { type: "sep" },
       {
         type: "item",
-        label: "适配全部",
+        label: "总览全局",
         disabled: cards.length === 0,
         onSelect: fitAll,
       },
@@ -468,6 +542,23 @@ function ContextMenuPanel({
         onSelect: () => void deleteIds([...selectedCardIds]),
       },
     ];
+  } else if (contextMenu.target === "connection") {
+    const connId = contextMenu.targetId;
+    entries = [
+      {
+        type: "item",
+        label: "删除连线",
+        shortcut: "Del",
+        disabled: !connId,
+        onSelect: () => {
+          if (connId) {
+            useConnectionStore.getState().removeConnection(connId);
+            autoSave.markDirty();
+          }
+          hide();
+        },
+      },
+    ];
   }
 
   return (
@@ -480,6 +571,8 @@ function ContextMenuPanel({
       {entries.map((e, i) =>
         e.type === "sep" ? (
           <MenuSeparator key={`s-${i}`} />
+        ) : e.type === "submenu" ? (
+          <SubMenuTrigger key={`${e.label}-${i}`} label={e.label} disabled={e.disabled} children={e.children} />
         ) : (
           <MenuButton
             key={`${e.label}-${i}`}

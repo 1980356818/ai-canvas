@@ -11,6 +11,8 @@ import {
   getRefSlotsForModel,
   type RefImageEntry,
 } from "@/config/model-ref-images";
+import { useConnectionStore, type Connection } from "@/stores/connectionStore";
+import { useProjectStore } from "@/stores/projectStore";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
 
@@ -71,12 +73,40 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       const refImages = { ...data.refImages, [slotKey]: entry };
       updateCard(card.id, { data: { ...data, refImages } });
       autoSave.markDirty(card.id);
+
+      if (entry.sourceCardId) {
+        const connStore = useConnectionStore.getState();
+        if (!connStore.hasConnection(entry.sourceCardId, card.id)) {
+          const projectId = useProjectStore.getState().currentProjectId;
+          if (projectId) {
+            const conn: Connection = {
+              id: crypto.randomUUID(),
+              projectId,
+              sourceCardId: entry.sourceCardId,
+              targetCardId: card.id,
+              createdAt: new Date().toISOString(),
+            };
+            connStore.addConnection(conn);
+            autoSave.markDirty();
+          }
+        }
+      }
     },
     [card.id, data, updateCard],
   );
 
   const clearRefImage = useCallback(
     (slotKey: string) => {
+      const entry = data.refImages?.[slotKey];
+      if (entry?.sourceCardId) {
+        const { connections, removeConnection } = useConnectionStore.getState();
+        for (const [id, c] of connections) {
+          if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
+            removeConnection(id);
+            break;
+          }
+        }
+      }
       const refImages = { ...data.refImages };
       delete refImages[slotKey];
       updateCard(card.id, { data: { ...data, refImages } });
@@ -146,18 +176,9 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
   return (
     <div className="flex h-full flex-col gap-2 p-3">
-      <textarea
-        className="min-h-[3rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
-        value={data.content ?? ""}
-        onChange={onPromptChange}
-        placeholder="描述你想生成的图片…"
-        disabled={generating}
-        autoFocus
-      />
-
       {refSlots.length > 0 && (
-        <div className="flex min-h-0 gap-2" style={{ height: refSlots.length > 1 ? 80 : 72 }}>
-          {refSlots.map((slot) => (
+        <div className="flex shrink-0 gap-2">
+          {refSlots.map((slot, idx) => (
             <RefImageSlot
               key={slot.key}
               label={slot.label}
@@ -168,10 +189,20 @@ export default function MediaEditor({ card }: MediaEditorProps) {
               disabled={generating}
               targetCardId={card.id}
               slotKey={slot.key}
+              index={idx}
             />
           ))}
         </div>
       )}
+
+      <textarea
+        className="min-h-[3rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+        value={data.content ?? ""}
+        onChange={onPromptChange}
+        placeholder="描述你想生成的图片…"
+        disabled={generating}
+        autoFocus
+      />
 
       <div className="flex items-center gap-2">
         <ModelSelector

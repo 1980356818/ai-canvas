@@ -6,10 +6,10 @@ import EditorSwitch from "./EditorSwitch";
 const GAP = 12;
 
 const EDITOR_SIZES: Record<string, { height: number; minWidth: number }> = {
-  ai_image: { height: 290, minWidth: 460 },
-  ai_tryon: { height: 280, minWidth: 460 },
+  ai_image: { height: 320, minWidth: 560 },
+  ai_tryon: { height: 300, minWidth: 560 },
 };
-const DEFAULT_SIZE = { height: 220, minWidth: 320 };
+const DEFAULT_SIZE = { height: 240, minWidth: 400 };
 
 export default function FloatingEditor() {
   const editingCardId = useCanvasStore((s) => s.editingCardId);

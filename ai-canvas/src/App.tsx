@@ -1,11 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useUIStore } from "@/stores/uiStore";
 import { useCardStore } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { loadCards } from "@/lib/tauri";
+import { useConnectionStore, type Connection } from "@/stores/connectionStore";
+import { loadCards, loadConnections } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
+import { startDataFlowWatcher, removeRefImageForSource } from "@/lib/dataFlow";
 import { CARD_DEFAULTS } from "@/shared/constants";
 import { useKeyboardShortcuts } from "@/features/canvas/hooks/useKeyboardShortcuts";
 import TitleBar from "@/app/TitleBar";
@@ -24,6 +26,7 @@ import type { CardType } from "@/shared/types";
 export default function App() {
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
   const appView = useUIStore((s) => s.appView);
+  const dataFlowCleanup = useRef<(() => void) | null>(null);
   const agentPanelVisible = useUIStore((s) => s.agentPanelVisible);
 
   useEffect(() => {
@@ -44,6 +47,7 @@ export default function App() {
   useEffect(() => {
     if (!currentProjectId) {
       useCardStore.getState().clear();
+      useConnectionStore.getState().clear();
       history.clear();
       return;
     }
@@ -75,10 +79,53 @@ export default function App() {
       })
       .catch(console.error);
 
+    const connRows = loadConnections(currentProjectId);
+    const conns: Connection[] = connRows.map((r) => ({
+      id: r.id,
+      projectId: r.project_id,
+      sourceCardId: r.source_card_id,
+      targetCardId: r.target_card_id,
+      createdAt: r.created_at,
+    }));
+    useConnectionStore.getState().setConnections(conns);
+
+    dataFlowCleanup.current?.();
+    dataFlowCleanup.current = startDataFlowWatcher();
+
     return () => {
+      dataFlowCleanup.current?.();
+      dataFlowCleanup.current = null;
       autoSave.forceSave();
     };
   }, [currentProjectId]);
+
+  useEffect(() => {
+    const unsub = useConnectionStore.subscribe((state, prev) => {
+      if (state.connections === prev.connections) return;
+
+      for (const [id, conn] of prev.connections) {
+        if (!state.connections.has(id)) {
+          removeRefImageForSource(conn.targetCardId, conn.sourceCardId);
+        }
+      }
+
+      const pid = useProjectStore.getState().currentProjectId;
+      if (!pid) return;
+      const rows = Array.from(state.connections.values())
+        .filter((c) => c.projectId === pid)
+        .map((c) => ({
+          id: c.id,
+          project_id: c.projectId,
+          source_card_id: c.sourceCardId,
+          target_card_id: c.targetCardId,
+          created_at: c.createdAt,
+        }));
+      import("@/lib/tauri").then(({ saveConnections }) =>
+        saveConnections(pid, rows),
+      );
+    });
+    return unsub;
+  }, []);
 
   useKeyboardShortcuts();
 

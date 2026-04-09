@@ -27,7 +27,7 @@ interface UIState {
     visible: boolean;
     x: number;
     y: number;
-    target: "canvas" | "card" | "multi";
+    target: "canvas" | "card" | "multi" | "connection";
     targetId?: string;
   };
   appView: AppView;
@@ -44,7 +44,7 @@ interface UIState {
   showContextMenu: (
     x: number,
     y: number,
-    target: "canvas" | "card" | "multi",
+    target: "canvas" | "card" | "multi" | "connection",
     targetId?: string,
   ) => void;
   hideContextMenu: () => void;

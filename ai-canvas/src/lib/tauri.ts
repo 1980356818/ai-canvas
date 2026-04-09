@@ -613,4 +613,25 @@ export async function onTauriFileDrop(
   }
 }
 
+// ── Connection persistence (localStorage-only for now) ───────
+
+export interface ConnectionRow {
+  id: string;
+  project_id: string;
+  source_card_id: string;
+  target_card_id: string;
+  created_at: string;
+}
+
+export function loadConnections(projectId: string): ConnectionRow[] {
+  return lsGet<ConnectionRow[]>("connections_" + projectId, []);
+}
+
+export function saveConnections(
+  projectId: string,
+  connections: ConnectionRow[],
+): void {
+  lsSet("connections_" + projectId, connections);
+}
+
 export { isTauri };

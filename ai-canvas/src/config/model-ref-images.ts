@@ -41,7 +41,11 @@ const MODEL_REF_CONFIGS: ModelRefConfig[] = [
   {
     match: /^nano-banana/,
     slots: [
-      { key: "refImage0", label: "参考图", description: "参考图", required: false },
+      { key: "refImage0", label: "参考图1", description: "参考图", required: false },
+      { key: "refImage1", label: "参考图2", description: "参考图", required: false },
+      { key: "refImage2", label: "参考图3", description: "参考图", required: false },
+      { key: "refImage3", label: "参考图4", description: "参考图", required: false },
+      { key: "refImage4", label: "参考图5", description: "参考图", required: false },
     ],
   },
 ];

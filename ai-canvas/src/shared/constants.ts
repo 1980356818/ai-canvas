@@ -20,6 +20,7 @@ function sizeFromRatio(ratio: number): { width: number; height: number } {
 export const CARD_DEFAULTS: Record<CardType, CardDefaults> = {
   ai_chat:     { ...sizeFromRatio(3 / 4), label: "AI 对话", data: { messages: [] } },
   ai_image:    { ...sizeFromRatio(4 / 5), label: "AI 图片", data: { content: "" } },
+  ai_video:    { ...sizeFromRatio(16 / 9), label: "AI 视频", data: { content: "" } },
   ai_tryon:    { ...sizeFromRatio(3 / 4), label: "AI 换装", data: { content: "" } },
   text:        { ...sizeFromRatio(4 / 3), label: "文本", data: { content: "" } },
   sticky_note: { ...sizeFromRatio(5 / 4), label: "便签", data: { content: "" } },
@@ -28,6 +29,7 @@ export const CARD_DEFAULTS: Record<CardType, CardDefaults> = {
 export const TYPE_COLORS: Record<CardType, string> = {
   ai_chat: "#3B82F6",
   ai_image: "#8B5CF6",
+  ai_video: "#EF4444",
   ai_tryon: "#EC4899",
   text: "#6B7280",
   sticky_note: "#F59E0B",

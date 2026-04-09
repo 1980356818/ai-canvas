@@ -3,6 +3,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useConnectionStore } from "@/stores/connectionStore";
 import { deleteCard, updateProjectMeta } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { history, recordBatchDelete } from "@/lib/history";
@@ -33,6 +34,7 @@ async function deleteSelected() {
   recordBatchDelete(cards);
   for (const id of ids) {
     useCardStore.getState().removeCard(id);
+    useConnectionStore.getState().removeConnectionsForCard(id);
     try {
       await deleteCard(id);
     } catch {
@@ -180,6 +182,12 @@ export function useKeyboardShortcuts() {
         !e.metaKey
       ) {
         e.preventDefault();
+        const connId = useConnectionStore.getState().selectedConnectionId;
+        if (connId) {
+          useConnectionStore.getState().removeConnection(connId);
+          autoSave.markDirty();
+          return;
+        }
         void deleteSelected();
         return;
       }

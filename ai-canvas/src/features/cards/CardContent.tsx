@@ -1,5 +1,5 @@
 import { memo, useState, useEffect } from "react";
-import { ImageIcon, Loader2, Shirt } from "lucide-react";
+import { ImageIcon, Loader2, Shirt, Video } from "lucide-react";
 import type { CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { resolveImageUrl } from "@/lib/tauri";
@@ -123,6 +123,55 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
   );
 }
 
+function VideoPreview({ card }: { card: CanvasCard }) {
+  const data = card.data as { content?: string; videoUrl?: string };
+  const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
+
+  if (genProgress) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary/60" />
+        <div className="w-full max-w-[80%] space-y-1.5">
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            {genProgress.percent > 0 ? (
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+                style={{ width: `${genProgress.percent}%` }}
+              />
+            ) : (
+              <div className="h-full w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full bg-primary/60" />
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] text-muted-foreground">{genProgress.label}</p>
+            {genProgress.percent > 0 && (
+              <p className="text-[10px] tabular-nums text-muted-foreground">{genProgress.percent}%</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (data.videoUrl) {
+    return (
+      <video
+        src={data.videoUrl}
+        className="h-full w-full object-cover"
+        controls
+        muted
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground/50">
+      <Video className="h-8 w-8" />
+      <span className="text-xs">{data.content ? "等待生成" : "AI 视频"}</span>
+    </div>
+  );
+}
+
 export default memo(function CardContent({ card }: { card: CanvasCard }) {
   switch (card.type) {
     case "ai_chat":
@@ -133,6 +182,8 @@ export default memo(function CardContent({ card }: { card: CanvasCard }) {
       return <StickyNoteCard card={card} />;
     case "ai_image":
       return <ImagePreview card={card} />;
+    case "ai_video":
+      return <VideoPreview card={card} />;
     case "ai_tryon":
       return <TryOnPreview card={card} />;
     default:

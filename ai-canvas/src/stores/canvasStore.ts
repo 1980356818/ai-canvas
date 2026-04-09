@@ -15,6 +15,11 @@ export interface PickModeState {
   onPick: (sourceCardId: string, imageUrl: string) => void;
 }
 
+export interface DragOffset {
+  dx: number;
+  dy: number;
+}
+
 interface CanvasState {
   viewport: Viewport;
   selectedCardIds: Set<string>;
@@ -22,6 +27,7 @@ interface CanvasState {
   tool: "select" | "pan";
   isDragging: boolean;
   pickMode: PickModeState | null;
+  dragOffsets: Map<string, DragOffset>;
 
   setViewport: (viewport: Partial<Viewport>) => void;
   setTool: (tool: CanvasState["tool"]) => void;
@@ -31,6 +37,7 @@ interface CanvasState {
   clearSelection: () => void;
   setEditingCardId: (id: string | null) => void;
   setIsDragging: (dragging: boolean) => void;
+  setDragOffset: (cardId: string, offset: DragOffset | null) => void;
   enterPickMode: (state: Omit<PickModeState, "active">) => void;
   exitPickMode: () => void;
 }
@@ -42,6 +49,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   tool: "select",
   isDragging: false,
   pickMode: null,
+  dragOffsets: new Map(),
 
   setViewport: (partial) =>
     set((s) => ({ viewport: { ...s.viewport, ...partial } })),
@@ -71,6 +79,14 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   setEditingCardId: (id) => set({ editingCardId: id }),
 
   setIsDragging: (dragging) => set({ isDragging: dragging }),
+
+  setDragOffset: (cardId, offset) =>
+    set((s) => {
+      const next = new Map(s.dragOffsets);
+      if (offset) next.set(cardId, offset);
+      else next.delete(cardId);
+      return { dragOffsets: next };
+    }),
 
   enterPickMode: (state) =>
     set({ pickMode: { ...state, active: true } }),
