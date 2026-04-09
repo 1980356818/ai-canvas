@@ -6,7 +6,6 @@ export function useViewport(
 ) {
   const setViewport = useCanvasStore((s) => s.setViewport);
   const viewport = useCanvasStore((s) => s.viewport);
-  const spaceHeld = useRef(false);
   const panning = useRef(false);
   const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0, vx: 0, vy: 0 });
@@ -23,21 +22,6 @@ export function useViewport(
     ro.observe(el);
     return () => ro.disconnect();
   }, [containerRef, setViewport]);
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !e.repeat) spaceHeld.current = true;
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space") spaceHeld.current = false;
-    };
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-    };
-  }, []);
 
   const onWheel = useCallback(
     (e: React.WheelEvent) => {
@@ -64,10 +48,7 @@ export function useViewport(
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
-      const isMiddle = e.button === 1;
-      const isLeftWithSpace = e.button === 0 && spaceHeld.current;
-
-      if (isMiddle || isLeftWithSpace) {
+      if (e.button === 1) {
         panning.current = true;
         setIsPanning(true);
         const vp = useCanvasStore.getState().viewport;

@@ -11,7 +11,6 @@ import CardContent from "@/features/cards/CardContent";
 import FloatingEditor from "@/features/editor/FloatingEditor";
 import ConnectionLayer from "./ConnectionLayer";
 import ZoomControls from "./ZoomControls";
-import QuickCreateMenu, { type QuickMenuPosition } from "./QuickCreateMenu";
 import { CARD_DEFAULTS } from "@/shared/constants";
 import { autoSave } from "@/lib/autoSave";
 import {
@@ -20,7 +19,6 @@ import {
   readMediaBase64,
   isTauri,
 } from "@/lib/tauri";
-import type { RefImageEntry } from "@/config/model-ref-images";
 
 export default function CanvasContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -37,7 +35,6 @@ export default function CanvasContainer() {
 
   const {
     selectionBox,
-    onCanvasPointerDown,
     onCanvasPointerMove,
     finishSelection,
     startSelection,
@@ -50,8 +47,6 @@ export default function CanvasContainer() {
 
   const pickMode = useCanvasStore((s) => s.pickMode);
 
-  const [quickMenu, setQuickMenu] = useState<QuickMenuPosition | null>(null);
-  const closeQuickMenu = useCallback(() => setQuickMenu(null), []);
 
   const dropHandledAt = useRef(0);
 
@@ -157,7 +152,7 @@ export default function CanvasContainer() {
 
       for (let i = 0; i < paths.length; i++) {
         try {
-          const dataUrl = await readMediaBase64(paths[i]);
+          const dataUrl = await readMediaBase64(paths[i]!);
           const now = new Date().toISOString();
           const { maxZIndex } = useCardStore.getState();
           const card: CanvasCard = {
@@ -216,12 +211,34 @@ export default function CanvasContainer() {
     );
   }, [projectCards, viewport]);
 
-  const LONG_PRESS_MS = 120;
+  const spaceHeld = useRef(false);
   const bgPending = useRef(false);
-  const bgLongPress = useRef(false);
   const bgMode = useRef<"none" | "selecting" | "panning">("none");
+  const justBoxSelected = useRef(false);
   const bgStart = useRef({ x: 0, y: 0 });
-  const longPressTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [spaceDown, setSpaceDown] = useState(false);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !e.repeat) {
+        e.preventDefault();
+        spaceHeld.current = true;
+        setSpaceDown(true);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        spaceHeld.current = false;
+        setSpaceDown(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     vpPointerDown(e);
@@ -232,14 +249,15 @@ export default function CanvasContainer() {
       target.dataset.canvasBackground !== undefined;
 
     if (isCanvasBg && e.button === 0) {
-      bgPending.current = true;
-      bgLongPress.current = false;
-      bgMode.current = "none";
-      bgStart.current = { x: e.clientX, y: e.clientY };
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = setTimeout(() => {
-        bgLongPress.current = true;
-      }, LONG_PRESS_MS);
+      if (spaceHeld.current) {
+        bgPending.current = true;
+        bgMode.current = "none";
+        bgStart.current = { x: e.clientX, y: e.clientY };
+      } else {
+        bgMode.current = "panning";
+        bgPending.current = false;
+        startPan(e.clientX, e.clientY);
+      }
     }
   };
 
@@ -248,15 +266,9 @@ export default function CanvasContainer() {
       const dx = e.clientX - bgStart.current.x;
       const dy = e.clientY - bgStart.current.y;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-        clearTimeout(longPressTimer.current);
         bgPending.current = false;
-        if (bgLongPress.current) {
-          bgMode.current = "panning";
-          startPan(bgStart.current.x, bgStart.current.y);
-        } else {
-          bgMode.current = "selecting";
-          startSelection(bgStart.current.x, bgStart.current.y);
-        }
+        bgMode.current = "selecting";
+        startSelection(bgStart.current.x, bgStart.current.y);
       }
     }
 
@@ -270,54 +282,14 @@ export default function CanvasContainer() {
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    clearTimeout(longPressTimer.current);
     const wasPending = bgPending.current;
     bgPending.current = false;
-    bgLongPress.current = false;
 
     if (bgMode.current === "panning") {
       vpPointerUp();
     } else if (bgMode.current === "selecting") {
       finishSelection(e.clientX, e.clientY, e.ctrlKey);
-
-      // Inline selection with debug
-      const rect = containerRef.current?.getBoundingClientRect();
-      const sx = bgStart.current.x;
-      const sy = bgStart.current.y;
-      const ex = e.clientX;
-      const ey = e.clientY;
-      const bw = Math.abs(ex - sx);
-      const bh = Math.abs(ey - sy);
-
-      if (rect && (bw > 5 || bh > 5)) {
-        const bx = Math.min(sx, ex);
-        const by = Math.min(sy, ey);
-        const vp = useCanvasStore.getState().viewport;
-        const wx = (bx - rect.left - vp.x) / vp.zoom;
-        const wy = (by - rect.top - vp.y) / vp.zoom;
-        const ww = bw / vp.zoom;
-        const wh = bh / vp.zoom;
-        const pid = useProjectStore.getState().currentProjectId;
-        const cards = useCardStore.getState().cards;
-        const hits: string[] = [];
-        let debugCards = "";
-        for (const c of cards.values()) {
-          if (c.projectId !== pid) continue;
-          debugCards += `[${c.id.slice(0,4)}: x${Math.round(c.x)},y${Math.round(c.y)},w${c.width},h${c.height}] `;
-          if (c.x < wx + ww && c.x + c.width > wx && c.y < wy + wh && c.y + c.height > wy) {
-            hits.push(c.id);
-          }
-        }
-        useUIStore.getState().addToast({
-          type: "info",
-          title: `框选调试: hits=${hits.length}`,
-          description: `screen:(${Math.round(bx)},${Math.round(by)},${Math.round(bw)}x${Math.round(bh)}) world:(${Math.round(wx)},${Math.round(wy)},${Math.round(ww)}x${Math.round(wh)}) rect:(${Math.round(rect.left)},${Math.round(rect.top)}) vp:(${Math.round(vp.x)},${Math.round(vp.y)},z${vp.zoom.toFixed(2)}) cards:${debugCards || "none"}`,
-          duration: 10000,
-        });
-        if (hits.length > 0) {
-          useCanvasStore.getState().setSelectedCardIds(hits);
-        }
-      }
+      justBoxSelected.current = true;
     } else if (wasPending) {
       useCanvasStore.getState().clearSelection();
     }
@@ -330,6 +302,10 @@ export default function CanvasContainer() {
   };
 
   const handleCanvasClick = (e: React.MouseEvent) => {
+    if (justBoxSelected.current) {
+      justBoxSelected.current = false;
+      return;
+    }
     if (
       e.target === containerRef.current ||
       (e.target as HTMLElement).dataset.canvasBackground !== undefined
@@ -355,18 +331,8 @@ export default function CanvasContainer() {
     const isCanvasBg =
       target === containerRef.current ||
       target.dataset.canvasBackground !== undefined;
-    if (!isCanvasBg || !currentProjectId) return;
-
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const canvasPos = screenToCanvas(e.clientX, e.clientY);
-    setQuickMenu({
-      screenX: e.clientX - rect.left,
-      screenY: e.clientY - rect.top,
-      canvasX: canvasPos.x,
-      canvasY: canvasPos.y,
-    });
+    if (!isCanvasBg) return;
+    showContextMenu(e.clientX, e.clientY, "canvas");
   };
 
   return (
@@ -375,7 +341,7 @@ export default function CanvasContainer() {
       data-canvas-viewport
       className="relative flex-1 overflow-hidden bg-background"
       style={{
-        cursor: isPanning ? "grabbing" : "default",
+        cursor: isPanning ? "grabbing" : spaceDown ? "crosshair" : "grab",
         backgroundImage:
           "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
         backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px`,
@@ -443,14 +409,6 @@ export default function CanvasContainer() {
       )}
 
       <ZoomControls zoom={viewport.zoom} />
-
-      {quickMenu && currentProjectId && (
-        <QuickCreateMenu
-          position={quickMenu}
-          projectId={currentProjectId}
-          onClose={closeQuickMenu}
-        />
-      )}
 
       <FloatingEditor />
     </div>

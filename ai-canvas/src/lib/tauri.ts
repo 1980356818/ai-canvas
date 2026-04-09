@@ -367,9 +367,12 @@ export async function aiProxyStream(
   callbacks: StreamCallbacks,
 ): Promise<{ streamId: string; abort: () => Promise<void> }> {
   const streamId = crypto.randomUUID();
+  console.log("[Stream] aiProxyStream called, provider:", provider, "endpoint:", endpoint, "streamId:", streamId);
+  console.log("[Stream] isTauri:", isTauri);
 
   if (isTauri) {
     await ensureTauriAPIs();
+    let tauriChunkCount = 0;
 
     interface StreamEvent {
       stream_id: string;
@@ -382,28 +385,35 @@ export async function aiProxyStream(
       if (payload.stream_id !== streamId) return;
       switch (payload.event) {
         case "chunk":
+          tauriChunkCount++;
+          console.log(`[Stream][Tauri] chunk #${tauriChunkCount}, data(${payload.data.length}):`, payload.data.slice(0, 200));
           callbacks.onChunk(payload.data);
           break;
         case "done":
+          console.log("[Stream][Tauri] done, total chunks:", tauriChunkCount);
           callbacks.onDone();
           unlisten();
           break;
         case "error":
+          console.error("[Stream][Tauri] error:", payload.data.slice(0, 500));
           callbacks.onError(payload.data);
           break;
       }
     });
 
+    console.log("[Stream][Tauri] invoking ai_proxy_stream...");
     await _invoke("ai_proxy_stream", {
       provider,
       endpoint,
       body: { ...body, stream: true },
       streamId,
     });
+    console.log("[Stream][Tauri] ai_proxy_stream invoked ok");
 
     return {
       streamId,
       abort: async () => {
+        console.log("[Stream][Tauri] aborting stream:", streamId);
         await _invoke("ai_proxy_stream_abort", { streamId });
         unlisten();
       },
@@ -417,8 +427,10 @@ export async function aiProxyStream(
     "Content-Type": "application/json",
     ...getAuthHeaders(),
   };
+  console.log("[Stream][Browser] fetch url:", url);
 
   (async () => {
+    let browserChunkCount = 0;
     try {
       const resp = await fetch(url, {
         method: "POST",
@@ -426,27 +438,37 @@ export async function aiProxyStream(
         body: JSON.stringify({ ...body, stream: true }),
         signal: abortController.signal,
       });
+      console.log("[Stream][Browser] response status:", resp.status, "content-type:", resp.headers.get("content-type"));
 
       if (!resp.ok) {
         const errText = await resp.text();
+        console.error("[Stream][Browser] HTTP error:", resp.status, errText.slice(0, 500));
         callbacks.onError(`HTTP ${resp.status}: ${errText}`);
         return;
       }
 
       const reader = resp.body?.getReader();
       if (!reader) {
+        console.error("[Stream][Browser] No readable stream in response");
         callbacks.onError("No readable stream");
         return;
       }
 
       const decoder = new TextDecoder();
       let buffer = "";
+      let readCount = 0;
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log("[Stream][Browser] reader done, remaining buffer:", JSON.stringify(buffer.slice(0, 200)));
+          break;
+        }
 
-        buffer += decoder.decode(value, { stream: true });
+        readCount++;
+        const chunk = decoder.decode(value, { stream: true });
+        console.log(`[Stream][Browser] read #${readCount}, bytes: ${value.byteLength}, decoded:`, chunk.slice(0, 200));
+        buffer += chunk;
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
 
@@ -454,19 +476,29 @@ export async function aiProxyStream(
           const trimmed = line.trim();
           if (!trimmed || trimmed.startsWith(":")) continue;
           if (trimmed === "data: [DONE]") {
+            console.log("[Stream][Browser] received [DONE], total SSE chunks:", browserChunkCount);
             callbacks.onDone();
             return;
           }
           if (trimmed.startsWith("data: ")) {
-            callbacks.onChunk(trimmed.slice(6));
+            browserChunkCount++;
+            const payload = trimmed.slice(6);
+            console.log(`[Stream][Browser] SSE chunk #${browserChunkCount}:`, payload.slice(0, 200));
+            callbacks.onChunk(payload);
+          } else {
+            console.warn("[Stream][Browser] unexpected line:", trimmed.slice(0, 200));
           }
         }
       }
 
+      console.log("[Stream][Browser] stream ended without [DONE], calling onDone, chunks:", browserChunkCount);
       callbacks.onDone();
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
+        console.error("[Stream][Browser] fetch error:", err);
         callbacks.onError(err instanceof Error ? err.message : String(err));
+      } else {
+        console.log("[Stream][Browser] fetch aborted");
       }
     }
   })();
@@ -474,6 +506,7 @@ export async function aiProxyStream(
   return {
     streamId,
     abort: async () => {
+      console.log("[Stream][Browser] aborting fetch");
       abortController.abort();
     },
   };

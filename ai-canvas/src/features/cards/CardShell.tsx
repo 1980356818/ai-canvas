@@ -20,22 +20,6 @@ import {
   injectOnConnect,
 } from "@/lib/dataFlow";
 
-function getCanvasViewportEl(): HTMLElement | null {
-  return document.querySelector("[data-canvas-viewport]");
-}
-
-function screenToWorld(clientX: number, clientY: number) {
-  const vp = useCanvasStore.getState().viewport;
-  const root = getCanvasViewportEl();
-  const rect = root?.getBoundingClientRect();
-  const left = rect?.left ?? 0;
-  const top = rect?.top ?? 0;
-  return {
-    x: (clientX - left - vp.x) / vp.zoom,
-    y: (clientY - top - vp.y) / vp.zoom,
-  };
-}
-
 function findInputPortAt(
   clientX: number,
   clientY: number,
@@ -264,6 +248,20 @@ export default memo(
           return below?.closest("[data-ref-slot]") ?? null;
         };
 
+        const selectedIds = useCanvasStore.getState().selectedCardIds;
+        const isGroupDrag = selectedIds.has(card.id) && selectedIds.size > 1;
+        const peerStarts = new Map<string, { cx: number; cy: number; el: HTMLElement | null }>();
+        if (isGroupDrag) {
+          const allCards = useCardStore.getState().cards;
+          for (const sid of selectedIds) {
+            if (sid === card.id) continue;
+            const sc = allCards.get(sid);
+            if (!sc) continue;
+            const sel = document.querySelector(`[data-card-id="${sid}"]`) as HTMLElement | null;
+            peerStarts.set(sid, { cx: sc.x, cy: sc.y, el: sel });
+          }
+        }
+
         const onMove = (ev: PointerEvent) => {
           if (ev.pointerId !== pid || !dragging.current) return;
           const dx = (ev.clientX - dragStart.current.mx) / zoom;
@@ -275,6 +273,13 @@ export default memo(
             const sx = dx * zoom;
             const sy = dy * zoom;
             editorEl.style.transform = `translate(${sx}px, ${sy}px) scale(${zoom})`;
+          }
+
+          if (isGroupDrag) {
+            for (const [sid, peer] of peerStarts) {
+              if (peer.el) peer.el.style.transform = `translate(${dx}px, ${dy}px)`;
+              useCanvasStore.getState().setDragOffset(sid, { dx, dy });
+            }
           }
 
           const slotEl = findSlotBelow(ev.clientX, ev.clientY);
@@ -300,11 +305,21 @@ export default memo(
           el.removeEventListener("pointerup", onUp);
           el.removeEventListener("lostpointercapture", onUp);
 
+          if (isGroupDrag) {
+            for (const [sid, peer] of peerStarts) {
+              if (peer.el) {
+                peer.el.style.transform = "";
+                peer.el.style.willChange = "";
+              }
+              useCanvasStore.getState().setDragOffset(sid, null);
+            }
+          }
+
           lastHoveredSlot?.dispatchEvent(
             new CustomEvent("canvas-card-hover", { detail: { active: false } }),
           );
 
-          if (didDrag.current && thisHasImage) {
+          if (didDrag.current && thisHasImage && !isGroupDrag) {
             const slotEl = findSlotBelow(ev.clientX, ev.clientY);
             if (slotEl) {
               const imgUrl = extractCardImage(card);
@@ -333,6 +348,25 @@ export default memo(
               y: dragStart.current.cy + dy,
             });
             autoSave.markDirty(card.id);
+
+            if (isGroupDrag) {
+              for (const [sid, peer] of peerStarts) {
+                recordUpdate(sid, { x: peer.cx, y: peer.cy });
+                updateCard(sid, { x: peer.cx + dx, y: peer.cy + dy });
+                autoSave.markDirty(sid);
+              }
+            }
+          } else {
+            const pm = useCanvasStore.getState().pickMode;
+            if (pm?.active) {
+              const imgUrl = extractCardImage(card);
+              if (imgUrl) pm.onPick(card.id, imgUrl);
+            } else if (ev.ctrlKey) {
+              useCanvasStore.getState().addSelectedCardId(card.id);
+            } else {
+              useCanvasStore.getState().setSelectedCardIds([card.id]);
+              useCanvasStore.getState().setEditingCardId(card.id);
+            }
           }
         };
 
@@ -392,32 +426,7 @@ export default memo(
       [card.id, card.locked, card.width, card.height, updateCard],
     );
 
-    const onCardClick = useCallback(
-      (e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (didDrag.current) return;
-
-        const pm = useCanvasStore.getState().pickMode;
-        if (pm?.active) {
-          const imgUrl = extractCardImage(card);
-          if (imgUrl) {
-            pm.onPick(card.id, imgUrl);
-          }
-          return;
-        }
-
-        if (e.ctrlKey) {
-          useCanvasStore.getState().addSelectedCardId(card.id);
-        } else {
-          useCanvasStore.getState().setSelectedCardIds([card.id]);
-          useCanvasStore.getState().setEditingCardId(card.id);
-        }
-      },
-      [card],
-    );
-
     const hasImage = cardHasImage(card);
-    const hasUpstream = !!(card.data as Record<string, unknown>).upstreamCardId;
 
     const onRefDragStart = useCallback(
       (e: React.DragEvent) => {
@@ -452,6 +461,7 @@ export default memo(
     return (
       <div
         ref={cardRef}
+        data-card-id={card.id}
         className="group absolute select-none rounded-xl"
         style={{
           left: card.x,
@@ -460,26 +470,25 @@ export default memo(
           height: card.height,
           zIndex: card.zIndex,
           touchAction: "none",
-          outline: selected ? "4px solid red" : "none",
-          outlineOffset: "2px",
-          boxShadow: selected ? "0 0 20px 6px red" : "none",
-          filter: selected ? "brightness(1.3)" : "none",
+          boxShadow: selected ? "0 0 14px 3px rgba(129,140,248,0.35), 0 0 4px 1px rgba(56,189,248,0.25)" : "none",
         }}
         onPointerDown={onPointerDown}
-        onClick={onCardClick}
         onContextMenu={onContextMenu}
       >
         <div
           className={cn(
             "pointer-events-none absolute rounded-[14px] transition-opacity duration-200",
             selected
-              ? "opacity-0"
+              ? "card-selected-border opacity-100"
               : "opacity-[0.35] group-hover:opacity-[0.55]",
           )}
           style={{
-            inset: -2,
-            padding: 2,
-            background: `linear-gradient(135deg, ${accentColor}, #a855f7, #ec4899)`,
+            inset: selected ? -3 : -2,
+            padding: selected ? 3 : 2,
+            background: selected
+              ? "linear-gradient(135deg, #38bdf8, #818cf8, #c084fc, #f472b6, #38bdf8)"
+              : `linear-gradient(135deg, ${accentColor}, #a855f7, #ec4899)`,
+            backgroundSize: selected ? "400% 400%" : undefined,
             WebkitMask:
               "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
             WebkitMaskComposite: "xor",
@@ -496,10 +505,6 @@ export default memo(
             !card.locked && "cursor-grab active:cursor-grabbing",
           )}
         >
-          <div
-            className="absolute left-2.5 top-2.5 z-10 h-[6px] w-[6px] rounded-full"
-            style={{ backgroundColor: accentColor }}
-          />
           <div className="h-full w-full overflow-hidden">{children}</div>
 
           {hasImage && !card.locked && (
@@ -520,17 +525,6 @@ export default memo(
             <div className="pointer-events-none absolute inset-0 z-10 animate-pulse rounded-xl ring-2 ring-primary ring-offset-2" />
           )}
 
-          {hasUpstream && (
-            <div
-              className="absolute right-2.5 top-2.5 z-10 flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-medium text-emerald-600 backdrop-blur-sm dark:text-emerald-400"
-              title="已接收上游数据"
-            >
-              <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="currentColor">
-                <path d="M1 5 L4 8 L9 2" stroke="currentColor" strokeWidth="1.5" fill="none" />
-              </svg>
-              上游
-            </div>
-          )}
         </div>
 
         <Port side="input" cardId={card.id} color={accentColor} />

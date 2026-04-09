@@ -2,9 +2,18 @@ import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
-import { getRefSlotsForModel, compactRefImages, type RefImageEntry } from "@/config/model-ref-images";
+import { getRefSlotsForModel, getRefSlotsForChatModel, compactRefImages, type RefImageEntry } from "@/config/model-ref-images";
 
 const IMAGE_SOURCE_TYPES = new Set(["ai_image", "ai_tryon", "ai_video"]);
+
+const REF_IMAGE_TARGETS = new Set(["ai_image", "ai_chat"]);
+
+function getRefSlots(target: { type: string; data: Record<string, unknown> }) {
+  const model = (target.data.model as string) || "";
+  return target.type === "ai_chat"
+    ? getRefSlotsForChatModel(model)
+    : getRefSlotsForModel(model);
+}
 
 export function canAcceptImageConnection(
   targetCardId: string,
@@ -12,13 +21,13 @@ export function canAcceptImageConnection(
 ): boolean {
   const cardStore = useCardStore.getState();
   const target = cardStore.getCard(targetCardId);
-  if (!target || target.type !== "ai_image") return true;
+  if (!target || !REF_IMAGE_TARGETS.has(target.type)) return true;
 
   const source = cardStore.getCard(sourceCardId);
   if (!source || !IMAGE_SOURCE_TYPES.has(source.type)) return true;
 
   const d = target.data as Record<string, unknown>;
-  const slots = getRefSlotsForModel((d.model as string) || "");
+  const slots = getRefSlots({ type: target.type, data: d });
   const refImages = (d.refImages || {}) as Record<string, RefImageEntry>;
 
   for (const slot of slots) {
@@ -33,7 +42,7 @@ export function removeRefImageForSource(
 ): void {
   const cardStore = useCardStore.getState();
   const target = cardStore.getCard(targetCardId);
-  if (!target || target.type !== "ai_image") return;
+  if (!target || !REF_IMAGE_TARGETS.has(target.type)) return;
 
   const d = { ...(target.data as Record<string, unknown>) };
   const refImages = { ...((d.refImages || {}) as Record<string, RefImageEntry>) };
@@ -47,8 +56,7 @@ export function removeRefImageForSource(
   }
 
   if (changed) {
-    const model = (d.model as string) || "";
-    const slots = getRefSlotsForModel(model);
+    const slots = getRefSlots({ type: target.type, data: d });
     d.refImages = compactRefImages(refImages, slots);
     cardStore.updateCard(targetCardId, { data: d });
     autoSave.markDirty(targetCardId);
@@ -65,14 +73,10 @@ export function extractOutput(card: CanvasCard): OutputPayload {
 
   switch (card.type) {
     case "ai_chat": {
-      const msgs = d.messages as
-        | Array<{ role: string; content: string }>
-        | undefined;
-      if (!msgs || msgs.length === 0) return { kind: "none" };
-      const last = msgs[msgs.length - 1];
-      if (last?.role !== "assistant" || !last.content) return { kind: "none" };
-      if (last.content.startsWith("错误:")) return { kind: "none" };
-      return { kind: "text", text: last.content };
+      const result = d.result as string | undefined;
+      if (result && !result.startsWith("错误:"))
+        return { kind: "text", text: result };
+      return { kind: "none" };
     }
 
     case "ai_image": {
@@ -137,11 +141,35 @@ function injectIntoCard(
           changed = true;
         }
       } else if (payload.kind === "image") {
-        const prev = (d.upstreamImageUrl as string) ?? "";
-        if (prev !== payload.url) {
-          d.upstreamImageUrl = payload.url;
-          d.upstreamCardId = sourceCardId;
-          changed = true;
+        const slots = getRefSlotsForChatModel((d.model as string) || "");
+        const refImages = {
+          ...((d.refImages || {}) as Record<string, RefImageEntry>),
+        };
+
+        let found = false;
+        for (const slot of slots) {
+          if (refImages[slot.key]?.sourceCardId === sourceCardId) {
+            if (refImages[slot.key]!.url !== payload.url) {
+              refImages[slot.key] = { url: payload.url, sourceCardId, sourceType: "card" };
+              d.refImages = refImages;
+              d.upstreamCardId = sourceCardId;
+              changed = true;
+            }
+            found = true;
+            break;
+          }
+        }
+
+        if (!found) {
+          for (const slot of slots) {
+            if (!refImages[slot.key]) {
+              refImages[slot.key] = { url: payload.url, sourceCardId, sourceType: "card" };
+              d.refImages = refImages;
+              d.upstreamCardId = sourceCardId;
+              changed = true;
+              break;
+            }
+          }
         }
       }
       break;
@@ -165,7 +193,7 @@ function injectIntoCard(
         let found = false;
         for (const slot of slots) {
           if (refImages[slot.key]?.sourceCardId === sourceCardId) {
-            if (refImages[slot.key].url !== payload.url) {
+            if (refImages[slot.key]!.url !== payload.url) {
               refImages[slot.key] = {
                 url: payload.url,
                 sourceCardId,

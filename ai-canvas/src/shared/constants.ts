@@ -18,7 +18,7 @@ function sizeFromRatio(ratio: number): { width: number; height: number } {
 }
 
 export const CARD_DEFAULTS: Record<CardType, CardDefaults> = {
-  ai_chat:     { ...sizeFromRatio(3 / 4), label: "AI 对话", data: { messages: [] } },
+  ai_chat:     { ...sizeFromRatio(3 / 4), label: "生成文字", data: { content: "", result: "" } },
   ai_image:    { ...sizeFromRatio(4 / 5), label: "AI 图片", data: { content: "" } },
   ai_video:    { ...sizeFromRatio(16 / 9), label: "AI 视频", data: { content: "" } },
   ai_tryon:    { ...sizeFromRatio(3 / 4), label: "AI 换装", data: { content: "" } },
@@ -75,13 +75,13 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
     id: "wf-ai-chat",
     name: "AI 对话",
-    description: "快速开启一个 AI 对话，支持多轮问答与内容生成",
+    description: "输入提示词，一键生成文字内容",
     icon: "MessageSquare",
     category: "chat",
     cards: [
       {
         type: "ai_chat",
-        title: "AI 对话",
+        title: "生成文字",
         relativeX: 0,
         relativeY: 0,
         ...CARD_DEFAULTS.ai_chat,
@@ -119,9 +119,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         width: CARD_DEFAULTS.ai_chat.width,
         height: CARD_DEFAULTS.ai_chat.height,
         data: {
-          messages: [],
-          systemPrompt:
-            "请帮我制定一套完整的内容营销策划方案，包括主题、文案方向和配图建议。",
+          content: "请帮我制定一套完整的内容营销策划方案，包括主题、文案方向和配图建议。",
+          result: "",
         },
       },
       {

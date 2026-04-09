@@ -54,6 +54,16 @@ const FALLBACK_SLOTS: RefImageSlot[] = [
   { key: "refImage0", label: "参考图", description: "参考图（如模型支持）", required: false },
 ];
 
+const CHAT_REF_SLOTS: RefImageSlot[] = [
+  { key: "refImage0", label: "参考图1", description: "图片参考", required: false },
+  { key: "refImage1", label: "参考图2", description: "图片参考", required: false },
+  { key: "refImage2", label: "参考图3", description: "图片参考", required: false },
+];
+
+export function getRefSlotsForChatModel(_modelId: string): RefImageSlot[] {
+  return CHAT_REF_SLOTS;
+}
+
 export function getRefSlotsForModel(modelId: string): RefImageSlot[] {
   if (!modelId) return FALLBACK_SLOTS;
   const cfg = MODEL_REF_CONFIGS.find((c) => c.match.test(modelId));

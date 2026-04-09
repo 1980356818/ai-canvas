@@ -3,7 +3,7 @@ import { Sparkles, Loader2, RefreshCw } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
-import { hasApiKey } from "@/lib/tauri";
+import { hasApiKey, readMediaBase64 } from "@/lib/tauri";
 import { modelService } from "@/services/models";
 import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
@@ -144,12 +144,26 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         throw new Error("当前 Provider 不支持图片生成");
       }
 
-      const referenceImages = refSlots
+      const rawRefImages = refSlots
         .map((slot) => {
           const entry = data.refImages?.[slot.key];
           return entry ? { url: entry.url, role: slot.key } : null;
         })
         .filter(Boolean) as Array<{ url: string; role: string }>;
+
+      const referenceImages: Array<{ url: string; role: string }> = [];
+      for (const ref of rawRefImages) {
+        if (
+          ref.url.startsWith("data:") ||
+          ref.url.startsWith("http://") ||
+          ref.url.startsWith("https://")
+        ) {
+          referenceImages.push(ref);
+        } else {
+          const dataUrl = await readMediaBase64(ref.url);
+          referenceImages.push({ ...ref, url: dataUrl });
+        }
+      }
 
       const result = await provider.generateImage({
         prompt,

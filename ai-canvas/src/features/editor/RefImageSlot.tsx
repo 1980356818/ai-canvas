@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect } from "react";
-import { Upload, X, Link2 } from "lucide-react";
+import { Upload, X } from "lucide-react";
 import { resolveImageUrl } from "@/lib/tauri";
 import { useCanvasStore } from "@/stores/canvasStore";
 import {
@@ -23,7 +23,7 @@ interface RefImageSlotProps {
 
 export default function RefImageSlot({
   label,
-  description,
+  description: _description,
   entry,
   onImage,
   onClear,
@@ -144,16 +144,6 @@ export default function RefImageSlot({
     [handleFile],
   );
 
-  const handlePickFromCanvas = useCallback(() => {
-    useCanvasStore.getState().enterPickMode({
-      targetCardId,
-      slotKey,
-      onPick: (sourceCardId, imageUrl) => {
-        onImage({ url: imageUrl, sourceCardId, sourceType: "card" });
-        useCanvasStore.getState().exitPickMode();
-      },
-    });
-  }, [targetCardId, slotKey, onImage]);
 
   const isHighlighted = dragOver || cardDragOver;
 

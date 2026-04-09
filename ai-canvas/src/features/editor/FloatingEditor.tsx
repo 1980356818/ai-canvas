@@ -6,6 +6,7 @@ import EditorSwitch from "./EditorSwitch";
 const GAP = 12;
 
 const EDITOR_SIZES: Record<string, { height: number; minWidth: number }> = {
+  ai_chat: { height: 320, minWidth: 560 },
   ai_image: { height: 320, minWidth: 560 },
   ai_tryon: { height: 300, minWidth: 560 },
 };

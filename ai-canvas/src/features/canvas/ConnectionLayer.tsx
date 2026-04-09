@@ -60,7 +60,7 @@ interface WireProps {
 const Wire = memo(function Wire({
   id,
   d,
-  gradientId,
+  gradientId: _gradientId,
   sourceColor,
   targetColor,
   selected,

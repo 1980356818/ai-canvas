@@ -1,37 +1,49 @@
-import { useRef, useCallback, useState, useEffect } from "react";
-import { Send, Loader2, Square } from "lucide-react";
+import { useRef, useCallback, useState, useEffect, useMemo } from "react";
+import { Sparkles, RefreshCw, Square } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
-import { autoSave } from "@/lib/autoSave";
-import { hasApiKey, aiProxyStream } from "@/lib/tauri";
-import { modelService } from "@/services/models";
 import { useUIStore } from "@/stores/uiStore";
+import { useConnectionStore, type Connection } from "@/stores/connectionStore";
+import { useProjectStore } from "@/stores/projectStore";
+import { autoSave } from "@/lib/autoSave";
+import { hasApiKey, aiProxyStream, readMediaBase64 } from "@/lib/tauri";
+import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
-import MarkdownContent from "@/shared/MarkdownContent";
+import {
+  getRefSlotsForChatModel,
+  compactRefImages,
+  type RefImageEntry,
+} from "@/config/model-ref-images";
 import ModelSelector from "./ModelSelector";
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
+import RefImageSlot from "./RefImageSlot";
 
 interface ChatData {
-  messages?: ChatMessage[];
-  systemPrompt?: string;
+  content?: string;
+  result?: string;
   model?: string;
+  refImages?: Record<string, RefImageEntry>;
 }
 
-interface ChatEditorProps {
-  card: CanvasCard;
-}
-
-function parseStreamChunk(raw: string): { content: string; error?: string } {
+function parseStreamChunk(raw: string): { content: string; reasoning?: string; error?: string } {
   try {
     const json = JSON.parse(raw);
     if (json?.error) {
-      return { content: "", error: json.error.message || JSON.stringify(json.error) };
+      const errMsg = json.error.message || JSON.stringify(json.error);
+      console.error("[ChatGen] chunk error:", errMsg, "raw:", raw);
+      return { content: "", error: errMsg };
     }
-    return { content: json?.choices?.[0]?.delta?.content ?? "" };
-  } catch {
+    const delta = json?.choices?.[0]?.delta;
+    const finishReason = json?.choices?.[0]?.finish_reason;
+    const content = delta?.content ?? "";
+    const reasoning = delta?.reasoning_content ?? "";
+
+    if (content || reasoning) {
+      console.log("[ChatGen] token:", JSON.stringify({ content: content || undefined, reasoning: reasoning ? reasoning.slice(0, 80) : undefined }));
+    } else {
+      console.log("[ChatGen] chunk delta:", JSON.stringify(delta), "finish_reason:", finishReason);
+    }
+    return { content, reasoning };
+  } catch (e) {
+    console.warn("[ChatGen] chunk parse failed:", (e as Error).message, "raw:", raw.slice(0, 300));
     return { content: "" };
   }
 }
@@ -48,17 +60,17 @@ function friendlyError(raw: string): string {
   return raw;
 }
 
-export default function ChatEditor({ card }: ChatEditorProps) {
+export default function ChatEditor({ card }: { card: CanvasCard }) {
   const updateCard = useCardStore((s) => s.updateCard);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const setCardProgress = useUIStore((s) => s.setCardProgress);
+  const generating = useUIStore((s) => s.generatingCards.has(card.id));
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [currentModel, setCurrentModel] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [streamContent, setStreamContent] = useState("");
-  const [currentModel, setCurrentModel] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<(() => Promise<void>) | null>(null);
   const data = card.data as ChatData;
-  const messages = data.messages ?? [];
 
   useEffect(() => {
     if (data.model) {
@@ -68,9 +80,10 @@ export default function ChatEditor({ card }: ChatEditorProps) {
     }
   }, [data.model]);
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages.length, streamContent]);
+  const refSlots = useMemo(
+    () => getRefSlotsForChatModel(currentModel),
+    [currentModel],
+  );
 
   const handleModelChange = useCallback(
     (modelId: string) => {
@@ -81,6 +94,64 @@ export default function ChatEditor({ card }: ChatEditorProps) {
     [card.id, data, updateCard],
   );
 
+  const onPromptChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const content = e.target.value;
+      updateCard(card.id, { data: { ...data, content } });
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const setRefImage = useCallback(
+    (slotKey: string, entry: RefImageEntry) => {
+      const refImages = { ...data.refImages, [slotKey]: entry };
+      updateCard(card.id, { data: { ...data, refImages } });
+      autoSave.markDirty(card.id);
+
+      if (entry.sourceCardId) {
+        const connStore = useConnectionStore.getState();
+        if (!connStore.hasConnection(entry.sourceCardId, card.id)) {
+          const projectId = useProjectStore.getState().currentProjectId;
+          if (projectId) {
+            const conn: Connection = {
+              id: crypto.randomUUID(),
+              projectId,
+              sourceCardId: entry.sourceCardId,
+              targetCardId: card.id,
+              createdAt: new Date().toISOString(),
+            };
+            connStore.addConnection(conn);
+            autoSave.markDirty();
+          }
+        }
+      }
+    },
+    [card.id, data, updateCard],
+  );
+
+  const clearRefImage = useCallback(
+    (slotKey: string) => {
+      const entry = data.refImages?.[slotKey];
+      if (entry?.sourceCardId) {
+        const { connections, removeConnection } = useConnectionStore.getState();
+        for (const [id, c] of connections) {
+          if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
+            removeConnection(id);
+            break;
+          }
+        }
+      }
+      const refImages = { ...data.refImages };
+      delete refImages[slotKey];
+      const compacted = compactRefImages(refImages, refSlots);
+      updateCard(card.id, { data: { ...data, refImages: compacted } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard, refSlots],
+  );
+
   const handleAbort = useCallback(async () => {
     if (abortRef.current) {
       await abortRef.current();
@@ -88,9 +159,9 @@ export default function ChatEditor({ card }: ChatEditorProps) {
     }
   }, []);
 
-  const sendMessage = useCallback(async () => {
-    const text = input.trim();
-    if (!text || loading || streaming) return;
+  const handleGenerate = useCallback(async () => {
+    const prompt = data.content?.trim();
+    if (!prompt || generating || streaming) return;
 
     if (!(await hasApiKey())) {
       useUIStore.getState().addToast({
@@ -106,95 +177,136 @@ export default function ChatEditor({ card }: ChatEditorProps) {
       return;
     }
 
-    const userMessages: ChatMessage[] = [
-      ...messages,
-      { role: "user", content: text },
-    ];
-    updateCard(card.id, { data: { ...data, messages: userMessages } });
-    autoSave.markDirty(card.id);
-    setInput("");
-    setLoading(true);
+    setCardProgress(card.id, { percent: 0, label: "正在生成…" });
+    setError(null);
     setStreaming(false);
     setStreamContent("");
 
     const model = currentModel || "deepseek-v3.2";
-    const systemPrompt =
-      data.systemPrompt ?? "你是一个有帮助的 AI 助手，请用中文回复。";
+    console.log("[ChatGen] === 开始生成 ===");
+    console.log("[ChatGen] model:", model);
+    console.log("[ChatGen] prompt:", prompt.slice(0, 100));
+
+    const imageEntries = refSlots
+      .map((slot) => data.refImages?.[slot.key])
+      .filter((e): e is RefImageEntry => !!e);
+
+    const resolvedImageUrls: string[] = [];
+    for (const img of imageEntries) {
+      if (
+        img.url.startsWith("data:") ||
+        img.url.startsWith("http://") ||
+        img.url.startsWith("https://")
+      ) {
+        resolvedImageUrls.push(img.url);
+      } else {
+        const dataUrl = await readMediaBase64(img.url);
+        resolvedImageUrls.push(dataUrl);
+      }
+    }
+
+    type ContentPart =
+      | { type: "text"; text: string }
+      | { type: "image_url"; image_url: { url: string } };
+
+    const userContent: ContentPart[] = [];
+    for (const url of resolvedImageUrls) {
+      userContent.push({ type: "image_url", image_url: { url } });
+    }
+    userContent.push({ type: "text", text: prompt });
 
     const apiMessages = [
-      { role: "system", content: systemPrompt },
-      ...userMessages.map((m) => ({ role: m.role, content: m.content })),
+      { role: "system", content: "你是一个有帮助的 AI 助手，请用中文回复。请直接回答用户的问题。" },
+      {
+        role: "user",
+        content: resolvedImageUrls.length > 0 ? userContent : prompt,
+      },
     ];
+    console.log("[ChatGen] images:", resolvedImageUrls.length);
+    console.log("[ChatGen] request body:", JSON.stringify({ model, messages: apiMessages }).slice(0, 500));
 
     let accumulated = "";
+    let accumulatedReasoning = "";
     let hasStreamError = false;
+    let chunkCount = 0;
 
     try {
+      console.log("[ChatGen] 调用 aiProxyStream...");
       const { abort } = await aiProxyStream(
         "openai",
         "/v1/chat/completions",
         { model, messages: apiMessages },
         {
           onChunk(raw) {
-            const { content: token, error: chunkError } = parseStreamChunk(raw);
+            chunkCount++;
+            console.log(`[ChatGen] onChunk #${chunkCount}, raw(${raw.length}):`, raw.slice(0, 300));
+            const { content: token, reasoning, error: chunkError } = parseStreamChunk(raw);
             if (chunkError) {
               hasStreamError = true;
-              const errMessages: ChatMessage[] = [
-                ...userMessages,
-                { role: "assistant", content: `错误: ${chunkError}` },
-              ];
+              console.error("[ChatGen] chunk error detected:", chunkError);
+              setError(chunkError);
               useCardStore.getState().updateCard(card.id, {
-                data: { ...data, messages: errMessages },
+                data: { ...data, result: `错误: ${chunkError}` },
               });
               autoSave.markDirty(card.id);
-              setLoading(false);
+              setCardProgress(card.id, null);
               setStreaming(false);
               setStreamContent("");
               abortRef.current = null;
               return;
             }
+            if (reasoning) {
+              accumulatedReasoning += reasoning;
+            }
             if (token) {
               accumulated += token;
-              setStreamContent(accumulated);
+            }
+            const preview = accumulated || (accumulatedReasoning ? "💭 思考中…" : "");
+            if (preview) {
+              setStreamContent(preview);
               if (!streaming) setStreaming(true);
             }
           },
           onDone() {
-            if (hasStreamError) return;
-            const final_content = accumulated || "（无回复）";
-            const assistantMessages: ChatMessage[] = [
-              ...userMessages,
-              { role: "assistant", content: final_content },
-            ];
+            console.log("[ChatGen] onDone, chunkCount:", chunkCount, "accumulated:", accumulated.length, "reasoning:", accumulatedReasoning.length);
+            console.log("[ChatGen] accumulated preview:", accumulated.slice(0, 200) || "(empty)");
+            console.log("[ChatGen] reasoning preview:", accumulatedReasoning.slice(0, 200) || "(empty)");
+            if (hasStreamError) {
+              console.log("[ChatGen] onDone skipped (hasStreamError)");
+              return;
+            }
+
+            let finalResult = accumulated;
+            if (!finalResult && accumulatedReasoning) {
+              finalResult = `<details><summary>💭 模型思考过程</summary>\n\n${accumulatedReasoning}\n\n</details>\n\n*（模型仅进行了思考，未生成最终回复）*`;
+              console.warn("[ChatGen] ⚠ content 为空但有 reasoning_content，已展示思考过程");
+            }
+            if (!finalResult) {
+              finalResult = "（无回复 — 模型未返回任何内容，可能是图片过大、内容被过滤或模型不支持当前请求格式）";
+              console.warn("[ChatGen] ⚠ content 和 reasoning 都为空");
+            }
+
             useCardStore.getState().updateCard(card.id, {
-              data: { ...data, messages: assistantMessages },
+              data: { ...data, result: finalResult },
             });
             autoSave.markDirty(card.id);
-            setLoading(false);
+            setCardProgress(card.id, null);
             setStreaming(false);
             setStreamContent("");
             abortRef.current = null;
           },
-          onError(error) {
+          onError(errStr) {
+            console.error("[ChatGen] onError:", errStr.slice(0, 500));
+            console.log("[ChatGen] onError accumulated so far:", accumulated.length);
             if (accumulated) {
-              const assistantMessages: ChatMessage[] = [
-                ...userMessages,
-                { role: "assistant", content: accumulated },
-              ];
               useCardStore.getState().updateCard(card.id, {
-                data: { ...data, messages: assistantMessages },
+                data: { ...data, result: accumulated },
               });
             } else {
-              const errorMessages: ChatMessage[] = [
-                ...userMessages,
-                { role: "assistant", content: `错误: ${friendlyError(error)}` },
-              ];
-              useCardStore.getState().updateCard(card.id, {
-                data: { ...data, messages: errorMessages },
-              });
+              setError(friendlyError(errStr));
             }
             autoSave.markDirty(card.id);
-            setLoading(false);
+            setCardProgress(card.id, null);
             setStreaming(false);
             setStreamContent("");
             abortRef.current = null;
@@ -202,130 +314,103 @@ export default function ChatEditor({ card }: ChatEditorProps) {
         },
       );
 
+      console.log("[ChatGen] aiProxyStream 已返回，流已启动");
       abortRef.current = abort;
       setStreaming(true);
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      const errorMessages: ChatMessage[] = [
-        ...userMessages,
-        { role: "assistant", content: `错误: ${friendlyError(errMsg)}` },
-      ];
-      updateCard(card.id, { data: { ...data, messages: errorMessages } });
-      autoSave.markDirty(card.id);
-      setLoading(false);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[ChatGen] 外层 catch:", msg);
+      setError(friendlyError(msg));
+      setCardProgress(card.id, null);
       setStreaming(false);
     }
-  }, [input, messages, card.id, data, updateCard, loading, streaming, currentModel]);
+  }, [data, card.id, generating, streaming, updateCard, currentModel, setCardProgress, refSlots]);
 
-  const onKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-      }
-    },
-    [sendMessage],
-  );
-
-  const isBusy = loading || streaming;
+  const isBusy = generating || streaming;
+  const hasRefImages = refSlots.some((s) => data.refImages?.[s.key]);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
-        <span className="text-xs text-muted-foreground">模型</span>
+    <div className="flex h-full flex-col gap-2 p-3">
+      {refSlots.length > 0 && (
+        <div className="flex shrink-0 gap-2">
+          {refSlots.map((slot, idx) => (
+            <RefImageSlot
+              key={slot.key}
+              label={slot.label}
+              description={slot.description}
+              entry={data.refImages?.[slot.key]}
+              onImage={(entry) => setRefImage(slot.key, entry)}
+              onClear={() => clearRefImage(slot.key)}
+              disabled={isBusy}
+              targetCardId={card.id}
+              slotKey={slot.key}
+              index={idx}
+            />
+          ))}
+        </div>
+      )}
+
+      <textarea
+        className="min-h-[3rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+        value={data.content ?? ""}
+        onChange={onPromptChange}
+        placeholder="输入提示词，生成文字内容…"
+        disabled={isBusy}
+        autoFocus
+      />
+
+      {streaming && streamContent && (
+        <div className="max-h-20 overflow-y-auto rounded-lg bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
+          {streamContent.slice(0, 200)}
+          {streamContent.length > 200 && "…"}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
         <ModelSelector
           capability="CHAT"
           value={currentModel}
           onChange={handleModelChange}
         />
-      </div>
-
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
-        {messages.length === 0 && !streaming && (
-          <p className="pt-2 text-center text-sm text-muted-foreground">
-            输入消息开始对话
-          </p>
+        {hasRefImages && (
+          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+            +参考图
+          </span>
         )}
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={cn(
-              "flex",
-              msg.role === "user" ? "justify-end" : "justify-start",
-            )}
-          >
-            <div
-              className={cn(
-                "max-w-[80%] rounded-lg px-3 py-2 text-sm",
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-foreground",
-              )}
-            >
-              <p className="mb-0.5 text-[10px] opacity-60">
-                {msg.role === "user" ? "你" : "AI"}
-              </p>
-              {msg.role === "assistant" ? (
-                <MarkdownContent content={msg.content} />
-              ) : (
-                <p className="whitespace-pre-wrap">{msg.content}</p>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {streaming && streamContent && (
-          <div className="flex justify-start">
-            <div className="max-w-[80%] rounded-lg bg-muted px-3 py-2 text-sm text-foreground">
-              <p className="mb-0.5 text-[10px] opacity-60">AI</p>
-              <MarkdownContent content={streamContent} />
-            </div>
-          </div>
+        {error && (
+          <span className="min-w-0 truncate text-[11px] text-destructive">{error}</span>
         )}
-
-        {loading && !streamContent && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              正在思考...
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-end gap-2 border-t border-border p-3">
+        <div className="flex-1" />
         {streaming ? (
           <button
             onClick={handleAbort}
-            className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg border border-border text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border px-4 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <Square className="h-3 w-3" />
-            停止生成
+            停止
           </button>
         ) : (
-          <>
-            <textarea
-              className="flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
-              rows={1}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder="输入消息... (Enter 发送)"
-              disabled={isBusy}
-              autoFocus
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!input.trim() || isBusy}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors disabled:opacity-30"
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </button>
-          </>
+          <button
+            onClick={handleGenerate}
+            disabled={isBusy || !data.content?.trim()}
+            className={cn(
+              "flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
+              "bg-primary text-primary-foreground hover:bg-primary/90",
+              (isBusy || !data.content?.trim()) && "cursor-not-allowed opacity-40",
+            )}
+          >
+            {data.result ? (
+              <>
+                <RefreshCw className="h-3.5 w-3.5" />
+                重新生成
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-3.5 w-3.5" />
+                生成
+              </>
+            )}
+          </button>
         )}
       </div>
     </div>
