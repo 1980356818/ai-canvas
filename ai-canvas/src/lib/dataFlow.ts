@@ -63,6 +63,27 @@ export function removeRefImageForSource(
   }
 }
 
+export function removeUpstreamTextForSource(
+  targetCardId: string,
+  sourceCardId: string,
+): void {
+  const cardStore = useCardStore.getState();
+  const target = cardStore.getCard(targetCardId);
+  if (!target) return;
+
+  const d = { ...(target.data as Record<string, unknown>) };
+  const upstreamTexts = {
+    ...((d.upstreamTexts as Record<string, string>) || {}),
+  };
+
+  if (!(sourceCardId in upstreamTexts)) return;
+
+  delete upstreamTexts[sourceCardId];
+  d.upstreamTexts = Object.keys(upstreamTexts).length > 0 ? upstreamTexts : undefined;
+  cardStore.updateCard(targetCardId, { data: d });
+  autoSave.markDirty(targetCardId);
+}
+
 export type OutputPayload =
   | { kind: "text"; text: string }
   | { kind: "image"; url: string }
@@ -177,18 +198,40 @@ function injectIntoCard(
 
     case "ai_image": {
       if (payload.kind === "text") {
-        const prev = (d.content as string) ?? "";
-        if (!prev && payload.text) {
-          d.content = payload.text;
+        const upstreamTexts = {
+          ...((d.upstreamTexts as Record<string, string>) || {}),
+        };
+        if (upstreamTexts[sourceCardId] !== payload.text) {
+          upstreamTexts[sourceCardId] = payload.text;
+          d.upstreamTexts = upstreamTexts;
           d.upstreamCardId = sourceCardId;
           changed = true;
         }
+        console.log("[DataFlow] ai_image 注入文本", {
+          sourceCardId,
+          targetId: target.id,
+          textLength: payload.text.length,
+          textPreview: payload.text.slice(0, 100),
+          allUpstreamTexts: Object.fromEntries(
+            Object.entries(upstreamTexts).map(([k, v]) => [k, (v as string).slice(0, 80)]),
+          ),
+        });
       } else if (payload.kind === "image") {
         const model = (d.model as string) || "";
         const slots = getRefSlotsForModel(model);
         const refImages = {
           ...((d.refImages || {}) as Record<string, RefImageEntry>),
         };
+
+        console.log("[DataFlow] ai_image 注入图片 - 开始", {
+          sourceCardId,
+          targetId: target.id,
+          model,
+          slotsCount: slots.length,
+          slotKeys: slots.map((s) => s.key),
+          existingRefKeys: Object.keys(refImages),
+          imageUrlPreview: payload.url.slice(0, 80),
+        });
 
         let found = false;
         for (const slot of slots) {
@@ -204,11 +247,13 @@ function injectIntoCard(
               changed = true;
             }
             found = true;
+            console.log("[DataFlow] ai_image 图片更新已有槽位", { slotKey: slot.key });
             break;
           }
         }
 
         if (!found) {
+          let assigned = false;
           for (const slot of slots) {
             if (!refImages[slot.key]) {
               refImages[slot.key] = {
@@ -219,8 +264,15 @@ function injectIntoCard(
               d.refImages = refImages;
               d.upstreamCardId = sourceCardId;
               changed = true;
+              assigned = true;
+              console.log("[DataFlow] ai_image 图片分配到空槽位", { slotKey: slot.key });
               break;
             }
+          }
+          if (!assigned) {
+            console.warn("[DataFlow] ai_image 图片注入失败: 所有槽位已满", {
+              occupiedSlots: Object.keys(refImages),
+            });
           }
         }
       }

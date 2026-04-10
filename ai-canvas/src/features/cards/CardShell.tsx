@@ -216,6 +216,7 @@ export default memo(
         el.setPointerCapture(e.pointerId);
         el.style.zIndex = String(useCardStore.getState().maxZIndex + 1);
         el.style.willChange = "transform";
+        el.style.cursor = "move";
 
         dragging.current = true;
         didDrag.current = false;
@@ -299,6 +300,7 @@ export default memo(
           dragging.current = false;
           el.style.transform = "";
           el.style.willChange = "";
+          el.style.cursor = "";
           useCanvasStore.getState().setDragOffset(card.id, null);
           if (editorEl) editorEl.style.transform = `scale(${zoom})`;
           el.removeEventListener("pointermove", onMove);
@@ -502,7 +504,6 @@ export default memo(
             selected ? "shadow-lg" : "group-hover:shadow-md",
             card.locked && "cursor-not-allowed opacity-90",
             resizing && "transition-none",
-            !card.locked && "cursor-grab active:cursor-grabbing",
           )}
         >
           <div className="h-full w-full overflow-hidden">{children}</div>
@@ -512,7 +513,7 @@ export default memo(
               draggable
               onDragStart={onRefDragStart}
               title="拖拽到参考图插槽"
-              className="absolute bottom-1.5 left-1.5 z-20 flex h-6 w-6 cursor-grab items-center justify-center rounded-md bg-black/50 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-primary/80 group-hover:opacity-100 active:cursor-grabbing"
+              className="absolute bottom-1.5 left-1.5 z-20 flex h-6 w-6 cursor-move items-center justify-center rounded-md bg-black/50 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-primary/80 group-hover:opacity-100 active:cursor-grabbing"
               style={{ userSelect: "auto", WebkitUserSelect: "auto" }}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}

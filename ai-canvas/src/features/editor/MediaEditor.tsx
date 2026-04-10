@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { Sparkles, Loader2, RefreshCw } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, X, Eye, EyeOff, ArrowDownLeft } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
@@ -22,6 +22,32 @@ interface MediaData {
   imageUrl?: string;
   model?: string;
   refImages?: Record<string, RefImageEntry>;
+  upstreamTexts?: Record<string, string>;
+}
+
+function buildFinalPrompt(data: MediaData): string {
+  const parts: string[] = [];
+  if (data.upstreamTexts) {
+    for (const text of Object.values(data.upstreamTexts)) {
+      if (text.trim()) parts.push(text.trim());
+    }
+  }
+  if (data.content?.trim()) {
+    parts.push(data.content.trim());
+  }
+  return parts.join("\n\n");
+}
+
+function getCardTitle(cardId: string): string {
+  const card = useCardStore.getState().getCard(cardId);
+  if (!card) return "未知卡片";
+  if (card.title) return card.title;
+  switch (card.type) {
+    case "text": return "文字卡片";
+    case "sticky_note": return "便签";
+    case "ai_chat": return "AI 对话";
+    default: return card.type;
+  }
 }
 
 interface MediaEditorProps {
@@ -35,7 +61,17 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [currentModel, setCurrentModel] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
   const data = card.data as MediaData;
+
+  const upstreamEntries = useMemo(
+    () => Object.entries(data.upstreamTexts || {}),
+    [data.upstreamTexts],
+  );
+  const hasUpstream = upstreamEntries.length > 0;
+
+  const finalPrompt = useMemo(() => buildFinalPrompt(data), [data]);
+  const canGenerate = finalPrompt.length > 0;
 
   useEffect(() => {
     if (data.model) {
@@ -67,6 +103,19 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
     },
     [card.id, data, updateCard],
+  );
+
+  const removeUpstreamEntry = useCallback(
+    (sourceCardId: string) => {
+      const { connections, removeConnection } = useConnectionStore.getState();
+      for (const [id, c] of connections) {
+        if (c.sourceCardId === sourceCardId && c.targetCardId === card.id) {
+          removeConnection(id);
+          break;
+        }
+      }
+    },
+    [card.id],
   );
 
   const setRefImage = useCallback(
@@ -118,8 +167,31 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   );
 
   const handleGenerate = useCallback(async () => {
-    const prompt = data.content?.trim();
+    const prompt = buildFinalPrompt(data);
     if (!prompt || generating) return;
+
+    console.group("[MediaEditor] handleGenerate 开始");
+    console.log("[MediaEditor] 卡片数据:", {
+      cardId: card.id,
+      model: data.model,
+      contentLength: data.content?.length ?? 0,
+      contentPreview: data.content?.slice(0, 100),
+      upstreamTexts: data.upstreamTexts
+        ? Object.fromEntries(
+            Object.entries(data.upstreamTexts).map(([k, v]) => [k, v.slice(0, 80)]),
+          )
+        : null,
+      refImagesKeys: data.refImages ? Object.keys(data.refImages) : [],
+      refImagesSummary: data.refImages
+        ? Object.fromEntries(
+            Object.entries(data.refImages).map(([k, v]) => [
+              k,
+              { urlPrefix: v.url.slice(0, 60), sourceCardId: v.sourceCardId, sourceType: v.sourceType },
+            ]),
+          )
+        : null,
+    });
+    console.log("[MediaEditor] 最终 prompt:", prompt);
 
     if (!(await hasApiKey())) {
       useUIStore.getState().addToast({
@@ -132,6 +204,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         },
         duration: 5000,
       });
+      console.groupEnd();
       return;
     }
 
@@ -151,6 +224,9 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         })
         .filter(Boolean) as Array<{ url: string; role: string }>;
 
+      console.log("[MediaEditor] refSlots:", refSlots.map((s) => s.key));
+      console.log("[MediaEditor] rawRefImages 数量:", rawRefImages.length);
+
       const referenceImages: Array<{ url: string; role: string }> = [];
       for (const ref of rawRefImages) {
         if (
@@ -160,10 +236,27 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         ) {
           referenceImages.push(ref);
         } else {
+          console.log("[MediaEditor] 转换本地文件为 base64:", ref.url.slice(0, 80));
           const dataUrl = await readMediaBase64(ref.url);
+          console.log("[MediaEditor] base64 转换结果长度:", dataUrl.length, "前缀:", dataUrl.slice(0, 40));
           referenceImages.push({ ...ref, url: dataUrl });
         }
       }
+
+      console.log("[MediaEditor] 最终 referenceImages:", referenceImages.map((r) => ({
+        role: r.role,
+        urlType: r.url.startsWith("data:") ? "base64" : r.url.startsWith("http") ? "http" : "local",
+        urlLength: r.url.length,
+        urlPrefix: r.url.slice(0, 50),
+      })));
+
+      console.log("[MediaEditor] 调用 generateImage:", {
+        promptLength: prompt.length,
+        promptPreview: prompt.slice(0, 200),
+        size: "1024x1024",
+        model: currentModel || "(default)",
+        refImageCount: referenceImages.length,
+      });
 
       const result = await provider.generateImage({
         prompt,
@@ -176,12 +269,17 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         },
       });
 
+      console.log("[MediaEditor] 生成成功:", { resultUrl: result.url?.slice(0, 100), revisedPrompt: result.revisedPrompt?.slice(0, 100) });
+      console.groupEnd();
+
       updateCard(card.id, {
         data: { ...data, imageUrl: result.url },
       });
       autoSave.markDirty(card.id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      console.error("[MediaEditor] 生成失败:", msg);
+      console.groupEnd();
       setError(msg);
     } finally {
       setCardProgress(card.id, null);
@@ -211,13 +309,51 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         </div>
       )}
 
+      {hasUpstream && (
+        <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
+          <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+            <ArrowDownLeft className="h-3 w-3" />
+            上游文字 · 自动拼接到提示词前
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {upstreamEntries.map(([cardId, text]) => (
+              <span
+                key={cardId}
+                title={text}
+                className="inline-flex max-w-[180px] items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs"
+              >
+                <span className="truncate">{getCardTitle(cardId)}: {text}</span>
+                <button
+                  onClick={() => removeUpstreamEntry(cardId)}
+                  disabled={generating}
+                  className="shrink-0 text-muted-foreground transition-colors hover:text-destructive disabled:opacity-40"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       <textarea
         className="min-h-[3rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
         value={data.content ?? ""}
         onChange={onPromptChange}
-        placeholder="描述你想生成的图片…"
+        placeholder={hasUpstream ? "追加你的提示词（可选）…" : "描述你想生成的图片…"}
         disabled={generating}
       />
+
+      {showPreview && canGenerate && (
+        <div className="shrink-0 rounded-lg border border-border bg-muted/50 p-2">
+          <div className="mb-1 text-[10px] font-medium text-muted-foreground">
+            最终提示词预览
+          </div>
+          <p className="max-h-[4rem] overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-foreground/80">
+            {finalPrompt}
+          </p>
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         <ModelSelector
@@ -230,18 +366,29 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             +参考图
           </span>
         )}
+        {hasUpstream && (
+          <button
+            onClick={() => setShowPreview((v) => !v)}
+            className="flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+            title={showPreview ? "隐藏预览" : "预览最终提示词"}
+          >
+            {showPreview
+              ? <><EyeOff className="h-3 w-3" />隐藏</>
+              : <><Eye className="h-3 w-3" />预览</>
+            }
+          </button>
+        )}
         {error && (
           <span className="min-w-0 truncate text-[11px] text-destructive">{error}</span>
         )}
         <div className="flex-1" />
         <button
           onClick={handleGenerate}
-          disabled={generating || !data.content?.trim()}
+          disabled={generating || !canGenerate}
           className={cn(
             "flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
             "bg-primary text-primary-foreground hover:bg-primary/90",
-            (generating || !data.content?.trim()) &&
-              "cursor-not-allowed opacity-40",
+            (generating || !canGenerate) && "cursor-not-allowed opacity-40",
           )}
         >
           {generating ? (

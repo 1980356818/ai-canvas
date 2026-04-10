@@ -1,5 +1,6 @@
-import { memo, useCallback, useRef } from "react";
-import { MessageSquare, Loader2 } from "lucide-react";
+import { memo, useCallback, useRef, useEffect } from "react";
+import { Loader2 } from "lucide-react";
+import { useCanvasStore } from "@/stores/canvasStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { autoSave } from "@/lib/autoSave";
@@ -7,8 +8,18 @@ import { autoSave } from "@/lib/autoSave";
 export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
   const data = card.data as { content?: string; result?: string };
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
+  const isEditing = useCanvasStore((s) => s.editingCardId === card.id);
   const updateCard = useCardStore((s) => s.updateCard);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (isEditing && !genProgress && promptRef.current) {
+      const ta = promptRef.current;
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = ta.value.length;
+    }
+  }, [isEditing, genProgress]);
 
   const onResultChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -19,6 +30,10 @@ export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
     },
     [card.id, data, updateCard],
   );
+
+  const stopDrag = useCallback((e: React.PointerEvent | React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
 
   if (genProgress) {
     return (
@@ -43,34 +58,20 @@ export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
     );
   }
 
-  if (data.result) {
-    return (
-      <div
-        className="h-full p-4"
-        onPointerDown={(e) => {
-          if ((e.target as HTMLElement).tagName === "TEXTAREA") {
-            e.stopPropagation();
-          }
-        }}
-        onWheel={(e) => e.stopPropagation()}
-      >
-        <textarea
-          data-card-result
-          className="h-full w-full resize-none rounded-lg bg-transparent px-2 py-1.5 text-xs leading-relaxed text-card-foreground outline-none placeholder:text-muted-foreground focus:bg-muted/30 focus:ring-1 focus:ring-primary/30"
-          value={data.result}
-          onChange={onResultChange}
-          placeholder="AI 生成的结果…"
-        />
-      </div>
-    );
-  }
-
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground/50">
-      <MessageSquare className="h-8 w-8" />
-      <span className="text-xs">
-        {data.content ? "等待生成" : "生成文字"}
-      </span>
+    <div className="flex h-full w-full flex-col p-4">
+      <textarea
+        ref={promptRef}
+        data-card-result
+        className="min-h-0 flex-1 resize-none rounded-lg border border-input bg-transparent px-3 py-2 text-sm leading-relaxed text-card-foreground outline-none ring-ring placeholder:text-muted-foreground/50 focus:ring-1"
+        style={{ pointerEvents: isEditing ? "auto" : "none" }}
+        value={data.result ?? ""}
+        readOnly={!isEditing}
+        onChange={onResultChange}
+        placeholder="点击输入文本..."
+        onPointerDown={stopDrag}
+        onMouseDown={stopDrag}
+      />
     </div>
   );
 });

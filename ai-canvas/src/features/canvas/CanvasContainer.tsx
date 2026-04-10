@@ -343,7 +343,7 @@ export default function CanvasContainer() {
       data-canvas-viewport
       className="relative flex-1 overflow-hidden bg-background"
       style={{
-        cursor: isPanning ? "grabbing" : spaceDown ? "crosshair" : "grab",
+        cursor: isPanning ? "grabbing" : spaceDown ? "crosshair" : "default",
         backgroundImage:
           "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
         backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px`,

@@ -7,7 +7,7 @@ import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { loadCards, loadConnections } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
-import { startDataFlowWatcher, removeRefImageForSource } from "@/lib/dataFlow";
+import { startDataFlowWatcher, removeRefImageForSource, removeUpstreamTextForSource } from "@/lib/dataFlow";
 
 import { useKeyboardShortcuts } from "@/features/canvas/hooks/useKeyboardShortcuts";
 import TitleBar from "@/app/TitleBar";
@@ -103,6 +103,7 @@ export default function App() {
       for (const [id, conn] of prev.connections) {
         if (!state.connections.has(id)) {
           removeRefImageForSource(conn.targetCardId, conn.sourceCardId);
+          removeUpstreamTextForSource(conn.targetCardId, conn.sourceCardId);
         }
       }
 

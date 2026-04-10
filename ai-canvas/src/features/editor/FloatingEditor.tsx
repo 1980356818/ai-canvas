@@ -34,6 +34,7 @@ export default function FloatingEditor() {
   }, [editingCardId, close]);
 
   if (!card) return null;
+  if (card.type === "text" || card.type === "sticky_note") return null;
 
   const { height, minWidth } = EDITOR_SIZES[card.type] ?? DEFAULT_SIZE;
   const zoom = viewport.zoom;

@@ -136,10 +136,31 @@ export class OpenAIProvider implements AIProvider {
     };
 
     if (req.referenceImages && req.referenceImages.length > 0) {
-      body.image = req.referenceImages.map((ref) => ref.url);
+      body.images = req.referenceImages.map((ref) => ref.url);
     }
 
+    console.group("[OpenAI] generateImage 请求");
+    console.log("[OpenAI] 请求体（不含图片数据）:", {
+      model: body.model,
+      promptLength: req.prompt.length,
+      promptPreview: req.prompt.slice(0, 300),
+      size: body.size,
+      quality: body.quality,
+      n: body.n,
+      response_format: body.response_format,
+      hasImagesField: !!body.images,
+      imagesCount: Array.isArray(body.images) ? (body.images as unknown[]).length : 0,
+      imageUrlPrefixes: Array.isArray(body.images)
+        ? (body.images as string[]).map((u) => u.slice(0, 60))
+        : [],
+    });
+
     const raw = await aiProxy("openai", "/v1/images/generations", body);
+
+    console.log("[OpenAI] 响应状态:", raw.status);
+    console.log("[OpenAI] 响应体预览:", raw.body.slice(0, 500));
+    console.groupEnd();
+
     throwIfError(raw.status, raw.body);
 
     const taskIdMatch = raw.body.match(/"task_id"\s*:\s*(\d+)/);
@@ -147,6 +168,7 @@ export class OpenAIProvider implements AIProvider {
 
     if (data.task_id || taskIdMatch) {
       const taskId = taskIdMatch ? taskIdMatch[1]! : String(data.task_id);
+      console.log("[OpenAI] 异步任务模式, taskId:", taskId);
 
       emit?.({ percent: 5, phase: "queued", label: "已提交，排队中…" });
 
@@ -156,8 +178,14 @@ export class OpenAIProvider implements AIProvider {
           emit?.({ percent: Math.max(5, progress), phase: "queued", label: "排队中…" });
         } else {
           const pct = progress > 0 ? Math.min(progress, 90) : 10;
-          emit?.({ percent: pct, phase: "generating", label: `生成中${progress > 0 ? ` ${progress}%` : "…"}` });
+          emit?.({ percent: pct, phase: "generating", label: "生成中…" });
         }
+      });
+
+      console.log("[OpenAI] 任务完成:", {
+        status: result.status,
+        resultUrl: result.resultUrl?.slice(0, 150),
+        errorMessage: result.errorMessage,
       });
 
       const failed = result.status.toLowerCase();
@@ -170,6 +198,7 @@ export class OpenAIProvider implements AIProvider {
 
       emit?.({ percent: 92, phase: "saving", label: "正在保存图片…" });
       const saved = await saveMedia(result.resultUrl);
+      console.log("[OpenAI] 图片已保存:", saved.localPath);
       emit?.({ percent: 100, phase: "saving", label: "完成" });
       return { url: saved.localPath };
     }

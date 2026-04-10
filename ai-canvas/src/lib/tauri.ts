@@ -529,7 +529,12 @@ export async function listModels(): Promise<ModelInfo[]> {
 }
 
 function normalizeTaskInfo(raw: Record<string, unknown>): TaskInfo {
-  return {
+  console.log("[TaskPoll] 原始响应字段:", Object.keys(raw));
+  console.log("[TaskPoll] 原始响应（不含大数据）:", JSON.stringify(raw, (key, value) => {
+    if (typeof value === "string" && value.length > 200) return value.slice(0, 200) + "…";
+    return value;
+  }));
+  const info: TaskInfo = {
     id: String(raw.id ?? ""),
     status: String(raw.status ?? ""),
     progress: Number(raw.progress ?? 0),
@@ -539,6 +544,14 @@ function normalizeTaskInfo(raw: Record<string, unknown>): TaskInfo {
     createdAt: (raw.createdAt ?? raw.created_at) as string | undefined,
     finishedAt: (raw.finishedAt ?? raw.finished_at) as string | undefined,
   };
+  if (info.status && /complet|success|fail|error|cancel/i.test(info.status)) {
+    console.log("[TaskPoll] 任务终态:", {
+      status: info.status,
+      resultUrl: info.resultUrl?.slice(0, 100),
+      errorMessage: info.errorMessage,
+    });
+  }
+  return info;
 }
 
 export async function pollTask(taskId: string): Promise<TaskInfo> {

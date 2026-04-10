@@ -175,7 +175,7 @@ export function useKeyboardShortcuts() {
       }
 
       if (
-        (e.key === "Delete" || e.key === "Backspace") &&
+        e.key === "Delete" &&
         !e.ctrlKey &&
         !e.metaKey
       ) {
