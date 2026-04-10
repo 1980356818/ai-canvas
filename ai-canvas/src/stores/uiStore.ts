@@ -34,7 +34,6 @@ interface UIState {
   };
   appView: AppView;
   generatingCards: Map<string, CardGenProgress>;
-  streamingContents: Map<string, string>;
 
   toggleSidebar: () => void;
   toggleAgentPanel: () => void;
@@ -56,7 +55,6 @@ interface UIState {
 
   setAppView: (view: AppView) => void;
   setCardProgress: (cardId: string, progress: CardGenProgress | null) => void;
-  setStreamingContent: (cardId: string, content: string | null) => void;
 }
 
 let toastCounter = 0;
@@ -70,7 +68,6 @@ export const useUIStore = create<UIState>((set) => ({
   contextMenu: { visible: false, x: 0, y: 0, target: "canvas" },
   appView: "home",
   generatingCards: new Map(),
-  streamingContents: new Map(),
 
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   toggleAgentPanel: () =>
@@ -110,13 +107,5 @@ export const useUIStore = create<UIState>((set) => ({
       if (progress) next.set(cardId, progress);
       else next.delete(cardId);
       return { generatingCards: next };
-    }),
-
-  setStreamingContent: (cardId, content) =>
-    set((s) => {
-      const next = new Map(s.streamingContents);
-      if (content !== null) next.set(cardId, content);
-      else next.delete(cardId);
-      return { streamingContents: next };
     }),
 }));

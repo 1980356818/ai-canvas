@@ -174,23 +174,28 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      if (isEditing(e)) return;
-
       if (
         (e.key === "Delete" || e.key === "Backspace") &&
         !e.ctrlKey &&
         !e.metaKey
       ) {
-        e.preventDefault();
-        const connId = useConnectionStore.getState().selectedConnectionId;
-        if (connId) {
-          useConnectionStore.getState().removeConnection(connId);
-          autoSave.markDirty();
+        const target = e.target as HTMLElement;
+        const inCardResult = "cardResult" in target.dataset;
+        if (!isEditing(e) || inCardResult) {
+          e.preventDefault();
+          const connId = useConnectionStore.getState().selectedConnectionId;
+          if (connId) {
+            useConnectionStore.getState().removeConnection(connId);
+            autoSave.markDirty();
+            return;
+          }
+          void deleteSelected();
           return;
         }
-        void deleteSelected();
         return;
       }
+
+      if (isEditing(e)) return;
 
       if ((e.ctrlKey || e.metaKey) && e.key === "c") {
         e.preventDefault();
