@@ -38,6 +38,8 @@ interface CanvasState {
   setEditingCardId: (id: string | null) => void;
   setIsDragging: (dragging: boolean) => void;
   setDragOffset: (cardId: string, offset: DragOffset | null) => void;
+  setDragOffsets: (offsets: Map<string, DragOffset>) => void;
+  clearDragOffsets: (cardIds: string[]) => void;
   enterPickMode: (state: Omit<PickModeState, "active">) => void;
   exitPickMode: () => void;
 }
@@ -85,6 +87,24 @@ export const useCanvasStore = create<CanvasState>((set) => ({
       const next = new Map(s.dragOffsets);
       if (offset) next.set(cardId, offset);
       else next.delete(cardId);
+      return { dragOffsets: next };
+    }),
+
+  setDragOffsets: (offsets) =>
+    set((s) => {
+      const next = new Map(s.dragOffsets);
+      for (const [cardId, offset] of offsets) {
+        next.set(cardId, offset);
+      }
+      return { dragOffsets: next };
+    }),
+
+  clearDragOffsets: (cardIds) =>
+    set((s) => {
+      const next = new Map(s.dragOffsets);
+      for (const cardId of cardIds) {
+        next.delete(cardId);
+      }
       return { dragOffsets: next };
     }),
 

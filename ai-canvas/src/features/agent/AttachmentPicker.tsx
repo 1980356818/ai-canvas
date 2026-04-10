@@ -1,7 +1,7 @@
 import { useCallback, useRef } from "react";
 import { Paperclip, X, ImageIcon } from "lucide-react";
-import { saveMedia, readMediaBase64 } from "@/lib/tauri";
 import type { ContentPart } from "@/agent/types";
+import { persistImage, getDisplayUrl } from "@/lib/media";
 
 const isTauri =
   typeof window !== "undefined" &&
@@ -38,10 +38,8 @@ export default function AttachmentPicker({
         const filePath =
           typeof selected === "string" ? selected : (selected as { path: string }).path;
 
-        const saved = await saveMedia(filePath);
-        const dataUrl = await readMediaBase64(saved.localPath);
-
-        onAdd({ type: "image", url: dataUrl, mimeType: "image/png" });
+        const relativePath = await persistImage(filePath);
+        onAdd({ type: "image", url: relativePath, mimeType: "image/png" });
       } catch (err) {
         console.error("Failed to pick file:", err);
       }
@@ -51,18 +49,20 @@ export default function AttachmentPicker({
   }, [onAdd]);
 
   const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        onAdd({
-          type: "image",
-          url: reader.result as string,
-          mimeType: file.type || "image/png",
-        });
-      };
-      reader.readAsDataURL(file);
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      const relativePath = await persistImage(dataUrl);
+      onAdd({
+        type: "image",
+        url: relativePath,
+        mimeType: file.type || "image/png",
+      });
       e.target.value = "";
     },
     [onAdd],
@@ -97,7 +97,7 @@ export default function AttachmentPicker({
             att.type === "image" ? (
               <div key={i} className="group relative">
                 <img
-                  src={att.url}
+                  src={getDisplayUrl(att.url)}
                   alt=""
                   className="h-10 w-10 rounded-md border border-border object-cover"
                 />

@@ -38,7 +38,7 @@ function formatRelativeTime(iso: string): string {
 export function ProjectPanel() {
   const projects = useProjectStore((s) => s.projects);
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
-  const setCurrentProjectId = useProjectStore((s) => s.setCurrentProjectId);
+  const openProject = useProjectStore((s) => s.openProject);
   const setProjects = useProjectStore((s) => s.setProjects);
   const addProject = useProjectStore((s) => s.addProject);
   const removeProject = useProjectStore((s) => s.removeProject);
@@ -98,7 +98,7 @@ export function ProjectPanel() {
   const onCreated = useCallback(
     (project: ProjectInfo) => {
       addProject(project);
-      setCurrentProjectId(project.id);
+      openProject(project.id);
       setAppView("canvas");
       addToast({
         type: "success",
@@ -106,7 +106,7 @@ export function ProjectPanel() {
         duration: 3000,
       });
     },
-    [addProject, addToast, setCurrentProjectId, setAppView],
+    [addProject, addToast, openProject, setAppView],
   );
 
   return (
@@ -132,13 +132,13 @@ export function ProjectPanel() {
                 role="button"
                 tabIndex={0}
                 onClick={() => {
-                  setCurrentProjectId(p.id);
+                  openProject(p.id);
                   setAppView("canvas");
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    setCurrentProjectId(p.id);
+                    openProject(p.id);
                     setAppView("canvas");
                   }
                 }}

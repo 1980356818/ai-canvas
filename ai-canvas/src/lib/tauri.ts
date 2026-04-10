@@ -183,6 +183,7 @@ export async function deleteProject(id: string): Promise<void> {
     projects.filter((p) => p.id !== id),
   );
   localStorage.removeItem(LS_PREFIX + "cards_" + id);
+  localStorage.removeItem(LS_PREFIX + "viewport_" + id);
 }
 
 export async function renameProject(
@@ -299,12 +300,14 @@ export async function aiProxy(
 export async function saveMedia(
   source: string,
   _filename?: string,
+  title?: string,
 ): Promise<{ localPath: string }> {
   if (isTauri) {
     await ensureTauriAPIs();
     const r = await _invoke<SaveMediaResult>("save_media", {
       source,
       filename: _filename,
+      title,
     });
     return { localPath: r.local_path };
   }
@@ -320,43 +323,8 @@ export async function readMediaBase64(path: string): Promise<string> {
   return path;
 }
 
-const imageUrlCache = new Map<string, string>();
-
-function dataUrlToBlobUrl(dataUrl: string): string {
-  const commaIdx = dataUrl.indexOf(",");
-  if (commaIdx === -1) return dataUrl;
-  const meta = dataUrl.slice(0, commaIdx);
-  const b64 = dataUrl.slice(commaIdx + 1);
-  const mime = meta.match(/:(.*?);/)?.[1] || "image/png";
-  const bin = atob(b64);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return URL.createObjectURL(new Blob([arr], { type: mime }));
-}
-
-/**
- * Resolve an image path to a short Blob URL for display.
- * Local paths are read via Rust IPC; results are cached as Blob URLs
- * so React reconciliation never compares multi-MB base64 strings.
- */
-export async function resolveImageUrl(path: string): Promise<string> {
-  if (!path) return "";
-  if (path.startsWith("blob:") || path.startsWith("http://") || path.startsWith("https://")) {
-    return path;
-  }
-  const cached = imageUrlCache.get(path);
-  if (cached) return cached;
-
-  let blobUrl: string;
-  if (path.startsWith("data:")) {
-    blobUrl = dataUrlToBlobUrl(path);
-  } else {
-    const dataUrl = await readMediaBase64(path);
-    blobUrl = dataUrlToBlobUrl(dataUrl);
-  }
-  imageUrlCache.set(path, blobUrl);
-  return blobUrl;
-}
+// resolveImageUrl / imageUrlCache / dataUrlToBlobUrl removed —
+// replaced by media.ts getDisplayUrl() which uses Tauri Asset Protocol.
 
 // ── Streaming AI Proxy ───────────────────────────────────────
 
@@ -657,6 +625,31 @@ export async function onTauriFileDrop(
   } catch {
     return () => {};
   }
+}
+
+// ── Per-project viewport persistence ─────────────────────────
+
+export interface SavedViewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export function saveProjectViewport(
+  projectId: string,
+  viewport: SavedViewport,
+): void {
+  lsSet("viewport_" + projectId, viewport);
+}
+
+export function loadProjectViewport(
+  projectId: string,
+): SavedViewport | null {
+  return lsGet<SavedViewport | null>("viewport_" + projectId, null);
+}
+
+export function removeProjectViewport(projectId: string): void {
+  localStorage.removeItem(LS_PREFIX + "viewport_" + projectId);
 }
 
 // ── Connection persistence (localStorage-only for now) ───────

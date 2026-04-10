@@ -136,9 +136,9 @@ const Wire = memo(function Wire({
         stroke={`url(#${pulseId})`}
         strokeWidth={flowing ? 4 : active ? 3.5 : 2.5}
         strokeLinecap="round"
-        opacity={flowing ? 0.9 : active ? 0.75 : 0.55}
+        opacity={flowing ? 0.9 : active ? 0.75 : 0}
         style={{ pointerEvents: "none" }}
-        className={flowing ? "wire-sweep-data" : active ? "wire-sweep-active" : "wire-sweep-idle"}
+        className={flowing ? "wire-sweep-data" : active ? "wire-sweep-active" : undefined}
       />
 
       {/* Selected highlight */}

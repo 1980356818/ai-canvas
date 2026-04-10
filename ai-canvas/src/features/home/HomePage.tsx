@@ -28,13 +28,13 @@ function formatRelativeTime(iso: string): string {
 }
 
 function ProjectCard({ project }: { project: ProjectInfo }) {
-  const setCurrentProjectId = useProjectStore((s) => s.setCurrentProjectId);
+  const openProject = useProjectStore((s) => s.openProject);
   const removeProject = useProjectStore((s) => s.removeProject);
   const setAppView = useUIStore((s) => s.setAppView);
   const addToast = useUIStore((s) => s.addToast);
 
   const handleOpen = () => {
-    setCurrentProjectId(project.id);
+    openProject(project.id);
     setAppView("canvas");
   };
 

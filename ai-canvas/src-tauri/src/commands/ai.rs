@@ -5,6 +5,7 @@ use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
+use chrono::Local;
 
 const BASE64_ENGINE: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 
@@ -219,14 +220,16 @@ pub struct SaveMediaResult {
 }
 
 /// Save media from a remote URL, base64 data-URL, or local path into
-/// `app_data_dir/media/images/{uuid}.{ext}`.  When `image_save_path` is set,
-/// a copy is also written to that user-chosen directory.  Returns the persisted path.
+/// `app_data_dir/media/images/{uuid}.{ext}`.  When `image_auto_save_path` is set,
+/// a copy is also written to that user-chosen directory.
+/// Returns a **relative** path like `media/images/{uuid}.{ext}`.
 #[tauri::command]
 pub async fn save_media(
     app: AppHandle,
     state: State<'_, AppState>,
     source: String,
     filename: Option<String>,
+    title: Option<String>,
 ) -> Result<SaveMediaResult, String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let media_dir = app_data_dir.join("media/images");
@@ -265,10 +268,10 @@ pub async fn save_media(
 
     std::fs::write(&dest, &bytes).map_err(|e| format!("写入文件失败: {}", e))?;
 
-    let user_dir = {
+    let auto_save_dir = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         db.query_row(
-            "SELECT value FROM settings WHERE key = 'image_save_path'",
+            "SELECT value FROM settings WHERE key = 'image_auto_save_path'",
             [],
             |row| row.get::<_, String>(0),
         )
@@ -276,31 +279,132 @@ pub async fn save_media(
         .filter(|s| !s.trim().is_empty())
     };
 
-    if let Some(dir) = user_dir {
-        let user_dest = std::path::Path::new(&dir).join(format!("{}.{}", file_id, ext));
+    if let Some(dir) = auto_save_dir {
+        let friendly_name = build_friendly_filename(&title, &file_id, &ext);
+        let user_dest = std::path::Path::new(&dir).join(&friendly_name);
         if let Err(e) = std::fs::create_dir_all(&dir) {
-            tracing::warn!("创建用户图片目录失败: {}", e);
+            tracing::warn!("创建自动保存目录失败: {}", e);
         } else if let Err(e) = std::fs::copy(&dest, &user_dest) {
-            tracing::warn!("复制图片到用户目录失败: {}", e);
+            tracing::warn!("复制图片到自动保存目录失败: {}", e);
         } else {
-            tracing::info!("图片已保存到用户目录: {:?}", user_dest);
+            tracing::info!("图片已自动保存: {:?}", user_dest);
         }
     }
 
+    let relative_path = format!("media/images/{}.{}", file_id, ext);
     Ok(SaveMediaResult {
-        local_path: dest.to_string_lossy().to_string(),
+        local_path: relative_path,
     })
 }
 
-/// Read a local file and return its content as a base64 data-URL.
+/// Return the absolute path of `app_data_dir` so the frontend can
+/// construct asset-protocol URLs via `convertFileSrc()`.
 #[tauri::command]
-pub async fn read_media_base64(path: String) -> Result<String, String> {
-    let bytes =
-        std::fs::read(&path).map_err(|e| format!("读取文件失败 '{}': {}", path, e))?;
+pub async fn get_media_base_path(app: AppHandle) -> Result<String, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(dir.to_string_lossy().to_string())
+}
 
-    let mime = match path
-        .rsplit('.')
-        .next()
+/// Copy an image from internal storage to the user's export directory.
+/// If `image_export_path` is not configured, returns an error prompting the user to set it.
+#[tauri::command]
+pub async fn export_image(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    source_path: String,
+    export_name: String,
+) -> Result<String, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let abs_source = app_data_dir.join(&source_path);
+
+    if !abs_source.exists() {
+        return Err(format!("源文件不存在: {}", source_path));
+    }
+
+    let export_dir = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        db.query_row(
+            "SELECT value FROM settings WHERE key = 'image_export_path'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+    };
+
+    let dir = export_dir.ok_or("请先在设置中配置「图片下载保存路径」")?;
+
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("创建导出目录失败: {}", e))?;
+
+    let dest = std::path::Path::new(&dir).join(&export_name);
+    std::fs::copy(&abs_source, &dest)
+        .map_err(|e| format!("导出图片失败: {}", e))?;
+
+    tracing::info!("图片已导出: {:?}", dest);
+    Ok(dest.to_string_lossy().to_string())
+}
+
+/// Open the system file explorer and highlight the given file.
+#[tauri::command]
+pub async fn open_in_explorer(app: AppHandle, path: String) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let abs_path = if path.starts_with("media/") {
+        app_data_dir.join(&path)
+    } else {
+        std::path::PathBuf::from(&path)
+    };
+
+    if !abs_path.exists() {
+        return Err(format!("文件不存在: {}", abs_path.display()));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .args(["/select,", &abs_path.to_string_lossy()])
+            .spawn()
+            .map_err(|e| format!("打开资源管理器失败: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R", &abs_path.to_string_lossy()])
+            .spawn()
+            .map_err(|e| format!("打开 Finder 失败: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let parent = abs_path.parent().unwrap_or(&abs_path);
+        std::process::Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| format!("打开文件管理器失败: {}", e))?;
+    }
+
+    Ok(())
+}
+
+/// Read a local file and return its content as a base64 data-URL.
+/// Accepts both relative paths (e.g. `media/images/uuid.png`) which are
+/// resolved against `app_data_dir`, and absolute paths.
+#[tauri::command]
+pub async fn read_media_base64(app: AppHandle, path: String) -> Result<String, String> {
+    let abs_path = if path.starts_with("media/") {
+        let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+        app_data_dir.join(&path)
+    } else {
+        std::path::PathBuf::from(&path)
+    };
+
+    let bytes =
+        std::fs::read(&abs_path).map_err(|e| format!("读取文件失败 '{}': {}", abs_path.display(), e))?;
+
+    let mime = match abs_path
+        .extension()
+        .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_lowercase()
         .as_str()
@@ -318,6 +422,24 @@ pub async fn read_media_base64(path: String) -> Result<String, String> {
 }
 
 // ── Helpers ─────────────────────────────────────────────────
+
+fn build_friendly_filename(title: &Option<String>, fallback_id: &str, ext: &str) -> String {
+    let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+    let base = title
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| sanitize_filename(s))
+        .unwrap_or_else(|| fallback_id[..8.min(fallback_id.len())].to_string());
+    format!("{}_{}.{}", base, timestamp, ext)
+}
+
+fn sanitize_filename(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' || c > '\x7f' { c } else { '_' })
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
 
 fn detect_extension(source: &str, filename: &Option<String>) -> String {
     if let Some(name) = filename {

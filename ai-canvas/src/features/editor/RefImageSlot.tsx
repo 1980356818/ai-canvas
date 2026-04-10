@@ -1,6 +1,5 @@
 import { useRef, useCallback, useState, useEffect } from "react";
 import { Upload, X } from "lucide-react";
-import { resolveImageUrl } from "@/lib/tauri";
 import { useCanvasStore } from "@/stores/canvasStore";
 import {
   CARD_REF_MIME,
@@ -8,6 +7,7 @@ import {
   type RefImageEntry,
 } from "@/config/model-ref-images";
 import { cn } from "@/lib/utils";
+import { persistImage, getDisplayUrl } from "@/lib/media";
 
 interface RefImageSlotProps {
   label: string;
@@ -34,7 +34,6 @@ export default function RefImageSlot({
 }: RefImageSlotProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const slotRef = useRef<HTMLDivElement>(null);
-  const [displayUrl, setDisplayUrl] = useState<string | undefined>();
   const [dragOver, setDragOver] = useState(false);
   const [cardDragOver, setCardDragOver] = useState(false);
   const pickMode = useCanvasStore((s) => s.pickMode);
@@ -43,19 +42,7 @@ export default function RefImageSlot({
     pickMode.targetCardId === targetCardId &&
     pickMode.slotKey === slotKey;
 
-  useEffect(() => {
-    if (!entry?.url) {
-      setDisplayUrl(undefined);
-      return;
-    }
-    let stale = false;
-    resolveImageUrl(entry.url).then((url) => {
-      if (!stale) setDisplayUrl(url);
-    });
-    return () => {
-      stale = true;
-    };
-  }, [entry?.url]);
+  const displayUrl = entry?.url ? getDisplayUrl(entry.url) : undefined;
 
   // Listen for custom events dispatched by CardShell during pointer-based drag
   useEffect(() => {
@@ -81,14 +68,15 @@ export default function RefImageSlot({
 
 
   const handleFile = useCallback(
-    (file: File) => {
+    async (file: File) => {
       if (!file.type.startsWith("image/")) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string")
-          onImage({ url: reader.result, sourceType: "file" });
-      };
-      reader.readAsDataURL(file);
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      const relativePath = await persistImage(dataUrl);
+      onImage({ url: relativePath, sourceType: "file" });
     },
     [onImage],
   );

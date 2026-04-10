@@ -34,7 +34,7 @@ function ProjectCard({
   onRename: (id: string, title: string) => void;
 }) {
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
-  const setCurrentProjectId = useProjectStore((s) => s.setCurrentProjectId);
+  const openProject = useProjectStore((s) => s.openProject);
   const removeProject = useProjectStore((s) => s.removeProject);
   const setAppView = useUIStore((s) => s.setAppView);
   const addToast = useUIStore((s) => s.addToast);
@@ -55,7 +55,7 @@ function ProjectCard({
   }, [editing]);
 
   const handleOpen = () => {
-    setCurrentProjectId(project.id);
+    openProject(project.id);
     setAppView("canvas");
   };
 
@@ -176,7 +176,7 @@ export default function ProjectsPage() {
   const onCreated = useCallback(
     (project: ProjectInfo) => {
       useProjectStore.getState().addProject(project);
-      useProjectStore.getState().setCurrentProjectId(project.id);
+      useProjectStore.getState().openProject(project.id);
       useUIStore.getState().setAppView("canvas");
       addToast({ type: "success", title: "项目创建成功", duration: 3000 });
     },

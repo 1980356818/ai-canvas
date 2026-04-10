@@ -33,7 +33,7 @@ function WorkflowCard({ workflow }: { workflow: WorkflowTemplate }) {
     try {
       const project = await createProject(workflow.name);
       useProjectStore.getState().addProject(project);
-      useProjectStore.getState().setCurrentProjectId(project.id);
+      useProjectStore.getState().openProject(project.id);
 
       instantiateWorkflowTemplate(workflow, project.id, 320, 80);
 

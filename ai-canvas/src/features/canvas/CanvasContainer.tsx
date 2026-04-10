@@ -16,9 +16,9 @@ import { autoSave } from "@/lib/autoSave";
 import {
   updateProjectMeta,
   onTauriFileDrop,
-  readMediaBase64,
   isTauri,
 } from "@/lib/tauri";
+import { persistImage } from "@/lib/media";
 
 function canCardAcceptFileDrop(cardId: string): boolean {
   const card = useCardStore.getState().getCard(cardId);
@@ -140,44 +140,49 @@ export default function CanvasContainer() {
         fileDragTargetRef.current = null;
       }
 
-      let startIdx = 0;
-
-      if (targetCardId) {
-        const targetCard = useCardStore.getState().getCard(targetCardId);
-        if (targetCard) {
+      const readFileAsDataUrl = (file: File): Promise<string> =>
+        new Promise((resolve) => {
           const reader = new FileReader();
-          reader.onload = () => {
-            const dataUrl = reader.result as string;
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+
+      (async () => {
+        let startIdx = 0;
+
+        if (targetCardId) {
+          const targetCard = useCardStore.getState().getCard(targetCardId);
+          if (targetCard) {
+            const dataUrl = await readFileAsDataUrl(files[0]);
+            const relativePath = await persistImage(dataUrl);
             const latest = useCardStore.getState().getCard(targetCardId);
-            if (!latest) return;
-            const d = { ...latest.data } as Record<string, unknown>;
-            if (latest.type === "ai_image") {
-              d.imageUrl = dataUrl;
-            } else if (latest.type === "ai_tryon") {
-              if (!d.personImageUrl) d.personImageUrl = dataUrl;
-              else if (!d.garmentImageUrl) d.garmentImageUrl = dataUrl;
+            if (latest) {
+              const d = { ...latest.data } as Record<string, unknown>;
+              if (latest.type === "ai_image") {
+                d.imageUrl = relativePath;
+              } else if (latest.type === "ai_tryon") {
+                if (!d.personImageUrl) d.personImageUrl = relativePath;
+                else if (!d.garmentImageUrl) d.garmentImageUrl = relativePath;
+              }
+              useCardStore.getState().updateCard(targetCardId, { data: d });
+              autoSave.markDirty(targetCardId);
             }
-            useCardStore.getState().updateCard(targetCardId, { data: d });
-            autoSave.markDirty(targetCardId);
-          };
-          reader.readAsDataURL(files[0]);
-          startIdx = 1;
+            startIdx = 1;
+          }
         }
-      }
 
-      const remaining = files.slice(startIdx);
-      if (remaining.length === 0) return;
+        const remaining = files.slice(startIdx);
+        if (remaining.length === 0) return;
 
-      const dropPos = screenToCanvas(e.clientX, e.clientY);
-      const { width, height } = CARD_DEFAULTS.ai_image;
-      const dropX = dropPos.x - width / 2;
-      const dropY = dropPos.y - height / 2;
-      const GAP = 20;
+        const dropPos = screenToCanvas(e.clientX, e.clientY);
+        const { width, height } = CARD_DEFAULTS.ai_image;
+        const dropX = dropPos.x - width / 2;
+        const dropY = dropPos.y - height / 2;
+        const GAP = 20;
 
-      remaining.forEach((file, idx) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = reader.result as string;
+        for (let idx = 0; idx < remaining.length; idx++) {
+          const dataUrl = await readFileAsDataUrl(remaining[idx]);
+          const relativePath = await persistImage(dataUrl);
           const now = new Date().toISOString();
           const { maxZIndex } = useCardStore.getState();
           const card: CanvasCard = {
@@ -191,23 +196,20 @@ export default function CanvasContainer() {
             zIndex: maxZIndex + 1 + idx,
             locked: false,
             collapsed: false,
-            data: { imageUrl: dataUrl, content: "" },
+            data: { imageUrl: relativePath, content: "" },
             createdAt: now,
             updatedAt: now,
           };
           useCardStore.getState().addCard(card);
           autoSave.markDirty(card.id);
-        };
-        reader.readAsDataURL(file);
-      });
+        }
 
-      const count =
-        useCardStore.getState().getCardsByProject(currentProjectId).length +
-        remaining.length;
-      useProjectStore
-        .getState()
-        .updateProject(currentProjectId, { nodeCount: count });
-      void updateProjectMeta(currentProjectId, { nodeCount: count });
+        const count = useCardStore.getState().getCardsByProject(currentProjectId).length;
+        useProjectStore
+          .getState()
+          .updateProject(currentProjectId, { nodeCount: count });
+        void updateProjectMeta(currentProjectId, { nodeCount: count });
+      })();
     },
     [currentProjectId, screenToCanvas],
   );
@@ -252,15 +254,15 @@ export default function CanvasContainer() {
 
       if (targetCardId && canCardAcceptFileDrop(targetCardId)) {
         try {
-          const dataUrl = await readMediaBase64(paths[0]!);
+          const relativePath = await persistImage(paths[0]!);
           const target = useCardStore.getState().getCard(targetCardId);
           if (target) {
             const d = { ...target.data } as Record<string, unknown>;
             if (target.type === "ai_image") {
-              d.imageUrl = dataUrl;
+              d.imageUrl = relativePath;
             } else if (target.type === "ai_tryon") {
-              if (!d.personImageUrl) d.personImageUrl = dataUrl;
-              else if (!d.garmentImageUrl) d.garmentImageUrl = dataUrl;
+              if (!d.personImageUrl) d.personImageUrl = relativePath;
+              else if (!d.garmentImageUrl) d.garmentImageUrl = relativePath;
             }
             useCardStore.getState().updateCard(targetCardId, { data: d });
             autoSave.markDirty(targetCardId);
@@ -271,7 +273,7 @@ export default function CanvasContainer() {
 
       for (let i = startIdx; i < paths.length; i++) {
         try {
-          const dataUrl = await readMediaBase64(paths[i]!);
+          const relativePath = await persistImage(paths[i]!);
           const now = new Date().toISOString();
           const { maxZIndex } = useCardStore.getState();
           const card: CanvasCard = {
@@ -285,7 +287,7 @@ export default function CanvasContainer() {
             zIndex: maxZIndex + 1 + (i - startIdx),
             locked: false,
             collapsed: false,
-            data: { imageUrl: dataUrl, content: "" },
+            data: { imageUrl: relativePath, content: "" },
             createdAt: now,
             updatedAt: now,
           };

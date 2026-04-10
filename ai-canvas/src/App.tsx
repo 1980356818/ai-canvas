@@ -1,13 +1,15 @@
 import { useEffect, useRef } from "react";
 import { useUIStore } from "@/stores/uiStore";
 import { useCardStore } from "@/stores/cardStore";
+import { useCanvasStore } from "@/stores/canvasStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
-import { loadCards, loadConnections } from "@/lib/tauri";
+import { loadCards, loadConnections, saveProjectViewport, loadProjectViewport } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
 import { startDataFlowWatcher, removeRefImageForSource, removeUpstreamTextForSource } from "@/lib/dataFlow";
+import { initMediaService } from "@/lib/media";
 
 import { useKeyboardShortcuts } from "@/features/canvas/hooks/useKeyboardShortcuts";
 import TitleBar from "@/app/TitleBar";
@@ -28,11 +30,12 @@ export default function App() {
   const appView = useUIStore((s) => s.appView);
   const dataFlowCleanup = useRef<(() => void) | null>(null);
   const agentPanelVisible = useUIStore((s) => s.agentPanelVisible);
+  const prevProjectIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     useSettingsStore.getState().applyTheme();
+    void initMediaService();
 
-    // Prevent webview from navigating to dropped files
     const prevent = (e: DragEvent) => {
       if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
     };
@@ -45,6 +48,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (prevProjectIdRef.current) {
+      const vp = useCanvasStore.getState().viewport;
+      saveProjectViewport(prevProjectIdRef.current, {
+        x: vp.x,
+        y: vp.y,
+        zoom: vp.zoom,
+      });
+    }
+    prevProjectIdRef.current = currentProjectId;
+
     if (!currentProjectId) {
       useCardStore.getState().clear();
       useConnectionStore.getState().clear();
@@ -52,6 +65,13 @@ export default function App() {
       return;
     }
     history.clear();
+
+    const savedViewport = loadProjectViewport(currentProjectId);
+    if (savedViewport) {
+      useCanvasStore.getState().setViewport(savedViewport);
+    } else {
+      useCanvasStore.getState().setViewport({ x: 0, y: 0, zoom: 1 });
+    }
 
     loadCards(currentProjectId)
       .then((rows) => {
@@ -126,6 +146,18 @@ export default function App() {
   }, []);
 
   useKeyboardShortcuts();
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const pid = useProjectStore.getState().currentProjectId;
+      if (pid) {
+        const vp = useCanvasStore.getState().viewport;
+        saveProjectViewport(pid, { x: vp.x, y: vp.y, zoom: vp.zoom });
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {

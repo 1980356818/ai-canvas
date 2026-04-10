@@ -5,7 +5,8 @@ import { useUIStore } from "@/stores/uiStore";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { autoSave } from "@/lib/autoSave";
-import { hasApiKey, aiProxy, readMediaBase64 } from "@/lib/tauri";
+import { hasApiKey, aiProxy } from "@/lib/tauri";
+import { getBase64ForApi } from "@/lib/media";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
 import {
@@ -162,16 +163,8 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     let resolvedImageUrls: string[] = [];
     if (modelSupportsVision(model)) {
       for (const img of imageEntries) {
-        if (
-          img.url.startsWith("data:") ||
-          img.url.startsWith("http://") ||
-          img.url.startsWith("https://")
-        ) {
-          resolvedImageUrls.push(img.url);
-        } else {
-          const dataUrl = await readMediaBase64(img.url);
-          resolvedImageUrls.push(dataUrl);
-        }
+        const dataUrl = await getBase64ForApi(img.url);
+        resolvedImageUrls.push(dataUrl);
       }
     } else if (imageEntries.length > 0) {
       useUIStore.getState().addToast({

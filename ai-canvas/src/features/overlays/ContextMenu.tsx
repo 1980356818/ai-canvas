@@ -14,6 +14,8 @@ import { recordBatchDelete } from "@/lib/history";
 import { cn } from "@/lib/utils";
 import { CARD_DEFAULTS, WORKFLOW_TEMPLATES } from "@/shared/constants";
 import type { CardType } from "@/shared/types";
+import { extractCardImage } from "@/config/model-ref-images";
+import { exportImage, revealInExplorer } from "@/lib/media";
 
 const CLIPBOARD_KIND = "ai-canvas-card/v1";
 
@@ -481,6 +483,8 @@ function ContextMenuPanel({
   } else if (contextMenu.target === "card") {
     const id = contextMenu.targetId;
     const card = id ? useCardStore.getState().getCard(id) : undefined;
+    const cardImagePath = card ? extractCardImage(card) : null;
+    const hasImage = !!cardImagePath && !cardImagePath.startsWith("data:") && !cardImagePath.startsWith("http");
     entries = [
       {
         type: "item",
@@ -488,6 +492,32 @@ function ContextMenuPanel({
         shortcut: "Ctrl+C",
         disabled: !id || !card || !navigator.clipboard?.writeText,
         onSelect: () => void runCopyCard(),
+      },
+      {
+        type: "item",
+        label: "保存图片到本地",
+        disabled: !hasImage,
+        onSelect: () => {
+          if (cardImagePath) {
+            void exportImage(cardImagePath, card?.data?.content as string || "AI图片")
+              .then(() => {
+                useUIStore.getState().addToast({ type: "success", title: "图片已导出" });
+              })
+              .catch((err: unknown) => {
+                useUIStore.getState().addToast({ type: "error", title: "导出失败", description: String(err) });
+              });
+          }
+          hide();
+        },
+      },
+      {
+        type: "item",
+        label: "在文件夹中显示",
+        disabled: !hasImage,
+        onSelect: () => {
+          if (cardImagePath) void revealInExplorer(cardImagePath);
+          hide();
+        },
       },
       { type: "sep" },
       {

@@ -75,7 +75,7 @@ export default function AIPromptInput() {
 
       const project = await createProject(trimmed.slice(0, 40));
       useProjectStore.getState().addProject(project);
-      useProjectStore.getState().setCurrentProjectId(project.id);
+      useProjectStore.getState().openProject(project.id);
 
       const now = new Date().toISOString();
       const cardType = config.cardType;

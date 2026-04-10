@@ -4,7 +4,8 @@ import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
-import { hasApiKey, readMediaBase64 } from "@/lib/tauri";
+import { hasApiKey } from "@/lib/tauri";
+import { getBase64ForApi } from "@/lib/media";
 import { modelService } from "@/services/models";
 import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
@@ -263,18 +264,8 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
       const referenceImages: Array<{ url: string; role: string }> = [];
       for (const ref of rawRefImages) {
-        if (
-          ref.url.startsWith("data:") ||
-          ref.url.startsWith("http://") ||
-          ref.url.startsWith("https://")
-        ) {
-          referenceImages.push(ref);
-        } else {
-          console.log("[MediaEditor] 转换本地文件为 base64:", ref.url.slice(0, 80));
-          const dataUrl = await readMediaBase64(ref.url);
-          console.log("[MediaEditor] base64 转换结果长度:", dataUrl.length, "前缀:", dataUrl.slice(0, 40));
-          referenceImages.push({ ...ref, url: dataUrl });
-        }
+        const dataUrl = await getBase64ForApi(ref.url);
+        referenceImages.push({ ...ref, url: dataUrl });
       }
 
       console.log("[MediaEditor] 最终 referenceImages:", referenceImages.map((r) => ({

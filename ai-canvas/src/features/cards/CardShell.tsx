@@ -33,7 +33,7 @@ function findInputPortAt(
   return null;
 }
 
-function Port({
+const Port = memo(function Port({
   side,
   cardId,
   color,
@@ -43,9 +43,9 @@ function Port({
   color: string;
 }) {
   const isOutput = side === "output";
-  const draftWire = useConnectionStore((s) => s.draftWire);
-  const isDraftTarget =
-    !isOutput && draftWire !== null && draftWire.sourceCardId !== cardId;
+  const isDraftTarget = useConnectionStore(
+    (s) => !isOutput && s.draftWire !== null && s.draftWire.sourceCardId !== cardId,
+  );
 
   const onPortPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -181,7 +181,7 @@ function Port({
       </div>
     </div>
   );
-}
+});
 
 interface CardShellProps {
   card: CanvasCard;
@@ -309,7 +309,6 @@ export default memo(
           const dy = (ev.clientY - dragStart.current.my) / zoom;
           if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didDrag.current = true;
           el.style.transform = `translate(${dx}px, ${dy}px)`;
-          useCanvasStore.getState().setDragOffset(card.id, { dx, dy });
           if (editorEl) {
             const sx = dx * zoom;
             const sy = dy * zoom;
@@ -317,10 +316,15 @@ export default memo(
           }
 
           if (isGroupDrag) {
+            const offsets = new Map<string, { dx: number; dy: number }>();
+            offsets.set(card.id, { dx, dy });
             for (const [sid, peer] of peerStarts) {
               if (peer.el) peer.el.style.transform = `translate(${dx}px, ${dy}px)`;
-              useCanvasStore.getState().setDragOffset(sid, { dx, dy });
+              offsets.set(sid, { dx, dy });
             }
+            useCanvasStore.getState().setDragOffsets(offsets);
+          } else {
+            useCanvasStore.getState().setDragOffset(card.id, { dx, dy });
           }
 
           const slotEl = findSlotBelow(ev.clientX, ev.clientY);
@@ -367,20 +371,21 @@ export default memo(
           el.style.transform = "";
           el.style.willChange = "";
           el.style.cursor = "";
-          useCanvasStore.getState().setDragOffset(card.id, null);
           if (editorEl) editorEl.style.transform = `scale(${zoom})`;
           el.removeEventListener("pointermove", onMove);
           el.removeEventListener("pointerup", onUp);
           el.removeEventListener("lostpointercapture", onUp);
 
           if (isGroupDrag) {
-            for (const [sid, peer] of peerStarts) {
+            for (const [, peer] of peerStarts) {
               if (peer.el) {
                 peer.el.style.transform = "";
                 peer.el.style.willChange = "";
               }
-              useCanvasStore.getState().setDragOffset(sid, null);
             }
+            useCanvasStore.getState().clearDragOffsets([card.id, ...peerStarts.keys()]);
+          } else {
+            useCanvasStore.getState().setDragOffset(card.id, null);
           }
 
           lastHoveredSlot?.dispatchEvent(

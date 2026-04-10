@@ -358,9 +358,9 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         type: "ai_image",
         title: "4角度展示",
         relativeX: sizeFromRatio(1).width + 80 + CARD_DEFAULTS.ai_chat.width + 80 + sizeFromRatio(3 / 4).width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
-        relativeY: CARD_DEFAULTS.ai_chat.height + 30 - sizeFromRatio(1).height / 2,
-        ...sizeFromRatio(1),
-        data: { content: "", size: "1:1" },
+        relativeY: CARD_DEFAULTS.ai_chat.height + 30 - sizeFromRatio(16 / 9).height / 2,
+        ...sizeFromRatio(16 / 9),
+        data: { content: "", size: "16:9" },
       },
     ],
     connections: [

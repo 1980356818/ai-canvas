@@ -1,8 +1,8 @@
-import { memo, useState, useEffect } from "react";
+import { memo } from "react";
 import { ImageIcon, Loader2, Shirt, Video } from "lucide-react";
 import type { CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
-import { resolveImageUrl } from "@/lib/tauri";
+import { getDisplayUrl } from "@/lib/media";
 import AIChatCard from "./AIChatCard";
 import TextCard from "./TextCard";
 import StickyNoteCard from "./StickyNoteCard";
@@ -10,14 +10,7 @@ import StickyNoteCard from "./StickyNoteCard";
 function ImagePreview({ card }: { card: CanvasCard }) {
   const data = card.data as { content?: string; imageUrl?: string };
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
-  const [displayUrl, setDisplayUrl] = useState<string | undefined>();
-
-  useEffect(() => {
-    if (!data.imageUrl) { setDisplayUrl(undefined); return; }
-    let stale = false;
-    resolveImageUrl(data.imageUrl).then((url) => { if (!stale) setDisplayUrl(url); });
-    return () => { stale = true; };
-  }, [data.imageUrl]);
+  const displayUrl = data.imageUrl ? getDisplayUrl(data.imageUrl) : undefined;
 
   if (genProgress) {
     return (
@@ -66,15 +59,8 @@ function ImagePreview({ card }: { card: CanvasCard }) {
 function TryOnPreview({ card }: { card: CanvasCard }) {
   const data = card.data as { personImageUrl?: string; garmentImageUrl?: string; resultImageUrl?: string };
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
-  const [displayUrl, setDisplayUrl] = useState<string | undefined>();
-
-  useEffect(() => {
-    const url = data.resultImageUrl || data.personImageUrl;
-    if (!url) { setDisplayUrl(undefined); return; }
-    let stale = false;
-    resolveImageUrl(url).then((u) => { if (!stale) setDisplayUrl(u); });
-    return () => { stale = true; };
-  }, [data.resultImageUrl, data.personImageUrl]);
+  const rawUrl = data.resultImageUrl || data.personImageUrl;
+  const displayUrl = rawUrl ? getDisplayUrl(rawUrl) : undefined;
 
   if (genProgress) {
     return (

@@ -28,7 +28,8 @@ export default function SettingsDialog() {
 
   const [apiKey, setApiKey] = useState<FieldState>({ value: "", show: false });
   const [baseUrl, setBaseUrl] = useState("");
-  const [imageSavePath, setImageSavePath] = useState("");
+  const [autoSavePath, setAutoSavePath] = useState("");
+  const [exportPath, setExportPath] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [connStatus, setConnStatus] = useState<ConnectionStatus>("idle");
@@ -41,17 +42,24 @@ export default function SettingsDialog() {
     Promise.all([
       getSetting("openai_api_key"),
       getSetting("openai_base_url"),
-      getSetting("image_save_path"),
-    ]).then(([key, url, savePath]) => {
+      getSetting("image_auto_save_path"),
+      getSetting("image_export_path"),
+    ]).then(([key, url, asp, ep]) => {
       setApiKey({ value: key ?? "", show: false });
       setBaseUrl(url ?? "");
-      setImageSavePath(savePath ?? "");
+      setAutoSavePath(asp ?? "");
+      setExportPath(ep ?? "");
     });
   }, [visible]);
 
-  const handlePickDirectory = useCallback(async () => {
+  const handlePickAutoSavePath = useCallback(async () => {
     const dir = await pickDirectory();
-    if (dir) setImageSavePath(dir);
+    if (dir) setAutoSavePath(dir);
+  }, []);
+
+  const handlePickExportPath = useCallback(async () => {
+    const dir = await pickDirectory();
+    if (dir) setExportPath(dir);
   }, []);
 
   const handleTestConnection = useCallback(async () => {
@@ -71,7 +79,8 @@ export default function SettingsDialog() {
     try {
       const trimmedKey = apiKey.value.trim();
       const trimmedUrl = baseUrl.trim();
-      const trimmedPath = imageSavePath.trim();
+      const trimmedAutoSave = autoSavePath.trim();
+      const trimmedExport = exportPath.trim();
       if (trimmedKey) {
         await setSetting("openai_api_key", trimmedKey);
         setApiKey((s) => ({ ...s, value: trimmedKey }));
@@ -80,8 +89,10 @@ export default function SettingsDialog() {
         await setSetting("openai_base_url", trimmedUrl);
         setBaseUrl(trimmedUrl);
       }
-      await setSetting("image_save_path", trimmedPath);
-      setImageSavePath(trimmedPath);
+      await setSetting("image_auto_save_path", trimmedAutoSave);
+      setAutoSavePath(trimmedAutoSave);
+      await setSetting("image_export_path", trimmedExport);
+      setExportPath(trimmedExport);
 
       invalidateApiKeyCache();
       modelService.invalidateCache();
@@ -100,7 +111,7 @@ export default function SettingsDialog() {
     } finally {
       setSaving(false);
     }
-  }, [apiKey.value, baseUrl, imageSavePath]);
+  }, [apiKey.value, baseUrl, autoSavePath, exportPath]);
 
   if (!visible) return null;
 
@@ -167,23 +178,22 @@ export default function SettingsDialog() {
 
           <div>
             <label className="mb-1.5 block text-sm font-medium">
-              图片保存路径
+              生成图片自动保存路径
               <span className="ml-1 text-xs text-muted-foreground">
-                (生成的图片自动保存到此目录)
+                (AI 生成的图片自动复制一份到此目录)
               </span>
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
-                value={imageSavePath}
-                onChange={(e) => setImageSavePath(e.target.value)}
+                value={autoSavePath}
                 placeholder="未设置则仅保存到应用内部"
                 className="min-w-0 flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
                 readOnly
               />
               <button
                 type="button"
-                onClick={handlePickDirectory}
+                onClick={handlePickAutoSavePath}
                 className="flex items-center gap-1.5 rounded-lg border border-input px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 title="选择文件夹"
               >
@@ -191,10 +201,46 @@ export default function SettingsDialog() {
                 选择
               </button>
             </div>
-            {imageSavePath && (
+            {autoSavePath && (
               <button
                 type="button"
-                onClick={() => setImageSavePath("")}
+                onClick={() => setAutoSavePath("")}
+                className="mt-1 text-[11px] text-muted-foreground hover:text-destructive"
+              >
+                清除路径
+              </button>
+            )}
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">
+              图片下载保存路径
+              <span className="ml-1 text-xs text-muted-foreground">
+                (右键保存图片时的默认目录)
+              </span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={exportPath}
+                placeholder="未设置时会弹出选择框"
+                className="min-w-0 flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+                readOnly
+              />
+              <button
+                type="button"
+                onClick={handlePickExportPath}
+                className="flex items-center gap-1.5 rounded-lg border border-input px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                title="选择文件夹"
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+                选择
+              </button>
+            </div>
+            {exportPath && (
+              <button
+                type="button"
+                onClick={() => setExportPath("")}
                 className="mt-1 text-[11px] text-muted-foreground hover:text-destructive"
               >
                 清除路径

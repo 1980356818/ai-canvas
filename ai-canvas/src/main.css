@@ -84,6 +84,14 @@
   }
 }
 
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 @keyframes shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(300%); }
@@ -114,7 +122,6 @@
 
 .wire-sweep-idle {
   stroke-dasharray: 24 176;
-  animation: wire-sweep 2.8s ease-in-out infinite;
 }
 .wire-sweep-active {
   stroke-dasharray: 36 164;
