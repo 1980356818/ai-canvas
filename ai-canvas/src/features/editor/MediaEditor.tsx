@@ -217,7 +217,6 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         onChange={onPromptChange}
         placeholder="描述你想生成的图片…"
         disabled={generating}
-        autoFocus
       />
 
       <div className="flex items-center gap-2">

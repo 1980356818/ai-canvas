@@ -45,27 +45,27 @@ function buildCard(
   worldY: number,
 ): CanvasCard {
   const now = new Date().toISOString();
-  const { width, height } = CARD_DEFAULTS[type];
+  const defaults = CARD_DEFAULTS[type];
   const { maxZIndex } = useCardStore.getState();
   return {
     id: crypto.randomUUID(),
     projectId,
     type,
-    x: worldX - width / 2,
-    y: worldY - height / 2,
-    width,
-    height,
+    x: worldX - defaults.width / 2,
+    y: worldY - defaults.height / 2,
+    width: defaults.width,
+    height: defaults.height,
     zIndex: maxZIndex + 1,
     locked: false,
     collapsed: false,
-    data: {},
+    data: { ...defaults.data },
     createdAt: now,
     updatedAt: now,
   };
 }
 
 type MenuEntry =
-  | { type: "item"; label: string; shortcut?: string; disabled?: boolean; onSelect: () => void }
+  | { type: "item"; label: string; shortcut?: string; disabled?: boolean; onSelect: (e: React.MouseEvent) => void }
   | { type: "submenu"; label: string; disabled?: boolean; children: MenuEntry[] }
   | { type: "sep" };
 
@@ -82,15 +82,15 @@ function MenuButton({
   label: string;
   shortcut?: string;
   disabled?: boolean;
-  onSelect: () => void;
+  onSelect: (e: React.MouseEvent) => void;
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
-      onClick={() => {
+      onClick={(e) => {
         if (disabled) return;
-        onSelect();
+        onSelect(e);
       }}
       className={cn(
         "flex w-full items-center justify-between gap-8 rounded-md px-2 py-1.5 text-left text-sm",
@@ -228,9 +228,17 @@ function ContextMenuPanel({
     };
   }, [hide]);
 
-  const addCardAtClick = (type: CardType) => {
+  const addCardAtClick = (type: CardType, e?: React.MouseEvent) => {
     if (!projectId) return;
-    const { x, y } = clientToWorld(contextMenu.x, contextMenu.y);
+    let x: number, y: number;
+    if (e) {
+      const world = clientToWorld(e.clientX, e.clientY);
+      x = world.x;
+      y = world.y;
+    } else {
+      x = contextMenu.worldX ?? clientToWorld(contextMenu.x, contextMenu.y).x;
+      y = contextMenu.worldY ?? clientToWorld(contextMenu.x, contextMenu.y).y;
+    }
     const card = buildCard(type, projectId, x, y);
     useCardStore.getState().addCard(card);
     autoSave.markDirty(card.id);
@@ -242,7 +250,8 @@ function ContextMenuPanel({
     if (!projectId) return;
     try {
       const text = await navigator.clipboard.readText();
-      const { x, y } = clientToWorld(contextMenu.x, contextMenu.y);
+      const x = contextMenu.worldX ?? clientToWorld(contextMenu.x, contextMenu.y).x;
+      const y = contextMenu.worldY ?? clientToWorld(contextMenu.x, contextMenu.y).y;
       let parsed: unknown;
       try {
         parsed = JSON.parse(text) as { kind?: string; card?: CanvasCard };
@@ -407,19 +416,19 @@ function ContextMenuPanel({
             type: "item",
             label: "生成文字",
             disabled: noProject,
-            onSelect: () => addCardAtClick("ai_chat"),
+            onSelect: (e) => addCardAtClick("ai_chat", e),
           },
           {
             type: "item",
             label: "生成图片",
             disabled: noProject,
-            onSelect: () => addCardAtClick("ai_image"),
+            onSelect: (e) => addCardAtClick("ai_image", e),
           },
           {
             type: "item",
             label: "生成视频",
             disabled: noProject,
-            onSelect: () => addCardAtClick("ai_video"),
+            onSelect: (e) => addCardAtClick("ai_video", e),
           },
         ],
       },
@@ -432,7 +441,7 @@ function ContextMenuPanel({
             type: "item",
             label: "AI换衣",
             disabled: noProject,
-            onSelect: () => addCardAtClick("ai_tryon"),
+            onSelect: (e) => addCardAtClick("ai_tryon", e),
           },
         ],
       },

@@ -10,6 +10,7 @@ import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
 import {
   getRefSlotsForChatModel,
+  modelSupportsVision,
   compactRefImages,
   type RefImageEntry,
 } from "@/config/model-ref-images";
@@ -67,7 +68,6 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [currentModel, setCurrentModel] = useState("");
   const [streaming, setStreaming] = useState(false);
-  const [streamContent, setStreamContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<(() => Promise<void>) | null>(null);
   const data = card.data as ChatData;
@@ -180,7 +180,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     setCardProgress(card.id, { percent: 0, label: "正在生成…" });
     setError(null);
     setStreaming(false);
-    setStreamContent("");
+    useUIStore.getState().setStreamingContent(card.id, null);
 
     const model = currentModel || "deepseek-v3.2";
     console.log("[ChatGen] === 开始生成 ===");
@@ -191,18 +191,28 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       .map((slot) => data.refImages?.[slot.key])
       .filter((e): e is RefImageEntry => !!e);
 
-    const resolvedImageUrls: string[] = [];
-    for (const img of imageEntries) {
-      if (
-        img.url.startsWith("data:") ||
-        img.url.startsWith("http://") ||
-        img.url.startsWith("https://")
-      ) {
-        resolvedImageUrls.push(img.url);
-      } else {
-        const dataUrl = await readMediaBase64(img.url);
-        resolvedImageUrls.push(dataUrl);
+    let resolvedImageUrls: string[] = [];
+    if (modelSupportsVision(model)) {
+      for (const img of imageEntries) {
+        if (
+          img.url.startsWith("data:") ||
+          img.url.startsWith("http://") ||
+          img.url.startsWith("https://")
+        ) {
+          resolvedImageUrls.push(img.url);
+        } else {
+          const dataUrl = await readMediaBase64(img.url);
+          resolvedImageUrls.push(dataUrl);
+        }
       }
+    } else if (imageEntries.length > 0) {
+      console.warn("[ChatGen] model does not support vision, stripping images:", model);
+      useUIStore.getState().addToast({
+        type: "warning",
+        title: "当前模型不支持图片输入",
+        description: `${model} 不支持视觉能力，已忽略参考图。建议切换到 GPT、Claude、Gemini 等支持图片的模型。`,
+        duration: 5000,
+      });
     }
 
     type ContentPart =
@@ -235,7 +245,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       const { abort } = await aiProxyStream(
         "openai",
         "/v1/chat/completions",
-        { model, messages: apiMessages },
+        { model, messages: apiMessages, max_tokens: 4096 },
         {
           onChunk(raw) {
             chunkCount++;
@@ -251,7 +261,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
               autoSave.markDirty(card.id);
               setCardProgress(card.id, null);
               setStreaming(false);
-              setStreamContent("");
+              useUIStore.getState().setStreamingContent(card.id, null);
               abortRef.current = null;
               return;
             }
@@ -263,7 +273,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
             }
             const preview = accumulated || (accumulatedReasoning ? "💭 思考中…" : "");
             if (preview) {
-              setStreamContent(preview);
+              useUIStore.getState().setStreamingContent(card.id, preview);
               if (!streaming) setStreaming(true);
             }
           },
@@ -292,7 +302,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
             autoSave.markDirty(card.id);
             setCardProgress(card.id, null);
             setStreaming(false);
-            setStreamContent("");
+            useUIStore.getState().setStreamingContent(card.id, null);
             abortRef.current = null;
           },
           onError(errStr) {
@@ -308,7 +318,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
             autoSave.markDirty(card.id);
             setCardProgress(card.id, null);
             setStreaming(false);
-            setStreamContent("");
+            useUIStore.getState().setStreamingContent(card.id, null);
             abortRef.current = null;
           },
         },
@@ -356,15 +366,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         onChange={onPromptChange}
         placeholder="输入提示词，生成文字内容…"
         disabled={isBusy}
-        autoFocus
       />
-
-      {streaming && streamContent && (
-        <div className="max-h-20 overflow-y-auto rounded-lg bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
-          {streamContent.slice(0, 200)}
-          {streamContent.length > 200 && "…"}
-        </div>
-      )}
 
       <div className="flex items-center gap-2">
         <ModelSelector

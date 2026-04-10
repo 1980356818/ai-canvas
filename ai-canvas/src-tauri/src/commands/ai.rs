@@ -88,7 +88,7 @@ pub async fn ai_proxy_stream(
     }
 
     let url = format!("{}{}", config.base_url.trim_end_matches('/'), endpoint);
-    let client = state.http_client.clone();
+    let client = state.stream_client.clone();
     let sid = stream_id.clone();
 
     tauri::async_runtime::spawn(async move {
@@ -128,6 +128,7 @@ async fn do_stream(
     let mut request = client
         .post(url)
         .header("Content-Type", "application/json")
+        .header("Accept-Encoding", "identity")
         .json(body);
 
     request = match provider {
@@ -139,8 +140,18 @@ async fn do_stream(
 
     let resp = request.send().await.map_err(|e| format!("请求失败: {}", e))?;
 
+    let status = resp.status().as_u16();
+    let version = format!("{:?}", resp.version());
+    let content_type = resp.headers().get("content-type").map(|v| v.to_str().unwrap_or("?").to_string()).unwrap_or_default();
+    let content_encoding = resp.headers().get("content-encoding").map(|v| v.to_str().unwrap_or("?").to_string()).unwrap_or_default();
+    let transfer_encoding = resp.headers().get("transfer-encoding").map(|v| v.to_str().unwrap_or("?").to_string()).unwrap_or_default();
+
+    tracing::info!(
+        "[stream] status={} version={} content-type={} content-encoding={} transfer-encoding={}",
+        status, version, content_type, content_encoding, transfer_encoding
+    );
+
     if !resp.status().is_success() {
-        let status = resp.status().as_u16();
         let body = resp.text().await.unwrap_or_default();
         return Err(format!("API 错误 (HTTP {}): {}", status, body));
     }
@@ -156,7 +167,10 @@ async fn do_stream(
         let chunk = match stream.chunk().await {
             Ok(Some(c)) => c,
             Ok(None) => break,
-            Err(e) => return Err(format!("读取流失败: {}", e)),
+            Err(e) => {
+                tracing::error!("[stream] chunk error: {} (status={} version={} ce={} te={})", e, status, version, content_encoding, transfer_encoding);
+                return Err(format!("读取流失败: {}", e));
+            }
         };
 
         buffer.push_str(&String::from_utf8_lossy(&chunk));

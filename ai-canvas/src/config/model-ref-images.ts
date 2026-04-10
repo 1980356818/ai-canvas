@@ -60,7 +60,21 @@ const CHAT_REF_SLOTS: RefImageSlot[] = [
   { key: "refImage2", label: "参考图3", description: "图片参考", required: false },
 ];
 
-export function getRefSlotsForChatModel(_modelId: string): RefImageSlot[] {
+const NON_VISION_PATTERNS: RegExp[] = [
+  /^spark/i,
+  /^ernie[_-]?(lite|speed|tiny)/i,
+  /^abab[_-]?\d/i,
+  /^hunyuan[_-]?lite/i,
+];
+
+export function modelSupportsVision(modelId: string): boolean {
+  if (!modelId) return true;
+  if (/vision|\bvl\b/i.test(modelId)) return true;
+  return !NON_VISION_PATTERNS.some((p) => p.test(modelId));
+}
+
+export function getRefSlotsForChatModel(modelId: string): RefImageSlot[] {
+  if (!modelSupportsVision(modelId)) return [];
   return CHAT_REF_SLOTS;
 }
 

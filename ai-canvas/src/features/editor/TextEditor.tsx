@@ -31,7 +31,6 @@ export default function TextEditor({ card }: TextEditorProps) {
         value={data.content ?? ""}
         onChange={onChange}
         placeholder="在这里输入内容..."
-        autoFocus
       />
     </div>
   );

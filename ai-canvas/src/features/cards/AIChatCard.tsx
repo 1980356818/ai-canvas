@@ -1,12 +1,64 @@
-import { memo } from "react";
-import { MessageSquare, Loader2 } from "lucide-react";
+import { memo, useState, useCallback, useRef, useEffect } from "react";
+import { MessageSquare, Loader2, Pencil } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
+import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { autoSave } from "@/lib/autoSave";
 import MarkdownContent from "@/shared/MarkdownContent";
-import type { CanvasCard } from "@/stores/cardStore";
 
 export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
   const data = card.data as { content?: string; result?: string };
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
+  const streamContent = useUIStore((s) => s.streamingContents.get(card.id));
+  const updateCard = useCardStore((s) => s.updateCard);
+
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    if (editing) textareaRef.current?.focus();
+  }, [editing]);
+
+  const startEditing = useCallback(() => {
+    setEditValue(data.result ?? "");
+    setEditing(true);
+  }, [data.result]);
+
+  const finishEditing = useCallback(() => {
+    setEditing(false);
+    if (editValue !== data.result) {
+      updateCard(card.id, { data: { ...data, result: editValue } });
+      autoSave.markDirty(card.id);
+    }
+  }, [card.id, data, editValue, updateCard]);
+
+  const onEditChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const val = e.target.value;
+      setEditValue(val);
+      updateCard(card.id, { data: { ...data, result: val } });
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => autoSave.markDirty(card.id), 400);
+    },
+    [card.id, data, updateCard],
+  );
+
+  if (streamContent) {
+    return (
+      <div className="relative h-full overflow-y-auto p-3">
+        <div className="prose prose-sm dark:prose-invert text-xs leading-relaxed">
+          <MarkdownContent content={streamContent} compact />
+        </div>
+        <div className="pointer-events-none sticky inset-x-0 bottom-0 flex items-center justify-center pb-2">
+          <span className="flex items-center gap-1.5 rounded-full bg-primary/80 px-3 py-1 text-[10px] text-primary-foreground backdrop-blur-sm">
+            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+            生成中…
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   if (genProgress) {
     return (
@@ -32,10 +84,46 @@ export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
   }
 
   if (data.result) {
+    if (editing) {
+      return (
+        <div
+          className="h-full overflow-hidden p-3"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <textarea
+            ref={textareaRef}
+            className="h-full w-full resize-none rounded-lg bg-muted/20 px-2.5 py-2 text-sm leading-relaxed text-card-foreground outline-none ring-1 ring-primary/40 focus:ring-primary/70"
+            value={editValue}
+            onChange={onEditChange}
+            onBlur={finishEditing}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                finishEditing();
+              }
+            }}
+          />
+        </div>
+      );
+    }
+
     return (
-      <div className="h-full overflow-hidden p-3">
-        <div className="prose prose-sm dark:prose-invert max-h-full overflow-hidden text-xs leading-relaxed">
+      <div
+        className="group/result relative h-full overflow-y-auto p-3"
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          startEditing();
+        }}
+      >
+        <div className="prose prose-sm dark:prose-invert text-xs leading-relaxed">
           <MarkdownContent content={data.result} compact />
+        </div>
+        <div className="pointer-events-none sticky inset-x-0 bottom-0 flex items-center justify-center pb-2 opacity-0 transition-opacity group-hover/result:opacity-100">
+          <span className="flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-[10px] text-white backdrop-blur-sm">
+            <Pencil className="h-2.5 w-2.5" />
+            双击编辑
+          </span>
         </div>
       </div>
     );

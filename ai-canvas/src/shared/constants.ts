@@ -18,7 +18,7 @@ function sizeFromRatio(ratio: number): { width: number; height: number } {
 }
 
 export const CARD_DEFAULTS: Record<CardType, CardDefaults> = {
-  ai_chat:     { ...sizeFromRatio(3 / 4), label: "生成文字", data: { content: "", result: "" } },
+  ai_chat:     { width: 680, height: 420, label: "生成文字", data: { content: "", result: "" } },
   ai_image:    { ...sizeFromRatio(4 / 5), label: "AI 图片", data: { content: "" } },
   ai_video:    { ...sizeFromRatio(16 / 9), label: "AI 视频", data: { content: "" } },
   ai_tryon:    { ...sizeFromRatio(3 / 4), label: "AI 换装", data: { content: "" } },

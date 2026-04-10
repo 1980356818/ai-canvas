@@ -298,7 +298,8 @@ export default function CanvasContainer() {
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    showContextMenu(e.clientX, e.clientY, "canvas");
+    const world = screenToCanvas(e.clientX, e.clientY);
+    showContextMenu(e.clientX, e.clientY, "canvas", undefined, world.x, world.y);
   };
 
   const handleCanvasClick = (e: React.MouseEvent) => {
@@ -332,7 +333,8 @@ export default function CanvasContainer() {
       target === containerRef.current ||
       target.dataset.canvasBackground !== undefined;
     if (!isCanvasBg) return;
-    showContextMenu(e.clientX, e.clientY, "canvas");
+    const world = screenToCanvas(e.clientX, e.clientY);
+    showContextMenu(e.clientX, e.clientY, "canvas", undefined, world.x, world.y);
   };
 
   return (

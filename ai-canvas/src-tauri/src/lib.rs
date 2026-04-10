@@ -9,6 +9,7 @@ use tauri::Manager;
 pub struct AppState {
     pub db: Mutex<rusqlite::Connection>,
     pub http_client: reqwest::Client,
+    pub stream_client: reqwest::Client,
     pub active_streams: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
@@ -38,9 +39,17 @@ pub fn run() {
                 .build()
                 .expect("failed to create http client");
 
+            let stream_client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(300))
+                .connect_timeout(std::time::Duration::from_secs(30))
+                .http1_only()
+                .build()
+                .expect("failed to create streaming http client");
+
             app.manage(AppState {
                 db: Mutex::new(conn),
                 http_client,
+                stream_client,
                 active_streams: Mutex::new(HashMap::new()),
             });
 

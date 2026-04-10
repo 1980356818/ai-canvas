@@ -8,7 +8,7 @@ import { loadCards, loadConnections } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
 import { startDataFlowWatcher, removeRefImageForSource } from "@/lib/dataFlow";
-import { CARD_DEFAULTS } from "@/shared/constants";
+
 import { useKeyboardShortcuts } from "@/features/canvas/hooks/useKeyboardShortcuts";
 import TitleBar from "@/app/TitleBar";
 import ErrorBoundary from "@/app/ErrorBoundary";
@@ -55,26 +55,23 @@ export default function App() {
 
     loadCards(currentProjectId)
       .then((rows) => {
-        const cards = rows.map((r) => {
-          const defaults = CARD_DEFAULTS[r.type as CardType];
-          return {
-            id: r.id,
-            projectId: r.project_id,
-            type: r.type as CardType,
-            x: r.x,
-            y: r.y,
-            width: defaults?.width ?? r.width,
-            height: defaults?.height ?? r.height,
-            zIndex: r.z_index,
-            locked: r.locked,
-            collapsed: r.collapsed,
-            color: r.color ?? undefined,
-            title: r.title ?? undefined,
-            data: JSON.parse(r.data),
-            createdAt: r.created_at,
-            updatedAt: r.updated_at,
-          };
-        });
+        const cards = rows.map((r) => ({
+          id: r.id,
+          projectId: r.project_id,
+          type: r.type as CardType,
+          x: r.x,
+          y: r.y,
+          width: r.width,
+          height: r.height,
+          zIndex: r.z_index,
+          locked: r.locked,
+          collapsed: r.collapsed,
+          color: r.color ?? undefined,
+          title: r.title ?? undefined,
+          data: JSON.parse(r.data),
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
+        }));
         useCardStore.getState().setCards(cards);
       })
       .catch(console.error);
