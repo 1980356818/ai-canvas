@@ -159,13 +159,13 @@ export default function AIPromptInput() {
                 key={m}
                 onClick={() => setMode(m)}
                 className={cn(
-                  "flex items-center gap-3 rounded-full px-8 py-4 text-base font-medium transition-all duration-200",
+                  "flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200",
                   mode === m
                     ? "bg-foreground/10 text-foreground"
                     : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                 )}
               >
-                <Icon className="h-5 w-5" />
+                <Icon className="h-4 w-4" />
                 {label}
               </button>
             );

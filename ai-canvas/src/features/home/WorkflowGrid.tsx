@@ -61,10 +61,10 @@ function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
   return (
     <button
       onClick={handleClick}
-      className="group flex h-56 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+      className="group flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
     >
       <div
-        className={`flex h-32 items-center justify-center gap-3 bg-gradient-to-br ${style.gradient}`}
+        className={`flex aspect-[9/16] items-center justify-center gap-3 bg-gradient-to-br ${style.gradient}`}
       >
         <Icon className={`h-8 w-8 ${style.accent} opacity-60`} />
         <ArrowRight className="h-4 w-4 text-muted-foreground/40" />
@@ -77,11 +77,11 @@ function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-1 px-5 py-4">
-        <p className="text-base font-semibold text-foreground">
+      <div className="flex flex-1 flex-col gap-1 px-3 py-2.5">
+        <p className="text-xs font-semibold text-foreground">
           {workflow.name}
         </p>
-        <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+        <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
           {workflow.description}
         </p>
       </div>
@@ -102,7 +102,7 @@ export default function WorkflowGrid() {
         快速开始
       </h2>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-4 gap-3">
         {featured.map((wf) => (
           <FeatureCard key={wf.id} workflow={wf} />
         ))}
