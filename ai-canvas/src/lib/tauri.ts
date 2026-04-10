@@ -132,7 +132,8 @@ export async function listProjects(): Promise<ProjectInfo[]> {
     }));
   }
 
-  return lsGet<ProjectInfo[]>("projects", []);
+  const all = lsGet<(ProjectInfo & { deletedAt?: string })[]>("projects", []);
+  return all.filter((p) => !p.deletedAt);
 }
 
 export async function createProject(title: string): Promise<ProjectInfo> {
@@ -174,6 +175,63 @@ export async function deleteProject(id: string): Promise<void> {
   if (isTauri) {
     await ensureTauriAPIs();
     await _invoke("delete_project", { id });
+    return;
+  }
+
+  const projects = lsGet<ProjectInfo[]>("projects", []);
+  const target = projects.find((p) => p.id === id);
+  if (target) {
+    (target as ProjectInfo & { deletedAt?: string }).deletedAt = new Date().toISOString();
+    lsSet("projects", projects);
+  }
+}
+
+export async function listDeletedProjects(): Promise<ProjectInfo[]> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    const rows = await _invoke<
+      {
+        id: string;
+        title: string;
+        thumbnail: string | null;
+        node_count: number;
+        created_at: string;
+        updated_at: string;
+      }[]
+    >("list_deleted_projects");
+    return rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      thumbnail: r.thumbnail ?? undefined,
+      nodeCount: r.node_count,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
+  }
+
+  const all = lsGet<(ProjectInfo & { deletedAt?: string })[]>("projects", []);
+  return all.filter((p) => !!p.deletedAt);
+}
+
+export async function restoreProject(id: string): Promise<void> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    await _invoke("restore_project", { id });
+    return;
+  }
+
+  const projects = lsGet<(ProjectInfo & { deletedAt?: string })[]>("projects", []);
+  const target = projects.find((p) => p.id === id);
+  if (target) {
+    delete target.deletedAt;
+    lsSet("projects", projects);
+  }
+}
+
+export async function permanentlyDeleteProject(id: string): Promise<void> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    await _invoke("permanently_delete_project", { id });
     return;
   }
 

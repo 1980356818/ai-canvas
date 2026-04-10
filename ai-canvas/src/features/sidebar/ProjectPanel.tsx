@@ -105,6 +105,7 @@ export function ProjectPanel() {
     deleteProject(id).catch(() =>
       addToast({ type: "error", title: "删除失败，请重试", duration: 4000 }),
     );
+    addToast({ type: "success", title: "已移入回收站", duration: 3000 });
   }, [pendingDelete, removeProject, addToast]);
 
   const onCreated = useCallback(
@@ -229,7 +230,7 @@ export function ProjectPanel() {
       <ConfirmDialog
         open={!!pendingDelete}
         title={`确定删除「${pendingDelete?.title ?? ""}」？`}
-        description="此操作不可撤销，项目内的所有卡片将一并删除。"
+        description="项目将移入回收站，你可以在「我的项目」中找回。"
         confirmLabel="删除"
         variant="danger"
         onConfirm={handleConfirmDelete}

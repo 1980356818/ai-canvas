@@ -16,7 +16,32 @@ pub struct ProjectInfo {
 pub fn list_projects(state: State<AppState>) -> Result<Vec<ProjectInfo>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let mut stmt = db
-        .prepare("SELECT id, title, thumbnail, node_count, created_at, updated_at FROM projects ORDER BY updated_at DESC")
+        .prepare("SELECT id, title, thumbnail, node_count, created_at, updated_at FROM projects WHERE deleted_at IS NULL ORDER BY updated_at DESC")
+        .map_err(|e| e.to_string())?;
+
+    let projects = stmt
+        .query_map([], |row| {
+            Ok(ProjectInfo {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                thumbnail: row.get(2)?,
+                node_count: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(projects)
+}
+
+#[tauri::command]
+pub fn list_deleted_projects(state: State<AppState>) -> Result<Vec<ProjectInfo>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = db
+        .prepare("SELECT id, title, thumbnail, node_count, created_at, updated_at FROM projects WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
         .map_err(|e| e.to_string())?;
 
     let projects = stmt
@@ -70,6 +95,28 @@ pub fn create_project(state: State<AppState>, title: String) -> Result<ProjectIn
 
 #[tauri::command]
 pub fn delete_project(state: State<AppState>, id: String) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.execute(
+        "UPDATE projects SET deleted_at = datetime('now') WHERE id = ?1",
+        rusqlite::params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn restore_project(state: State<AppState>, id: String) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.execute(
+        "UPDATE projects SET deleted_at = NULL WHERE id = ?1",
+        rusqlite::params![id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn permanently_delete_project(state: State<AppState>, id: String) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.execute("DELETE FROM projects WHERE id = ?1", rusqlite::params![id])
         .map_err(|e| e.to_string())?;

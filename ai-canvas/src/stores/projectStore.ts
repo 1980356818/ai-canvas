@@ -11,13 +11,17 @@ export interface ProjectInfo {
 
 interface ProjectState {
   projects: ProjectInfo[];
+  deletedProjects: ProjectInfo[];
   currentProjectId: string | null;
   openProjectIds: string[];
 
   setProjects: (projects: ProjectInfo[]) => void;
+  setDeletedProjects: (projects: ProjectInfo[]) => void;
   setCurrentProjectId: (id: string | null) => void;
   addProject: (project: ProjectInfo) => void;
   removeProject: (id: string) => void;
+  restoreProject: (id: string) => void;
+  permanentlyRemoveProject: (id: string) => void;
   updateProject: (id: string, partial: Partial<ProjectInfo>) => void;
   getCurrentProject: () => ProjectInfo | undefined;
   openProject: (id: string) => void;
@@ -26,10 +30,13 @@ interface ProjectState {
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
   projects: [],
+  deletedProjects: [],
   currentProjectId: null,
   openProjectIds: [],
 
   setProjects: (projects) => set({ projects }),
+
+  setDeletedProjects: (deletedProjects) => set({ deletedProjects }),
 
   setCurrentProjectId: (id) => set({ currentProjectId: id }),
 
@@ -37,10 +44,31 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set((s) => ({ projects: [project, ...s.projects] })),
 
   removeProject: (id) =>
+    set((s) => {
+      const removed = s.projects.find((p) => p.id === id);
+      return {
+        projects: s.projects.filter((p) => p.id !== id),
+        deletedProjects: removed
+          ? [removed, ...s.deletedProjects]
+          : s.deletedProjects,
+        openProjectIds: s.openProjectIds.filter((pid) => pid !== id),
+        currentProjectId:
+          s.currentProjectId === id ? null : s.currentProjectId,
+      };
+    }),
+
+  restoreProject: (id) =>
+    set((s) => {
+      const restored = s.deletedProjects.find((p) => p.id === id);
+      return {
+        deletedProjects: s.deletedProjects.filter((p) => p.id !== id),
+        projects: restored ? [restored, ...s.projects] : s.projects,
+      };
+    }),
+
+  permanentlyRemoveProject: (id) =>
     set((s) => ({
-      projects: s.projects.filter((p) => p.id !== id),
-      openProjectIds: s.openProjectIds.filter((pid) => pid !== id),
-      currentProjectId: s.currentProjectId === id ? null : s.currentProjectId,
+      deletedProjects: s.deletedProjects.filter((p) => p.id !== id),
     })),
 
   updateProject: (id, partial) =>

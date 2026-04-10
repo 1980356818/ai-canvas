@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, FolderOpen, Trash2, Search } from "lucide-react";
+import { Plus, FolderOpen, Trash2, Search, Undo2, Trash, ChevronDown, ChevronRight } from "lucide-react";
 import { NewProjectDialog } from "@/features/overlays/NewProjectDialog";
 import { ConfirmDialog } from "@/features/overlays/ConfirmDialog";
-import { listProjects, deleteProject, renameProject } from "@/lib/tauri";
+import {
+  listProjects,
+  deleteProject,
+  renameProject,
+  listDeletedProjects,
+  restoreProject,
+  permanentlyDeleteProject,
+} from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import { useProjectStore, type ProjectInfo } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -150,16 +157,68 @@ function ProjectCard({
   );
 }
 
+function DeletedProjectCard({
+  project,
+  onRestore,
+  onPermanentDelete,
+}: {
+  project: ProjectInfo;
+  onRestore: (project: ProjectInfo) => void;
+  onPermanentDelete: (project: ProjectInfo) => void;
+}) {
+  return (
+    <div className="group flex items-start gap-4 rounded-xl border border-border/60 bg-card/60 p-4 text-left shadow-sm opacity-70">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+        <Trash className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-foreground">
+          {project.title}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {project.nodeCount} 张卡片
+        </p>
+      </div>
+      <div className="flex shrink-0 gap-1">
+        <button
+          type="button"
+          aria-label="恢复项目"
+          title="恢复"
+          onClick={() => onRestore(project)}
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+        >
+          <Undo2 className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          aria-label="彻底删除"
+          title="彻底删除"
+          onClick={() => onPermanentDelete(project)}
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectsPage() {
   const projects = useProjectStore((s) => s.projects);
+  const deletedProjects = useProjectStore((s) => s.deletedProjects);
   const setProjects = useProjectStore((s) => s.setProjects);
+  const setDeletedProjects = useProjectStore((s) => s.setDeletedProjects);
   const removeProject = useProjectStore((s) => s.removeProject);
   const updateProject = useProjectStore((s) => s.updateProject);
+  const storeRestoreProject = useProjectStore((s) => s.restoreProject);
+  const storePermanentlyRemove = useProjectStore((s) => s.permanentlyRemoveProject);
   const addToast = useUIStore((s) => s.addToast);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [pendingDelete, setPendingDelete] = useState<ProjectInfo | null>(null);
+  const [pendingPermanentDelete, setPendingPermanentDelete] = useState<ProjectInfo | null>(null);
+  const [trashExpanded, setTrashExpanded] = useState(false);
 
   useEffect(() => {
     listProjects()
@@ -167,7 +226,10 @@ export default function ProjectsPage() {
       .catch(() =>
         addToast({ type: "error", title: "加载项目失败", duration: 4000 }),
       );
-  }, [addToast, setProjects]);
+    listDeletedProjects()
+      .then(setDeletedProjects)
+      .catch(console.error);
+  }, [addToast, setProjects, setDeletedProjects]);
 
   const onCreated = useCallback(
     (project: ProjectInfo) => {
@@ -199,7 +261,29 @@ export default function ProjectsPage() {
     deleteProject(id).catch(() =>
       addToast({ type: "error", title: "删除失败，请重试", duration: 4000 }),
     );
+    addToast({ type: "success", title: "已移入回收站", duration: 3000 });
   }, [pendingDelete, removeProject, addToast]);
+
+  const handleRestore = useCallback(
+    (project: ProjectInfo) => {
+      storeRestoreProject(project.id);
+      restoreProject(project.id).catch(() =>
+        addToast({ type: "error", title: "恢复失败，请重试", duration: 4000 }),
+      );
+      addToast({ type: "success", title: "项目已恢复", duration: 3000 });
+    },
+    [storeRestoreProject, addToast],
+  );
+
+  const handleConfirmPermanentDelete = useCallback(() => {
+    if (!pendingPermanentDelete) return;
+    const id = pendingPermanentDelete.id;
+    setPendingPermanentDelete(null);
+    storePermanentlyRemove(id);
+    permanentlyDeleteProject(id).catch(() =>
+      addToast({ type: "error", title: "删除失败，请重试", duration: 4000 }),
+    );
+  }, [pendingPermanentDelete, storePermanentlyRemove, addToast]);
 
   const filtered = search.trim()
     ? projects.filter((p) =>
@@ -243,7 +327,7 @@ export default function ProjectsPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-5xl space-y-8">
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <FolderOpen className="mb-4 h-12 w-12 text-muted-foreground/40" />
@@ -272,6 +356,36 @@ export default function ProjectsPage() {
               ))}
             </div>
           )}
+
+          {deletedProjects.length > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setTrashExpanded((v) => !v)}
+                className="mb-3 flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {trashExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+                <Trash className="h-4 w-4" />
+                回收站（{deletedProjects.length}）
+              </button>
+              {trashExpanded && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {deletedProjects.map((p) => (
+                    <DeletedProjectCard
+                      key={p.id}
+                      project={p}
+                      onRestore={handleRestore}
+                      onPermanentDelete={setPendingPermanentDelete}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -283,11 +397,20 @@ export default function ProjectsPage() {
       <ConfirmDialog
         open={!!pendingDelete}
         title={`确定删除「${pendingDelete?.title ?? ""}」？`}
-        description="此操作不可撤销，项目内的所有卡片将一并删除。"
+        description="项目将移入回收站，你可以随时找回。"
         confirmLabel="删除"
         variant="danger"
         onConfirm={handleConfirmDelete}
         onCancel={() => setPendingDelete(null)}
+      />
+      <ConfirmDialog
+        open={!!pendingPermanentDelete}
+        title={`彻底删除「${pendingPermanentDelete?.title ?? ""}」？`}
+        description="此操作不可撤销，项目内的所有卡片将一并删除。"
+        confirmLabel="彻底删除"
+        variant="danger"
+        onConfirm={handleConfirmPermanentDelete}
+        onCancel={() => setPendingPermanentDelete(null)}
       />
     </div>
   );
