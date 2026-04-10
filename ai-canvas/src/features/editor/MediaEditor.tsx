@@ -1,7 +1,8 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { Sparkles, Loader2, RefreshCw, X, Eye, EyeOff, ArrowDownLeft } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, X, Eye, EyeOff, ArrowDownLeft, Lock } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey, readMediaBase64 } from "@/lib/tauri";
 import { modelService } from "@/services/models";
@@ -14,6 +15,7 @@ import {
 } from "@/config/model-ref-images";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize } from "@/shared/constants";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
 
@@ -21,8 +23,14 @@ interface MediaData {
   content?: string;
   imageUrl?: string;
   model?: string;
+  size?: string;
   refImages?: Record<string, RefImageEntry>;
   upstreamTexts?: Record<string, string>;
+  _locked?: boolean;
+  _label?: string;
+  _description?: string;
+  _promptTemplate?: string;
+  _params?: Record<string, string>;
 }
 
 function buildFinalPrompt(data: MediaData): string {
@@ -60,6 +68,9 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   const generating = useUIStore((s) => s.generatingCards.has(card.id));
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [currentModel, setCurrentModel] = useState("");
+  const [currentSize, setCurrentSize] = useState(
+    () => normalizeImageSize((card.data as MediaData).size) || useSettingsStore.getState().lastImageSize,
+  );
   const [error, setError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const data = card.data as MediaData;
@@ -90,6 +101,19 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     (modelId: string) => {
       setCurrentModel(modelId);
       updateCard(card.id, { data: { ...data, model: modelId } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const handleSizeChange = useCallback(
+    (sizeValue: string) => {
+      setCurrentSize(sizeValue);
+      useSettingsStore.getState().setLastImageSize(sizeValue);
+
+      const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === sizeValue);
+      const dims = opt ? sizeFromRatio(opt.ratio) : {};
+      updateCard(card.id, { ...dims, data: { ...data, size: sizeValue } });
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
@@ -253,14 +277,14 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       console.log("[MediaEditor] 调用 generateImage:", {
         promptLength: prompt.length,
         promptPreview: prompt.slice(0, 200),
-        size: "1024x1024",
+        size: currentSize,
         model: currentModel || "(default)",
         refImageCount: referenceImages.length,
       });
 
       const result = await provider.generateImage({
         prompt,
-        size: "1024x1024",
+        size: currentSize,
         model: currentModel || undefined,
         quality: "standard",
         referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
@@ -284,9 +308,26 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, generating, updateCard, currentModel, setCardProgress, refSlots]);
+  }, [data, card.id, generating, updateCard, currentModel, currentSize, setCardProgress, refSlots]);
 
   const hasRefImages = refSlots.some((s) => data.refImages?.[s.key]);
+  const isLocked = !!data._locked;
+
+  const handleParamChange = useCallback(
+    (key: string, value: string) => {
+      const params = { ...data._params, [key]: value };
+      let content = data.content ?? "";
+      if (data._promptTemplate) {
+        content = data._promptTemplate.replace(
+          new RegExp(`\\{\\{${key}\\}\\}`, "g"),
+          value,
+        );
+      }
+      updateCard(card.id, { data: { ...data, _params: params, content } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
 
   return (
     <div className="flex h-full flex-col gap-2 p-3">
@@ -309,50 +350,90 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         </div>
       )}
 
-      {hasUpstream && (
-        <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
-          <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
-            <ArrowDownLeft className="h-3 w-3" />
-            上游文字 · 自动拼接到提示词前
+      {isLocked ? (
+        <>
+          <div className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3 py-2">
+            <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-foreground">{data._label || "模板生成节点"}</p>
+              {data._description && (
+                <p className="text-[11px] text-muted-foreground">{data._description}</p>
+              )}
+            </div>
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {upstreamEntries.map(([cardId, text]) => (
-              <span
-                key={cardId}
-                title={text}
-                className="inline-flex max-w-[180px] items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs"
-              >
-                <span className="truncate">{getCardTitle(cardId)}: {text}</span>
-                <button
-                  onClick={() => removeUpstreamEntry(cardId)}
-                  disabled={generating}
-                  className="shrink-0 text-muted-foreground transition-colors hover:text-destructive disabled:opacity-40"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+          {data._params && (
+            <div className="flex shrink-0 items-center gap-2">
+              {Object.entries(data._params).map(([key, value]) => (
+                <label key={key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span>{key === "gender" ? "性别" : key}</span>
+                  <select
+                    value={value}
+                    onChange={(e) => handleParamChange(key, e.target.value)}
+                    disabled={generating}
+                    className="h-6 rounded border border-input bg-background px-1.5 text-xs text-foreground outline-none ring-ring focus:ring-1"
+                  >
+                    {key === "gender" ? (
+                      <>
+                        <option value="女">女</option>
+                        <option value="男">男</option>
+                      </>
+                    ) : (
+                      <option value={value}>{value}</option>
+                    )}
+                  </select>
+                </label>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {hasUpstream && (
+            <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
+              <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+                <ArrowDownLeft className="h-3 w-3" />
+                上游文字 · 自动拼接到提示词前
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {upstreamEntries.map(([cardId, text]) => (
+                  <span
+                    key={cardId}
+                    title={text}
+                    className="inline-flex max-w-[180px] items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs"
+                  >
+                    <span className="truncate">{getCardTitle(cardId)}: {text}</span>
+                    <button
+                      onClick={() => removeUpstreamEntry(cardId)}
+                      disabled={generating}
+                      className="shrink-0 text-muted-foreground transition-colors hover:text-destructive disabled:opacity-40"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
-      <textarea
-        className="min-h-[3rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
-        value={data.content ?? ""}
-        onChange={onPromptChange}
-        placeholder={hasUpstream ? "追加你的提示词（可选）…" : "描述你想生成的图片…"}
-        disabled={generating}
-      />
+          <textarea
+            className="min-h-[3rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+            value={data.content ?? ""}
+            onChange={onPromptChange}
+            placeholder={hasUpstream ? "追加你的提示词（可选）…" : "描述你想生成的图片…"}
+            disabled={generating}
+          />
 
-      {showPreview && canGenerate && (
-        <div className="shrink-0 rounded-lg border border-border bg-muted/50 p-2">
-          <div className="mb-1 text-[10px] font-medium text-muted-foreground">
-            最终提示词预览
-          </div>
-          <p className="max-h-[4rem] overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-foreground/80">
-            {finalPrompt}
-          </p>
-        </div>
+          {showPreview && canGenerate && (
+            <div className="shrink-0 rounded-lg border border-border bg-muted/50 p-2">
+              <div className="mb-1 text-[10px] font-medium text-muted-foreground">
+                最终提示词预览
+              </div>
+              <p className="max-h-[4rem] overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-foreground/80">
+                {finalPrompt}
+              </p>
+            </div>
+          )}
+        </>
       )}
 
       <div className="flex items-center gap-2">
@@ -361,12 +442,46 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           value={currentModel}
           onChange={handleModelChange}
         />
+        {!isLocked && (
+          <div className="flex shrink-0 items-center rounded-lg border border-border p-0.5">
+            {IMAGE_SIZE_OPTIONS.map((opt) => {
+              const active = currentSize === opt.value;
+              const boxH = 12;
+              const boxW = opt.ratio >= 1 ? boxH : Math.round(boxH * opt.ratio);
+              const boxHFinal = opt.ratio >= 1 ? Math.round(boxH / opt.ratio) : boxH;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => handleSizeChange(opt.value)}
+                  disabled={generating}
+                  title={opt.value}
+                  className={cn(
+                    "flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] transition-colors",
+                    active
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    generating && "cursor-not-allowed opacity-40",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block shrink-0 rounded-[2px] border",
+                      active ? "border-primary-foreground/50" : "border-current/40",
+                    )}
+                    style={{ width: boxW, height: boxHFinal }}
+                  />
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
         {hasRefImages && (
           <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
             +参考图
           </span>
         )}
-        {hasUpstream && (
+        {!isLocked && hasUpstream && (
           <button
             onClick={() => setShowPreview((v) => !v)}
             className="flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"

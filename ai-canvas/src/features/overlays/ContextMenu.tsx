@@ -9,9 +9,10 @@ import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { deleteCard, updateProjectMeta } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
+import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { recordBatchDelete } from "@/lib/history";
 import { cn } from "@/lib/utils";
-import { CARD_DEFAULTS } from "@/shared/constants";
+import { CARD_DEFAULTS, WORKFLOW_TEMPLATES } from "@/shared/constants";
 import type { CardType } from "@/shared/types";
 
 const CLIPBOARD_KIND = "ai-canvas-card/v1";
@@ -443,6 +444,21 @@ function ContextMenuPanel({
             disabled: noProject,
             onSelect: (e) => addCardAtClick("ai_tryon", e),
           },
+          { type: "sep" },
+          ...WORKFLOW_TEMPLATES
+            .filter((wf) => wf.connections && wf.connections.length > 0)
+            .map((wf) => ({
+              type: "item" as const,
+              label: wf.name,
+              disabled: noProject,
+              onSelect: () => {
+                if (!projectId) return;
+                const world = clientToWorld(contextMenu.x, contextMenu.y);
+                instantiateWorkflowTemplate(wf, projectId, world.x, world.y);
+                syncNodeCount(projectId);
+                hide();
+              },
+            })),
         ],
       },
       { type: "sep" },

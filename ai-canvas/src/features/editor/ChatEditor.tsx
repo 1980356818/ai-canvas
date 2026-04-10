@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { Sparkles, RefreshCw, Loader2 } from "lucide-react";
+import { Sparkles, RefreshCw, Loader2, Lock } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
@@ -22,6 +22,10 @@ interface ChatData {
   result?: string;
   model?: string;
   refImages?: Record<string, RefImageEntry>;
+  _locked?: boolean;
+  _systemPrompt?: string;
+  _label?: string;
+  _description?: string;
 }
 
 function friendlyError(raw: string): string {
@@ -53,10 +57,13 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     }
   }, [data.model]);
 
-  const refSlots = useMemo(
-    () => getRefSlotsForChatModel(currentModel),
-    [currentModel],
-  );
+  const refSlots = useMemo(() => {
+    const slots = getRefSlotsForChatModel(currentModel);
+    if (data._locked && slots.length === 0) {
+      return getRefSlotsForChatModel("");
+    }
+    return slots;
+  }, [currentModel, data._locked]);
 
   const handleModelChange = useCallback(
     (modelId: string) => {
@@ -185,8 +192,9 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     }
     userContent.push({ type: "text", text: prompt });
 
+    const systemPrompt = data._systemPrompt || "你是一个有帮助的 AI 助手，请用中文回复。请直接回答用户的问题。";
     const apiMessages = [
-      { role: "system", content: "你是一个有帮助的 AI 助手，请用中文回复。请直接回答用户的问题。" },
+      { role: "system", content: systemPrompt },
       {
         role: "user",
         content: resolvedImageUrls.length > 0 ? userContent : prompt,
@@ -224,6 +232,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
   }, [data, card.id, generating, updateCard, currentModel, setCardProgress, refSlots]);
 
   const hasRefImages = refSlots.some((s) => data.refImages?.[s.key]);
+  const isLocked = !!data._locked;
 
   return (
     <div className="flex h-full flex-col gap-2 p-3">
@@ -246,13 +255,25 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         </div>
       )}
 
-      <textarea
-        className="min-h-[3rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
-        value={data.content ?? ""}
-        onChange={onPromptChange}
-        placeholder="输入提示词，生成文字内容…"
-        disabled={generating}
-      />
+      {isLocked ? (
+        <div className="flex flex-1 items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3 py-2">
+          <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-foreground">{data._label || "模板分析节点"}</p>
+            {data._description && (
+              <p className="text-[11px] text-muted-foreground">{data._description}</p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <textarea
+          className="min-h-[3rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+          value={data.content ?? ""}
+          onChange={onPromptChange}
+          placeholder="输入提示词，生成文字内容…"
+          disabled={generating}
+        />
+      )}
 
       <div className="flex items-center gap-2">
         <ModelSelector
@@ -281,17 +302,17 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
           {generating ? (
             <>
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              生成中…
+              {isLocked ? "分析中…" : "生成中…"}
             </>
           ) : data.result ? (
             <>
               <RefreshCw className="h-3.5 w-3.5" />
-              重新生成
+              {isLocked ? "重新分析" : "重新生成"}
             </>
           ) : (
             <>
               <Sparkles className="h-3.5 w-3.5" />
-              生成
+              {isLocked ? "分析" : "生成"}
             </>
           )}
         </button>

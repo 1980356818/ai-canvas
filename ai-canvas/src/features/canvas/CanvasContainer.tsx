@@ -20,6 +20,23 @@ import {
   isTauri,
 } from "@/lib/tauri";
 
+function canCardAcceptFileDrop(cardId: string): boolean {
+  const card = useCardStore.getState().getCard(cardId);
+  if (!card) return false;
+  if (useUIStore.getState().generatingCards.has(cardId)) return false;
+  if (card.type === "ai_image") {
+    return !(card.data as { imageUrl?: string }).imageUrl;
+  }
+  if (card.type === "ai_tryon") {
+    const d = card.data as {
+      personImageUrl?: string;
+      garmentImageUrl?: string;
+    };
+    return !d.personImageUrl || !d.garmentImageUrl;
+  }
+  return false;
+}
+
 export default function CanvasContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const {
@@ -49,6 +66,7 @@ export default function CanvasContainer() {
 
 
   const dropHandledAt = useRef(0);
+  const fileDragTargetRef = useRef<string | null>(null);
 
   const handleFileDragOver = useCallback(
     (e: React.DragEvent) => {
@@ -56,9 +74,48 @@ export default function CanvasContainer() {
       const hasFiles = Array.from(e.dataTransfer.types).includes("Files");
       if (!hasFiles) return;
       e.preventDefault();
-      e.dataTransfer.dropEffect = "copy";
+
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const cardEl = el?.closest("[data-card-id]") as HTMLElement | null;
+      const candidateId = cardEl?.dataset.cardId ?? null;
+      const newTargetId =
+        candidateId && canCardAcceptFileDrop(candidateId) ? candidateId : null;
+
+      if (newTargetId !== fileDragTargetRef.current) {
+        if (fileDragTargetRef.current) {
+          document
+            .querySelector(
+              `[data-card-id="${fileDragTargetRef.current}"]`,
+            )
+            ?.classList.remove("file-drop-target");
+        }
+        fileDragTargetRef.current = newTargetId;
+        if (newTargetId) {
+          document
+            .querySelector(`[data-card-id="${newTargetId}"]`)
+            ?.classList.add("file-drop-target");
+        }
+      }
+
+      e.dataTransfer.dropEffect = newTargetId ? "move" : "copy";
     },
     [currentProjectId],
+  );
+
+  const handleFileDragLeave = useCallback(
+    (e: React.DragEvent) => {
+      const related = e.relatedTarget as Node | null;
+      if (related && containerRef.current?.contains(related)) return;
+      if (fileDragTargetRef.current) {
+        document
+          .querySelector(
+            `[data-card-id="${fileDragTargetRef.current}"]`,
+          )
+          ?.classList.remove("file-drop-target");
+        fileDragTargetRef.current = null;
+      }
+    },
+    [],
   );
 
   const handleFileDrop = useCallback(
@@ -73,13 +130,51 @@ export default function CanvasContainer() {
 
       dropHandledAt.current = Date.now();
 
+      const targetCardId = fileDragTargetRef.current;
+      if (fileDragTargetRef.current) {
+        document
+          .querySelector(
+            `[data-card-id="${fileDragTargetRef.current}"]`,
+          )
+          ?.classList.remove("file-drop-target");
+        fileDragTargetRef.current = null;
+      }
+
+      let startIdx = 0;
+
+      if (targetCardId) {
+        const targetCard = useCardStore.getState().getCard(targetCardId);
+        if (targetCard) {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            const latest = useCardStore.getState().getCard(targetCardId);
+            if (!latest) return;
+            const d = { ...latest.data } as Record<string, unknown>;
+            if (latest.type === "ai_image") {
+              d.imageUrl = dataUrl;
+            } else if (latest.type === "ai_tryon") {
+              if (!d.personImageUrl) d.personImageUrl = dataUrl;
+              else if (!d.garmentImageUrl) d.garmentImageUrl = dataUrl;
+            }
+            useCardStore.getState().updateCard(targetCardId, { data: d });
+            autoSave.markDirty(targetCardId);
+          };
+          reader.readAsDataURL(files[0]);
+          startIdx = 1;
+        }
+      }
+
+      const remaining = files.slice(startIdx);
+      if (remaining.length === 0) return;
+
       const dropPos = screenToCanvas(e.clientX, e.clientY);
       const { width, height } = CARD_DEFAULTS.ai_image;
       const dropX = dropPos.x - width / 2;
       const dropY = dropPos.y - height / 2;
       const GAP = 20;
 
-      files.forEach((file, idx) => {
+      remaining.forEach((file, idx) => {
         const reader = new FileReader();
         reader.onload = () => {
           const dataUrl = reader.result as string;
@@ -108,7 +203,7 @@ export default function CanvasContainer() {
 
       const count =
         useCardStore.getState().getCardsByProject(currentProjectId).length +
-        files.length;
+        remaining.length;
       useProjectStore
         .getState()
         .updateProject(currentProjectId, { nodeCount: count });
@@ -150,7 +245,31 @@ export default function CanvasContainer() {
       const dropY = (cy - vp.y) / vp.zoom - height / 2;
       const GAP = 20;
 
-      for (let i = 0; i < paths.length; i++) {
+      let startIdx = 0;
+      const el = document.elementFromPoint(cssx, cssy);
+      const cardEl = el?.closest("[data-card-id]") as HTMLElement | null;
+      const targetCardId = cardEl?.dataset.cardId ?? null;
+
+      if (targetCardId && canCardAcceptFileDrop(targetCardId)) {
+        try {
+          const dataUrl = await readMediaBase64(paths[0]!);
+          const target = useCardStore.getState().getCard(targetCardId);
+          if (target) {
+            const d = { ...target.data } as Record<string, unknown>;
+            if (target.type === "ai_image") {
+              d.imageUrl = dataUrl;
+            } else if (target.type === "ai_tryon") {
+              if (!d.personImageUrl) d.personImageUrl = dataUrl;
+              else if (!d.garmentImageUrl) d.garmentImageUrl = dataUrl;
+            }
+            useCardStore.getState().updateCard(targetCardId, { data: d });
+            autoSave.markDirty(targetCardId);
+            startIdx = 1;
+          }
+        } catch { /* skip */ }
+      }
+
+      for (let i = startIdx; i < paths.length; i++) {
         try {
           const dataUrl = await readMediaBase64(paths[i]!);
           const now = new Date().toISOString();
@@ -159,11 +278,11 @@ export default function CanvasContainer() {
             id: crypto.randomUUID(),
             projectId: pid,
             type: "ai_image",
-            x: dropX + i * (width + GAP),
+            x: dropX + (i - startIdx) * (width + GAP),
             y: dropY,
             width,
             height,
-            zIndex: maxZIndex + 1 + i,
+            zIndex: maxZIndex + 1 + (i - startIdx),
             locked: false,
             collapsed: false,
             data: { imageUrl: dataUrl, content: "" },
@@ -357,6 +476,7 @@ export default function CanvasContainer() {
       onClick={handleCanvasClick}
       onDoubleClick={handleDoubleClick}
       onDragOver={handleFileDragOver}
+      onDragLeave={handleFileDragLeave}
       onDrop={handleFileDrop}
     >
       <div

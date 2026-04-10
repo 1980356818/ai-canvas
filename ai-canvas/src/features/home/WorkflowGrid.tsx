@@ -2,13 +2,14 @@ import {
   MessageSquare,
   ImageIcon,
   Layers,
+  User,
   LucideIcon,
 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
-import { useCardStore } from "@/stores/cardStore";
 import { createProject, updateProjectMeta } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
+import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { cn } from "@/lib/utils";
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "@/shared/constants";
 
@@ -16,6 +17,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   MessageSquare,
   ImageIcon,
   Layers,
+  User,
 };
 
 const CATEGORY_COLOR: Record<WorkflowTemplate["category"], string> = {
@@ -33,27 +35,7 @@ function WorkflowCard({ workflow }: { workflow: WorkflowTemplate }) {
       useProjectStore.getState().addProject(project);
       useProjectStore.getState().setCurrentProjectId(project.id);
 
-      const now = new Date().toISOString();
-      for (const preset of workflow.cards) {
-        const card = {
-          id: crypto.randomUUID(),
-          projectId: project.id,
-          type: preset.type,
-          x: 320 + preset.relativeX,
-          y: 80 + preset.relativeY,
-          width: preset.width,
-          height: preset.height,
-          zIndex: useCardStore.getState().maxZIndex + 1,
-          locked: false,
-          collapsed: false,
-          title: preset.title,
-          data: preset.data,
-          createdAt: now,
-          updatedAt: now,
-        };
-        useCardStore.getState().addCard(card);
-        autoSave.markDirty(card.id);
-      }
+      instantiateWorkflowTemplate(workflow, project.id, 320, 80);
 
       await autoSave.forceSave();
       const meta = { nodeCount: workflow.cards.length };

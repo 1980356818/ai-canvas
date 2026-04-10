@@ -1,4 +1,5 @@
 import type { ToolDefinition } from "../types";
+import { IMAGE_SIZE_OPTIONS, sizeFromRatio } from "@/shared/constants";
 
 export const generateImageTool: ToolDefinition = {
   name: "generate_image",
@@ -14,8 +15,8 @@ export const generateImageTool: ToolDefinition = {
       },
       size: {
         type: "string",
-        enum: ["1024x1024", "1024x1792", "1792x1024"],
-        description: "图片尺寸。正方形用 1024x1024，竖版用 1024x1792，横版用 1792x1024",
+        enum: IMAGE_SIZE_OPTIONS.map((o) => o.value),
+        description: "图片比例。正方形用 1:1，竖版用 9:16，横版用 16:9",
       },
       cardTitle: {
         type: "string",
@@ -38,15 +39,15 @@ export const generateImageTool: ToolDefinition = {
       quality: "standard",
     })) as { url: string; revisedPrompt?: string };
 
-    const [w = 1024, h = 1024] = size.split("x").map(Number);
-    const scale = 400 / Math.max(w, h);
+    const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === size);
+    const { width, height } = sizeFromRatio(opt?.ratio ?? 1);
 
     ctx.createCard({
       type: "ai_image",
       title: cardTitle ?? "AI 生成图片",
-      width: Math.round(w * scale),
-      height: Math.round(h * scale),
-      data: { content: prompt, imageUrl: result.url },
+      width,
+      height,
+      data: { content: prompt, imageUrl: result.url, size },
     });
 
     return {

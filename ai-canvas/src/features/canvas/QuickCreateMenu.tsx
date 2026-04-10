@@ -4,7 +4,8 @@ import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import { autoSave } from "@/lib/autoSave";
 import { cn } from "@/lib/utils";
-import { CARD_DEFAULTS, type QuickCreateItem } from "@/shared/constants";
+import { CARD_DEFAULTS, IMAGE_SIZE_OPTIONS, sizeFromRatio, type QuickCreateItem } from "@/shared/constants";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 const QUICK_CREATE_ITEMS: QuickCreateItem[] = [
   { type: "ai_chat", icon: MessageSquare, label: CARD_DEFAULTS.ai_chat.label },
@@ -61,18 +62,33 @@ export default function QuickCreateMenu({
       const now = new Date().toISOString();
       const defaults = CARD_DEFAULTS[item.type];
 
+      let cardWidth = defaults.width;
+      let cardHeight = defaults.height;
+      let cardData = { ...defaults.data };
+
+      if (item.type === "ai_image") {
+        const lastSize = useSettingsStore.getState().lastImageSize;
+        const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === lastSize);
+        if (opt) {
+          const sized = sizeFromRatio(opt.ratio);
+          cardWidth = sized.width;
+          cardHeight = sized.height;
+        }
+        cardData = { ...cardData, size: lastSize };
+      }
+
       const card = {
         id: crypto.randomUUID(),
         projectId,
         type: item.type,
-        x: position.canvasX - defaults.width / 2,
-        y: position.canvasY - defaults.height / 2,
-        width: defaults.width,
-        height: defaults.height,
+        x: position.canvasX - cardWidth / 2,
+        y: position.canvasY - cardHeight / 2,
+        width: cardWidth,
+        height: cardHeight,
         zIndex: useCardStore.getState().maxZIndex + 1,
         locked: false,
         collapsed: false,
-        data: { ...defaults.data },
+        data: cardData,
         createdAt: now,
         updatedAt: now,
       };

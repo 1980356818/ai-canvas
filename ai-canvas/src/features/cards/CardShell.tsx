@@ -249,6 +249,46 @@ export default memo(
           return below?.closest("[data-ref-slot]") ?? null;
         };
 
+        let lastHoveredCardEl: HTMLElement | null = null;
+        let hoverReadyCardId: string | null = null;
+        let hoverTimerId: ReturnType<typeof setTimeout> | null = null;
+        const HOVER_HOLD_MS = 800;
+
+        const findAcceptingCardBelow = (
+          cx: number,
+          cy: number,
+        ): HTMLElement | null => {
+          if (!thisHasImage) return null;
+          const prev = el.style.pointerEvents;
+          el.style.pointerEvents = "none";
+          const below = document.elementFromPoint(cx, cy);
+          el.style.pointerEvents = prev;
+          const cardBelow = below?.closest(
+            "[data-card-id]",
+          ) as HTMLElement | null;
+          if (!cardBelow || cardBelow.dataset.cardId === card.id) return null;
+          const belowId = cardBelow.dataset.cardId!;
+          const belowCard = useCardStore.getState().getCard(belowId);
+          if (
+            !belowCard ||
+            useUIStore.getState().generatingCards.has(belowId)
+          )
+            return null;
+          if (
+            belowCard.type === "ai_image" &&
+            !(belowCard.data as { imageUrl?: string }).imageUrl
+          )
+            return cardBelow;
+          if (belowCard.type === "ai_tryon") {
+            const d = belowCard.data as {
+              personImageUrl?: string;
+              garmentImageUrl?: string;
+            };
+            if (!d.personImageUrl || !d.garmentImageUrl) return cardBelow;
+          }
+          return null;
+        };
+
         const selectedIds = useCanvasStore.getState().selectedCardIds;
         const isGroupDrag = selectedIds.has(card.id) && selectedIds.size > 1;
         const peerStarts = new Map<string, { cx: number; cy: number; el: HTMLElement | null }>();
@@ -293,6 +333,32 @@ export default memo(
             );
             lastHoveredSlot = slotEl;
           }
+
+          const acceptCardEl = findAcceptingCardBelow(ev.clientX, ev.clientY);
+          if (acceptCardEl !== lastHoveredCardEl) {
+            if (lastHoveredCardEl) {
+              lastHoveredCardEl.classList.remove(
+                "card-image-hover",
+                "card-image-ready",
+              );
+              if (hoverTimerId) {
+                clearTimeout(hoverTimerId);
+                hoverTimerId = null;
+              }
+              hoverReadyCardId = null;
+            }
+            lastHoveredCardEl = acceptCardEl;
+            if (acceptCardEl) {
+              acceptCardEl.classList.add("card-image-hover");
+              const targetId = acceptCardEl.dataset.cardId!;
+              hoverTimerId = setTimeout(() => {
+                acceptCardEl.classList.remove("card-image-hover");
+                acceptCardEl.classList.add("card-image-ready");
+                hoverReadyCardId = targetId;
+                hoverTimerId = null;
+              }, HOVER_HOLD_MS);
+            }
+          }
         };
 
         const onUp = (ev: PointerEvent) => {
@@ -321,7 +387,49 @@ export default memo(
             new CustomEvent("canvas-card-hover", { detail: { active: false } }),
           );
 
+          if (lastHoveredCardEl) {
+            lastHoveredCardEl.classList.remove(
+              "card-image-hover",
+              "card-image-ready",
+            );
+            if (hoverTimerId) {
+              clearTimeout(hoverTimerId);
+              hoverTimerId = null;
+            }
+          }
+
           if (didDrag.current && thisHasImage && !isGroupDrag) {
+            if (hoverReadyCardId) {
+              const imgUrl = extractCardImage(card);
+              if (imgUrl) {
+                const target = useCardStore
+                  .getState()
+                  .getCard(hoverReadyCardId);
+                if (target) {
+                  const d = {
+                    ...target.data,
+                  } as Record<string, unknown>;
+                  if (target.type === "ai_image") {
+                    d.imageUrl = imgUrl;
+                  } else if (target.type === "ai_tryon") {
+                    if (!d.personImageUrl) d.personImageUrl = imgUrl;
+                    else if (!d.garmentImageUrl) d.garmentImageUrl = imgUrl;
+                  }
+                  useCardStore
+                    .getState()
+                    .updateCard(hoverReadyCardId, { data: d });
+                  autoSave.markDirty(hoverReadyCardId);
+                  useUIStore.getState().addToast({
+                    type: "info",
+                    title: "图片已放置到目标卡片",
+                    duration: 2000,
+                  });
+                }
+                bringToFront(card.id);
+                return;
+              }
+            }
+
             const slotEl = findSlotBelow(ev.clientX, ev.clientY);
             if (slotEl) {
               const imgUrl = extractCardImage(card);

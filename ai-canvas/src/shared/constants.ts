@@ -10,16 +10,44 @@ export interface CardDefaults {
 
 export const CARD_MAX_EDGE = 340;
 
-function sizeFromRatio(ratio: number): { width: number; height: number } {
+export function sizeFromRatio(ratio: number): { width: number; height: number } {
   if (ratio >= 1) {
     return { width: CARD_MAX_EDGE, height: Math.round(CARD_MAX_EDGE / ratio) };
   }
   return { width: Math.round(CARD_MAX_EDGE * ratio), height: CARD_MAX_EDGE };
 }
 
+export interface ImageSizeOption {
+  value: string;
+  label: string;
+  ratio: number;
+}
+
+export const IMAGE_SIZE_OPTIONS: ImageSizeOption[] = [
+  { value: "1:1",   label: "1:1",   ratio: 1 },
+  { value: "3:4",   label: "3:4",   ratio: 3 / 4 },
+  { value: "4:3",   label: "4:3",   ratio: 4 / 3 },
+  { value: "9:16",  label: "9:16",  ratio: 9 / 16 },
+  { value: "16:9",  label: "16:9",  ratio: 16 / 9 },
+];
+
+export const DEFAULT_IMAGE_SIZE = IMAGE_SIZE_OPTIONS[0].value;
+
+const LEGACY_SIZE_MAP: Record<string, string> = {
+  "1024x1024": "1:1",
+  "1024x1792": "9:16",
+  "1792x1024": "16:9",
+};
+
+export function normalizeImageSize(raw: string | undefined): string {
+  if (!raw) return DEFAULT_IMAGE_SIZE;
+  if (raw.includes(":")) return raw;
+  return LEGACY_SIZE_MAP[raw] ?? DEFAULT_IMAGE_SIZE;
+}
+
 export const CARD_DEFAULTS: Record<CardType, CardDefaults> = {
   ai_chat:     { width: 680, height: 420, label: "生成文字", data: { content: "", result: "" } },
-  ai_image:    { ...sizeFromRatio(4 / 5), label: "AI 图片", data: { content: "" } },
+  ai_image:    { ...sizeFromRatio(IMAGE_SIZE_OPTIONS[0].ratio), label: "AI 图片", data: { content: "", size: IMAGE_SIZE_OPTIONS[0].value } },
   ai_video:    { ...sizeFromRatio(16 / 9), label: "AI 视频", data: { content: "" } },
   ai_tryon:    { ...sizeFromRatio(3 / 4), label: "AI 换装", data: { content: "" } },
   text:        { ...sizeFromRatio(4 / 3), label: "文本", data: { content: "" } },
@@ -62,6 +90,11 @@ export interface WorkflowCardPreset {
   data: Record<string, unknown>;
 }
 
+export interface WorkflowConnectionPreset {
+  sourceIndex: number;
+  targetIndex: number;
+}
+
 export interface WorkflowTemplate {
   id: string;
   name: string;
@@ -69,6 +102,7 @@ export interface WorkflowTemplate {
   icon: string;
   category: "chat" | "image" | "composite";
   cards: WorkflowCardPreset[];
+  connections?: WorkflowConnectionPreset[];
 }
 
 export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
@@ -130,6 +164,165 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         relativeY: 0,
         ...CARD_DEFAULTS.text,
       },
+    ],
+  },
+  {
+    id: "wf-white-bg",
+    name: "一键白底图",
+    description: "上传商品图，AI 自动识别特征并生成白底精修图和多角度展示图",
+    icon: "ImageIcon",
+    category: "composite",
+    cards: [
+      {
+        type: "ai_image",
+        title: "商品原图",
+        relativeX: 0,
+        relativeY: (CARD_DEFAULTS.ai_chat.height - sizeFromRatio(1).height) / 2,
+        ...sizeFromRatio(1),
+        data: { content: "", size: "1:1" },
+      },
+      {
+        type: "ai_chat",
+        title: "服装特征识别",
+        relativeX: sizeFromRatio(1).width + 80,
+        relativeY: 0,
+        width: CARD_DEFAULTS.ai_chat.width,
+        height: CARD_DEFAULTS.ai_chat.height,
+        data: {
+          _locked: true,
+          _label: "服装特征识别",
+          _description: "接收商品原图后点击分析",
+          _systemPrompt: [
+            "你是一个电商服装产品精修提示词生成专家。用户会上传服装图片，你需要：",
+            "1. 识别图片中的服装品类（如牛仔裤、羽绒服、衬衣、马甲等）",
+            "2. 识别服装颜色（如浅蓝色、米白色、深灰色等）",
+            "3. 识别服装关键特征（如水洗做旧、菱格绗缝、亚麻纹理、纽扣细节、刺绣图案等）",
+            "4. 识别版型细节（如阔腿版型、宽松版型、常规合身等）",
+            "",
+            "基于识别到的信息，按照以下模板生成标准化精修提示词。只输出提示词本身，不要输出任何其他内容：",
+            "",
+            "产品精修，将图片中的[颜色][服装品类]完整提取并转换成3D立体形状，置于纯净的纯白背景上。正面视图、背面视图，平视视角，精准还原[服装品类]的颜色、[关键特征1]、[关键特征2]、[设计细节]以及领标细节，去除多余褶皱，使衣身轮廓平整顺滑，边缘干净无杂色。清除灰尘、瑕疵，让[服装品类]看起来挺括、崭新、洁净，光线均匀无杂乱阴影，符合电商主图标准，主体突出。",
+          ].join("\n"),
+          content: "请分析上传的服装图片，识别服装的品类、颜色和关键特征，生成电商白底精修提示词。",
+          result: "",
+        },
+      },
+      {
+        type: "ai_image",
+        title: "白底精修图",
+        relativeX: sizeFromRatio(1).width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
+        relativeY: (CARD_DEFAULTS.ai_chat.height - sizeFromRatio(1).height) / 2,
+        ...sizeFromRatio(1),
+        data: { content: "", size: "1:1" },
+      },
+      {
+        type: "ai_chat",
+        title: "多角度提示词生成",
+        relativeX: sizeFromRatio(1).width + 80 + CARD_DEFAULTS.ai_chat.width + 80 + sizeFromRatio(1).width + 80,
+        relativeY: 0,
+        width: CARD_DEFAULTS.ai_chat.width,
+        height: CARD_DEFAULTS.ai_chat.height,
+        data: {
+          _locked: true,
+          _label: "多角度提示词生成",
+          _description: "基于白底图自动生成多角度展示提示词",
+          _systemPrompt: [
+            "你是一个电商服装多角度展示图提示词生成专家。用户会提供一张服装图片，你需要：",
+            "",
+            "1. 识别图片中的服装品类、颜色、关键特征",
+            "2. 基于以下模板生成多角度展示图提示词。只输出提示词本身，不要输出任何其他内容：",
+            "",
+            "基于我提供的这件[颜色][服装品类]原图，生成一组多角度产品细节特征展示图。要求保持[服装品类]的款式、[颜色]、[关键纹理/设计]、[版型/细节]等所有细节完全不变，仅从不同角度（正面、侧面、背面、45度角、[关键部位特写1]、[关键部位特写2]、[细节特写1]、[细节特写2]等）进行拍摄式呈现，不要有重复的角度呈现。整体风格为简洁的白底商业产品图，光线均匀柔和，突出质感，清晰展现[面料质感]与[版型]细节。",
+          ].join("\n"),
+          content: "请分析这张服装图片，识别服装特征，生成多角度展示图提示词。",
+          result: "",
+        },
+      },
+      {
+        type: "ai_image",
+        title: "多角度展示图",
+        relativeX: sizeFromRatio(1).width + 80 + CARD_DEFAULTS.ai_chat.width + 80 + sizeFromRatio(1).width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
+        relativeY: (CARD_DEFAULTS.ai_chat.height - sizeFromRatio(16 / 9).height) / 2,
+        ...sizeFromRatio(16 / 9),
+        data: { content: "", size: "16:9" },
+      },
+    ],
+    connections: [
+      { sourceIndex: 0, targetIndex: 1 },
+      { sourceIndex: 0, targetIndex: 2 },
+      { sourceIndex: 1, targetIndex: 2 },
+      { sourceIndex: 2, targetIndex: 3 },
+      { sourceIndex: 3, targetIndex: 4 },
+    ],
+  },
+  {
+    id: "wf-face-gen",
+    name: "捏脸",
+    description: "上传人脸照片，AI 融合生成人脸肖像和 4 角度人物展示",
+    icon: "User",
+    category: "composite",
+    cards: [
+      {
+        type: "ai_image",
+        title: "人脸融合肖像",
+        relativeX: 0,
+        relativeY: 0,
+        ...sizeFromRatio(3 / 4),
+        data: {
+          _locked: true,
+          _label: "人脸融合肖像",
+          _description: "上传人脸照片，选择性别后点击生成",
+          _promptTemplate: [
+            "A photorealistic portrait of a distinct individual who looks like the biological offspring of the people in the provided reference photos.",
+            "The face should be a natural, organic blend of the input features, creating a unique new identity that bears a strong family resemblance to both inputs without being a direct copy of either.",
+            "Capture the subtle genetic traits from the references.",
+            "",
+            "Character Description:",
+            "Subject: An Asian {{gender}} model with flawless, pore-level skin texture.",
+            "Expression: Neutral and candid, with a high-quality photo realism aesthetic — soft, cinematic lighting that highlights facial contours.",
+            "Vibe: High-fashion, sophisticated, and authentic.",
+            "setting: white background, eye-level front face.",
+            "",
+            "Technical Constraints:",
+            "Maintain consistent lighting across the blended features.",
+            "Output in 4k resolution, raw photography style.",
+          ].join("\n"),
+          _params: { gender: "女" },
+          content: [
+            "A photorealistic portrait of a distinct individual who looks like the biological offspring of the people in the provided reference photos.",
+            "The face should be a natural, organic blend of the input features, creating a unique new identity that bears a strong family resemblance to both inputs without being a direct copy of either.",
+            "Capture the subtle genetic traits from the references.",
+            "",
+            "Character Description:",
+            "Subject: An Asian 女 model with flawless, pore-level skin texture.",
+            "Expression: Neutral and candid, with a high-quality photo realism aesthetic — soft, cinematic lighting that highlights facial contours.",
+            "Vibe: High-fashion, sophisticated, and authentic.",
+            "setting: white background, eye-level front face.",
+            "",
+            "Technical Constraints:",
+            "Maintain consistent lighting across the blended features.",
+            "Output in 4k resolution, raw photography style.",
+          ].join("\n"),
+          size: "9:16",
+        },
+      },
+      {
+        type: "ai_image",
+        title: "4角度展示",
+        relativeX: sizeFromRatio(3 / 4).width + 80,
+        relativeY: 0,
+        ...sizeFromRatio(1),
+        data: {
+          _locked: true,
+          _label: "4 角度 Character Sheet",
+          _description: "基于生成的肖像自动生成 4 角度展示图",
+          content: "A 2x2 grid character sheet of reference image, white background. The grid shows the same character from 4 different camera angles: 1. Front view, 2. Left Profile view, 3. Right Three-Quarter view, 4. Low angle looking up. Headshot framing. Consistent facial features.",
+          size: "1:1",
+        },
+      },
+    ],
+    connections: [
+      { sourceIndex: 0, targetIndex: 1 },
     ],
   },
 ];

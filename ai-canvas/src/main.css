@@ -141,3 +141,99 @@
 .card-selected-border {
   animation: selected-border-flow 2.5s ease infinite;
 }
+
+[data-card-id].file-drop-target::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 14px;
+  border: 2.5px dashed rgba(139, 92, 246, 0.8);
+  background: rgba(139, 92, 246, 0.08);
+  z-index: 30;
+  pointer-events: none;
+  animation: file-drop-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes file-drop-pulse {
+  0%, 100% {
+    border-color: rgba(139, 92, 246, 0.8);
+    background: rgba(139, 92, 246, 0.1);
+    box-shadow: 0 0 16px 2px rgba(139, 92, 246, 0.25);
+  }
+  50% {
+    border-color: rgba(139, 92, 246, 0.45);
+    background: rgba(139, 92, 246, 0.04);
+    box-shadow: 0 0 8px 1px rgba(139, 92, 246, 0.1);
+  }
+}
+
+/* ── Card-to-card image transfer: hover counting phase ── */
+[data-card-id].card-image-hover::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 14px;
+  border: 2.5px dashed rgba(139, 92, 246, 0.7);
+  background-image: linear-gradient(
+    rgba(139, 92, 246, 0.14),
+    rgba(139, 92, 246, 0.14)
+  );
+  background-repeat: no-repeat;
+  background-position: bottom;
+  background-size: 100% 0%;
+  animation: card-hover-fill 800ms linear forwards;
+  z-index: 30;
+  pointer-events: none;
+}
+[data-card-id].card-image-hover::before {
+  content: "悬停以放置图片";
+  position: absolute;
+  left: 50%;
+  bottom: -28px;
+  transform: translateX(-50%);
+  z-index: 31;
+  pointer-events: none;
+  font-size: 11px;
+  line-height: 1;
+  color: #fff;
+  background: rgba(139, 92, 246, 0.88);
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+@keyframes card-hover-fill {
+  to { background-size: 100% 100%; }
+}
+
+/* ── Card-to-card image transfer: ready phase ── */
+[data-card-id].card-image-ready::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 14px;
+  border: 2.5px solid rgba(34, 197, 94, 0.8);
+  background: rgba(34, 197, 94, 0.1);
+  z-index: 30;
+  pointer-events: none;
+  animation: card-ready-glow 1s ease-in-out infinite;
+}
+[data-card-id].card-image-ready::before {
+  content: "松开以放置 ✓";
+  position: absolute;
+  left: 50%;
+  bottom: -28px;
+  transform: translateX(-50%);
+  z-index: 31;
+  pointer-events: none;
+  font-size: 11px;
+  line-height: 1;
+  color: #fff;
+  background: rgba(34, 197, 94, 0.9);
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+@keyframes card-ready-glow {
+  0%, 100% { box-shadow: 0 0 12px 2px rgba(34, 197, 94, 0.25); }
+  50% { box-shadow: 0 0 22px 5px rgba(34, 197, 94, 0.4); }
+}
