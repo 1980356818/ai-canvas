@@ -7,14 +7,13 @@ import { useConnectionStore } from "@/stores/connectionStore";
 import { deleteCard, updateProjectMeta } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { history, recordBatchDelete } from "@/lib/history";
+import { copyCards, pasteCards } from "@/lib/clipboard";
 
 function syncNodeCount(projectId: string) {
   const count = useCardStore.getState().getCardsByProject(projectId).length;
   useProjectStore.getState().updateProject(projectId, { nodeCount: count });
   void updateProjectMeta(projectId, { nodeCount: count });
 }
-
-const CLIPBOARD_KIND = "ai-canvas-card/v1";
 
 function isEditing(e: KeyboardEvent): boolean {
   const tag = (e.target as HTMLElement)?.tagName;
@@ -45,106 +44,6 @@ async function deleteSelected() {
   autoSave.markDirty();
   const pid = useProjectStore.getState().currentProjectId;
   if (pid) syncNodeCount(pid);
-}
-
-async function copySelected() {
-  const ids = useCanvasStore.getState().selectedCardIds;
-  if (ids.size === 0) return;
-  const cards: CanvasCard[] = [];
-  for (const id of ids) {
-    const c = useCardStore.getState().getCard(id);
-    if (c) cards.push(c);
-  }
-  if (cards.length === 0) return;
-  const payload =
-    cards.length === 1
-      ? JSON.stringify({ kind: CLIPBOARD_KIND, card: cards[0] })
-      : JSON.stringify({ kind: CLIPBOARD_KIND, cards });
-  try {
-    await navigator.clipboard.writeText(payload);
-    useUIStore.getState().addToast({
-      type: "info",
-      title: `已复制 ${cards.length} 张卡片`,
-      duration: 1500,
-    });
-  } catch {
-    /* denied */
-  }
-}
-
-async function pasteCards() {
-  const projectId = useProjectStore.getState().currentProjectId;
-  if (!projectId) return;
-  try {
-    const text = await navigator.clipboard.readText();
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(text) as Record<string, unknown>;
-    } catch {
-      const card = createTextCard(projectId, text);
-      useCardStore.getState().addCard(card);
-      autoSave.markDirty(card.id);
-      syncNodeCount(projectId);
-      return;
-    }
-    if (parsed.kind !== CLIPBOARD_KIND) {
-      const card = createTextCard(projectId, text);
-      useCardStore.getState().addCard(card);
-      autoSave.markDirty(card.id);
-      syncNodeCount(projectId);
-      return;
-    }
-
-    const sources: CanvasCard[] = parsed.cards
-      ? (parsed.cards as CanvasCard[])
-      : parsed.card
-        ? [parsed.card as CanvasCard]
-        : [];
-
-    const now = new Date().toISOString();
-    const offset = 30;
-    for (const src of sources) {
-      const { maxZIndex } = useCardStore.getState();
-      const card: CanvasCard = {
-        ...src,
-        id: crypto.randomUUID(),
-        projectId,
-        x: src.x + offset,
-        y: src.y + offset,
-        zIndex: maxZIndex + 1,
-        createdAt: now,
-        updatedAt: now,
-      };
-      useCardStore.getState().addCard(card);
-      autoSave.markDirty(card.id);
-    }
-    syncNodeCount(projectId);
-  } catch {
-    /* clipboard denied */
-  }
-}
-
-function createTextCard(projectId: string, content: string): CanvasCard {
-  const vp = useCanvasStore.getState().viewport;
-  const cx = (-vp.x + vp.width / 2) / vp.zoom;
-  const cy = (-vp.y + vp.height / 2) / vp.zoom;
-  const { maxZIndex } = useCardStore.getState();
-  const now = new Date().toISOString();
-  return {
-    id: crypto.randomUUID(),
-    projectId,
-    type: "text",
-    x: cx - 160,
-    y: cy - 120,
-    width: 320,
-    height: 240,
-    zIndex: maxZIndex + 1,
-    locked: false,
-    collapsed: false,
-    data: { content },
-    createdAt: now,
-    updatedAt: now,
-  };
 }
 
 function selectAll() {
@@ -199,13 +98,14 @@ export function useKeyboardShortcuts() {
 
       if ((e.ctrlKey || e.metaKey) && e.key === "c") {
         e.preventDefault();
-        void copySelected();
+        void copyCards(useCanvasStore.getState().selectedCardIds);
         return;
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key === "v") {
         e.preventDefault();
-        void pasteCards();
+        const pid = useProjectStore.getState().currentProjectId;
+        if (pid) void pasteCards(pid);
         return;
       }
 

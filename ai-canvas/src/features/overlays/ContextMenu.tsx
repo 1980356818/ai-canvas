@@ -16,8 +16,7 @@ import { CARD_DEFAULTS, WORKFLOW_TEMPLATES } from "@/shared/constants";
 import type { CardType } from "@/shared/types";
 import { extractCardImage } from "@/config/model-ref-images";
 import { exportImage, revealInExplorer } from "@/lib/media";
-
-const CLIPBOARD_KIND = "ai-canvas-card/v1";
+import { copyCards, pasteCards } from "@/lib/clipboard";
 
 function syncNodeCount(projectId: string) {
   const count = useCardStore.getState().getCardsByProject(projectId).length;
@@ -251,65 +250,16 @@ function ContextMenuPanel({
 
   const runPaste = async () => {
     if (!projectId) return;
-    try {
-      const text = await navigator.clipboard.readText();
-      const x = contextMenu.worldX ?? clientToWorld(contextMenu.x, contextMenu.y).x;
-      const y = contextMenu.worldY ?? clientToWorld(contextMenu.x, contextMenu.y).y;
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(text) as { kind?: string; card?: CanvasCard };
-      } catch {
-        parsed = null;
-      }
-      if (
-        parsed &&
-        typeof parsed === "object" &&
-        "kind" in parsed &&
-        parsed.kind === CLIPBOARD_KIND &&
-        "card" in parsed &&
-        parsed.card &&
-        typeof parsed.card === "object"
-      ) {
-        const src = parsed.card as CanvasCard;
-        const now = new Date().toISOString();
-        const { maxZIndex } = useCardStore.getState();
-        const card: CanvasCard = {
-          ...src,
-          id: crypto.randomUUID(),
-          projectId,
-          x: x - src.width / 2,
-          y: y - src.height / 2,
-          zIndex: maxZIndex + 1,
-          createdAt: now,
-          updatedAt: now,
-        };
-        useCardStore.getState().addCard(card);
-        autoSave.markDirty(card.id);
-      } else {
-        const card = buildCard("text", projectId, x, y);
-        card.data = { content: text };
-        useCardStore.getState().addCard(card);
-        autoSave.markDirty(card.id);
-      }
-      syncNodeCount(projectId);
-    } catch {
-      /* clipboard denied or invalid */
-    }
+    const world = {
+      worldX: contextMenu.worldX ?? clientToWorld(contextMenu.x, contextMenu.y).x,
+      worldY: contextMenu.worldY ?? clientToWorld(contextMenu.x, contextMenu.y).y,
+    };
+    await pasteCards(projectId, world);
     hide();
   };
 
-  const runCopyCard = async () => {
-    const id = contextMenu.targetId;
-    if (!id) return;
-    const card = useCardStore.getState().getCard(id);
-    if (!card) return;
-    try {
-      await navigator.clipboard.writeText(
-        JSON.stringify({ kind: CLIPBOARD_KIND, card }),
-      );
-    } catch {
-      /* denied */
-    }
+  const runCopyCards = async (ids: Set<string>) => {
+    await copyCards(ids);
     hide();
   };
 
@@ -469,7 +419,7 @@ function ContextMenuPanel({
         type: "item",
         label: "粘贴",
         shortcut: "Ctrl+V",
-        disabled: noProject || !navigator.clipboard?.readText,
+        disabled: noProject,
         onSelect: () => void runPaste(),
       },
       { type: "sep" },
@@ -490,8 +440,8 @@ function ContextMenuPanel({
         type: "item",
         label: "复制",
         shortcut: "Ctrl+C",
-        disabled: !id || !card || !navigator.clipboard?.writeText,
-        onSelect: () => void runCopyCard(),
+        disabled: !id || !card,
+        onSelect: () => void runCopyCards(new Set(id ? [id] : [])),
       },
       {
         type: "item",
@@ -578,6 +528,14 @@ function ContextMenuPanel({
     ];
   } else if (contextMenu.target === "multi") {
     entries = [
+      {
+        type: "item",
+        label: "复制",
+        shortcut: "Ctrl+C",
+        disabled: selectedCardIds.size === 0,
+        onSelect: () => void runCopyCards(selectedCardIds),
+      },
+      { type: "sep" },
       {
         type: "item",
         label: "左对齐",

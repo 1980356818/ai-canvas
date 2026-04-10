@@ -78,6 +78,8 @@ pub fn run() {
             commands::gateway::list_models,
             commands::gateway::poll_task,
             commands::gateway::validate_connection,
+            commands::clipboard::clipboard_write,
+            commands::clipboard::clipboard_read,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

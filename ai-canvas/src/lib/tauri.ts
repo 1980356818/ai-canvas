@@ -673,4 +673,23 @@ export function saveConnections(
   lsSet("connections_" + projectId, connections);
 }
 
+// ── Clipboard (native via Rust arboard) ──────────────────────
+
+export async function clipboardWriteText(text: string): Promise<void> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    await _invoke("clipboard_write", { text });
+    return;
+  }
+  await navigator.clipboard.writeText(text);
+}
+
+export async function clipboardReadText(): Promise<string> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    return _invoke<string>("clipboard_read");
+  }
+  return navigator.clipboard.readText();
+}
+
 export { isTauri };
