@@ -48,13 +48,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (prevProjectIdRef.current) {
-      const vp = useCanvasStore.getState().viewport;
-      saveProjectViewport(prevProjectIdRef.current, {
-        x: vp.x,
-        y: vp.y,
-        zoom: vp.zoom,
-      });
+    const prevId = prevProjectIdRef.current;
+    // Only save viewport if the previous project still exists (not deleted)
+    if (prevId) {
+      const stillExists = useProjectStore.getState().projects.some((p) => p.id === prevId);
+      if (stillExists) {
+        const vp = useCanvasStore.getState().viewport;
+        saveProjectViewport(prevId, { x: vp.x, y: vp.y, zoom: vp.zoom });
+      }
     }
     prevProjectIdRef.current = currentProjectId;
 
@@ -112,7 +113,9 @@ export default function App() {
     return () => {
       dataFlowCleanup.current?.();
       dataFlowCleanup.current = null;
-      autoSave.forceSave();
+      // Only save if the project still exists (skip on project deletion)
+      const pid = useProjectStore.getState().currentProjectId;
+      if (pid) autoSave.forceSave();
     };
   }, [currentProjectId]);
 
@@ -120,14 +123,19 @@ export default function App() {
     const unsub = useConnectionStore.subscribe((state, prev) => {
       if (state.connections === prev.connections) return;
 
-      for (const [id, conn] of prev.connections) {
-        if (!state.connections.has(id)) {
-          removeRefImageForSource(conn.targetCardId, conn.sourceCardId);
-          removeUpstreamTextForSource(conn.targetCardId, conn.sourceCardId);
+      const pid = useProjectStore.getState().currentProjectId;
+
+      // Skip per-connection cleanup when all connections were cleared (project switch/delete).
+      // The card store is already cleared in that case, so the cleanup is unnecessary.
+      if (state.connections.size > 0 || pid) {
+        for (const [id, conn] of prev.connections) {
+          if (!state.connections.has(id)) {
+            removeRefImageForSource(conn.targetCardId, conn.sourceCardId);
+            removeUpstreamTextForSource(conn.targetCardId, conn.sourceCardId);
+          }
         }
       }
 
-      const pid = useProjectStore.getState().currentProjectId;
       if (!pid) return;
       const rows = Array.from(state.connections.values())
         .filter((c) => c.projectId === pid)

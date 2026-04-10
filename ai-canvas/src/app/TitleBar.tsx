@@ -59,10 +59,17 @@ export default function TitleBar() {
     }
   };
 
+  const isHome = appView === "home";
+
   return (
     <div
       data-tauri-drag-region
-      className="flex h-9 shrink-0 items-center border-b border-border bg-muted/40 select-none"
+      className={cn(
+        "flex h-9 shrink-0 items-center select-none",
+        isHome
+          ? "bg-transparent"
+          : "border-b border-border bg-muted/40",
+      )}
     >
       {isCanvas ? (
         <>
@@ -154,7 +161,9 @@ export default function TitleBar() {
         </>
       ) : (
         <>
-          <span className="px-3 text-sm font-medium">AI 无限画布</span>
+          {!isHome && (
+            <span className="px-3 text-sm font-medium">AI 无限画布</span>
+          )}
           <div data-tauri-drag-region className="flex-1" />
         </>
       )}

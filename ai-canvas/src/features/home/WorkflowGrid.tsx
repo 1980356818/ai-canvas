@@ -1,33 +1,39 @@
 import {
-  MessageSquare,
   ImageIcon,
-  Layers,
   User,
-  LucideIcon,
+  ArrowRight,
+  Sparkles,
+  ScanFace,
+  type LucideIcon,
 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { createProject, updateProjectMeta } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
-import { cn } from "@/lib/utils";
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "@/shared/constants";
 
-const ICON_MAP: Record<string, LucideIcon> = {
-  MessageSquare,
-  ImageIcon,
-  Layers,
-  User,
+const FEATURED_IDS = ["wf-white-bg", "wf-face-gen"];
+
+const CARD_STYLES: Record<
+  string,
+  { gradient: string; icon: LucideIcon; accent: string }
+> = {
+  "wf-white-bg": {
+    gradient: "from-violet-500/10 via-purple-500/5 to-fuchsia-500/10",
+    icon: ImageIcon,
+    accent: "text-violet-500",
+  },
+  "wf-face-gen": {
+    gradient: "from-sky-500/10 via-blue-500/5 to-indigo-500/10",
+    icon: User,
+    accent: "text-sky-500",
+  },
 };
 
-const CATEGORY_COLOR: Record<WorkflowTemplate["category"], string> = {
-  chat: "bg-blue-500/10 text-blue-500",
-  image: "bg-purple-500/10 text-purple-500",
-  composite: "bg-amber-500/10 text-amber-500",
-};
-
-function WorkflowCard({ workflow }: { workflow: WorkflowTemplate }) {
-  const Icon = ICON_MAP[workflow.icon] ?? Layers;
+function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
+  const style = CARD_STYLES[workflow.id] ?? CARD_STYLES["wf-white-bg"]!;
+  const Icon = style.icon;
 
   const handleClick = async () => {
     try {
@@ -55,43 +61,50 @@ function WorkflowCard({ workflow }: { workflow: WorkflowTemplate }) {
   return (
     <button
       onClick={handleClick}
-      className="group relative flex flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+      className="group flex h-56 flex-col overflow-hidden rounded-2xl border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
     >
       <div
-        className={cn(
-          "flex h-10 w-10 items-center justify-center rounded-lg",
-          CATEGORY_COLOR[workflow.category],
-        )}
+        className={`flex h-32 items-center justify-center gap-3 bg-gradient-to-br ${style.gradient}`}
       >
-        <Icon className="h-5 w-5" />
+        <Icon className={`h-8 w-8 ${style.accent} opacity-60`} />
+        <ArrowRight className="h-4 w-4 text-muted-foreground/40" />
+        <Sparkles className={`h-7 w-7 ${style.accent} opacity-40`} />
+        <ArrowRight className="h-4 w-4 text-muted-foreground/40" />
+        {workflow.id === "wf-face-gen" ? (
+          <ScanFace className={`h-8 w-8 ${style.accent} opacity-60`} />
+        ) : (
+          <ImageIcon className={`h-8 w-8 ${style.accent} opacity-60`} />
+        )}
       </div>
 
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">
+      <div className="flex flex-1 flex-col gap-1 px-5 py-4">
+        <p className="text-base font-semibold text-foreground">
           {workflow.name}
         </p>
-        <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+        <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
           {workflow.description}
         </p>
-      </div>
-
-      <div className="absolute inset-x-0 bottom-0 flex items-center justify-center rounded-b-xl bg-primary py-1.5 text-xs font-medium text-primary-foreground opacity-0 transition-opacity group-hover:opacity-100">
-        立即使用
       </div>
     </button>
   );
 }
 
 export default function WorkflowGrid() {
+  const featured = WORKFLOW_TEMPLATES.filter((wf) =>
+    FEATURED_IDS.includes(wf.id),
+  );
+
+  if (featured.length === 0) return null;
+
   return (
-    <div className="mx-auto w-full max-w-4xl">
-      <h2 className="mb-4 text-sm font-semibold text-foreground">
+    <div className="mx-auto w-full max-w-6xl">
+      <h2 className="mb-5 text-base font-semibold text-foreground">
         快速开始
       </h2>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {WORKFLOW_TEMPLATES.map((wf) => (
-          <WorkflowCard key={wf.id} workflow={wf} />
+      <div className="grid grid-cols-2 gap-4">
+        {featured.map((wf) => (
+          <FeatureCard key={wf.id} workflow={wf} />
         ))}
       </div>
     </div>

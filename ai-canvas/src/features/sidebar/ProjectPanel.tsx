@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { NewProjectDialog } from "@/features/overlays/NewProjectDialog";
+import { ConfirmDialog } from "@/features/overlays/ConfirmDialog";
 import {
   deleteProject,
   listProjects,
@@ -48,6 +49,7 @@ export function ProjectPanel() {
   const setAppView = useUIStore((s) => s.setAppView);
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<ProjectInfo | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -94,6 +96,16 @@ export function ProjectPanel() {
     },
     [addToast, updateProject],
   );
+
+  const handleConfirmDelete = useCallback(() => {
+    if (!pendingDelete) return;
+    const id = pendingDelete.id;
+    setPendingDelete(null);
+    removeProject(id);
+    deleteProject(id).catch(() =>
+      addToast({ type: "error", title: "删除失败，请重试", duration: 4000 }),
+    );
+  }, [pendingDelete, removeProject, addToast]);
 
   const onCreated = useCallback(
     (project: ProjectInfo) => {
@@ -195,25 +207,7 @@ export function ProjectPanel() {
                     title="删除"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (
-                        !window.confirm(
-                          `确定删除「${p.title}」？此操作不可撤销。`,
-                        )
-                      ) {
-                        return;
-                      }
-                      void (async () => {
-                        try {
-                          await deleteProject(p.id);
-                          removeProject(p.id);
-                        } catch {
-                          addToast({
-                            type: "error",
-                            title: "删除失败",
-                            duration: 4000,
-                          });
-                        }
-                      })();
+                      setPendingDelete(p);
                     }}
                     className={cn(
                       "shrink-0 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100",
@@ -231,6 +225,15 @@ export function ProjectPanel() {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onCreated={onCreated}
+      />
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title={`确定删除「${pendingDelete?.title ?? ""}」？`}
+        description="此操作不可撤销，项目内的所有卡片将一并删除。"
+        confirmLabel="删除"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setPendingDelete(null)}
       />
     </div>
   );

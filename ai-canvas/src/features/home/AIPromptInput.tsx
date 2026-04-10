@@ -138,8 +138,8 @@ export default function AIPromptInput() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
-      <div className="rounded-2xl border border-border bg-card shadow-sm transition-shadow focus-within:ring-2 focus-within:ring-primary/20">
+    <div className="relative z-10 mx-auto w-full max-w-2xl">
+      <div className="rounded-2xl border border-border/50 bg-card/60 shadow-lg shadow-black/5 backdrop-blur-xl transition-shadow focus-within:shadow-xl focus-within:shadow-primary/10">
         <textarea
           ref={textareaRef}
           value={prompt}
@@ -147,11 +147,11 @@ export default function AIPromptInput() {
           onKeyDown={handleKeyDown}
           placeholder={config.placeholder}
           rows={3}
-          className="w-full resize-none rounded-t-2xl bg-transparent px-4 pb-2 pt-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-          style={{ minHeight: "88px", maxHeight: "200px" }}
+          className="w-full resize-none rounded-t-2xl bg-transparent px-5 pb-2 pt-5 text-base text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+          style={{ minHeight: "100px", maxHeight: "200px" }}
         />
 
-        <div className="flex items-center gap-1 border-t border-border px-3 py-2">
+        <div className="flex items-center gap-1 border-t border-border/40 px-4 py-2.5">
           {(Object.keys(MODE_CONFIG) as InputMode[]).map((m) => {
             const { label, icon: Icon } = MODE_CONFIG[m];
             return (
@@ -159,19 +159,19 @@ export default function AIPromptInput() {
                 key={m}
                 onClick={() => setMode(m)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                  "flex items-center gap-3 rounded-full px-8 py-4 text-base font-medium transition-all duration-200",
                   mode === m
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                    ? "bg-foreground/10 text-foreground"
+                    : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
                 )}
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon className="h-5 w-5" />
                 {label}
               </button>
             );
           })}
 
-          <div className="mx-1.5 h-4 w-px bg-border" />
+          <div className="mx-1.5 h-4 w-px bg-border/40" />
 
           <ModelSelector
             capability={mode === "chat" ? "CHAT" : "IMAGE"}
@@ -181,17 +181,17 @@ export default function AIPromptInput() {
 
           <div className="flex-1" />
 
-          <span className="mr-2 select-none text-xs text-muted-foreground">
-            Ctrl+Enter 发送
+          <span className="mr-2 hidden select-none text-xs text-muted-foreground/60 sm:inline">
+            Ctrl+Enter
           </span>
 
           <button
             onClick={handleSend}
             disabled={!prompt.trim() || sending}
             className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+              "flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200",
               prompt.trim() && !sending
-                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                ? "bg-foreground text-background shadow-sm hover:opacity-80"
                 : "cursor-not-allowed bg-muted text-muted-foreground",
             )}
             title="发送"

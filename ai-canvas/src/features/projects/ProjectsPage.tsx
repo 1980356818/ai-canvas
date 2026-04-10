@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, FolderOpen, Trash2, Search } from "lucide-react";
 import { NewProjectDialog } from "@/features/overlays/NewProjectDialog";
+import { ConfirmDialog } from "@/features/overlays/ConfirmDialog";
 import { listProjects, deleteProject, renameProject } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import { useProjectStore, type ProjectInfo } from "@/stores/projectStore";
@@ -29,15 +30,15 @@ function formatRelativeTime(iso: string): string {
 function ProjectCard({
   project,
   onRename,
+  onRequestDelete,
 }: {
   project: ProjectInfo;
   onRename: (id: string, title: string) => void;
+  onRequestDelete: (project: ProjectInfo) => void;
 }) {
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
   const openProject = useProjectStore((s) => s.openProject);
-  const removeProject = useProjectStore((s) => s.removeProject);
   const setAppView = useUIStore((s) => s.setAppView);
-  const addToast = useUIStore((s) => s.addToast);
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -57,16 +58,6 @@ function ProjectCard({
   const handleOpen = () => {
     openProject(project.id);
     setAppView("canvas");
-  };
-
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!window.confirm(`确定删除「${project.title}」？此操作不可撤销。`)) return;
-    deleteProject(project.id)
-      .then(() => removeProject(project.id))
-      .catch(() =>
-        addToast({ type: "error", title: "删除失败", duration: 4000 }),
-      );
   };
 
   const commitRename = (value: string) => {
@@ -146,7 +137,10 @@ function ProjectCard({
         <button
           type="button"
           aria-label="删除项目"
-          onClick={handleDelete}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRequestDelete(project);
+          }}
           className="shrink-0 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
         >
           <Trash2 className="h-4 w-4" />
@@ -159,11 +153,13 @@ function ProjectCard({
 export default function ProjectsPage() {
   const projects = useProjectStore((s) => s.projects);
   const setProjects = useProjectStore((s) => s.setProjects);
+  const removeProject = useProjectStore((s) => s.removeProject);
   const updateProject = useProjectStore((s) => s.updateProject);
   const addToast = useUIStore((s) => s.addToast);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<ProjectInfo | null>(null);
 
   useEffect(() => {
     listProjects()
@@ -194,6 +190,16 @@ export default function ProjectsPage() {
     },
     [addToast, updateProject],
   );
+
+  const handleConfirmDelete = useCallback(() => {
+    if (!pendingDelete) return;
+    const id = pendingDelete.id;
+    setPendingDelete(null);
+    removeProject(id);
+    deleteProject(id).catch(() =>
+      addToast({ type: "error", title: "删除失败，请重试", duration: 4000 }),
+    );
+  }, [pendingDelete, removeProject, addToast]);
 
   const filtered = search.trim()
     ? projects.filter((p) =>
@@ -261,6 +267,7 @@ export default function ProjectsPage() {
                   key={p.id}
                   project={p}
                   onRename={(id, title) => void handleRename(id, title)}
+                  onRequestDelete={setPendingDelete}
                 />
               ))}
             </div>
@@ -272,6 +279,15 @@ export default function ProjectsPage() {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onCreated={onCreated}
+      />
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title={`确定删除「${pendingDelete?.title ?? ""}」？`}
+        description="此操作不可撤销，项目内的所有卡片将一并删除。"
+        confirmLabel="删除"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setPendingDelete(null)}
       />
     </div>
   );

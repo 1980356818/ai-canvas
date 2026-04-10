@@ -45,7 +45,7 @@
     --accent: oklch(0.97 0 0);
     --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);
-    --destructive-foreground: oklch(0.577 0.245 27.325);
+    --destructive-foreground: oklch(0.985 0 0);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
     --ring: oklch(0.708 0 0);
@@ -68,7 +68,7 @@
     --accent: oklch(0.269 0 0);
     --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.396 0.141 25.723);
-    --destructive-foreground: oklch(0.637 0.237 25.331);
+    --destructive-foreground: oklch(0.985 0 0);
     --border: oklch(0.269 0 0);
     --input: oklch(0.269 0 0);
     --ring: oklch(0.439 0 0);
@@ -90,6 +90,77 @@
 }
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/* ── Homepage: Apple-style utilities ── */
+
+.text-gradient {
+  background: linear-gradient(135deg, var(--foreground) 0%, oklch(0.55 0 0) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.dark .text-gradient {
+  background: linear-gradient(135deg, var(--foreground) 0%, oklch(0.7 0 0) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-glow {
+  position: relative;
+}
+.hero-glow::before {
+  content: "";
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  width: 600px;
+  height: 400px;
+  transform: translateX(-50%);
+  border-radius: 9999px;
+  background: radial-gradient(
+    ellipse at center,
+    oklch(0.75 0.06 280 / 0.12) 0%,
+    oklch(0.8 0.04 260 / 0.06) 40%,
+    transparent 70%
+  );
+  filter: blur(60px);
+  pointer-events: none;
+  z-index: 0;
+  animation: hero-glow-pulse 6s ease-in-out infinite;
+}
+.dark .hero-glow::before {
+  background: radial-gradient(
+    ellipse at center,
+    oklch(0.45 0.08 280 / 0.15) 0%,
+    oklch(0.4 0.05 260 / 0.08) 40%,
+    transparent 70%
+  );
+}
+
+@keyframes hero-glow-pulse {
+  0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
+  50% { opacity: 0.7; transform: translateX(-50%) scale(1.05); }
+}
+
+.image-collage {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out both;
 }
 
 @keyframes shimmer {
