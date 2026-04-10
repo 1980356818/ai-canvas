@@ -454,7 +454,8 @@ function ContextMenuPanel({
               onSelect: () => {
                 if (!projectId) return;
                 const world = clientToWorld(contextMenu.x, contextMenu.y);
-                instantiateWorkflowTemplate(wf, projectId, world.x, world.y);
+                const cardIds = instantiateWorkflowTemplate(wf, projectId, world.x, world.y);
+                useCanvasStore.getState().setSelectedCardIds(cardIds);
                 syncNodeCount(projectId);
                 hide();
               },

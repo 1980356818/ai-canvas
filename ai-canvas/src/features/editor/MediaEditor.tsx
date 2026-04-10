@@ -112,11 +112,21 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       useSettingsStore.getState().setLastImageSize(sizeValue);
 
       const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === sizeValue);
-      const dims = opt ? sizeFromRatio(opt.ratio) : {};
-      updateCard(card.id, { ...dims, data: { ...data, size: sizeValue } });
+      if (!opt) return;
+      const dims = sizeFromRatio(opt.ratio);
+
+      const centerX = card.x + card.width / 2;
+      const centerY = card.y + card.height / 2;
+
+      updateCard(card.id, {
+        x: centerX - dims.width / 2,
+        y: centerY - dims.height / 2,
+        ...dims,
+        data: { ...data, size: sizeValue },
+      });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, card.x, card.y, card.width, card.height, data, updateCard],
   );
 
   const onPromptChange = useCallback(
