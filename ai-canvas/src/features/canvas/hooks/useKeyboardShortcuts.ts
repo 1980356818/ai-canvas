@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useCanvasStore } from "@/stores/canvasStore";
+import { useCanvasStore, lastPointerWorld } from "@/stores/canvasStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -105,7 +105,12 @@ export function useKeyboardShortcuts() {
       if ((e.ctrlKey || e.metaKey) && e.key === "v") {
         e.preventDefault();
         const pid = useProjectStore.getState().currentProjectId;
-        if (pid) void pasteCards(pid);
+        if (pid) {
+          void pasteCards(pid, {
+            worldX: lastPointerWorld.x,
+            worldY: lastPointerWorld.y,
+          });
+        }
         return;
       }
 

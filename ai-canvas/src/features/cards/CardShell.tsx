@@ -289,7 +289,11 @@ export default memo(
           return null;
         };
 
-        const selectedIds = useCanvasStore.getState().selectedCardIds;
+        let selectedIds = useCanvasStore.getState().selectedCardIds;
+        if (!selectedIds.has(card.id) && !e.ctrlKey) {
+          useCanvasStore.getState().setSelectedCardIds([card.id]);
+          selectedIds = useCanvasStore.getState().selectedCardIds;
+        }
         const isGroupDrag = selectedIds.has(card.id) && selectedIds.size > 1;
         const peerStarts = new Map<string, { cx: number; cy: number; el: HTMLElement | null }>();
         if (isGroupDrag) {
@@ -307,7 +311,9 @@ export default memo(
           if (ev.pointerId !== pid || !dragging.current) return;
           const dx = (ev.clientX - dragStart.current.mx) / zoom;
           const dy = (ev.clientY - dragStart.current.my) / zoom;
-          if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didDrag.current = true;
+          const screenDx = ev.clientX - dragStart.current.mx;
+          const screenDy = ev.clientY - dragStart.current.my;
+          if (Math.abs(screenDx) > 5 || Math.abs(screenDy) > 5) didDrag.current = true;
           el.style.transform = `translate(${dx}px, ${dy}px)`;
           if (editorEl) {
             const sx = dx * zoom;
@@ -480,6 +486,10 @@ export default memo(
                 autoSave.markDirty(sid);
               }
             }
+
+            if (!ev.ctrlKey && !isGroupDrag) {
+              useCanvasStore.getState().setSelectedCardIds([card.id]);
+            }
           } else {
             const pm = useCanvasStore.getState().pickMode;
             if (pm?.active) {
@@ -594,6 +604,7 @@ export default memo(
           height: card.height,
           zIndex: card.zIndex,
           touchAction: "none",
+          contain: "layout style paint",
           boxShadow: selected ? "0 0 14px 3px rgba(129,140,248,0.35), 0 0 4px 1px rgba(56,189,248,0.25)" : "none",
         }}
         onPointerDown={onPointerDown}

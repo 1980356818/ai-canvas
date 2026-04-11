@@ -24,6 +24,7 @@ export interface CanvasCard {
 interface CardState {
   cards: Map<string, CanvasCard>;
   maxZIndex: number;
+  layoutVersion: number;
 
   setCards: (cards: CanvasCard[]) => void;
   addCard: (card: CanvasCard) => void;
@@ -39,6 +40,7 @@ interface CardState {
 export const useCardStore = create<CardState>((set, get) => ({
   cards: new Map(),
   maxZIndex: 0,
+  layoutVersion: 0,
 
   setCards: (cards) => {
     const map = new Map<string, CanvasCard>();
@@ -47,7 +49,7 @@ export const useCardStore = create<CardState>((set, get) => ({
       map.set(card.id, card);
       if (card.zIndex > maxZ) maxZ = card.zIndex;
     }
-    set({ cards: map, maxZIndex: maxZ });
+    set((s) => ({ cards: map, maxZIndex: maxZ, layoutVersion: s.layoutVersion + 1 }));
   },
 
   addCard: (card) =>
@@ -57,6 +59,7 @@ export const useCardStore = create<CardState>((set, get) => ({
       return {
         cards: next,
         maxZIndex: Math.max(s.maxZIndex, card.zIndex),
+        layoutVersion: s.layoutVersion + 1,
       };
     }),
 
@@ -64,7 +67,7 @@ export const useCardStore = create<CardState>((set, get) => ({
     set((s) => {
       const next = new Map(s.cards);
       next.delete(id);
-      return { cards: next };
+      return { cards: next, layoutVersion: s.layoutVersion + 1 };
     }),
 
   updateCard: (id, partial) =>
@@ -72,8 +75,17 @@ export const useCardStore = create<CardState>((set, get) => ({
       const card = s.cards.get(id);
       if (!card) return s;
       const next = new Map(s.cards);
-      next.set(id, { ...card, ...partial, updatedAt: new Date().toISOString() });
-      return { cards: next };
+      const updated = { ...card, ...partial, updatedAt: new Date().toISOString() };
+      next.set(id, updated);
+      const layoutChanged =
+        updated.x !== card.x ||
+        updated.y !== card.y ||
+        updated.width !== card.width ||
+        updated.height !== card.height;
+      return {
+        cards: next,
+        layoutVersion: layoutChanged ? s.layoutVersion + 1 : s.layoutVersion,
+      };
     }),
 
   bringToFront: (id) =>
@@ -104,5 +116,5 @@ export const useCardStore = create<CardState>((set, get) => ({
   getCardsByProject: (projectId) =>
     Array.from(get().cards.values()).filter((c) => c.projectId === projectId),
 
-  clear: () => set({ cards: new Map(), maxZIndex: 0 }),
+  clear: () => set((s) => ({ cards: new Map(), maxZIndex: 0, layoutVersion: s.layoutVersion + 1 })),
 }));

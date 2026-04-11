@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, FolderOpen, Trash2, Search, Undo2, Trash, ChevronDown, ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Plus, FolderOpen, Trash2, Search, Undo2, Trash, ChevronDown, ChevronRight, Pencil } from "lucide-react";
 import { NewProjectDialog } from "@/features/overlays/NewProjectDialog";
 import { ConfirmDialog } from "@/features/overlays/ConfirmDialog";
 import {
@@ -34,14 +35,90 @@ function formatRelativeTime(iso: string): string {
   return `${dayDiff}天前`;
 }
 
+interface ProjectContextMenuProps {
+  x: number;
+  y: number;
+  onRename: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}
+
+function ProjectContextMenu({ x, y, onRename, onDelete, onClose }: ProjectContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x, y });
+
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    let nx = x, ny = y;
+    const pad = 8;
+    if (nx + rect.width > window.innerWidth - pad) nx = Math.max(pad, window.innerWidth - rect.width - pad);
+    if (ny + rect.height > window.innerHeight - pad) ny = Math.max(pad, window.innerHeight - rect.height - pad);
+    setPos({ x: nx, y: ny });
+  }, [x, y]);
+
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      onClose();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    const t = window.setTimeout(() => {
+      document.addEventListener("pointerdown", onPointerDown, true);
+      document.addEventListener("keydown", onKeyDown, true);
+    }, 0);
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={menuRef}
+      className="fixed z-50 min-w-[10rem] rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+      style={{ left: pos.x, top: pos.y }}
+      role="menu"
+    >
+      <button
+        type="button"
+        onClick={() => { onRename(); onClose(); }}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground hover:bg-accent hover:text-accent-foreground"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+        重命名
+      </button>
+      <div className="my-1 h-px bg-border" role="separator" />
+      <button
+        type="button"
+        onClick={() => { onDelete(); onClose(); }}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive hover:bg-destructive/10"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+        删除
+      </button>
+    </div>
+  );
+}
+
 function ProjectCard({
   project,
   onRename,
   onRequestDelete,
+  onContextMenu,
+  externalEditing,
+  onEditingDone,
 }: {
   project: ProjectInfo;
   onRename: (id: string, title: string) => void;
   onRequestDelete: (project: ProjectInfo) => void;
+  onContextMenu: (e: React.MouseEvent, project: ProjectInfo) => void;
+  externalEditing?: boolean;
+  onEditingDone?: () => void;
 }) {
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
   const openProject = useProjectStore((s) => s.openProject);
@@ -52,6 +129,13 @@ function ProjectCard({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const active = currentProjectId === project.id;
+
+  useEffect(() => {
+    if (externalEditing && !editing) {
+      setEditing(true);
+      setDraft(project.title);
+    }
+  }, [externalEditing, editing, project.title]);
 
   useEffect(() => {
     if (!editing) return;
@@ -70,6 +154,7 @@ function ProjectCard({
   const commitRename = (value: string) => {
     const trimmed = value.trim();
     setEditing(false);
+    onEditingDone?.();
     if (trimmed && trimmed !== project.title) {
       onRename(project.id, trimmed);
     }
@@ -85,6 +170,11 @@ function ProjectCard({
           e.preventDefault();
           handleOpen();
         }
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onContextMenu(e, project);
       }}
       className={cn(
         "group relative flex items-start gap-4 rounded-xl border bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
@@ -219,6 +309,8 @@ export default function ProjectsPage() {
   const [pendingDelete, setPendingDelete] = useState<ProjectInfo | null>(null);
   const [pendingPermanentDelete, setPendingPermanentDelete] = useState<ProjectInfo | null>(null);
   const [trashExpanded, setTrashExpanded] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; project: ProjectInfo } | null>(null);
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
 
   useEffect(() => {
     listProjects()
@@ -352,6 +444,9 @@ export default function ProjectsPage() {
                   project={p}
                   onRename={(id, title) => void handleRename(id, title)}
                   onRequestDelete={setPendingDelete}
+                  onContextMenu={(e, proj) => setCtxMenu({ x: e.clientX, y: e.clientY, project: proj })}
+                  externalEditing={editingCardId === p.id}
+                  onEditingDone={() => setEditingCardId(null)}
                 />
               ))}
             </div>
@@ -412,6 +507,16 @@ export default function ProjectsPage() {
         onConfirm={handleConfirmPermanentDelete}
         onCancel={() => setPendingPermanentDelete(null)}
       />
+      {ctxMenu && createPortal(
+        <ProjectContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          onRename={() => setEditingCardId(ctxMenu.project.id)}
+          onDelete={() => setPendingDelete(ctxMenu.project)}
+          onClose={() => setCtxMenu(null)}
+        />,
+        document.body,
+      )}
     </div>
   );
 }

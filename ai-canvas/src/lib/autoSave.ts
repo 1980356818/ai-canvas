@@ -29,7 +29,7 @@ class AutoSaveManager {
   private dirtyCardIds = new Set<string>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private saving = false;
-  private intervalMs = 30_000;
+  private intervalMs = 5_000;
 
   setInterval(ms: number) {
     this.intervalMs = ms;

@@ -1,11 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, startTransition } from "react";
 import { useUIStore } from "@/stores/uiStore";
 import { useCardStore } from "@/stores/cardStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
-import { loadCards, loadConnections, saveProjectViewport, loadProjectViewport } from "@/lib/tauri";
+import { loadCards, loadConnections, saveConnections, saveProjectViewport, loadProjectViewport } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
 import { startDataFlowWatcher, removeRefImageForSource, removeUpstreamTextForSource } from "@/lib/dataFlow";
@@ -49,12 +49,23 @@ export default function App() {
 
   useEffect(() => {
     const prevId = prevProjectIdRef.current;
-    // Only save viewport if the previous project still exists (not deleted)
     if (prevId) {
       const stillExists = useProjectStore.getState().projects.some((p) => p.id === prevId);
       if (stillExists) {
         const vp = useCanvasStore.getState().viewport;
         saveProjectViewport(prevId, { x: vp.x, y: vp.y, zoom: vp.zoom });
+
+        const conns = useConnectionStore.getState().getConnectionsByProject(prevId);
+        saveConnections(
+          prevId,
+          conns.map((c) => ({
+            id: c.id,
+            project_id: c.projectId,
+            source_card_id: c.sourceCardId,
+            target_card_id: c.targetCardId,
+            created_at: c.createdAt,
+          })),
+        );
       }
     }
     prevProjectIdRef.current = currentProjectId;
@@ -93,7 +104,9 @@ export default function App() {
           createdAt: r.created_at,
           updatedAt: r.updated_at,
         }));
-        useCardStore.getState().setCards(cards);
+        startTransition(() => {
+          useCardStore.getState().setCards(cards);
+        });
       })
       .catch(console.error);
 
@@ -146,9 +159,7 @@ export default function App() {
           target_card_id: c.targetCardId,
           created_at: c.createdAt,
         }));
-      import("@/lib/tauri").then(({ saveConnections }) =>
-        saveConnections(pid, rows),
-      );
+      saveConnections(pid, rows);
     });
     return unsub;
   }, []);
@@ -161,6 +172,20 @@ export default function App() {
       if (pid) {
         const vp = useCanvasStore.getState().viewport;
         saveProjectViewport(pid, { x: vp.x, y: vp.y, zoom: vp.zoom });
+
+        const conns = useConnectionStore.getState().getConnectionsByProject(pid);
+        saveConnections(
+          pid,
+          conns.map((c) => ({
+            id: c.id,
+            project_id: c.projectId,
+            source_card_id: c.sourceCardId,
+            target_card_id: c.targetCardId,
+            created_at: c.createdAt,
+          })),
+        );
+
+        void autoSave.forceSave();
       }
     };
     window.addEventListener("beforeunload", handleBeforeUnload);

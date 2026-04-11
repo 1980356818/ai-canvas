@@ -225,7 +225,7 @@ export default memo(function ConnectionLayer({
   onConnectionContextMenu,
 }: ConnectionLayerProps) {
   const connections = useConnectionStore((s) => s.connections);
-  const cards = useCardStore((s) => s.cards);
+  const layoutVersion = useCardStore((s) => s.layoutVersion);
   const dragOffsets = useCanvasStore((s) => s.dragOffsets);
   const selectedId = useConnectionStore((s) => s.selectedConnectionId);
   const hoveredId = useConnectionStore((s) => s.hoveredConnectionId);
@@ -233,6 +233,7 @@ export default memo(function ConnectionLayer({
   const setHovered = useConnectionStore((s) => s.setHoveredConnectionId);
 
   const projectConns = useMemo(() => {
+    const cards = useCardStore.getState().cards;
     const result: Array<{
       conn: Connection;
       d: string;
@@ -267,7 +268,8 @@ export default memo(function ConnectionLayer({
       });
     }
     return result;
-  }, [connections, cards, projectId, dragOffsets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connections, layoutVersion, projectId, dragOffsets]);
 
   const removeConnection = useConnectionStore((s) => s.removeConnection);
 

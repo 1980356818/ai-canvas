@@ -1,5 +1,5 @@
-import { useRef, useMemo, useState, useCallback, useEffect } from "react";
-import { useCanvasStore } from "@/stores/canvasStore";
+import { useRef, useMemo, useState, useCallback, useEffect, memo } from "react";
+import { useCanvasStore, lastPointerWorld, type Viewport } from "@/stores/canvasStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -12,7 +12,7 @@ import FloatingEditor from "@/features/editor/FloatingEditor";
 import ConnectionLayer from "./ConnectionLayer";
 import ZoomControls from "./ZoomControls";
 import ImageToolbar from "./ImageToolbar";
-import { CARD_DEFAULTS, sizeFromRatio } from "@/shared/constants";
+import { CARD_DEFAULTS, sizeFromRatio, TYPE_COLORS } from "@/shared/constants";
 import { autoSave } from "@/lib/autoSave";
 import {
   updateProjectMeta,
@@ -47,6 +47,93 @@ function canCardAcceptFileDrop(cardId: string): boolean {
   return false;
 }
 
+const LOD_SCREEN_THRESHOLD = 80;
+
+function CardThumbnail({ card }: { card: CanvasCard }) {
+  const color = card.color || TYPE_COLORS[card.type] || "#6B7280";
+  return (
+    <div
+      className="absolute rounded-lg"
+      style={{
+        left: card.x,
+        top: card.y,
+        width: card.width,
+        height: card.height,
+        zIndex: card.zIndex,
+        backgroundColor: `color-mix(in srgb, ${color} 15%, var(--color-card))`,
+        border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
+      }}
+    />
+  );
+}
+
+const CardLayer = memo(function CardLayer({
+  projectId,
+  viewport,
+}: {
+  projectId: string | null;
+  viewport: Viewport;
+}) {
+  const cards = useCardStore((s) => s.cards);
+  const selectedCardIds = useCanvasStore((s) => s.selectedCardIds);
+
+  const projectCards = useMemo(() => {
+    if (!projectId) return [];
+    return Array.from(cards.values())
+      .filter((c) => c.projectId === projectId)
+      .sort((a, b) => a.zIndex - b.zIndex);
+  }, [cards, projectId]);
+
+  const { fullCards, thumbCards } = useMemo(() => {
+    if (viewport.width === 0 || viewport.height === 0)
+      return { fullCards: [] as CanvasCard[], thumbCards: [] as CanvasCard[] };
+    const MARGIN = 200;
+    const worldLeft = -viewport.x / viewport.zoom - MARGIN;
+    const worldTop = -viewport.y / viewport.zoom - MARGIN;
+    const worldRight = worldLeft + viewport.width / viewport.zoom + MARGIN * 2;
+    const worldBottom = worldTop + viewport.height / viewport.zoom + MARGIN * 2;
+
+    const full: CanvasCard[] = [];
+    const thumb: CanvasCard[] = [];
+
+    for (const c of projectCards) {
+      if (
+        c.x + c.width <= worldLeft ||
+        c.x >= worldRight ||
+        c.y + c.height <= worldTop ||
+        c.y >= worldBottom
+      )
+        continue;
+
+      const screenW = c.width * viewport.zoom;
+      const screenH = c.height * viewport.zoom;
+      if (screenW < LOD_SCREEN_THRESHOLD && screenH < LOD_SCREEN_THRESHOLD) {
+        thumb.push(c);
+      } else {
+        full.push(c);
+      }
+    }
+    return { fullCards: full, thumbCards: thumb };
+  }, [projectCards, viewport]);
+
+  return (
+    <>
+      {thumbCards.map((card) => (
+        <CardThumbnail key={card.id} card={card} />
+      ))}
+      {fullCards.map((card) => (
+        <CardShell
+          key={card.id}
+          card={card}
+          selected={selectedCardIds.has(card.id)}
+        >
+          <CardContent card={card} />
+        </CardShell>
+      ))}
+    </>
+  );
+});
+
 export default function CanvasContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const {
@@ -68,8 +155,6 @@ export default function CanvasContainer() {
   } = useSelection(containerRef);
 
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
-  const cards = useCardStore((s) => s.cards);
-  const selectedCardIds = useCanvasStore((s) => s.selectedCardIds);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
 
   const pickMode = useCanvasStore((s) => s.pickMode);
@@ -339,29 +424,6 @@ export default function CanvasContainer() {
     };
   }, []);
 
-  const projectCards = useMemo(() => {
-    if (!currentProjectId) return [];
-    return Array.from(cards.values())
-      .filter((c) => c.projectId === currentProjectId)
-      .sort((a, b) => a.zIndex - b.zIndex);
-  }, [cards, currentProjectId]);
-
-  const visibleCards = useMemo(() => {
-    if (viewport.width === 0 || viewport.height === 0) return projectCards;
-    const MARGIN = 200;
-    const worldLeft = -viewport.x / viewport.zoom - MARGIN;
-    const worldTop = -viewport.y / viewport.zoom - MARGIN;
-    const worldRight = worldLeft + viewport.width / viewport.zoom + MARGIN * 2;
-    const worldBottom = worldTop + viewport.height / viewport.zoom + MARGIN * 2;
-    return projectCards.filter(
-      (c) =>
-        c.x + c.width > worldLeft &&
-        c.x < worldRight &&
-        c.y + c.height > worldTop &&
-        c.y < worldBottom,
-    );
-  }, [projectCards, viewport]);
-
   const spaceHeld = useRef(false);
   const bgPending = useRef(false);
   const bgMode = useRef<"none" | "selecting" | "panning">("none");
@@ -413,6 +475,10 @@ export default function CanvasContainer() {
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
+    const world = screenToCanvas(e.clientX, e.clientY);
+    lastPointerWorld.x = world.x;
+    lastPointerWorld.y = world.y;
+
     if (bgPending.current) {
       const dx = e.clientX - bgStart.current.x;
       const dy = e.clientY - bgStart.current.y;
@@ -518,15 +584,7 @@ export default function CanvasContainer() {
           transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
         }}
       >
-        {visibleCards.map((card) => (
-          <CardShell
-            key={card.id}
-            card={card}
-            selected={selectedCardIds.has(card.id)}
-          >
-            <CardContent card={card} />
-          </CardShell>
-        ))}
+        <CardLayer projectId={currentProjectId} viewport={viewport} />
 
         {currentProjectId && (
           <ConnectionLayer

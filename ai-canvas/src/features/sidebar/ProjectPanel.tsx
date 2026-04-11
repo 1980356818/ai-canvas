@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Plus, Trash2, Pencil } from "lucide-react";
 import { NewProjectDialog } from "@/features/overlays/NewProjectDialog";
 import { ConfirmDialog } from "@/features/overlays/ConfirmDialog";
 import {
@@ -36,6 +37,76 @@ function formatRelativeTime(iso: string): string {
   return `${dayDiff}天前`;
 }
 
+interface ProjectContextMenuProps {
+  x: number;
+  y: number;
+  onRename: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}
+
+function ProjectContextMenu({ x, y, onRename, onDelete, onClose }: ProjectContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x, y });
+
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    let nx = x, ny = y;
+    const pad = 8;
+    if (nx + rect.width > window.innerWidth - pad) nx = Math.max(pad, window.innerWidth - rect.width - pad);
+    if (ny + rect.height > window.innerHeight - pad) ny = Math.max(pad, window.innerHeight - rect.height - pad);
+    setPos({ x: nx, y: ny });
+  }, [x, y]);
+
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      onClose();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    const t = window.setTimeout(() => {
+      document.addEventListener("pointerdown", onPointerDown, true);
+      document.addEventListener("keydown", onKeyDown, true);
+    }, 0);
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={menuRef}
+      className="fixed z-50 min-w-[10rem] rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+      style={{ left: pos.x, top: pos.y }}
+      role="menu"
+    >
+      <button
+        type="button"
+        onClick={() => { onRename(); onClose(); }}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground hover:bg-accent hover:text-accent-foreground"
+      >
+        <Pencil className="h-3.5 w-3.5" />
+        重命名
+      </button>
+      <div className="my-1 h-px bg-border" role="separator" />
+      <button
+        type="button"
+        onClick={() => { onDelete(); onClose(); }}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive hover:bg-destructive/10"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+        删除
+      </button>
+    </div>
+  );
+}
+
 export function ProjectPanel() {
   const projects = useProjectStore((s) => s.projects);
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
@@ -53,6 +124,7 @@ export function ProjectPanel() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; project: ProjectInfo } | null>(null);
 
   useEffect(() => {
     void listProjects()
@@ -158,6 +230,7 @@ export function ProjectPanel() {
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  setCtxMenu({ x: e.clientX, y: e.clientY, project: p });
                 }}
                 className={cn(
                   "group relative flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent",
@@ -236,6 +309,19 @@ export function ProjectPanel() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setPendingDelete(null)}
       />
+      {ctxMenu && createPortal(
+        <ProjectContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          onRename={() => {
+            setEditingId(ctxMenu.project.id);
+            setRenameDraft(ctxMenu.project.title);
+          }}
+          onDelete={() => setPendingDelete(ctxMenu.project)}
+          onClose={() => setCtxMenu(null)}
+        />,
+        document.body,
+      )}
     </div>
   );
 }

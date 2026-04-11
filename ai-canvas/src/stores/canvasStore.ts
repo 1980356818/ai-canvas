@@ -44,6 +44,8 @@ interface CanvasState {
   exitPickMode: () => void;
 }
 
+export const lastPointerWorld = { x: 0, y: 0 };
+
 export const useCanvasStore = create<CanvasState>((set) => ({
   viewport: { x: 0, y: 0, zoom: 1, width: 0, height: 0 },
   selectedCardIds: new Set(),
