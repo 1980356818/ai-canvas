@@ -217,6 +217,83 @@ pub async fn ai_proxy_stream_abort(
 #[derive(Serialize)]
 pub struct SaveMediaResult {
     pub local_path: String,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+}
+
+fn detect_image_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    if bytes.len() < 10 {
+        return None;
+    }
+
+    // PNG
+    if bytes.len() >= 24 && bytes[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
+        let w = u32::from_be_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
+        let h = u32::from_be_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]);
+        return Some((w, h));
+    }
+
+    // GIF
+    if bytes.len() >= 10 && (bytes[0..6] == *b"GIF87a" || bytes[0..6] == *b"GIF89a") {
+        let w = u16::from_le_bytes([bytes[6], bytes[7]]) as u32;
+        let h = u16::from_le_bytes([bytes[8], bytes[9]]) as u32;
+        return Some((w, h));
+    }
+
+    // BMP
+    if bytes.len() >= 26 && bytes[0..2] == *b"BM" {
+        let w = u32::from_le_bytes([bytes[18], bytes[19], bytes[20], bytes[21]]);
+        let h_signed = i32::from_le_bytes([bytes[22], bytes[23], bytes[24], bytes[25]]);
+        return Some((w, h_signed.unsigned_abs()));
+    }
+
+    // JPEG — scan for SOF0..SOF3 markers
+    if bytes[0..2] == [0xFF, 0xD8] {
+        let mut i = 2;
+        while i + 9 < bytes.len() {
+            if bytes[i] != 0xFF {
+                i += 1;
+                continue;
+            }
+            let marker = bytes[i + 1];
+            if marker == 0x00 || marker == 0xFF {
+                i += 1;
+                continue;
+            }
+            if (0xC0..=0xC3).contains(&marker) {
+                let h = u16::from_be_bytes([bytes[i + 5], bytes[i + 6]]) as u32;
+                let w = u16::from_be_bytes([bytes[i + 7], bytes[i + 8]]) as u32;
+                return Some((w, h));
+            }
+            if i + 3 >= bytes.len() {
+                break;
+            }
+            let seg_len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
+            i += 2 + seg_len;
+        }
+    }
+
+    // WebP
+    if bytes.len() >= 30 && bytes[0..4] == *b"RIFF" && bytes[8..12] == *b"WEBP" {
+        if bytes.len() >= 30 && bytes[12..16] == *b"VP8 " {
+            let w = (u16::from_le_bytes([bytes[26], bytes[27]]) & 0x3FFF) as u32;
+            let h = (u16::from_le_bytes([bytes[28], bytes[29]]) & 0x3FFF) as u32;
+            return Some((w, h));
+        }
+        if bytes.len() >= 25 && bytes[12..16] == *b"VP8L" {
+            let bits = u32::from_le_bytes([bytes[21], bytes[22], bytes[23], bytes[24]]);
+            let w = (bits & 0x3FFF) + 1;
+            let h = ((bits >> 14) & 0x3FFF) + 1;
+            return Some((w, h));
+        }
+        if bytes.len() >= 30 && bytes[12..16] == *b"VP8X" {
+            let w = (bytes[24] as u32) | ((bytes[25] as u32) << 8) | ((bytes[26] as u32) << 16);
+            let h = (bytes[27] as u32) | ((bytes[28] as u32) << 8) | ((bytes[29] as u32) << 16);
+            return Some((w + 1, h + 1));
+        }
+    }
+
+    None
 }
 
 /// Save media from a remote URL, base64 data-URL, or local path into
@@ -291,9 +368,13 @@ pub async fn save_media(
         }
     }
 
+    let dims = detect_image_dimensions(&bytes);
+
     let relative_path = format!("media/images/{}.{}", file_id, ext);
     Ok(SaveMediaResult {
         local_path: relative_path,
+        width: dims.map(|(w, _)| w),
+        height: dims.map(|(_, h)| h),
     })
 }
 

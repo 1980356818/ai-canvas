@@ -367,19 +367,19 @@ function ContextMenuPanel({
         children: [
           {
             type: "item",
-            label: "生成文字",
+            label: "文本",
             disabled: noProject,
             onSelect: (e) => addCardAtClick("ai_chat", e),
           },
           {
             type: "item",
-            label: "生成图片",
+            label: "图片",
             disabled: noProject,
             onSelect: (e) => addCardAtClick("ai_image", e),
           },
           {
             type: "item",
-            label: "生成视频",
+            label: "视频",
             disabled: noProject,
             onSelect: (e) => addCardAtClick("ai_video", e),
           },

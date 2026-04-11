@@ -26,18 +26,28 @@ export async function initMediaService(): Promise<void> {
   _convertFileSrc = core.convertFileSrc;
 }
 
+export interface PersistImageResult {
+  localPath: string;
+  width?: number;
+  height?: number;
+}
+
 /**
  * Save any image source (data URL, HTTP URL, local path) to local storage.
- * Returns a relative path like `media/images/{uuid}.png`.
+ * Returns the relative path and, when available, the detected image dimensions.
  */
 export async function persistImage(
   source: string,
   title?: string,
-): Promise<string> {
-  if (!isTauri) return source;
+): Promise<PersistImageResult> {
+  if (!isTauri) return { localPath: source };
 
   const result = await saveMedia(source, undefined, title);
-  return result.localPath;
+  return {
+    localPath: result.localPath,
+    width: result.width,
+    height: result.height,
+  };
 }
 
 /**

@@ -8,7 +8,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { autoSave } from "@/lib/autoSave";
 import { recordUpdate } from "@/lib/history";
 import { cn } from "@/lib/utils";
-import { TYPE_COLORS } from "@/shared/constants";
+import { TYPE_COLORS, sizeFromRatio } from "@/shared/constants";
 import {
   cardHasImage,
   extractCardImage,
@@ -252,7 +252,7 @@ export default memo(
         let lastHoveredCardEl: HTMLElement | null = null;
         let hoverReadyCardId: string | null = null;
         let hoverTimerId: ReturnType<typeof setTimeout> | null = null;
-        const HOVER_HOLD_MS = 800;
+        const HOVER_HOLD_MS = 250;
 
         const findAcceptingCardBelow = (
           cx: number,
@@ -414,15 +414,24 @@ export default memo(
                   const d = {
                     ...target.data,
                   } as Record<string, unknown>;
+                  const patch: Partial<CanvasCard> = { data: d };
                   if (target.type === "ai_image") {
                     d.imageUrl = imgUrl;
+                    const ratio = card.width / card.height;
+                    const sized = sizeFromRatio(ratio);
+                    const cx = target.x + target.width / 2;
+                    const cy = target.y + target.height / 2;
+                    patch.x = cx - sized.width / 2;
+                    patch.y = cy - sized.height / 2;
+                    patch.width = sized.width;
+                    patch.height = sized.height;
                   } else if (target.type === "ai_tryon") {
                     if (!d.personImageUrl) d.personImageUrl = imgUrl;
                     else if (!d.garmentImageUrl) d.garmentImageUrl = imgUrl;
                   }
                   useCardStore
                     .getState()
-                    .updateCard(hoverReadyCardId, { data: d });
+                    .updateCard(hoverReadyCardId, patch);
                   autoSave.markDirty(hoverReadyCardId);
                   useUIStore.getState().addToast({
                     type: "info",

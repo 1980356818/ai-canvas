@@ -11,14 +11,24 @@ import CardContent from "@/features/cards/CardContent";
 import FloatingEditor from "@/features/editor/FloatingEditor";
 import ConnectionLayer from "./ConnectionLayer";
 import ZoomControls from "./ZoomControls";
-import { CARD_DEFAULTS } from "@/shared/constants";
+import ImageToolbar from "./ImageToolbar";
+import { CARD_DEFAULTS, sizeFromRatio } from "@/shared/constants";
 import { autoSave } from "@/lib/autoSave";
 import {
   updateProjectMeta,
   onTauriFileDrop,
   isTauri,
 } from "@/lib/tauri";
-import { persistImage } from "@/lib/media";
+import { persistImage, type PersistImageResult } from "@/lib/media";
+
+function cardSizeFromPersist(
+  saved: PersistImageResult,
+): { width: number; height: number } {
+  if (saved.width && saved.height && saved.width > 0 && saved.height > 0) {
+    return sizeFromRatio(saved.width / saved.height);
+  }
+  return { width: CARD_DEFAULTS.ai_image.width, height: CARD_DEFAULTS.ai_image.height };
+}
 
 function canCardAcceptFileDrop(cardId: string): boolean {
   const card = useCardStore.getState().getCard(cardId);
@@ -153,18 +163,26 @@ export default function CanvasContainer() {
         if (targetCardId) {
           const targetCard = useCardStore.getState().getCard(targetCardId);
           if (targetCard) {
-            const dataUrl = await readFileAsDataUrl(files[0]);
-            const relativePath = await persistImage(dataUrl);
+            const dataUrl = await readFileAsDataUrl(files[0]!);
+            const saved = await persistImage(dataUrl);
             const latest = useCardStore.getState().getCard(targetCardId);
             if (latest) {
               const d = { ...latest.data } as Record<string, unknown>;
+              const update: Partial<CanvasCard> = { data: d };
               if (latest.type === "ai_image") {
-                d.imageUrl = relativePath;
+                d.imageUrl = saved.localPath;
+                const sized = cardSizeFromPersist(saved);
+                const cx = latest.x + latest.width / 2;
+                const cy = latest.y + latest.height / 2;
+                update.x = cx - sized.width / 2;
+                update.y = cy - sized.height / 2;
+                update.width = sized.width;
+                update.height = sized.height;
               } else if (latest.type === "ai_tryon") {
-                if (!d.personImageUrl) d.personImageUrl = relativePath;
-                else if (!d.garmentImageUrl) d.garmentImageUrl = relativePath;
+                if (!d.personImageUrl) d.personImageUrl = saved.localPath;
+                else if (!d.garmentImageUrl) d.garmentImageUrl = saved.localPath;
               }
-              useCardStore.getState().updateCard(targetCardId, { data: d });
+              useCardStore.getState().updateCard(targetCardId, update);
               autoSave.markDirty(targetCardId);
             }
             startIdx = 1;
@@ -175,33 +193,34 @@ export default function CanvasContainer() {
         if (remaining.length === 0) return;
 
         const dropPos = screenToCanvas(e.clientX, e.clientY);
-        const { width, height } = CARD_DEFAULTS.ai_image;
-        const dropX = dropPos.x - width / 2;
-        const dropY = dropPos.y - height / 2;
         const GAP = 20;
+        let cursorX = 0;
 
         for (let idx = 0; idx < remaining.length; idx++) {
-          const dataUrl = await readFileAsDataUrl(remaining[idx]);
-          const relativePath = await persistImage(dataUrl);
+          const dataUrl = await readFileAsDataUrl(remaining[idx]!);
+          const saved = await persistImage(dataUrl);
+          const { width: cardW, height: cardH } = cardSizeFromPersist(saved);
+
           const now = new Date().toISOString();
           const { maxZIndex } = useCardStore.getState();
           const card: CanvasCard = {
             id: crypto.randomUUID(),
             projectId: currentProjectId,
             type: "ai_image",
-            x: dropX + idx * (width + GAP),
-            y: dropY,
-            width,
-            height,
+            x: dropPos.x - cardW / 2 + cursorX,
+            y: dropPos.y - cardH / 2,
+            width: cardW,
+            height: cardH,
             zIndex: maxZIndex + 1 + idx,
             locked: false,
             collapsed: false,
-            data: { imageUrl: relativePath, content: "" },
+            data: { imageUrl: saved.localPath, content: "" },
             createdAt: now,
             updatedAt: now,
           };
           useCardStore.getState().addCard(card);
           autoSave.markDirty(card.id);
+          cursorX += cardW + GAP;
         }
 
         const count = useCardStore.getState().getCardsByProject(currentProjectId).length;
@@ -242,9 +261,8 @@ export default function CanvasContainer() {
       const cx = rect ? cssx - rect.left : cssx;
       const cy = rect ? cssy - rect.top : cssy;
       const vp = useCanvasStore.getState().viewport;
-      const { width, height } = CARD_DEFAULTS.ai_image;
-      const dropX = (cx - vp.x) / vp.zoom - width / 2;
-      const dropY = (cy - vp.y) / vp.zoom - height / 2;
+      const dropX = (cx - vp.x) / vp.zoom;
+      const dropY = (cy - vp.y) / vp.zoom;
       const GAP = 20;
 
       let startIdx = 0;
@@ -254,45 +272,57 @@ export default function CanvasContainer() {
 
       if (targetCardId && canCardAcceptFileDrop(targetCardId)) {
         try {
-          const relativePath = await persistImage(paths[0]!);
+          const saved = await persistImage(paths[0]!);
           const target = useCardStore.getState().getCard(targetCardId);
           if (target) {
             const d = { ...target.data } as Record<string, unknown>;
+            const update: Partial<CanvasCard> = { data: d };
             if (target.type === "ai_image") {
-              d.imageUrl = relativePath;
+              d.imageUrl = saved.localPath;
+              const sized = cardSizeFromPersist(saved);
+              const cx = target.x + target.width / 2;
+              const cy = target.y + target.height / 2;
+              update.x = cx - sized.width / 2;
+              update.y = cy - sized.height / 2;
+              update.width = sized.width;
+              update.height = sized.height;
             } else if (target.type === "ai_tryon") {
-              if (!d.personImageUrl) d.personImageUrl = relativePath;
-              else if (!d.garmentImageUrl) d.garmentImageUrl = relativePath;
+              if (!d.personImageUrl) d.personImageUrl = saved.localPath;
+              else if (!d.garmentImageUrl) d.garmentImageUrl = saved.localPath;
             }
-            useCardStore.getState().updateCard(targetCardId, { data: d });
+            useCardStore.getState().updateCard(targetCardId, update);
             autoSave.markDirty(targetCardId);
             startIdx = 1;
           }
         } catch { /* skip */ }
       }
 
+      let tauriCursorX = 0;
       for (let i = startIdx; i < paths.length; i++) {
         try {
-          const relativePath = await persistImage(paths[i]!);
+          const saved = await persistImage(paths[i]!);
+          const { width: cardW, height: cardH } = cardSizeFromPersist(saved);
+
           const now = new Date().toISOString();
           const { maxZIndex } = useCardStore.getState();
           const card: CanvasCard = {
             id: crypto.randomUUID(),
             projectId: pid,
             type: "ai_image",
-            x: dropX + (i - startIdx) * (width + GAP),
-            y: dropY,
-            width,
-            height,
+            x: dropX - cardW / 2 + tauriCursorX,
+            y: dropY - cardH / 2,
+            width: cardW,
+            height: cardH,
             zIndex: maxZIndex + 1 + (i - startIdx),
             locked: false,
             collapsed: false,
-            data: { imageUrl: relativePath, content: "" },
+            data: { imageUrl: saved.localPath, content: "" },
             createdAt: now,
             updatedAt: now,
           };
           useCardStore.getState().addCard(card);
           autoSave.markDirty(card.id);
+          tauriCursorX += cardW + GAP;
         } catch { /* skip unreadable files */ }
       }
 
@@ -531,6 +561,8 @@ export default function CanvasContainer() {
           </p>
         </div>
       )}
+
+      <ImageToolbar />
 
       <ZoomControls zoom={viewport.zoom} />
 

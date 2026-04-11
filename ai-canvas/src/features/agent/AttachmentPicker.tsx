@@ -38,7 +38,7 @@ export default function AttachmentPicker({
         const filePath =
           typeof selected === "string" ? selected : (selected as { path: string }).path;
 
-        const relativePath = await persistImage(filePath);
+        const { localPath: relativePath } = await persistImage(filePath);
         onAdd({ type: "image", url: relativePath, mimeType: "image/png" });
       } catch (err) {
         console.error("Failed to pick file:", err);
@@ -57,7 +57,7 @@ export default function AttachmentPicker({
         reader.onload = () => resolve(reader.result as string);
         reader.readAsDataURL(file);
       });
-      const relativePath = await persistImage(dataUrl);
+      const { localPath: relativePath } = await persistImage(dataUrl);
       onAdd({
         type: "image",
         url: relativePath,

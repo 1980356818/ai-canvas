@@ -79,6 +79,8 @@ export interface AiProxyResponse {
 
 export interface SaveMediaResult {
   local_path: string;
+  width: number | null;
+  height: number | null;
 }
 
 export interface StreamCallbacks {
@@ -359,7 +361,7 @@ export async function saveMedia(
   source: string,
   _filename?: string,
   title?: string,
-): Promise<{ localPath: string }> {
+): Promise<{ localPath: string; width?: number; height?: number }> {
   if (isTauri) {
     await ensureTauriAPIs();
     const r = await _invoke<SaveMediaResult>("save_media", {
@@ -367,7 +369,11 @@ export async function saveMedia(
       filename: _filename,
       title,
     });
-    return { localPath: r.local_path };
+    return {
+      localPath: r.local_path,
+      width: r.width ?? undefined,
+      height: r.height ?? undefined,
+    };
   }
 
   return { localPath: source };

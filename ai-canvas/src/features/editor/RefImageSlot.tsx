@@ -75,7 +75,7 @@ export default function RefImageSlot({
         reader.onload = () => resolve(reader.result as string);
         reader.readAsDataURL(file);
       });
-      const relativePath = await persistImage(dataUrl);
+      const { localPath: relativePath } = await persistImage(dataUrl);
       onImage({ url: relativePath, sourceType: "file" });
     },
     [onImage],
