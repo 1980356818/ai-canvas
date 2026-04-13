@@ -5,7 +5,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
-import { loadCards, loadConnections, saveConnections, saveProjectViewport, loadProjectViewport } from "@/lib/tauri";
+import { isTauri, loadCards, loadConnections, saveConnections, saveProjectViewport, loadProjectViewport } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
 import { startDataFlowWatcher, removeRefImageForSource, removeUpstreamTextForSource } from "@/lib/dataFlow";
@@ -167,27 +167,42 @@ export default function App() {
   useKeyboardShortcuts();
 
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const saveBeforeExit = async () => {
       const pid = useProjectStore.getState().currentProjectId;
-      if (pid) {
-        const vp = useCanvasStore.getState().viewport;
-        saveProjectViewport(pid, { x: vp.x, y: vp.y, zoom: vp.zoom });
+      if (!pid) return;
 
-        const conns = useConnectionStore.getState().getConnectionsByProject(pid);
-        saveConnections(
-          pid,
-          conns.map((c) => ({
-            id: c.id,
-            project_id: c.projectId,
-            source_card_id: c.sourceCardId,
-            target_card_id: c.targetCardId,
-            created_at: c.createdAt,
-          })),
-        );
+      const vp = useCanvasStore.getState().viewport;
+      saveProjectViewport(pid, { x: vp.x, y: vp.y, zoom: vp.zoom });
 
-        void autoSave.forceSave();
-      }
+      const conns = useConnectionStore.getState().getConnectionsByProject(pid);
+      saveConnections(
+        pid,
+        conns.map((c) => ({
+          id: c.id,
+          project_id: c.projectId,
+          source_card_id: c.sourceCardId,
+          target_card_id: c.targetCardId,
+          created_at: c.createdAt,
+        })),
+      );
+
+      await autoSave.forceSave();
     };
+
+    if (isTauri) {
+      let unlisten: (() => void) | undefined;
+      import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
+        const win = getCurrentWindow();
+        win.onCloseRequested(async (event) => {
+          event.preventDefault();
+          await saveBeforeExit();
+          await win.destroy();
+        }).then((fn) => { unlisten = fn; });
+      });
+      return () => unlisten?.();
+    }
+
+    const handleBeforeUnload = () => { void saveBeforeExit(); };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, []);

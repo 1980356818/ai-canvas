@@ -1,11 +1,24 @@
-import { memo } from "react";
+import { memo, useState, useEffect } from "react";
 import { ImageIcon, Loader2, Shirt, Video, RotateCw } from "lucide-react";
 import type { CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { getDisplayUrl } from "@/lib/media";
+import { isPreloaded } from "@/lib/imagePreloader";
 import AIChatCard from "./AIChatCard";
 import TextCard from "./TextCard";
 import StickyNoteCard from "./StickyNoteCard";
+
+const IMG_DEFER_MS = 50;
+
+function useDeferredMount(delayMs: number, skipDelay: boolean): boolean {
+  const [ready, setReady] = useState(skipDelay);
+  useEffect(() => {
+    if (skipDelay) { setReady(true); return; }
+    const t = setTimeout(() => setReady(true), delayMs);
+    return () => clearTimeout(t);
+  }, [delayMs, skipDelay]);
+  return ready;
+}
 
 function ImagePreview({ card }: { card: CanvasCard }) {
   const data = card.data as { content?: string; imageUrl?: string };
@@ -14,6 +27,8 @@ function ImagePreview({ card }: { card: CanvasCard }) {
   const isMultiangle = card.type === "ai_multiangle";
   const PlaceholderIcon = isMultiangle ? RotateCw : ImageIcon;
   const placeholderLabel = isMultiangle ? "多角度" : "AI 图片";
+  const alreadyCached = displayUrl ? isPreloaded(displayUrl) : false;
+  const imgReady = useDeferredMount(IMG_DEFER_MS, alreadyCached);
 
   if (genProgress) {
     return (
@@ -42,10 +57,12 @@ function ImagePreview({ card }: { card: CanvasCard }) {
   }
 
   if (displayUrl) {
+    if (!imgReady) return <div className="h-full w-full bg-muted/20" />;
     return (
       <img
         src={displayUrl}
         alt=""
+        decoding="async"
         className="h-full w-full object-cover"
       />
     );
@@ -64,6 +81,8 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
   const rawUrl = data.resultImageUrl || data.personImageUrl;
   const displayUrl = rawUrl ? getDisplayUrl(rawUrl) : undefined;
+  const alreadyCached = displayUrl ? isPreloaded(displayUrl) : false;
+  const imgReady = useDeferredMount(IMG_DEFER_MS, alreadyCached);
 
   if (genProgress) {
     return (
@@ -92,9 +111,10 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
   }
 
   if (displayUrl) {
+    if (!imgReady) return <div className="h-full w-full bg-muted/20" />;
     return (
       <div className="relative h-full w-full">
-        <img src={displayUrl} alt="" className="h-full w-full object-cover" />
+        <img src={displayUrl} alt="" decoding="async" className="h-full w-full object-cover" />
         {data.resultImageUrl && (
           <span className="absolute left-2 top-2 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white">
             换装结果

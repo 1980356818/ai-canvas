@@ -1,13 +1,27 @@
-import { useMemo, memo } from "react";
+import { useMemo, useEffect, useRef, memo } from "react";
 import { useCanvasStore, type Viewport } from "@/stores/canvasStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import CardShell from "@/features/cards/CardShell";
 import CardContent from "@/features/cards/CardContent";
 import { TYPE_COLORS } from "@/shared/constants";
 import { spatialIndex } from "@/lib/spatial-index";
+import { preloadImages } from "@/lib/imagePreloader";
+import { getDisplayUrl } from "@/lib/media";
 
 const LOD_SCREEN_THRESHOLD = 80;
 const VIEWPORT_MARGIN = 200;
+const PRELOAD_SCREEN_PX = 400;
+
+function getCardImageUrl(card: CanvasCard): string | undefined {
+  if (card.type === "ai_image" || card.type === "ai_multiangle") {
+    return (card.data as { imageUrl?: string }).imageUrl;
+  }
+  if (card.type === "ai_tryon") {
+    const d = card.data as { resultImageUrl?: string; personImageUrl?: string };
+    return d.resultImageUrl || d.personImageUrl;
+  }
+  return undefined;
+}
 
 function CardThumbnail({ card }: { card: CanvasCard }) {
   const color = card.color || TYPE_COLORS[card.type] || "#6B7280";
@@ -82,6 +96,40 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
     return { fullCards: full, thumbCards: thumb };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards, projectId, viewport, layoutVersion]);
+
+  const prevVp = useRef({ x: viewport.x, y: viewport.y });
+
+  useEffect(() => {
+    if (!projectId || spatialIndex.size === 0) return;
+
+    const dx = viewport.x - prevVp.current.x;
+    const dy = viewport.y - prevVp.current.y;
+    prevVp.current = { x: viewport.x, y: viewport.y };
+
+    const margin = PRELOAD_SCREEN_PX / viewport.zoom;
+    const dirX = dx !== 0 ? -Math.sign(dx) : 0;
+    const dirY = dy !== 0 ? -Math.sign(dy) : 0;
+
+    const baseLeft = -viewport.x / viewport.zoom;
+    const baseTop = -viewport.y / viewport.zoom;
+    const baseRight = baseLeft + viewport.width / viewport.zoom;
+    const baseBottom = baseTop + viewport.height / viewport.zoom;
+
+    const pLeft = baseLeft - margin + (dirX < 0 ? dirX * margin : 0);
+    const pTop = baseTop - margin + (dirY < 0 ? dirY * margin : 0);
+    const pRight = baseRight + margin + (dirX > 0 ? dirX * margin : 0);
+    const pBottom = baseBottom + margin + (dirY > 0 ? dirY * margin : 0);
+
+    const ids = spatialIndex.query(pLeft, pTop, pRight, pBottom);
+    const urls: string[] = [];
+    for (const id of ids) {
+      const card = cards.get(id);
+      if (!card || card.projectId !== projectId) continue;
+      const imgUrl = getCardImageUrl(card);
+      if (imgUrl) urls.push(getDisplayUrl(imgUrl));
+    }
+    if (urls.length > 0) preloadImages(urls);
+  }, [viewport.x, viewport.y, viewport.zoom, viewport.width, viewport.height, projectId, cards]);
 
   return (
     <>

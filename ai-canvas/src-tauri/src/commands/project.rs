@@ -16,7 +16,14 @@ pub struct ProjectInfo {
 pub fn list_projects(state: State<AppState>) -> Result<Vec<ProjectInfo>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let mut stmt = db
-        .prepare("SELECT id, title, thumbnail, node_count, created_at, updated_at FROM projects WHERE deleted_at IS NULL ORDER BY updated_at DESC")
+        .prepare(
+            "SELECT p.id, p.title, p.thumbnail,
+                    (SELECT COUNT(*) FROM cards c WHERE c.project_id = p.id) AS node_count,
+                    p.created_at, p.updated_at
+             FROM projects p
+             WHERE p.deleted_at IS NULL
+             ORDER BY p.updated_at DESC",
+        )
         .map_err(|e| e.to_string())?;
 
     let projects = stmt
@@ -41,7 +48,14 @@ pub fn list_projects(state: State<AppState>) -> Result<Vec<ProjectInfo>, String>
 pub fn list_deleted_projects(state: State<AppState>) -> Result<Vec<ProjectInfo>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let mut stmt = db
-        .prepare("SELECT id, title, thumbnail, node_count, created_at, updated_at FROM projects WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
+        .prepare(
+            "SELECT p.id, p.title, p.thumbnail,
+                    (SELECT COUNT(*) FROM cards c WHERE c.project_id = p.id) AS node_count,
+                    p.created_at, p.updated_at
+             FROM projects p
+             WHERE p.deleted_at IS NOT NULL
+             ORDER BY p.deleted_at DESC",
+        )
         .map_err(|e| e.to_string())?;
 
     let projects = stmt
@@ -75,7 +89,10 @@ pub fn create_project(state: State<AppState>, title: String) -> Result<ProjectIn
 
     let project = db
         .query_row(
-            "SELECT id, title, thumbnail, node_count, created_at, updated_at FROM projects WHERE id = ?1",
+            "SELECT p.id, p.title, p.thumbnail,
+                    (SELECT COUNT(*) FROM cards c WHERE c.project_id = p.id) AS node_count,
+                    p.created_at, p.updated_at
+             FROM projects p WHERE p.id = ?1",
             rusqlite::params![id],
             |row| {
                 Ok(ProjectInfo {
