@@ -236,7 +236,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
               className="relative h-8 w-8 shrink-0 overflow-hidden rounded border border-input"
             >
               <img
-                src={getDisplayUrl(data.refImages!.refImage0.url)}
+                src={getDisplayUrl(data.refImages!.refImage0!.url)}
                 alt="参考图"
                 className="h-full w-full object-cover"
               />

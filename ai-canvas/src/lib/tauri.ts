@@ -562,7 +562,7 @@ export async function listModels(): Promise<ModelInfo[]> {
 
 function normalizeTaskInfo(raw: Record<string, unknown>): TaskInfo {
   console.log("[TaskPoll] 原始响应字段:", Object.keys(raw));
-  console.log("[TaskPoll] 原始响应（不含大数据）:", JSON.stringify(raw, (key, value) => {
+  console.log("[TaskPoll] 原始响应（不含大数据）:", JSON.stringify(raw, (_key, value) => {
     if (typeof value === "string" && value.length > 200) return value.slice(0, 200) + "…";
     return value;
   }));

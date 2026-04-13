@@ -64,7 +64,7 @@ function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
       className="group flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
     >
       <div
-        className={`flex aspect-[9/16] items-center justify-center gap-3 bg-gradient-to-br ${style.gradient}`}
+        className={`flex aspect-[16/9] items-center justify-center gap-3 bg-gradient-to-br ${style.gradient}`}
       >
         <Icon className={`h-8 w-8 ${style.accent} opacity-60`} />
         <ArrowRight className="h-4 w-4 text-muted-foreground/40" />

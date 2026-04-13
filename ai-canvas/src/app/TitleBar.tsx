@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Minus, Square, X, PanelLeft, Plus, Pencil, Trash2 } from "lucide-react";
+import { Minus, Square, X, PanelLeft, Plus, Pencil } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { NewProjectDialog } from "@/features/overlays/NewProjectDialog";
 import { useUIStore, type SaveStatus } from "@/stores/uiStore";
-import { useProjectStore, type ProjectInfo } from "@/stores/projectStore";
+import { useProjectStore } from "@/stores/projectStore";
 import { renameProject } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
@@ -319,7 +320,7 @@ export default function TitleBar() {
             <Square className="h-3 w-3" />
           </button>
           <button
-            onClick={() => appWindow?.close()}
+            onClick={() => { if (isTauri) void invoke("quit_app"); }}
             className="flex h-7 w-10 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground"
           >
             <X className="h-3.5 w-3.5" />

@@ -6,6 +6,11 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 pub struct AppState {
     pub db: Mutex<rusqlite::Connection>,
     pub http_client: reqwest::Client,
@@ -56,7 +61,13 @@ pub fn run() {
             tracing::info!("app initialized, data dir: {:?}", app_data_dir);
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                window.app_handle().exit(0);
+            }
+        })
         .invoke_handler(tauri::generate_handler![
+            quit_app,
             commands::project::list_projects,
             commands::project::list_deleted_projects,
             commands::project::create_project,

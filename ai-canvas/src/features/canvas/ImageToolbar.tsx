@@ -296,7 +296,7 @@ export default function ImageToolbar() {
 
       setCropping(true);
       try {
-        const { dataUrl, cellW, cellH } = await cropImageCell(
+        const { dataUrl } = await cropImageCell(
           data.imageUrl,
           info.row,
           info.col,

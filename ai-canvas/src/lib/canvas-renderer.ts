@@ -98,7 +98,7 @@ export function drawCards(
   ctx: CanvasRenderingContext2D,
   cards: Map<string, CanvasCard>,
   selectedIds: Set<string>,
-  zoom: number,
+  _zoom: number,
   projectId: string,
   imageCache?: CardImageCache,
 ) {

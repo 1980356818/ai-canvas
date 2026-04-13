@@ -37,7 +37,7 @@ export const IMAGE_SIZE_OPTIONS: ImageSizeOption[] = [
   { value: "16:9",  label: "16:9",  ratio: 16 / 9 },
 ];
 
-export const DEFAULT_IMAGE_SIZE = IMAGE_SIZE_OPTIONS[0].value;
+export const DEFAULT_IMAGE_SIZE = IMAGE_SIZE_OPTIONS[0]!.value;
 
 const LEGACY_SIZE_MAP: Record<string, string> = {
   "1024x1024": "1:1",
@@ -53,7 +53,7 @@ export function normalizeImageSize(raw: string | undefined): string {
 
 export const CARD_DEFAULTS: Record<CardType, CardDefaults> = {
   ai_chat:     { width: 680, height: 420, label: "生成文字", data: { content: "", result: "" } },
-  ai_image:    { ...sizeFromRatio(IMAGE_SIZE_OPTIONS[0].ratio), label: "AI 图片", data: { content: "", size: IMAGE_SIZE_OPTIONS[0].value } },
+  ai_image:    { ...sizeFromRatio(IMAGE_SIZE_OPTIONS[0]!.ratio), label: "AI 图片", data: { content: "", size: IMAGE_SIZE_OPTIONS[0]!.value } },
   ai_video:    { ...sizeFromRatio(16 / 9), label: "AI 视频", data: { content: "" } },
   ai_tryon:    { ...sizeFromRatio(3 / 4), label: "AI 换装", data: { content: "" } },
   ai_multiangle: { ...sizeFromRatio(1), label: "多角度", data: { content: "h:0,v:0,z:5", size: "1:1", model: "qwen-image-edit-2511-multipie", h: 0, v: 0, z: 5 } },

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Trash2, FolderOpen, Layers, ChevronRight, Plus } from "lucide-react";
+import { Trash2, Layers, ChevronRight, Plus } from "lucide-react";
 import AIPromptInput from "@/features/home/AIPromptInput";
 import WorkflowGrid from "@/features/home/WorkflowGrid";
 import { ConfirmDialog } from "@/features/overlays/ConfirmDialog";
@@ -7,7 +7,7 @@ import { useProjectStore, type ProjectInfo } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { listProjects, deleteProject, loadCards, createProject } from "@/lib/tauri";
 import { getDisplayUrl } from "@/lib/media";
-import { cn } from "@/lib/utils";
+
 
 function formatRelativeTime(iso: string): string {
   const d = new Date(iso);

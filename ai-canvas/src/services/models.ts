@@ -34,11 +34,11 @@ export const modelService = {
   },
 
   async getDefaultChatModel(): Promise<string> {
-    return CHAT_MODELS[0].id;
+    return CHAT_MODELS[0]!.id;
   },
 
   async getDefaultImageModel(): Promise<string> {
-    return IMAGE_MODELS[0].id; // firered
+    return IMAGE_MODELS[0]!.id;
   },
 
   invalidateCache() {},

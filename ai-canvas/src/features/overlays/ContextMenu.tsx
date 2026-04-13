@@ -67,7 +67,7 @@ function buildCard(
 }
 
 type MenuEntry =
-  | { type: "item"; label: string; shortcut?: string; disabled?: boolean; onSelect: (e: React.MouseEvent) => void }
+  | { type: "item"; label: string; shortcut?: string; disabled?: boolean; onSelect: (e?: React.MouseEvent) => void }
   | { type: "submenu"; label: string; disabled?: boolean; children: MenuEntry[] }
   | { type: "sep" };
 
@@ -84,7 +84,7 @@ function MenuButton({
   label: string;
   shortcut?: string;
   disabled?: boolean;
-  onSelect: (e: React.MouseEvent) => void;
+  onSelect: (e?: React.MouseEvent) => void;
 }) {
   return (
     <button
@@ -183,6 +183,8 @@ function ContextMenuPanel({
     y: number;
     target: "canvas" | "card" | "multi" | "connection";
     targetId?: string;
+    worldX?: number;
+    worldY?: number;
   };
   hide: () => void;
 }) {
@@ -457,10 +459,10 @@ function ContextMenuPanel({
           if (cardImagePath) {
             void exportImage(cardImagePath, card?.data?.content as string || "AI图片")
               .then(() => {
-                useUIStore.getState().addToast({ type: "success", title: "图片已导出" });
+                useUIStore.getState().addToast({ type: "success", title: "图片已导出", duration: 3000 });
               })
               .catch((err: unknown) => {
-                useUIStore.getState().addToast({ type: "error", title: "导出失败", description: String(err) });
+                useUIStore.getState().addToast({ type: "error", title: "导出失败", description: String(err), duration: 5000 });
               });
           }
           hide();
