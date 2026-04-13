@@ -26,16 +26,9 @@ const MODEL_REF_CONFIGS: ModelRefConfig[] = [
     ],
   },
   {
-    match: /^jimeng/,
+    match: /^firered/,
     slots: [
-      { key: "refImage0", label: "参考图", description: "画面参考", required: false },
-      { key: "refImage1", label: "风格参考", description: "风格迁移参考图", required: false },
-    ],
-  },
-  {
-    match: /^flux/,
-    slots: [
-      { key: "refImage0", label: "底图", description: "图生图的底图", required: false },
+      { key: "refImage0", label: "参考图", description: "需要编辑的原图", required: false },
     ],
   },
   {

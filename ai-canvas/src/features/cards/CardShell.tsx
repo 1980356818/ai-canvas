@@ -604,7 +604,7 @@ export default memo(
           height: card.height,
           zIndex: card.zIndex,
           touchAction: "none",
-          contain: "layout style paint",
+          contain: "layout style",
           boxShadow: selected ? "0 0 14px 3px rgba(129,140,248,0.35), 0 0 4px 1px rgba(56,189,248,0.25)" : "none",
         }}
         onPointerDown={onPointerDown}

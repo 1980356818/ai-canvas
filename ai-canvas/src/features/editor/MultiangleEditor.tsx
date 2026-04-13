@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { Sparkles, Loader2, RefreshCw, ImageIcon, X } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/lib/tauri";
 import { getBase64ForApi, getDisplayUrl } from "@/lib/media";
@@ -13,13 +14,14 @@ import {
 } from "@/config/model-ref-images";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize } from "@/shared/constants";
 
 const MODEL_ID = "qwen-image-edit-2511-multipie";
 
 const ANGLE_PARAMS = [
-  { key: "h", label: "水平角度", min: 0, max: 360, step: 5, unit: "°", description: "0=正面，逆时针环绕" },
-  { key: "v", label: "垂直角度", min: -30, max: 60, step: 5, unit: "°", description: "0=平视" },
-  { key: "z", label: "镜头距离", min: 0, max: 10, step: 1, unit: "", description: "0=超远景 4=中景 10=特写" },
+  { key: "h", label: "水平角度", min: 0, max: 360, step: 5, unit: "°", description: "0°正面 90°右侧 180°背面 270°左侧" },
+  { key: "v", label: "垂直角度", min: -30, max: 90, step: 5, unit: "°", description: "-30°仰拍 0°平视 60°俯拍 90°鸟瞰" },
+  { key: "z", label: "镜头距离", min: 0, max: 10, step: 1, unit: "", description: "0=远景 5=中景 10=特写" },
 ] as const;
 
 const REF_SLOTS = [
@@ -51,9 +53,41 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
   const data = card.data as MultiangleData;
   const h = data.h ?? 0;
   const v = data.v ?? 0;
-  const z = data.z ?? 4;
+  const z = data.z ?? 5;
   const hasRef = !!data.refImages?.refImage0;
   const canGenerate = hasRef;
+  const [currentSize, setCurrentSize] = useState(
+    () => normalizeImageSize(data.size) || useSettingsStore.getState().lastImageSize,
+  );
+
+  const handleSizeChange = useCallback(
+    (sizeValue: string) => {
+      setCurrentSize(sizeValue);
+      useSettingsStore.getState().setLastImageSize(sizeValue);
+
+      if (data.imageUrl) {
+        updateCard(card.id, { data: { ...data, size: sizeValue } });
+        autoSave.markDirty(card.id);
+        return;
+      }
+
+      const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === sizeValue);
+      if (!opt) return;
+      const dims = sizeFromRatio(opt.ratio);
+
+      const centerX = card.x + card.width / 2;
+      const centerY = card.y + card.height / 2;
+
+      updateCard(card.id, {
+        x: centerX - dims.width / 2,
+        y: centerY - dims.height / 2,
+        ...dims,
+        data: { ...data, size: sizeValue },
+      });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, card.x, card.y, card.width, card.height, data, updateCard],
+  );
 
   const handleAngleChange = useCallback(
     (key: string, value: number) => {
@@ -155,7 +189,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
 
       const result = await provider.generateImage({
         prompt,
-        size: data.size || "1:1",
+        size: currentSize,
         model: MODEL_ID,
         quality: "standard",
         referenceImages,
@@ -174,7 +208,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, h, v, z, generating, canGenerate, updateCard, setCardProgress]);
+  }, [data, card.id, h, v, z, generating, canGenerate, updateCard, setCardProgress, currentSize]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const handleFile = useCallback(
@@ -272,12 +306,38 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="rounded bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-          通义多角度
-        </span>
-        <span className="text-[10px] text-muted-foreground">
-          {buildPrompt(h, v, z)}
-        </span>
+        <div className="flex shrink-0 items-center rounded-lg border border-border p-0.5">
+          {IMAGE_SIZE_OPTIONS.map((opt) => {
+            const active = currentSize === opt.value;
+            const boxH = 12;
+            const boxW = opt.ratio >= 1 ? boxH : Math.round(boxH * opt.ratio);
+            const boxHFinal = opt.ratio >= 1 ? Math.round(boxH / opt.ratio) : boxH;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => handleSizeChange(opt.value)}
+                disabled={generating}
+                title={opt.value}
+                className={cn(
+                  "flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] transition-colors",
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  generating && "cursor-not-allowed opacity-40",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-block shrink-0 rounded-[2px] border",
+                    active ? "border-primary-foreground/50" : "border-current/40",
+                  )}
+                  style={{ width: boxW, height: boxHFinal }}
+                />
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
         {error && (
           <span className="min-w-0 truncate text-[11px] text-destructive">{error}</span>
         )}

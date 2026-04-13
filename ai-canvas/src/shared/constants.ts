@@ -56,7 +56,7 @@ export const CARD_DEFAULTS: Record<CardType, CardDefaults> = {
   ai_image:    { ...sizeFromRatio(IMAGE_SIZE_OPTIONS[0].ratio), label: "AI 图片", data: { content: "", size: IMAGE_SIZE_OPTIONS[0].value } },
   ai_video:    { ...sizeFromRatio(16 / 9), label: "AI 视频", data: { content: "" } },
   ai_tryon:    { ...sizeFromRatio(3 / 4), label: "AI 换装", data: { content: "" } },
-  ai_multiangle: { ...sizeFromRatio(1), label: "多角度", data: { content: "h:0,v:0,z:4", size: "1:1", model: "qwen-image-edit-2511-multipie", h: 0, v: 0, z: 4 } },
+  ai_multiangle: { ...sizeFromRatio(1), label: "多角度", data: { content: "h:0,v:0,z:5", size: "1:1", model: "qwen-image-edit-2511-multipie", h: 0, v: 0, z: 5 } },
   text:        { ...sizeFromRatio(4 / 3), label: "文本", data: { content: "" } },
   sticky_note: { ...sizeFromRatio(5 / 4), label: "便签", data: { content: "" } },
 };

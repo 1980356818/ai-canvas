@@ -112,6 +112,12 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       setCurrentSize(sizeValue);
       useSettingsStore.getState().setLastImageSize(sizeValue);
 
+      if (data.imageUrl) {
+        updateCard(card.id, { data: { ...data, size: sizeValue } });
+        autoSave.markDirty(card.id);
+        return;
+      }
+
       const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === sizeValue);
       if (!opt) return;
       const dims = sizeFromRatio(opt.ratio);

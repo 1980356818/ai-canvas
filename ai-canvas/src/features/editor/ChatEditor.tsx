@@ -202,6 +202,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       });
 
       if (resp.status >= 400) {
+        console.error(`[ChatEditor] AI 请求失败 (HTTP ${resp.status}):`, resp.body.slice(0, 1000));
         setError(friendlyError(resp.body));
         setCardProgress(card.id, null);
         return;
@@ -217,6 +218,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       });
       autoSave.markDirty(card.id);
     } catch (err) {
+      console.error("[ChatEditor] AI 请求异常:", err);
       const msg = err instanceof Error ? err.message : String(err);
       setError(friendlyError(msg));
     } finally {

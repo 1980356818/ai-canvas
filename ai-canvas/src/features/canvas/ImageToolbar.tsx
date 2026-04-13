@@ -156,11 +156,24 @@ const GridOverlay = memo(function GridOverlay({
       const onUp = (ev: PointerEvent) => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
+
+        const blockClick = (ce: Event) => {
+          ce.stopPropagation();
+          ce.stopImmediatePropagation();
+          ce.preventDefault();
+        };
+        window.addEventListener("click", blockClick, { capture: true, once: true });
+        const cleanupTimer = setTimeout(
+          () => window.removeEventListener("click", blockClick, { capture: true }),
+          200,
+        );
+
         const cur = dragRef.current;
         if (cur) {
           onCellDrop({ row: cur.row, col: cur.col, clientX: ev.clientX, clientY: ev.clientY });
         }
         setDragging(null);
+        void cleanupTimer;
       };
 
       window.addEventListener("pointermove", onMove);
@@ -266,10 +279,14 @@ export default function ImageToolbar() {
 
   const [activeGrid, setActiveGrid] = useState<number | null>(null);
   const [cropping, setCropping] = useState(false);
+  const gridCardId = useRef<string | null>(null);
 
   useEffect(() => {
-    setActiveGrid(null);
-  }, [targetCardId]);
+    if (activeGrid && gridCardId.current && targetCardId !== gridCardId.current) {
+      setActiveGrid(null);
+      gridCardId.current = null;
+    }
+  }, [targetCardId, activeGrid]);
 
   const handleCellDrop = useCallback(
     async (info: CellDragInfo) => {
@@ -287,8 +304,8 @@ export default function ImageToolbar() {
         );
         const { localPath: relativePath } = await persistImage(dataUrl);
 
-        const ratio = cellW / cellH;
-        const { width: newW, height: newH } = sizeFromRatio(ratio);
+        const cardRatio = card.width / card.height;
+        const { width: newW, height: newH } = sizeFromRatio(cardRatio);
 
         const { maxZIndex } = useCardStore.getState();
         const projectId = useProjectStore.getState().currentProjectId;
@@ -315,6 +332,8 @@ export default function ImageToolbar() {
 
         useCardStore.getState().addCard(newCard);
         autoSave.markDirty(newCard.id);
+
+        useCanvasStore.getState().setSelectedCardIds([card.id]);
 
         const count = useCardStore
           .getState()
@@ -378,7 +397,15 @@ export default function ImageToolbar() {
                 ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
-            onClick={() => setActiveGrid(activeGrid === size ? null : size)}
+            onClick={() => {
+              if (activeGrid === size) {
+                setActiveGrid(null);
+                gridCardId.current = null;
+              } else {
+                setActiveGrid(size);
+                gridCardId.current = targetCardId ?? null;
+              }
+            }}
           >
             <MiniGrid n={size} active={activeGrid === size} />
             {label}
@@ -391,7 +418,7 @@ export default function ImageToolbar() {
             <button
               title="退出拆图模式"
               className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => setActiveGrid(null)}
+              onClick={() => { setActiveGrid(null); gridCardId.current = null; }}
             >
               <X className="h-3.5 w-3.5" />
             </button>
