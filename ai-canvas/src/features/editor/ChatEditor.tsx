@@ -27,6 +27,7 @@ interface ChatData {
   _systemPrompt?: string;
   _label?: string;
   _description?: string;
+  _resultStale?: boolean;
 }
 
 function friendlyError(raw: string): string {
@@ -156,6 +157,10 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
 
     const model = currentModel || "deepseek-v3.2";
 
+    if (data.result) {
+      updateCard(card.id, { data: { ...data, _resultStale: true } });
+    }
+
     const imageEntries = refSlots
       .map((slot) => data.refImages?.[slot.key])
       .filter((e): e is RefImageEntry => !!e);
@@ -202,8 +207,8 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       });
 
       if (resp.status >= 400) {
-        console.error(`[ChatEditor] AI 请求失败 (HTTP ${resp.status}):`, resp.body.slice(0, 1000));
-        setError(friendlyError(resp.body));
+        console.error(`[ChatEditor] AI 请求失败 (模型: ${model}, HTTP ${resp.status}):`, resp.body.slice(0, 1000));
+        setError(`[${model}] ${friendlyError(resp.body)}`);
         setCardProgress(card.id, null);
         return;
       }
@@ -214,7 +219,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         "（无回复 — 模型未返回任何内容）";
 
       useCardStore.getState().updateCard(card.id, {
-        data: { ...data, result },
+        data: { ...data, result, _resultStale: false },
       });
       autoSave.markDirty(card.id);
     } catch (err) {

@@ -1,12 +1,12 @@
 import { memo, useCallback, useRef, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { autoSave } from "@/lib/autoSave";
 
 export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
-  const data = card.data as { content?: string; result?: string };
+  const data = card.data as { content?: string; result?: string; _resultStale?: boolean };
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
   const isEditing = useCanvasStore((s) => s.editingCardId === card.id);
   const updateCard = useCardStore((s) => s.updateCard);
@@ -60,6 +60,12 @@ export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
 
   return (
     <div className="flex h-full w-full flex-col p-4">
+      {data._resultStale && data.result && (
+        <div className="mb-1.5 flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span>最近一次生成失败，以下为上次成功的结果</span>
+        </div>
+      )}
       <textarea
         ref={promptRef}
         data-card-result

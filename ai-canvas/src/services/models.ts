@@ -1,10 +1,10 @@
 import { type ModelInfo } from "@/lib/tauri";
 
 const CHAT_MODELS: ModelInfo[] = [
-  { id: "gemini-3-flash-preview", capability: "CHAT" },
-  { id: "gemini-3.1-pro-preview", capability: "CHAT" },
   { id: "deepseek-v3.2", capability: "CHAT" },
   { id: "gpt-5.4", capability: "CHAT" },
+  { id: "gemini-3-flash-preview", capability: "CHAT" },
+  { id: "gemini-3.1-pro-preview", capability: "CHAT" },
 ];
 
 const IMAGE_MODELS: ModelInfo[] = [
