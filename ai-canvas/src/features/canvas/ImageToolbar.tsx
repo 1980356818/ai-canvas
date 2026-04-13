@@ -337,7 +337,7 @@ export default function ImageToolbar() {
     [card, activeGrid, cropping],
   );
 
-  if (!card || card.type !== "ai_image") return null;
+  if (!card || (card.type !== "ai_image" && card.type !== "ai_multiangle")) return null;
   const imgData = card.data as { imageUrl?: string };
   if (!imgData.imageUrl) return null;
 

@@ -383,6 +383,12 @@ function ContextMenuPanel({
             disabled: noProject,
             onSelect: (e) => addCardAtClick("ai_video", e),
           },
+          {
+            type: "item",
+            label: "多角度",
+            disabled: noProject,
+            onSelect: (e) => addCardAtClick("ai_multiangle", e),
+          },
         ],
       },
       {

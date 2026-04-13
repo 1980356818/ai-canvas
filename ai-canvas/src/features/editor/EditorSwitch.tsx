@@ -12,6 +12,7 @@ export default function EditorSwitch({ card }: { card: CanvasCard }) {
     case "ai_chat":
       return <ChatEditor card={card} />;
     case "ai_image":
+    case "ai_multiangle":
       return <MediaEditor card={card} />;
     case "ai_tryon":
       return <TryOnEditor card={card} />;

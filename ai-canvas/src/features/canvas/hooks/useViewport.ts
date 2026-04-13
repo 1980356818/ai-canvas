@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef, useState } from "react";
 import { useCanvasStore } from "@/stores/canvasStore";
+import { MIN_ZOOM, MAX_ZOOM } from "@/shared/constants";
 
 function applyViewportToDOM(
   container: HTMLDivElement,
@@ -51,7 +52,7 @@ export function useViewport(
       const cursorY = e.clientY - rect.top;
 
       const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-      const newZoom = Math.min(5, Math.max(0.1, vp.zoom * factor));
+      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, vp.zoom * factor));
       const ratio = newZoom / vp.zoom;
       const newX = cursorX - (cursorX - vp.x) * ratio;
       const newY = cursorY - (cursorY - vp.y) * ratio;

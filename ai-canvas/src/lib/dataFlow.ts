@@ -4,9 +4,9 @@ import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
 import { getRefSlotsForModel, getRefSlotsForChatModel, compactRefImages, type RefImageEntry } from "@/config/model-ref-images";
 
-const IMAGE_SOURCE_TYPES = new Set(["ai_image", "ai_tryon", "ai_video"]);
+const IMAGE_SOURCE_TYPES = new Set(["ai_image", "ai_multiangle", "ai_tryon", "ai_video"]);
 
-const REF_IMAGE_TARGETS = new Set(["ai_image", "ai_chat"]);
+const REF_IMAGE_TARGETS = new Set(["ai_image", "ai_multiangle", "ai_chat"]);
 
 function getRefSlots(target: { type: string; data: Record<string, unknown> }) {
   const model = (target.data.model as string) || "";
@@ -100,7 +100,8 @@ export function extractOutput(card: CanvasCard): OutputPayload {
       return { kind: "none" };
     }
 
-    case "ai_image": {
+    case "ai_image":
+    case "ai_multiangle": {
       if (typeof d.imageUrl === "string" && d.imageUrl)
         return { kind: "image", url: d.imageUrl };
       return { kind: "none" };
@@ -196,7 +197,8 @@ function injectIntoCard(
       break;
     }
 
-    case "ai_image": {
+    case "ai_image":
+    case "ai_multiangle": {
       if (payload.kind === "text") {
         const upstreamTexts = {
           ...((d.upstreamTexts as Record<string, string>) || {}),

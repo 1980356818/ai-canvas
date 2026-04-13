@@ -14,7 +14,7 @@ export const canvasOpsTool: ToolDefinition = {
       },
       cardType: {
         type: "string",
-        enum: ["text", "sticky_note", "ai_chat", "ai_image"],
+        enum: ["text", "sticky_note", "ai_chat", "ai_image", "ai_multiangle"],
         description: "卡片类型（create 时必填）",
       },
       cardId: {

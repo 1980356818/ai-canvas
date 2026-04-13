@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { ImageIcon, Loader2, Shirt, Video } from "lucide-react";
+import { ImageIcon, Loader2, Shirt, Video, RotateCw } from "lucide-react";
 import type { CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { getDisplayUrl } from "@/lib/media";
@@ -11,6 +11,9 @@ function ImagePreview({ card }: { card: CanvasCard }) {
   const data = card.data as { content?: string; imageUrl?: string };
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
   const displayUrl = data.imageUrl ? getDisplayUrl(data.imageUrl) : undefined;
+  const isMultiangle = card.type === "ai_multiangle";
+  const PlaceholderIcon = isMultiangle ? RotateCw : ImageIcon;
+  const placeholderLabel = isMultiangle ? "多角度" : "AI 图片";
 
   if (genProgress) {
     return (
@@ -50,8 +53,8 @@ function ImagePreview({ card }: { card: CanvasCard }) {
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground/50">
-      <ImageIcon className="h-8 w-8" />
-      <span className="text-xs">{data.content ? "等待生成" : "AI 图片"}</span>
+      <PlaceholderIcon className="h-8 w-8" />
+      <span className="text-xs">{data.content ? "等待生成" : placeholderLabel}</span>
     </div>
   );
 }
@@ -167,6 +170,7 @@ export default memo(function CardContent({ card }: { card: CanvasCard }) {
     case "sticky_note":
       return <StickyNoteCard card={card} />;
     case "ai_image":
+    case "ai_multiangle":
       return <ImagePreview card={card} />;
     case "ai_video":
       return <VideoPreview card={card} />;

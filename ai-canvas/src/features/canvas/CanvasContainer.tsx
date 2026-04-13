@@ -1,18 +1,19 @@
-import { useRef, useMemo, useState, useCallback, useEffect, memo } from "react";
-import { useCanvasStore, lastPointerWorld, type Viewport } from "@/stores/canvasStore";
+import { useRef, useState, useCallback, useEffect } from "react";
+import { useCanvasStore, lastPointerWorld } from "@/stores/canvasStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useViewport } from "./hooks/useViewport";
 import { useSelection } from "./hooks/useSelection";
-import CardShell from "@/features/cards/CardShell";
-import CardContent from "@/features/cards/CardContent";
+import { useSpatialIndex } from "./hooks/useSpatialIndex";
+import CardLayer from "./CardLayer";
 import FloatingEditor from "@/features/editor/FloatingEditor";
 import ConnectionLayer from "./ConnectionLayer";
+import CanvasBirdView from "./CanvasBirdView";
 import ZoomControls from "./ZoomControls";
 import ImageToolbar from "./ImageToolbar";
-import { CARD_DEFAULTS, sizeFromRatio, TYPE_COLORS } from "@/shared/constants";
+import { CARD_DEFAULTS, sizeFromRatio, TYPE_COLORS, BIRDVIEW_ENTER_ZOOM, BIRDVIEW_EXIT_ZOOM } from "@/shared/constants";
 import { autoSave } from "@/lib/autoSave";
 import {
   updateProjectMeta,
@@ -34,7 +35,7 @@ function canCardAcceptFileDrop(cardId: string): boolean {
   const card = useCardStore.getState().getCard(cardId);
   if (!card) return false;
   if (useUIStore.getState().generatingCards.has(cardId)) return false;
-  if (card.type === "ai_image") {
+  if (card.type === "ai_image" || card.type === "ai_multiangle") {
     return !(card.data as { imageUrl?: string }).imageUrl;
   }
   if (card.type === "ai_tryon") {
@@ -47,92 +48,6 @@ function canCardAcceptFileDrop(cardId: string): boolean {
   return false;
 }
 
-const LOD_SCREEN_THRESHOLD = 80;
-
-function CardThumbnail({ card }: { card: CanvasCard }) {
-  const color = card.color || TYPE_COLORS[card.type] || "#6B7280";
-  return (
-    <div
-      className="absolute rounded-lg"
-      style={{
-        left: card.x,
-        top: card.y,
-        width: card.width,
-        height: card.height,
-        zIndex: card.zIndex,
-        backgroundColor: `color-mix(in srgb, ${color} 15%, var(--color-card))`,
-        border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
-      }}
-    />
-  );
-}
-
-const CardLayer = memo(function CardLayer({
-  projectId,
-  viewport,
-}: {
-  projectId: string | null;
-  viewport: Viewport;
-}) {
-  const cards = useCardStore((s) => s.cards);
-  const selectedCardIds = useCanvasStore((s) => s.selectedCardIds);
-
-  const projectCards = useMemo(() => {
-    if (!projectId) return [];
-    return Array.from(cards.values())
-      .filter((c) => c.projectId === projectId)
-      .sort((a, b) => a.zIndex - b.zIndex);
-  }, [cards, projectId]);
-
-  const { fullCards, thumbCards } = useMemo(() => {
-    if (viewport.width === 0 || viewport.height === 0)
-      return { fullCards: [] as CanvasCard[], thumbCards: [] as CanvasCard[] };
-    const MARGIN = 200;
-    const worldLeft = -viewport.x / viewport.zoom - MARGIN;
-    const worldTop = -viewport.y / viewport.zoom - MARGIN;
-    const worldRight = worldLeft + viewport.width / viewport.zoom + MARGIN * 2;
-    const worldBottom = worldTop + viewport.height / viewport.zoom + MARGIN * 2;
-
-    const full: CanvasCard[] = [];
-    const thumb: CanvasCard[] = [];
-
-    for (const c of projectCards) {
-      if (
-        c.x + c.width <= worldLeft ||
-        c.x >= worldRight ||
-        c.y + c.height <= worldTop ||
-        c.y >= worldBottom
-      )
-        continue;
-
-      const screenW = c.width * viewport.zoom;
-      const screenH = c.height * viewport.zoom;
-      if (screenW < LOD_SCREEN_THRESHOLD && screenH < LOD_SCREEN_THRESHOLD) {
-        thumb.push(c);
-      } else {
-        full.push(c);
-      }
-    }
-    return { fullCards: full, thumbCards: thumb };
-  }, [projectCards, viewport]);
-
-  return (
-    <>
-      {thumbCards.map((card) => (
-        <CardThumbnail key={card.id} card={card} />
-      ))}
-      {fullCards.map((card) => (
-        <CardShell
-          key={card.id}
-          card={card}
-          selected={selectedCardIds.has(card.id)}
-        >
-          <CardContent card={card} />
-        </CardShell>
-      ))}
-    </>
-  );
-});
 
 export default function CanvasContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -158,6 +73,38 @@ export default function CanvasContainer() {
   const showContextMenu = useUIStore((s) => s.showContextMenu);
 
   const pickMode = useCanvasStore((s) => s.pickMode);
+
+  useSpatialIndex();
+
+  const [birdView, setBirdView] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
+  const transTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingTarget = useRef<boolean | null>(null);
+
+  const shouldBird = birdView
+    ? viewport.zoom < BIRDVIEW_EXIT_ZOOM
+    : viewport.zoom <= BIRDVIEW_ENTER_ZOOM;
+
+  if (shouldBird !== birdView && !transitioning) {
+    pendingTarget.current = shouldBird;
+    setTransitioning(true);
+    if (transTimer.current) clearTimeout(transTimer.current);
+    transTimer.current = setTimeout(() => {
+      transTimer.current = null;
+      setBirdView(pendingTarget.current!);
+      pendingTarget.current = null;
+      setTimeout(() => setTransitioning(false), 50);
+    }, 200);
+  } else if (shouldBird === birdView && transitioning && pendingTarget.current !== null) {
+    if (transTimer.current) clearTimeout(transTimer.current);
+    transTimer.current = null;
+    pendingTarget.current = null;
+    setTransitioning(false);
+  }
+
+  const isBirdView = birdView;
+  const showDom = !birdView || transitioning;
+  const showCanvas = birdView || transitioning;
 
 
   const dropHandledAt = useRef(0);
@@ -254,7 +201,7 @@ export default function CanvasContainer() {
             if (latest) {
               const d = { ...latest.data } as Record<string, unknown>;
               const update: Partial<CanvasCard> = { data: d };
-              if (latest.type === "ai_image") {
+              if (latest.type === "ai_image" || latest.type === "ai_multiangle") {
                 d.imageUrl = saved.localPath;
                 const sized = cardSizeFromPersist(saved);
                 const cx = latest.x + latest.width / 2;
@@ -362,7 +309,7 @@ export default function CanvasContainer() {
           if (target) {
             const d = { ...target.data } as Record<string, unknown>;
             const update: Partial<CanvasCard> = { data: d };
-            if (target.type === "ai_image") {
+            if (target.type === "ai_image" || target.type === "ai_multiangle") {
               d.imageUrl = saved.localPath;
               const sized = cardSizeFromPersist(saved);
               const cx = target.x + target.width / 2;
@@ -561,8 +508,7 @@ export default function CanvasContainer() {
       className="relative flex-1 overflow-hidden bg-background"
       style={{
         cursor: isPanning ? "grabbing" : spaceDown ? "crosshair" : "default",
-        backgroundImage:
-          "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
+        backgroundImage: "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
         backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px`,
         backgroundPosition: `${viewport.x}px ${viewport.y}px`,
       }}
@@ -577,22 +523,41 @@ export default function CanvasContainer() {
       onDragLeave={handleFileDragLeave}
       onDrop={handleFileDrop}
     >
-      <div
-        data-canvas-background
-        className="absolute inset-0 origin-top-left"
-        style={{
-          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
-        }}
-      >
-        <CardLayer projectId={currentProjectId} viewport={viewport} />
+      {showCanvas && (
+        <div
+          className="absolute inset-0"
+          style={{
+            opacity: isBirdView ? 1 : 0,
+            transition: transitioning ? "opacity 200ms ease" : "none",
+            pointerEvents: isBirdView ? "auto" : "none",
+            zIndex: isBirdView ? 1 : 0,
+          }}
+        >
+          <CanvasBirdView viewport={viewport} screenToCanvas={screenToCanvas} />
+        </div>
+      )}
 
-        {currentProjectId && (
-          <ConnectionLayer
-            projectId={currentProjectId}
-            onConnectionContextMenu={handleConnectionContextMenu}
-          />
-        )}
-      </div>
+      {showDom && (
+        <div
+          data-canvas-background
+          className="absolute inset-0 origin-top-left"
+          style={{
+            transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+            opacity: isBirdView ? 0 : 1,
+            transition: transitioning ? "opacity 200ms ease" : "none",
+            pointerEvents: isBirdView ? "none" : "auto",
+          }}
+        >
+          <CardLayer projectId={currentProjectId} viewport={viewport} />
+
+          {currentProjectId && (
+            <ConnectionLayer
+              projectId={currentProjectId}
+              onConnectionContextMenu={handleConnectionContextMenu}
+            />
+          )}
+        </div>
+      )}
 
       {pickMode?.active && (
         <div className="pointer-events-none absolute left-1/2 top-4 z-50 -translate-x-1/2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 text-sm font-medium text-primary backdrop-blur-sm">
@@ -620,11 +585,17 @@ export default function CanvasContainer() {
         </div>
       )}
 
-      <ImageToolbar />
+      {!isBirdView && <ImageToolbar />}
 
       <ZoomControls zoom={viewport.zoom} />
 
-      <FloatingEditor />
+      {!isBirdView && <FloatingEditor />}
+
+      {isBirdView && (
+        <div className="pointer-events-none absolute bottom-14 left-1/2 z-40 -translate-x-1/2 rounded-lg border border-border/40 bg-card/80 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur-sm">
+          鸟瞰模式 · 滚轮放大可切回编辑
+        </div>
+      )}
     </div>
   );
 }

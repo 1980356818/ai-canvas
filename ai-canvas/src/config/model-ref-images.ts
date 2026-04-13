@@ -112,6 +112,7 @@ export function extractCardImage(card: CanvasCard): string | null {
   const d = card.data as Record<string, unknown>;
   switch (card.type) {
     case "ai_image":
+    case "ai_multiangle":
       return (d.imageUrl as string) || null;
     case "ai_tryon":
       return (

@@ -275,7 +275,7 @@ export default memo(
           )
             return null;
           if (
-            belowCard.type === "ai_image" &&
+            (belowCard.type === "ai_image" || belowCard.type === "ai_multiangle") &&
             !(belowCard.data as { imageUrl?: string }).imageUrl
           )
             return cardBelow;
@@ -421,7 +421,7 @@ export default memo(
                     ...target.data,
                   } as Record<string, unknown>;
                   const patch: Partial<CanvasCard> = { data: d };
-                  if (target.type === "ai_image") {
+                  if (target.type === "ai_image" || target.type === "ai_multiangle") {
                     d.imageUrl = imgUrl;
                     const ratio = card.width / card.height;
                     const sized = sizeFromRatio(ratio);
@@ -604,7 +604,7 @@ export default memo(
           height: card.height,
           zIndex: card.zIndex,
           touchAction: "none",
-          contain: "layout style paint",
+          contain: "layout style",
           boxShadow: selected ? "0 0 14px 3px rgba(129,140,248,0.35), 0 0 4px 1px rgba(56,189,248,0.25)" : "none",
         }}
         onPointerDown={onPointerDown}

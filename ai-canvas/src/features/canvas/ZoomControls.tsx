@@ -3,6 +3,7 @@ import { Minus, Plus, Maximize } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { MIN_ZOOM, MAX_ZOOM } from "@/shared/constants";
 
 export default function ZoomControls({ zoom }: { zoom: number }) {
   const setViewport = useCanvasStore((s) => s.setViewport);
@@ -10,7 +11,7 @@ export default function ZoomControls({ zoom }: { zoom: number }) {
 
   const zoomTo = useCallback(
     (newZoom: number) => {
-      const clamped = Math.min(5, Math.max(0.1, newZoom));
+      const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newZoom));
       const cx = viewport.width / 2;
       const cy = viewport.height / 2;
       const ratio = clamped / viewport.zoom;
@@ -49,7 +50,7 @@ export default function ZoomControls({ zoom }: { zoom: number }) {
       (viewport.height - PAD * 2) / ch,
       2,
     );
-    const clamped = Math.max(0.1, z);
+    const clamped = Math.max(MIN_ZOOM, z);
     setViewport({
       zoom: clamped,
       x: (viewport.width - cw * clamped) / 2 - minX * clamped,
