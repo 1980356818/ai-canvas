@@ -1,10 +1,10 @@
 import { useCallback, useRef, useState } from "react";
-import { Sparkles, Loader2, RefreshCw, ImageIcon } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, ImageIcon, X } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/lib/tauri";
-import { getBase64ForApi } from "@/lib/media";
+import { getBase64ForApi, getDisplayUrl } from "@/lib/media";
 import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
 import {
@@ -13,7 +13,6 @@ import {
 } from "@/config/model-ref-images";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
-import RefImageSlot from "./RefImageSlot";
 
 const MODEL_ID = "qwen-image-edit-2511-multipie";
 
@@ -177,28 +176,69 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
     }
   }, [data, card.id, h, v, z, generating, canGenerate, updateCard, setCardProgress]);
 
+  const inputRef = useRef<HTMLInputElement>(null);
+  const handleFile = useCallback(
+    async (file: File) => {
+      if (!file.type.startsWith("image/")) return;
+      const { persistImage } = await import("@/lib/media");
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      const { localPath } = await persistImage(dataUrl);
+      setRefImage("refImage0", { url: localPath, sourceType: "file" });
+    },
+    [setRefImage],
+  );
+
   return (
     <div className="flex h-full flex-col gap-2.5 p-3">
-      <div className="flex shrink-0 gap-2">
-        {REF_SLOTS.map((slot, idx) => (
-          <RefImageSlot
-            key={slot.key}
-            label={slot.label}
-            description={slot.description}
-            entry={data.refImages?.[slot.key]}
-            onImage={(entry) => setRefImage(slot.key, entry)}
-            onClear={() => clearRefImage(slot.key)}
-            disabled={generating}
-            targetCardId={card.id}
-            slotKey={slot.key}
-            index={idx}
-          />
-        ))}
-        {!hasRef && (
-          <div className="flex flex-1 items-center gap-1.5 text-xs text-muted-foreground">
-            <ImageIcon className="h-3.5 w-3.5" />
-            需要先添加参考图才能生成
-          </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {hasRef ? (
+          <>
+            <div
+              data-ref-slot
+              className="relative h-8 w-8 shrink-0 overflow-hidden rounded border border-input"
+            >
+              <img
+                src={getDisplayUrl(data.refImages!.refImage0.url)}
+                alt="参考图"
+                className="h-full w-full object-cover"
+              />
+            </div>
+            <span className="text-xs text-muted-foreground">参考图已设置</span>
+            <button
+              onClick={() => clearRefImage("refImage0")}
+              disabled={generating}
+              className="text-muted-foreground transition-colors hover:text-destructive disabled:opacity-40"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => inputRef.current?.click()}
+              disabled={generating}
+              className="flex h-8 items-center gap-1.5 rounded-lg border border-dashed border-input px-2.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-40"
+            >
+              <ImageIcon className="h-3.5 w-3.5" />
+              上传参考图
+            </button>
+            <span className="text-[11px] text-muted-foreground">需要先添加参考图</span>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFile(file);
+                e.target.value = "";
+              }}
+            />
+          </>
         )}
       </div>
 
