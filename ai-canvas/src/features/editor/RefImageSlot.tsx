@@ -1,6 +1,7 @@
 import { useRef, useCallback, useState, useEffect } from "react";
 import { Upload, X } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
+import { useProjectStore } from "@/stores/projectStore";
 import {
   CARD_REF_MIME,
   type CardRefPayload,
@@ -75,7 +76,8 @@ export default function RefImageSlot({
         reader.onload = () => resolve(reader.result as string);
         reader.readAsDataURL(file);
       });
-      const { localPath: relativePath } = await persistImage(dataUrl);
+      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const { localPath: relativePath } = await persistImage(dataUrl, undefined, pid);
       onImage({ url: relativePath, sourceType: "file" });
     },
     [onImage],

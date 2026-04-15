@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react";
 import { Paperclip, X, ImageIcon } from "lucide-react";
 import type { ContentPart } from "@/agent/types";
+import { useProjectStore } from "@/stores/projectStore";
 import { persistImage, getDisplayUrl } from "@/lib/media";
 
 const isTauri =
@@ -38,7 +39,8 @@ export default function AttachmentPicker({
         const filePath =
           typeof selected === "string" ? selected : (selected as { path: string }).path;
 
-        const { localPath: relativePath } = await persistImage(filePath);
+        const pid = useProjectStore.getState().currentProjectId ?? undefined;
+        const { localPath: relativePath } = await persistImage(filePath, undefined, pid);
         onAdd({ type: "image", url: relativePath, mimeType: "image/png" });
       } catch (err) {
         console.error("Failed to pick file:", err);
@@ -57,7 +59,8 @@ export default function AttachmentPicker({
         reader.onload = () => resolve(reader.result as string);
         reader.readAsDataURL(file);
       });
-      const { localPath: relativePath } = await persistImage(dataUrl);
+      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const { localPath: relativePath } = await persistImage(dataUrl, undefined, pid);
       onAdd({
         type: "image",
         url: relativePath,

@@ -215,12 +215,14 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
     async (file: File) => {
       if (!file.type.startsWith("image/")) return;
       const { persistImage } = await import("@/lib/media");
+      const { useProjectStore } = await import("@/stores/projectStore");
       const dataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.readAsDataURL(file);
       });
-      const { localPath } = await persistImage(dataUrl);
+      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const { localPath } = await persistImage(dataUrl, undefined, pid);
       setRefImage("refImage0", { url: localPath, sourceType: "file" });
     },
     [setRefImage],

@@ -143,11 +143,58 @@ pub fn permanently_delete_project(state: State<AppState>, id: String) -> Result<
 #[tauri::command]
 pub fn rename_project(state: State<AppState>, id: String, title: String) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
+
+    let old_title: Option<String> = db
+        .query_row(
+            "SELECT title FROM projects WHERE id = ?1",
+            rusqlite::params![id],
+            |row| row.get(0),
+        )
+        .ok();
+
     db.execute(
         "UPDATE projects SET title = ?1, updated_at = datetime('now') WHERE id = ?2",
         rusqlite::params![title, id],
     )
     .map_err(|e| e.to_string())?;
+
+    if let Some(old) = old_title {
+        if old != title {
+            let auto_dir = db
+                .query_row(
+                    "SELECT value FROM settings WHERE key = 'image_auto_save_path'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok()
+                .filter(|s| !s.trim().is_empty());
+
+            if let Some(base) = auto_dir {
+                let old_folder = super::ai::build_project_folder_name_pub(&old, &id);
+                let new_folder = super::ai::build_project_folder_name_pub(&title, &id);
+
+                if old_folder != new_folder {
+                    let old_path = std::path::Path::new(&base).join(&old_folder);
+                    let new_path = std::path::Path::new(&base).join(&new_folder);
+
+                    if old_path.exists() {
+                        if let Err(e) = std::fs::rename(&old_path, &new_path) {
+                            tracing::warn!(
+                                "重命名自动保存文件夹失败 ({} → {}): {}",
+                                old_folder, new_folder, e
+                            );
+                        } else {
+                            tracing::info!(
+                                "自动保存文件夹已重命名: {} → {}",
+                                old_folder, new_folder
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 

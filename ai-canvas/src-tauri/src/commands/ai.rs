@@ -298,7 +298,7 @@ fn detect_image_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 
 /// Save media from a remote URL, base64 data-URL, or local path into
 /// `app_data_dir/media/images/{uuid}.{ext}`.  When `image_auto_save_path` is set,
-/// a copy is also written to that user-chosen directory.
+/// a copy is also written to that user-chosen directory, organized by project subfolder.
 /// Returns a **relative** path like `media/images/{uuid}.{ext}`.
 #[tauri::command]
 pub async fn save_media(
@@ -307,6 +307,7 @@ pub async fn save_media(
     source: String,
     filename: Option<String>,
     title: Option<String>,
+    project_id: Option<String>,
 ) -> Result<SaveMediaResult, String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let media_dir = app_data_dir.join("media/images");
@@ -345,21 +346,43 @@ pub async fn save_media(
 
     std::fs::write(&dest, &bytes).map_err(|e| format!("写入文件失败: {}", e))?;
 
-    let auto_save_dir = {
+    let (auto_save_dir, project_folder_name) = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        db.query_row(
-            "SELECT value FROM settings WHERE key = 'image_auto_save_path'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .ok()
-        .filter(|s| !s.trim().is_empty())
+        let dir = db
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'image_auto_save_path'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .filter(|s| !s.trim().is_empty());
+
+        let folder = if let (Some(_), Some(pid)) = (&dir, &project_id) {
+            db.query_row(
+                "SELECT title FROM projects WHERE id = ?1",
+                rusqlite::params![pid],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .map(|t| build_project_folder_name(&t, pid))
+        } else {
+            None
+        };
+
+        (dir, folder)
     };
 
     if let Some(dir) = auto_save_dir {
+        let target_dir = if let Some(ref folder) = project_folder_name {
+            std::path::Path::new(&dir).join(folder)
+        } else {
+            std::path::PathBuf::from(&dir)
+        };
+
         let friendly_name = build_friendly_filename(&title, &file_id, &ext);
-        let user_dest = std::path::Path::new(&dir).join(&friendly_name);
-        if let Err(e) = std::fs::create_dir_all(&dir) {
+        let user_dest = target_dir.join(&friendly_name);
+
+        if let Err(e) = std::fs::create_dir_all(&target_dir) {
             tracing::warn!("创建自动保存目录失败: {}", e);
         } else if let Err(e) = std::fs::copy(&dest, &user_dest) {
             tracing::warn!("复制图片到自动保存目录失败: {}", e);
@@ -503,6 +526,22 @@ pub async fn read_media_base64(app: AppHandle, path: String) -> Result<String, S
 }
 
 // ── Helpers ─────────────────────────────────────────────────
+
+/// Build a project subfolder name: `{sanitized_title}_{short_uuid}`.
+/// The short UUID suffix guarantees uniqueness even when titles are identical.
+fn build_project_folder_name(title: &str, project_id: &str) -> String {
+    let safe_title = sanitize_filename(title);
+    let short_id = &project_id[..8.min(project_id.len())];
+    if safe_title.is_empty() {
+        short_id.to_string()
+    } else {
+        format!("{}_{}", safe_title, short_id)
+    }
+}
+
+pub fn build_project_folder_name_pub(title: &str, project_id: &str) -> String {
+    build_project_folder_name(title, project_id)
+}
 
 fn build_friendly_filename(title: &Option<String>, fallback_id: &str, ext: &str) -> String {
     let timestamp = Local::now().format("%Y%m%d_%H%M%S");

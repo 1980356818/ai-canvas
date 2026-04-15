@@ -361,6 +361,7 @@ export async function saveMedia(
   source: string,
   _filename?: string,
   title?: string,
+  projectId?: string,
 ): Promise<{ localPath: string; width?: number; height?: number }> {
   if (isTauri) {
     await ensureTauriAPIs();
@@ -368,6 +369,7 @@ export async function saveMedia(
       source,
       filename: _filename,
       title,
+      projectId: projectId ?? null,
     });
     return {
       localPath: r.local_path,

@@ -302,14 +302,15 @@ export default function ImageToolbar() {
           info.col,
           activeGrid,
         );
-        const { localPath: relativePath } = await persistImage(dataUrl);
+        const projectId = useProjectStore.getState().currentProjectId;
+        if (!projectId) return;
+
+        const { localPath: relativePath } = await persistImage(dataUrl, undefined, projectId);
 
         const cardRatio = card.width / card.height;
         const { width: newW, height: newH } = sizeFromRatio(cardRatio);
 
         const { maxZIndex } = useCardStore.getState();
-        const projectId = useProjectStore.getState().currentProjectId;
-        if (!projectId) return;
 
         const dropPos = screenToCanvas(info.clientX, info.clientY);
 

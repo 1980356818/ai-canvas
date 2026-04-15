@@ -10,6 +10,7 @@ import type {
 import { throwIfError } from "./errors";
 import { waitForTask } from "@/services/tasks";
 import { aiProxy, saveMedia } from "@/lib/tauri";
+import { useProjectStore } from "@/stores/projectStore";
 
 function gcd(a: number, b: number): number {
   return b === 0 ? a : gcd(b, a % b);
@@ -197,7 +198,8 @@ export class OpenAIProvider implements AIProvider {
       }
 
       emit?.({ percent: 92, phase: "saving", label: "正在保存图片…" });
-      const saved = await saveMedia(result.resultUrl);
+      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
       console.log("[OpenAI] 图片已保存:", saved.localPath);
       emit?.({ percent: 100, phase: "saving", label: "完成" });
       return { url: saved.localPath };
@@ -206,7 +208,8 @@ export class OpenAIProvider implements AIProvider {
     emit?.({ percent: 80, phase: "saving", label: "正在保存图片…" });
     const img = data.data?.[0];
     if (!img?.url) throw new Error("No image returned");
-    const saved = await saveMedia(img.url);
+    const pid = useProjectStore.getState().currentProjectId ?? undefined;
+    const saved = await saveMedia(img.url, undefined, undefined, pid);
     emit?.({ percent: 100, phase: "saving", label: "完成" });
     return { url: saved.localPath, revisedPrompt: img.revised_prompt };
   }

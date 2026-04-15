@@ -196,7 +196,7 @@ export default function CanvasContainer() {
           const targetCard = useCardStore.getState().getCard(targetCardId);
           if (targetCard) {
             const dataUrl = await readFileAsDataUrl(files[0]!);
-            const saved = await persistImage(dataUrl);
+            const saved = await persistImage(dataUrl, undefined, currentProjectId);
             const latest = useCardStore.getState().getCard(targetCardId);
             if (latest) {
               const d = { ...latest.data } as Record<string, unknown>;
@@ -230,7 +230,7 @@ export default function CanvasContainer() {
 
         for (let idx = 0; idx < remaining.length; idx++) {
           const dataUrl = await readFileAsDataUrl(remaining[idx]!);
-          const saved = await persistImage(dataUrl);
+          const saved = await persistImage(dataUrl, undefined, currentProjectId);
           const { width: cardW, height: cardH } = cardSizeFromPersist(saved);
 
           const now = new Date().toISOString();
@@ -304,7 +304,7 @@ export default function CanvasContainer() {
 
       if (targetCardId && canCardAcceptFileDrop(targetCardId)) {
         try {
-          const saved = await persistImage(paths[0]!);
+          const saved = await persistImage(paths[0]!, undefined, pid);
           const target = useCardStore.getState().getCard(targetCardId);
           if (target) {
             const d = { ...target.data } as Record<string, unknown>;
@@ -332,7 +332,7 @@ export default function CanvasContainer() {
       let tauriCursorX = 0;
       for (let i = startIdx; i < paths.length; i++) {
         try {
-          const saved = await persistImage(paths[i]!);
+          const saved = await persistImage(paths[i]!, undefined, pid);
           const { width: cardW, height: cardH } = cardSizeFromPersist(saved);
 
           const now = new Date().toISOString();

@@ -34,15 +34,17 @@ export interface PersistImageResult {
 
 /**
  * Save any image source (data URL, HTTP URL, local path) to local storage.
- * Returns the relative path and, when available, the detected image dimensions.
+ * When `projectId` is provided, auto-saved copies are organized into
+ * a project-specific subfolder: `{title}_{short_id}/`.
  */
 export async function persistImage(
   source: string,
   title?: string,
+  projectId?: string,
 ): Promise<PersistImageResult> {
   if (!isTauri) return { localPath: source };
 
-  const result = await saveMedia(source, undefined, title);
+  const result = await saveMedia(source, undefined, title, projectId);
   return {
     localPath: result.localPath,
     width: result.width,
