@@ -14,8 +14,8 @@ import { recordBatchDelete } from "@/lib/history";
 import { cn } from "@/lib/utils";
 import { CARD_DEFAULTS, WORKFLOW_TEMPLATES } from "@/shared/constants";
 import type { CardType } from "@/shared/types";
-import { extractCardImage } from "@/config/model-ref-images";
-import { exportImage, revealInExplorer } from "@/lib/media";
+import { extractCardMedia } from "@/config/model-ref-images";
+import { exportFile, revealInExplorer } from "@/lib/media";
 import { copyCards, pasteCards } from "@/lib/clipboard";
 
 function syncNodeCount(projectId: string) {
@@ -441,8 +441,9 @@ function ContextMenuPanel({
   } else if (contextMenu.target === "card") {
     const id = contextMenu.targetId;
     const card = id ? useCardStore.getState().getCard(id) : undefined;
-    const cardImagePath = card ? extractCardImage(card) : null;
-    const hasImage = !!cardImagePath && !cardImagePath.startsWith("data:") && !cardImagePath.startsWith("http");
+    const cardMediaPath = card ? extractCardMedia(card) : null;
+    const hasLocalMedia = !!cardMediaPath && !cardMediaPath.startsWith("data:") && !cardMediaPath.startsWith("http");
+    const isVideo = card?.type === "ai_video";
     entries = [
       {
         type: "item",
@@ -453,13 +454,14 @@ function ContextMenuPanel({
       },
       {
         type: "item",
-        label: "保存图片到本地",
-        disabled: !hasImage,
+        label: isVideo ? "保存视频到本地" : "保存图片到本地",
+        disabled: !hasLocalMedia,
         onSelect: () => {
-          if (cardImagePath) {
-            void exportImage(cardImagePath, card?.data?.content as string || "AI图片")
+          if (cardMediaPath) {
+            const title = (card?.data as Record<string, unknown>)?.content as string || (isVideo ? "AI视频" : "AI图片");
+            void exportFile(cardMediaPath, title, projectId ?? undefined)
               .then(() => {
-                useUIStore.getState().addToast({ type: "success", title: "图片已导出", duration: 3000 });
+                useUIStore.getState().addToast({ type: "success", title: isVideo ? "视频已导出" : "图片已导出", duration: 3000 });
               })
               .catch((err: unknown) => {
                 useUIStore.getState().addToast({ type: "error", title: "导出失败", description: String(err), duration: 5000 });
@@ -471,9 +473,9 @@ function ContextMenuPanel({
       {
         type: "item",
         label: "在文件夹中显示",
-        disabled: !hasImage,
+        disabled: !hasLocalMedia,
         onSelect: () => {
-          if (cardImagePath) void revealInExplorer(cardImagePath);
+          if (cardMediaPath) void revealInExplorer(cardMediaPath);
           hide();
         },
       },

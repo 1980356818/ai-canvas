@@ -95,12 +95,13 @@ export async function getBase64ForApi(storedPath: string): Promise<string> {
 }
 
 /**
- * Export an image to the user's configured export directory.
- * Returns the absolute path of the exported file.
+ * Export an image or video to the user's configured save directory.
+ * Saves to `file_auto_save_path/{project_folder}/filename`.
  */
-export async function exportImage(
+export async function exportFile(
   storedPath: string,
   cardTitle: string,
+  projectId?: string,
 ): Promise<string> {
   if (!isTauri) return storedPath;
 
@@ -110,12 +111,13 @@ export async function exportImage(
     .toISOString()
     .replace(/[-:T]/g, "")
     .slice(0, 15);
-  const safeName = (cardTitle || "AI图片").replace(/[<>:"/\\|?*]/g, "_");
+  const safeName = (cardTitle || "AI文件").replace(/[<>:"/\\|?*]/g, "_");
   const exportName = `${safeName}_${timestamp}.${ext}`;
 
-  return invoke<string>("export_image", {
+  return invoke<string>("export_file", {
     sourcePath: storedPath,
     exportName,
+    projectId: projectId ?? null,
   });
 }
 

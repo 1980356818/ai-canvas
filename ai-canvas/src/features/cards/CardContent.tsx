@@ -177,6 +177,8 @@ function VideoPreview({ card }: { card: CanvasCard }) {
   const data = card.data as { content?: string; videoUrl?: string };
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
   const cardError = useUIStore((s) => s.cardErrors.get(card.id));
+  const displayUrl = data.videoUrl ? getDisplayUrl(data.videoUrl) : undefined;
+  const isRemote = data.videoUrl?.startsWith("http://") || data.videoUrl?.startsWith("https://");
 
   if (genProgress) {
     return (
@@ -204,7 +206,7 @@ function VideoPreview({ card }: { card: CanvasCard }) {
     );
   }
 
-  if (cardError && !data.videoUrl) {
+  if (cardError && !displayUrl) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
         <AlertCircle className="h-8 w-8 text-destructive/60" />
@@ -214,15 +216,21 @@ function VideoPreview({ card }: { card: CanvasCard }) {
     );
   }
 
-  if (data.videoUrl) {
+  if (displayUrl) {
     return (
       <div className="relative h-full w-full">
         <video
-          src={data.videoUrl}
+          src={displayUrl}
           className="h-full w-full object-cover"
           controls
           muted
         />
+        {isRemote && (
+          <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-amber-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm">
+            <Cloud className="h-3 w-3" />
+            远程
+          </span>
+        )}
         {cardError && (
           <div className="absolute inset-x-0 bottom-0 bg-destructive/90 px-2 py-1">
             <p className="truncate text-[10px] text-white">{cardError}</p>

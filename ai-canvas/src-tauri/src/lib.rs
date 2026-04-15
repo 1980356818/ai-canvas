@@ -87,7 +87,7 @@ pub fn run() {
             commands::ai::save_media,
             commands::ai::read_media_base64,
             commands::ai::get_media_base_path,
-            commands::ai::export_image,
+            commands::ai::export_file,
             commands::ai::open_in_explorer,
             commands::gateway::list_models,
             commands::gateway::poll_task,

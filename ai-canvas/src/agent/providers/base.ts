@@ -86,6 +86,7 @@ export interface VideoGenRequest {
   prompt: string;
   model?: string;
   size?: string;
+  referenceImages?: ImageRefInput[];
   onProgress?: (progress: VideoGenProgress) => void;
 }
 

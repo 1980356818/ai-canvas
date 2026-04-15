@@ -5,7 +5,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/lib/tauri";
 import { modelService } from "@/services/models";
-import { scheduleBackgroundSave } from "@/lib/media";
+import { scheduleBackgroundSave, getBase64ForApi } from "@/lib/media";
 import { useProjectStore } from "@/stores/projectStore";
 import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ interface VideoData {
   model?: string;
   size?: string;
   upstreamTexts?: Record<string, string>;
+  upstreamImageUrl?: string;
   upstreamCardId?: string;
   _locked?: boolean;
   _label?: string;
@@ -148,10 +149,17 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         throw new Error("当前 Provider 不支持视频生成");
       }
 
+      const referenceImages: Array<{ url: string; role: string }> = [];
+      if (data.upstreamImageUrl) {
+        const dataUrl = await getBase64ForApi(data.upstreamImageUrl);
+        referenceImages.push({ url: dataUrl, role: "refImage0" });
+      }
+
       const result = await provider.generateVideo({
         prompt,
         model: currentModel || undefined,
         size: currentSize,
+        referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
         onProgress: (p) => {
           setCardProgress(card.id, { percent: p.percent, label: p.label });
         },

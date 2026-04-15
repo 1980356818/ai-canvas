@@ -162,12 +162,21 @@ pub fn rename_project(state: State<AppState>, id: String, title: String) -> Resu
         if old != title {
             let auto_dir = db
                 .query_row(
-                    "SELECT value FROM settings WHERE key = 'image_auto_save_path'",
+                    "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
                     [],
                     |row| row.get::<_, String>(0),
                 )
                 .ok()
-                .filter(|s| !s.trim().is_empty());
+                .filter(|s| !s.trim().is_empty())
+                .or_else(|| {
+                    db.query_row(
+                        "SELECT value FROM settings WHERE key = 'image_auto_save_path'",
+                        [],
+                        |row| row.get::<_, String>(0),
+                    )
+                    .ok()
+                    .filter(|s| !s.trim().is_empty())
+                });
 
             if let Some(base) = auto_dir {
                 let old_folder = super::ai::build_project_folder_name_pub(&old, &id);

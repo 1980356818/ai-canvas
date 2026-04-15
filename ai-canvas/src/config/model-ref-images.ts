@@ -119,6 +119,20 @@ export function extractCardImage(card: CanvasCard): string | null {
   }
 }
 
+export function extractCardMedia(card: CanvasCard): string | null {
+  const imageUrl = extractCardImage(card);
+  if (imageUrl) return imageUrl;
+  if (card.type === "ai_video") {
+    const d = card.data as Record<string, unknown>;
+    return (d.videoUrl as string) || null;
+  }
+  return null;
+}
+
+export function cardHasMedia(card: CanvasCard): boolean {
+  return extractCardMedia(card) !== null;
+}
+
 export function cardHasImage(card: CanvasCard): boolean {
   return extractCardImage(card) !== null;
 }

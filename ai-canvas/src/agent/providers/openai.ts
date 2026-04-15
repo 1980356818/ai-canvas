@@ -233,10 +233,21 @@ export class OpenAIProvider implements AIProvider {
     const emit = req.onProgress;
     emit?.({ percent: 0, phase: "submitting", label: "正在提交视频请求…" });
 
+    let messageContent: unknown = req.prompt;
+    if (req.referenceImages && req.referenceImages.length > 0) {
+      const parts: Array<Record<string, unknown>> = [
+        { type: "text", text: req.prompt },
+      ];
+      for (const ref of req.referenceImages) {
+        parts.push({ type: "image_url", image_url: { url: ref.url } });
+      }
+      messageContent = parts;
+    }
+
     const body: Record<string, unknown> = {
       model: req.model ?? "veo3.1-fast",
       stream: false,
-      messages: [{ role: "user", content: req.prompt }],
+      messages: [{ role: "user", content: messageContent }],
     };
 
     if (req.size && req.size !== "auto") {

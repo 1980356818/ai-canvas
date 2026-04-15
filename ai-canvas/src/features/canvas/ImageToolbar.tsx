@@ -4,7 +4,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
-import { persistImage, getBase64ForApi, exportImage } from "@/lib/media";
+import { persistImage, getBase64ForApi, exportFile } from "@/lib/media";
 import { autoSave } from "@/lib/autoSave";
 import { sizeFromRatio } from "@/shared/constants";
 import { updateProjectMeta } from "@/lib/tauri";
@@ -355,7 +355,8 @@ export default function ImageToolbar() {
       return;
     }
     try {
-      await exportImage(data.imageUrl, (data.content as string) || "AI图片");
+      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      await exportFile(data.imageUrl, (data.content as string) || "AI图片", pid);
       useUIStore.getState().addToast({ type: "success", title: "图片已导出", duration: 3000 });
     } catch (err) {
       useUIStore.getState().addToast({ type: "error", title: "导出失败", description: String(err), duration: 5000 });

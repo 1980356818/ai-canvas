@@ -328,9 +328,8 @@ pub async fn save_media(
     std::fs::create_dir_all(&media_dir)
         .map_err(|e| format!("创建媒体目录失败: {}", e))?;
 
-    let ext = detect_extension(&source, &filename);
+    let mut ext = detect_extension(&source, &filename);
     let file_id = uuid::Uuid::new_v4().to_string();
-    let dest = media_dir.join(format!("{}.{}", file_id, ext));
 
     let bytes = if source.starts_with("data:") {
         let b64 = source
@@ -365,6 +364,10 @@ pub async fn save_media(
                         tracing::warn!("[save_media] 下载返回非成功状态: {}", last_err);
                         continue;
                     }
+                    if let Some(ct_ext) = ext_from_content_type(resp.headers()) {
+                        tracing::info!("[save_media] Content-Type 检测到扩展名: {}", ct_ext);
+                        ext = ct_ext;
+                    }
                     match resp.bytes().await {
                         Ok(b) => {
                             tracing::info!("[save_media] 下载成功, {} 字节", b.len());
@@ -389,18 +392,29 @@ pub async fn save_media(
         std::fs::read(&source).map_err(|e| format!("读取文件失败: {}", e))?
     };
 
+    let dest = media_dir.join(format!("{}.{}", file_id, ext));
+
     std::fs::write(&dest, &bytes).map_err(|e| format!("写入文件失败: {}", e))?;
 
     let (auto_save_dir, project_folder_name) = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         let dir = db
             .query_row(
-                "SELECT value FROM settings WHERE key = 'image_auto_save_path'",
+                "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
                 [],
                 |row| row.get::<_, String>(0),
             )
             .ok()
-            .filter(|s| !s.trim().is_empty());
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| {
+                db.query_row(
+                    "SELECT value FROM settings WHERE key = 'image_auto_save_path'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+            });
 
         let folder = if let (Some(_), Some(pid)) = (&dir, &project_id) {
             db.query_row(
@@ -430,9 +444,9 @@ pub async fn save_media(
         if let Err(e) = std::fs::create_dir_all(&target_dir) {
             tracing::warn!("创建自动保存目录失败: {}", e);
         } else if let Err(e) = std::fs::copy(&dest, &user_dest) {
-            tracing::warn!("复制图片到自动保存目录失败: {}", e);
+            tracing::warn!("复制文件到自动保存目录失败: {}", e);
         } else {
-            tracing::info!("图片已自动保存: {:?}", user_dest);
+            tracing::info!("文件已自动保存: {:?}", user_dest);
         }
     }
 
@@ -454,14 +468,15 @@ pub async fn get_media_base_path(app: AppHandle) -> Result<String, String> {
     Ok(dir.to_string_lossy().to_string())
 }
 
-/// Copy an image from internal storage to the user's export directory.
-/// If `image_export_path` is not configured, returns an error prompting the user to set it.
+/// Copy an image or video from internal storage to the user's file save directory.
+/// Saves to `file_auto_save_path/{project_folder}/export_name`.
 #[tauri::command]
-pub async fn export_image(
+pub async fn export_file(
     app: AppHandle,
     state: State<'_, AppState>,
     source_path: String,
     export_name: String,
+    project_id: Option<String>,
 ) -> Result<String, String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let abs_source = app_data_dir.join(&source_path);
@@ -470,27 +485,57 @@ pub async fn export_image(
         return Err(format!("源文件不存在: {}", source_path));
     }
 
-    let export_dir = {
+    let (base_dir, project_folder_name) = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        db.query_row(
-            "SELECT value FROM settings WHERE key = 'image_export_path'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .ok()
-        .filter(|s| !s.trim().is_empty())
+        let dir = db
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| {
+                db.query_row(
+                    "SELECT value FROM settings WHERE key IN ('image_export_path', 'image_auto_save_path') ORDER BY key ASC LIMIT 1",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+            });
+
+        let folder = if let (Some(_), Some(pid)) = (&dir, &project_id) {
+            db.query_row(
+                "SELECT title FROM projects WHERE id = ?1",
+                rusqlite::params![pid],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .map(|t| build_project_folder_name(&t, pid))
+        } else {
+            None
+        };
+
+        (dir, folder)
     };
 
-    let dir = export_dir.ok_or("请先在设置中配置「图片下载保存路径」")?;
+    let dir = base_dir.ok_or("请先在设置中配置「文件自动保存路径」")?;
 
-    std::fs::create_dir_all(&dir)
+    let target_dir = if let Some(ref folder) = project_folder_name {
+        std::path::Path::new(&dir).join(folder)
+    } else {
+        std::path::PathBuf::from(&dir)
+    };
+
+    std::fs::create_dir_all(&target_dir)
         .map_err(|e| format!("创建导出目录失败: {}", e))?;
 
-    let dest = std::path::Path::new(&dir).join(&export_name);
+    let dest = target_dir.join(&export_name);
     std::fs::copy(&abs_source, &dest)
-        .map_err(|e| format!("导出图片失败: {}", e))?;
+        .map_err(|e| format!("导出文件失败: {}", e))?;
 
-    tracing::info!("图片已导出: {:?}", dest);
+    tracing::info!("文件已导出: {:?}", dest);
     Ok(dest.to_string_lossy().to_string())
 }
 
@@ -510,8 +555,11 @@ pub async fn open_in_explorer(app: AppHandle, path: String) -> Result<(), String
 
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
+        let win_path = abs_path.to_string_lossy().replace('/', "\\");
+        tracing::info!("open_in_explorer: {}", win_path);
         std::process::Command::new("explorer")
-            .args(["/select,", &abs_path.to_string_lossy()])
+            .raw_arg(format!("/select,\"{}\"", win_path))
             .spawn()
             .map_err(|e| format!("打开资源管理器失败: {}", e))?;
     }
@@ -606,24 +654,36 @@ fn sanitize_filename(name: &str) -> String {
         .to_string()
 }
 
+fn ext_from_content_type(headers: &reqwest::header::HeaderMap) -> Option<String> {
+    let ct = headers.get("content-type")?.to_str().ok()?;
+    let mime = ct.split(';').next().unwrap_or(ct).trim();
+    match mime {
+        "video/mp4" => Some("mp4".into()),
+        "video/webm" => Some("webm".into()),
+        "video/quicktime" => Some("mov".into()),
+        "image/png" => Some("png".into()),
+        "image/jpeg" => Some("jpg".into()),
+        "image/gif" => Some("gif".into()),
+        "image/webp" => Some("webp".into()),
+        "image/svg+xml" => Some("svg".into()),
+        _ if mime.starts_with("video/") => Some("mp4".into()),
+        _ => None,
+    }
+}
+
 fn detect_extension(source: &str, filename: &Option<String>) -> String {
     if let Some(name) = filename {
         if let Some(ext) = name.rsplit('.').next() {
             return ext.to_lowercase();
         }
     }
-    if source.starts_with("data:image/png") {
-        return "png".into();
-    }
-    if source.starts_with("data:image/jpeg") || source.starts_with("data:image/jpg") {
-        return "jpg".into();
-    }
-    if source.starts_with("data:image/gif") {
-        return "gif".into();
-    }
-    if source.starts_with("data:image/webp") {
-        return "webp".into();
-    }
+    if source.starts_with("data:image/png") { return "png".into(); }
+    if source.starts_with("data:image/jpeg") || source.starts_with("data:image/jpg") { return "jpg".into(); }
+    if source.starts_with("data:image/gif") { return "gif".into(); }
+    if source.starts_with("data:image/webp") { return "webp".into(); }
+    if source.starts_with("data:video/mp4") { return "mp4".into(); }
+    if source.starts_with("data:video/webm") { return "webm".into(); }
+    if source.starts_with("data:video/quicktime") { return "mov".into(); }
     if let Some(path_part) = source.split('?').next() {
         if let Some(ext) = path_part.rsplit('.').next() {
             let ext = ext.to_lowercase();
