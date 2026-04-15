@@ -30,11 +30,15 @@ export interface ImageSizeOption {
 }
 
 export const IMAGE_SIZE_OPTIONS: ImageSizeOption[] = [
+  { value: "auto",  label: "自适应", ratio: 1 },
   { value: "1:1",   label: "1:1",   ratio: 1 },
-  { value: "3:4",   label: "3:4",   ratio: 3 / 4 },
+  { value: "3:2",   label: "3:2",   ratio: 3 / 2 },
+  { value: "2:3",   label: "2:3",   ratio: 2 / 3 },
   { value: "4:3",   label: "4:3",   ratio: 4 / 3 },
-  { value: "9:16",  label: "9:16",  ratio: 9 / 16 },
+  { value: "3:4",   label: "3:4",   ratio: 3 / 4 },
   { value: "16:9",  label: "16:9",  ratio: 16 / 9 },
+  { value: "9:16",  label: "9:16",  ratio: 9 / 16 },
+  { value: "21:9",  label: "21:9",  ratio: 21 / 9 },
 ];
 
 export const DEFAULT_IMAGE_SIZE = IMAGE_SIZE_OPTIONS[0]!.value;

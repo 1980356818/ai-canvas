@@ -9,6 +9,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { clipboardWriteText, clipboardReadText, updateProjectMeta } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { injectOnConnect } from "@/lib/dataFlow";
+import { recordBatchCreate } from "@/lib/history";
 
 const CLIPBOARD_KIND = "ai-canvas-card/v2";
 const CLIPBOARD_KIND_V1 = "ai-canvas-card/v1";
@@ -243,6 +244,7 @@ function materialize(
 
   syncNodeCount(projectId);
   useCanvasStore.getState().setSelectedCardIds(newCardIds);
+  recordBatchCreate(newCardIds);
 
   return newCardIds;
 }

@@ -1,7 +1,24 @@
-import { Home, FolderOpen, LayoutDashboard, Settings } from "lucide-react";
+import { Home, FolderOpen, LayoutDashboard, Settings, Sun, Moon } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { cn } from "@/lib/utils";
+
+function ThemeToggle() {
+  const theme = useSettingsStore((s) => s.theme);
+  const dark =
+    theme === "dark" ||
+    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  return (
+    <button
+      onClick={() => useSettingsStore.getState().toggleTheme()}
+      title={dark ? "切换到日间模式" : "切换到夜间模式"}
+      className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    >
+      {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+    </button>
+  );
+}
 
 export default function SideCapsule() {
   const appView = useUIStore((s) => s.appView);
@@ -65,6 +82,8 @@ export default function SideCapsule() {
         ))}
 
         <div className="mx-2 border-t border-border" />
+
+        <ThemeToggle />
 
         <button
           onClick={toggleSettings}

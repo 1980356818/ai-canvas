@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Trash2, Layers, ChevronRight, Plus } from "lucide-react";
+import { Trash2, Layers, ChevronRight } from "lucide-react";
 import AIPromptInput from "@/features/home/AIPromptInput";
 import WorkflowGrid from "@/features/home/WorkflowGrid";
 import { ConfirmDialog } from "@/features/overlays/ConfirmDialog";
 import { useProjectStore, type ProjectInfo } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
-import { listProjects, deleteProject, loadCards, createProject } from "@/lib/tauri";
+import { listProjects, deleteProject, loadCards } from "@/lib/tauri";
 import { getDisplayUrl } from "@/lib/media";
 
 
@@ -202,25 +202,6 @@ function RecentProjects() {
     addToast({ type: "success", title: "已移入回收站", duration: 3000 });
   }, [pendingDelete, removeProject, addToast]);
 
-  const openProject = useProjectStore((s) => s.openProject);
-  const addProject = useProjectStore((s) => s.addProject);
-
-  const handleCreateBlank = async () => {
-    try {
-      const project = await createProject("未命名项目");
-      addProject(project);
-      openProject(project.id);
-      setAppView("canvas");
-    } catch (err) {
-      addToast({
-        type: "error",
-        title: "创建项目失败",
-        description: String(err),
-        duration: 4000,
-      });
-    }
-  };
-
   const top4 = projects.slice(0, 4);
 
   return (
@@ -238,36 +219,15 @@ function RecentProjects() {
         )}
       </div>
       <div className="grid grid-cols-4 gap-3">
-        {projects.length === 0 ? (
-          <button
-            onClick={handleCreateBlank}
-            className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-xl border border-dashed border-border/80 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
-          >
-            <div className="flex aspect-[3/2] w-full items-center justify-center bg-gradient-to-br from-muted/60 to-muted/30">
-              <Plus className="h-8 w-8 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
-            </div>
-            <div className="flex items-start gap-2 px-3 py-2.5">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-muted-foreground">
-                  空白项目
-                </p>
-                <p className="mt-0.5 truncate text-[11px] text-muted-foreground/60">
-                  从空白画布开始创作
-                </p>
-              </div>
-            </div>
-          </button>
-        ) : (
-          top4.map((p, i) => (
-            <ProjectCard
-              key={p.id}
-              project={p}
-              images={projectImages[p.id] ?? []}
-              index={i}
-              onRequestDelete={setPendingDelete}
-            />
-          ))
-        )}
+        {top4.map((p, i) => (
+          <ProjectCard
+            key={p.id}
+            project={p}
+            images={projectImages[p.id] ?? []}
+            index={i}
+            onRequestDelete={setPendingDelete}
+          />
+        ))}
       </div>
       <ConfirmDialog
         open={!!pendingDelete}

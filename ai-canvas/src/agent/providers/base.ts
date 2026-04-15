@@ -74,6 +74,24 @@ export interface ImageGenResponse {
   revisedPrompt?: string;
 }
 
+// ── Video Generation ────────────────────────────────────────
+
+export interface VideoGenProgress {
+  percent: number;
+  phase: "submitting" | "queued" | "generating" | "saving";
+  label: string;
+}
+
+export interface VideoGenRequest {
+  prompt: string;
+  model?: string;
+  onProgress?: (progress: VideoGenProgress) => void;
+}
+
+export interface VideoGenResponse {
+  url: string;
+}
+
 // ── Provider Interface ──────────────────────────────────────
 
 export interface AIProvider {
@@ -86,4 +104,6 @@ export interface AIProvider {
   chat(req: ChatRequest): Promise<ChatResponse>;
 
   generateImage?(req: ImageGenRequest): Promise<ImageGenResponse>;
+
+  generateVideo?(req: VideoGenRequest): Promise<VideoGenResponse>;
 }

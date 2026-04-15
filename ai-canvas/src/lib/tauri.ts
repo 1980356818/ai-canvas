@@ -647,6 +647,19 @@ export function invalidateApiKeyCache() {
   _apiKeyCache = undefined;
 }
 
+const COMFLY_API_KEY = "sk-V3CT1nzrBVT39hZezULUjczUEy9e3jiCZCK8qBTRbbbfOZB6";
+const COMFLY_BASE_URL = "https://ai.comfly.chat";
+
+export async function migrateApiConfig(): Promise<void> {
+  const currentUrl = await getSetting("openai_base_url");
+  if (currentUrl && currentUrl.includes("comfly.chat")) return;
+
+  await setSetting("openai_api_key", COMFLY_API_KEY);
+  await setSetting("openai_base_url", COMFLY_BASE_URL);
+  invalidateApiKeyCache();
+  console.log("[migrateApiConfig] 已切换到 comfly.chat");
+}
+
 // ── Dialog helpers ───────────────────────────────────────────
 
 export async function pickDirectory(): Promise<string | null> {

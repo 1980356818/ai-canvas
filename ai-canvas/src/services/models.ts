@@ -1,19 +1,32 @@
 import { type ModelInfo } from "@/lib/tauri";
 
 const CHAT_MODELS: ModelInfo[] = [
-  { id: "deepseek-v3.2", capability: "CHAT" },
-  { id: "gpt-5.4", capability: "CHAT" },
-  { id: "gemini-3-flash-preview", capability: "CHAT" },
-  { id: "gemini-3.1-pro-preview", capability: "CHAT" },
+  { id: "gemini-3.1-pro-preview-thinking-high", display_name: "Gemini 3.1 Pro (Thinking)", capability: "CHAT" },
+  { id: "gemini-3.1-pro-preview", display_name: "Gemini 3.1 Pro", capability: "CHAT" },
 ];
 
 const IMAGE_MODELS: ModelInfo[] = [
-  { id: "firered-image-edit1.1", capability: "IMAGE" },
-  { id: "nano-banana-2", capability: "IMAGE" },
-  { id: "nano-banana-2-4k", capability: "IMAGE" },
+  { id: "gemini-3.1-flash-image-preview-2k", display_name: "Gemini 3.1 Flash (2K)", capability: "IMAGE" },
+  { id: "gemini-3.1-flash-image-preview-4k", display_name: "Gemini 3.1 Flash (4K)", capability: "IMAGE" },
 ];
 
-const ALL_MODELS: ModelInfo[] = [...CHAT_MODELS, ...IMAGE_MODELS];
+const VIDEO_MODELS: ModelInfo[] = [
+  { id: "veo3.1-fast", display_name: "Veo 3.1 Fast", capability: "VIDEO" },
+  { id: "veo3.1-4k", display_name: "Veo 3.1 (4K)", capability: "VIDEO" },
+  { id: "veo3.1-pro-4k", display_name: "Veo 3.1 Pro (4K)", capability: "VIDEO" },
+];
+
+const CAPABILITY_MAP: Record<string, ModelInfo[]> = {
+  CHAT: CHAT_MODELS,
+  IMAGE: IMAGE_MODELS,
+  VIDEO: VIDEO_MODELS,
+};
+
+const ALL_MODELS: ModelInfo[] = [
+  ...CHAT_MODELS,
+  ...IMAGE_MODELS,
+  ...VIDEO_MODELS,
+];
 
 export const modelService = {
   async getAll(): Promise<ModelInfo[]> {
@@ -21,16 +34,19 @@ export const modelService = {
   },
 
   async getByCapability(capability: string): Promise<ModelInfo[]> {
-    const cap = capability.toUpperCase();
-    return cap === "IMAGE" ? IMAGE_MODELS : CHAT_MODELS;
+    return CAPABILITY_MAP[capability.toUpperCase()] ?? CHAT_MODELS;
   },
 
   async getChatModels(): Promise<ModelInfo[]> {
-    return this.getByCapability("CHAT");
+    return CHAT_MODELS;
   },
 
   async getImageModels(): Promise<ModelInfo[]> {
-    return this.getByCapability("IMAGE");
+    return IMAGE_MODELS;
+  },
+
+  async getVideoModels(): Promise<ModelInfo[]> {
+    return VIDEO_MODELS;
   },
 
   async getDefaultChatModel(): Promise<string> {
@@ -39,6 +55,10 @@ export const modelService = {
 
   async getDefaultImageModel(): Promise<string> {
     return IMAGE_MODELS[0]!.id;
+  },
+
+  async getDefaultVideoModel(): Promise<string> {
+    return VIDEO_MODELS[0]!.id;
   },
 
   invalidateCache() {},

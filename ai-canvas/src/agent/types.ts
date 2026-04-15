@@ -49,7 +49,8 @@ export type ProviderCapability =
   | "chat"
   | "vision"
   | "tool_calling"
-  | "image_gen";
+  | "image_gen"
+  | "video_gen";
 
 export interface ProviderDescriptor {
   id: string;

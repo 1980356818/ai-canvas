@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect } from "react";
-import { Sparkles, Loader2, RefreshCw } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, AlertCircle, X } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
@@ -7,6 +7,7 @@ import { hasApiKey } from "@/lib/tauri";
 import { modelService } from "@/services/models";
 import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
+import { friendlyError } from "@/lib/errors";
 import type { RefImageEntry } from "@/config/model-ref-images";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
@@ -120,6 +121,7 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
 
     setCardProgress(card.id, { percent: 0, label: "正在提交请求…" });
     setError(null);
+    useUIStore.getState().setCardError(card.id, null);
 
     try {
       const provider = providerManager.getDefault();
@@ -139,9 +141,17 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
 
       updateCard(card.id, { data: { ...data, resultImageUrl: result.url } });
       autoSave.markDirty(card.id);
+      useUIStore.getState().addToast({
+        type: "success",
+        title: "换装完成",
+        description: "AI 换装已完成",
+        duration: 3000,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
+      const errMsg = friendlyError(msg);
+      setError(errMsg);
+      useUIStore.getState().setCardError(card.id, errMsg);
     } finally {
       setCardProgress(card.id, null);
     }
@@ -197,17 +207,25 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
         rows={1}
       />
 
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+          <p className="min-w-0 flex-1 text-xs leading-relaxed text-destructive">{error}</p>
+          <button
+            onClick={() => { setError(null); useUIStore.getState().setCardError(card.id, null); }}
+            className="shrink-0 rounded p-0.5 text-destructive/60 hover:bg-destructive/10 hover:text-destructive"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
         <ModelSelector
           capability="IMAGE"
           value={currentModel}
           onChange={handleModelChange}
         />
-        {error && (
-          <span className="min-w-0 truncate text-[11px] text-destructive">
-            {error}
-          </span>
-        )}
         <div className="flex-1" />
         <button
           onClick={handleGenerate}

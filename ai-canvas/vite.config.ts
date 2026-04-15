@@ -5,7 +5,7 @@ import path from "path";
 
 const host = process.env.TAURI_DEV_HOST;
 
-const JIJING_API = "https://ai.snoworangekeji.cn";
+const JIJING_API = "https://ai.comfly.chat";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],

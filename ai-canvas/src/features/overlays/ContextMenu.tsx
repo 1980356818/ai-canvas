@@ -480,54 +480,6 @@ function ContextMenuPanel({
       { type: "sep" },
       {
         type: "item",
-        label: card?.collapsed ? "展开" : "折叠",
-        disabled: !id || !card,
-        onSelect: () => {
-          if (!id || !card) return;
-          useCardStore.getState().updateCard(id, {
-            collapsed: !card.collapsed,
-          });
-          autoSave.markDirty(id);
-          hide();
-        },
-      },
-      {
-        type: "item",
-        label: card?.locked ? "解锁" : "锁定",
-        disabled: !id || !card,
-        onSelect: () => {
-          if (!id || !card) return;
-          useCardStore.getState().updateCard(id, { locked: !card.locked });
-          autoSave.markDirty(id);
-          hide();
-        },
-      },
-      { type: "sep" },
-      {
-        type: "item",
-        label: "置于顶层",
-        disabled: !id,
-        onSelect: () => {
-          if (!id) return;
-          useCardStore.getState().bringToFront(id);
-          autoSave.markDirty(id);
-          hide();
-        },
-      },
-      {
-        type: "item",
-        label: "置于底层",
-        disabled: !id,
-        onSelect: () => {
-          if (!id) return;
-          useCardStore.getState().sendToBack(id);
-          autoSave.markDirty(id);
-          hide();
-        },
-      },
-      { type: "sep" },
-      {
-        type: "item",
         label: "删除",
         shortcut: "Del",
         disabled: !id,

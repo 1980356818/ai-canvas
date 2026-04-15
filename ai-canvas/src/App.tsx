@@ -5,7 +5,7 @@ import { useCanvasStore } from "@/stores/canvasStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
-import { isTauri, loadCards, loadConnections, saveConnections, saveProjectViewport, loadProjectViewport } from "@/lib/tauri";
+import { isTauri, loadCards, loadConnections, saveConnections, saveProjectViewport, loadProjectViewport, migrateApiConfig } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
 import { startDataFlowWatcher, removeRefImageForSource, removeUpstreamTextForSource } from "@/lib/dataFlow";
@@ -35,6 +35,7 @@ export default function App() {
   useEffect(() => {
     useSettingsStore.getState().applyTheme();
     void initMediaService();
+    void migrateApiConfig();
 
     const prevent = (e: DragEvent) => {
       if (e.dataTransfer?.types.includes("Files")) e.preventDefault();

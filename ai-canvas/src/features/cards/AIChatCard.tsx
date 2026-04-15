@@ -8,6 +8,7 @@ import { autoSave } from "@/lib/autoSave";
 export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
   const data = card.data as { content?: string; result?: string; _resultStale?: boolean };
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
+  const cardError = useUIStore((s) => s.cardErrors.get(card.id));
   const isEditing = useCanvasStore((s) => s.editingCardId === card.id);
   const updateCard = useCardStore((s) => s.updateCard);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -60,7 +61,13 @@ export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
 
   return (
     <div className="flex h-full w-full flex-col p-4">
-      {data._resultStale && data.result && (
+      {cardError && (
+        <div className="mb-1.5 flex items-center gap-1.5 rounded-md bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span className="line-clamp-2">{cardError}</span>
+        </div>
+      )}
+      {!cardError && data._resultStale && data.result && (
         <div className="mb-1.5 flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-600 dark:text-amber-400">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           <span>最近一次生成失败，以下为上次成功的结果</span>

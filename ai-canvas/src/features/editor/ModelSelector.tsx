@@ -5,7 +5,7 @@ import type { ModelInfo } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
 interface ModelSelectorProps {
-  capability: "CHAT" | "IMAGE";
+  capability: "CHAT" | "IMAGE" | "VIDEO";
   value: string;
   onChange: (modelId: string) => void;
   className?: string;

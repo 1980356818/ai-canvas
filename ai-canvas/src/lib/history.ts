@@ -1,4 +1,5 @@
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useUIStore } from "@/stores/uiStore";
 import { deleteCard as deleteCardFromDb } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 
@@ -9,6 +10,21 @@ export type UndoAction =
   | { type: "batch"; actions: UndoAction[] };
 
 const MAX_STACK = 50;
+
+function describeAction(action: UndoAction): string {
+  switch (action.type) {
+    case "delete": return "删除";
+    case "create": return "创建";
+    case "update": return "修改";
+    case "batch": {
+      const inner = action.actions[0];
+      if (!inner) return "操作";
+      if (inner.type === "delete") return `删除 ${action.actions.length} 张卡片`;
+      if (inner.type === "create") return `创建 ${action.actions.length} 张卡片`;
+      return `修改 ${action.actions.length} 张卡片`;
+    }
+  }
+}
 
 class HistoryManager {
   private undoStack: UndoAction[] = [];
@@ -32,16 +48,32 @@ class HistoryManager {
 
   undo() {
     const action = this.undoStack.pop();
-    if (!action) return;
+    if (!action) {
+      useUIStore.getState().addToast({ type: "info", title: "没有可撤销的操作", duration: 1500 });
+      return;
+    }
     const reverse = this.apply(action);
     if (reverse) this.redoStack.push(reverse);
+    useUIStore.getState().addToast({
+      type: "info",
+      title: `已撤销: ${describeAction(action)}`,
+      duration: 1500,
+    });
   }
 
   redo() {
     const action = this.redoStack.pop();
-    if (!action) return;
+    if (!action) {
+      useUIStore.getState().addToast({ type: "info", title: "没有可重做的操作", duration: 1500 });
+      return;
+    }
     const reverse = this.apply(action);
     if (reverse) this.undoStack.push(reverse);
+    useUIStore.getState().addToast({
+      type: "info",
+      title: `已重做: ${describeAction(action)}`,
+      duration: 1500,
+    });
   }
 
   clear() {
@@ -111,6 +143,17 @@ export function recordBatchDelete(cards: CanvasCard[]) {
     history.push({
       type: "batch",
       actions: cards.map((c) => ({ type: "delete", card: { ...c } })),
+    });
+  }
+}
+
+export function recordBatchCreate(cardIds: string[]) {
+  if (cardIds.length === 1) {
+    recordCreate(cardIds[0]!);
+  } else if (cardIds.length > 1) {
+    history.push({
+      type: "batch",
+      actions: cardIds.map((id) => ({ type: "create" as const, cardId: id })),
     });
   }
 }

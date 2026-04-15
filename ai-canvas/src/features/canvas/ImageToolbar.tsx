@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef, memo } from "react";
-import { Scissors, X } from "lucide-react";
+import { Scissors, Download, ChevronDown } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
-import { persistImage, getBase64ForApi } from "@/lib/media";
+import { persistImage, getBase64ForApi, exportImage } from "@/lib/media";
 import { autoSave } from "@/lib/autoSave";
 import { sizeFromRatio } from "@/shared/constants";
 import { updateProjectMeta } from "@/lib/tauri";
@@ -18,30 +18,6 @@ const GRID_OPTIONS = [
 ];
 
 const TOOLBAR_GAP = 10;
-
-function MiniGrid({ n, active }: { n: number; active: boolean }) {
-  const cells = Array.from({ length: n * n });
-  return (
-    <div
-      className="grid gap-px"
-      style={{
-        gridTemplateColumns: `repeat(${n}, 1fr)`,
-        width: 14,
-        height: 14,
-      }}
-    >
-      {cells.map((_, i) => (
-        <div
-          key={i}
-          className={cn(
-            "rounded-[1px]",
-            active ? "bg-primary-foreground" : "bg-current opacity-60",
-          )}
-        />
-      ))}
-    </div>
-  );
-}
 
 async function cropImageCell(
   imageUrl: string,
@@ -194,7 +170,7 @@ const GridOverlay = memo(function GridOverlay({
             "absolute transition-all duration-150",
             disabled
               ? "cursor-wait"
-              : "cursor-grab active:cursor-grabbing",
+              : "cursor-crosshair",
             isHovered && !isDraggingThis
               ? "crop-cell-hover z-10"
               : "crop-cell-idle",
@@ -357,6 +333,35 @@ export default function ImageToolbar() {
     [card, activeGrid, cropping],
   );
 
+  const [gridDropdownOpen, setGridDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!gridDropdownOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (dropdownRef.current?.contains(e.target as Node)) return;
+      setGridDropdownOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [gridDropdownOpen]);
+
+  const handleDownload = useCallback(async () => {
+    if (!card) return;
+    const data = card.data as { imageUrl?: string; content?: string };
+    if (!data.imageUrl) return;
+    if (data.imageUrl.startsWith("data:") || data.imageUrl.startsWith("http")) {
+      useUIStore.getState().addToast({ type: "info", title: "该图片暂不支持直接下载", duration: 2500 });
+      return;
+    }
+    try {
+      await exportImage(data.imageUrl, (data.content as string) || "AI图片");
+      useUIStore.getState().addToast({ type: "success", title: "图片已导出", duration: 3000 });
+    } catch (err) {
+      useUIStore.getState().addToast({ type: "error", title: "导出失败", description: String(err), duration: 5000 });
+    }
+  }, [card]);
+
   if (!card || (card.type !== "ai_image" && card.type !== "ai_multiangle")) return null;
   const imgData = card.data as { imageUrl?: string };
   if (!imgData.imageUrl) return null;
@@ -367,6 +372,8 @@ export default function ImageToolbar() {
   const cardScreenLeft = card.x * zoom + viewport.x + dragScreenDx;
   const cardScreenTop = card.y * zoom + viewport.y + dragScreenDy;
   const cardScreenWidth = card.width * zoom;
+
+  const activeLabel = GRID_OPTIONS.find((o) => o.size === activeGrid)?.label;
 
   return (
     <>
@@ -383,48 +390,63 @@ export default function ImageToolbar() {
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
-        <Scissors className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
-        <span className="mr-1 text-xs text-muted-foreground">拆图</span>
-
-        <div className="mx-1 h-4 w-px bg-border" />
-
-        {GRID_OPTIONS.map(({ size, label }) => (
+        {/* Grid split dropdown */}
+        <div className="relative" ref={dropdownRef}>
           <button
-            key={size}
-            title={`${label} 宫格拆分`}
+            title="宫格拆分"
             className={cn(
               "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-              activeGrid === size
+              activeGrid
                 ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
-            onClick={() => {
-              if (activeGrid === size) {
-                setActiveGrid(null);
-                gridCardId.current = null;
-              } else {
-                setActiveGrid(size);
-                gridCardId.current = targetCardId ?? null;
-              }
-            }}
+            onClick={() => setGridDropdownOpen((v) => !v)}
           >
-            <MiniGrid n={size} active={activeGrid === size} />
-            {label}
+            <Scissors className="h-3.5 w-3.5" />
+            <span>{activeGrid ? `宫格拆分 ${activeLabel}` : "宫格拆分"}</span>
+            <ChevronDown className="h-3 w-3" />
           </button>
-        ))}
 
-        {activeGrid && (
-          <>
-            <div className="mx-1 h-4 w-px bg-border" />
-            <button
-              title="退出拆图模式"
-              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => { setActiveGrid(null); gridCardId.current = null; }}
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </>
-        )}
+          {gridDropdownOpen && (
+            <div className="absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 rounded-lg border border-border bg-popover p-1 shadow-lg">
+              {GRID_OPTIONS.map(({ size, label }) => (
+                <button
+                  key={size}
+                  className={cn(
+                    "flex w-full items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                    activeGrid === size
+                      ? "bg-primary text-primary-foreground"
+                      : "text-foreground hover:bg-accent hover:text-accent-foreground",
+                  )}
+                  onClick={() => {
+                    if (activeGrid === size) {
+                      setActiveGrid(null);
+                      gridCardId.current = null;
+                    } else {
+                      setActiveGrid(size);
+                      gridCardId.current = targetCardId ?? null;
+                    }
+                    setGridDropdownOpen(false);
+                  }}
+                >
+                  {label} 宫格
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mx-0.5 h-4 w-px bg-border" />
+
+        {/* Download button */}
+        <button
+          title="下载图片"
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          onClick={() => void handleDownload()}
+        >
+          <Download className="h-3.5 w-3.5" />
+          <span>下载</span>
+        </button>
       </div>
       </div>
 

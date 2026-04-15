@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Sparkles,
   ScanFace,
+  Plus,
   type LucideIcon,
 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
@@ -89,12 +90,45 @@ function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
   );
 }
 
+function BlankProjectCard() {
+  const handleClick = async () => {
+    try {
+      const project = await createProject("未命名项目");
+      useProjectStore.getState().addProject(project);
+      useProjectStore.getState().openProject(project.id);
+      useUIStore.getState().setAppView("canvas");
+    } catch (err) {
+      useUIStore.getState().addToast({
+        type: "error",
+        title: "创建项目失败",
+        description: String(err),
+        duration: 4000,
+      });
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className="group flex flex-col overflow-hidden rounded-2xl border border-dashed border-border/80 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg"
+    >
+      <div className="flex aspect-[16/9] items-center justify-center bg-gradient-to-br from-muted/60 to-muted/30">
+        <Plus className="h-10 w-10 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
+      </div>
+      <div className="flex flex-1 flex-col gap-1 px-3 py-2.5">
+        <p className="text-xs font-semibold text-foreground">空白项目</p>
+        <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+          从空白画布开始创作
+        </p>
+      </div>
+    </button>
+  );
+}
+
 export default function WorkflowGrid() {
   const featured = WORKFLOW_TEMPLATES.filter((wf) =>
     FEATURED_IDS.includes(wf.id),
   );
-
-  if (featured.length === 0) return null;
 
   return (
     <div className="mx-auto w-full max-w-6xl">
@@ -103,6 +137,7 @@ export default function WorkflowGrid() {
       </h2>
 
       <div className="grid grid-cols-4 gap-3">
+        <BlankProjectCard />
         {featured.map((wf) => (
           <FeatureCard key={wf.id} workflow={wf} />
         ))}

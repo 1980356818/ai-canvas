@@ -15,6 +15,7 @@ import {
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize } from "@/shared/constants";
+import SizeCombo from "./SizeCombo";
 
 const MODEL_ID = "qwen-image-edit-2511-multipie";
 
@@ -33,6 +34,7 @@ interface MultiangleData {
   imageUrl?: string;
   model?: string;
   size?: string;
+  resolution?: string;
   refImages?: Record<string, RefImageEntry>;
   h?: number;
   v?: number;
@@ -59,13 +61,16 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
   const [currentSize, setCurrentSize] = useState(
     () => normalizeImageSize(data.size) || useSettingsStore.getState().lastImageSize,
   );
+  const [currentResolution, setCurrentResolution] = useState(
+    () => data.resolution || "1K",
+  );
 
   const handleSizeChange = useCallback(
     (sizeValue: string) => {
       setCurrentSize(sizeValue);
       useSettingsStore.getState().setLastImageSize(sizeValue);
 
-      if (data.imageUrl) {
+      if (data.imageUrl || sizeValue === "auto") {
         updateCard(card.id, { data: { ...data, size: sizeValue } });
         autoSave.markDirty(card.id);
         return;
@@ -87,6 +92,15 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
       autoSave.markDirty(card.id);
     },
     [card.id, card.x, card.y, card.width, card.height, data, updateCard],
+  );
+
+  const handleResolutionChange = useCallback(
+    (res: string) => {
+      setCurrentResolution(res);
+      updateCard(card.id, { data: { ...data, resolution: res } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
   );
 
   const handleAngleChange = useCallback(
@@ -308,38 +322,13 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="flex shrink-0 items-center rounded-lg border border-border p-0.5">
-          {IMAGE_SIZE_OPTIONS.map((opt) => {
-            const active = currentSize === opt.value;
-            const boxH = 12;
-            const boxW = opt.ratio >= 1 ? boxH : Math.round(boxH * opt.ratio);
-            const boxHFinal = opt.ratio >= 1 ? Math.round(boxH / opt.ratio) : boxH;
-            return (
-              <button
-                key={opt.value}
-                onClick={() => handleSizeChange(opt.value)}
-                disabled={generating}
-                title={opt.value}
-                className={cn(
-                  "flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] transition-colors",
-                  active
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  generating && "cursor-not-allowed opacity-40",
-                )}
-              >
-                <span
-                  className={cn(
-                    "inline-block shrink-0 rounded-[2px] border",
-                    active ? "border-primary-foreground/50" : "border-current/40",
-                  )}
-                  style={{ width: boxW, height: boxHFinal }}
-                />
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
+        <SizeCombo
+          value={currentSize}
+          resolution={currentResolution}
+          onChange={handleSizeChange}
+          onResolutionChange={handleResolutionChange}
+          disabled={generating}
+        />
         {error && (
           <span className="min-w-0 truncate text-[11px] text-destructive">{error}</span>
         )}

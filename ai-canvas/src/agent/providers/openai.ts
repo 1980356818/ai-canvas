@@ -6,6 +6,8 @@ import type {
   ChatResponseToolCall,
   ImageGenRequest,
   ImageGenResponse,
+  VideoGenRequest,
+  VideoGenResponse,
 } from "./base";
 import { throwIfError } from "./errors";
 import { waitForTask } from "@/services/tasks";
@@ -46,7 +48,7 @@ export class OpenAIProvider implements AIProvider {
   readonly descriptor = {
     id: "openai",
     name: "OpenAI",
-    capabilities: ["chat", "vision", "tool_calling", "image_gen"] as const,
+    capabilities: ["chat", "vision", "tool_calling", "image_gen", "video_gen"] as const,
   };
 
   async chat(req: ChatRequest): Promise<ChatResponse> {
@@ -212,5 +214,65 @@ export class OpenAIProvider implements AIProvider {
     const saved = await saveMedia(img.url, undefined, undefined, pid);
     emit?.({ percent: 100, phase: "saving", label: "完成" });
     return { url: saved.localPath, revisedPrompt: img.revised_prompt };
+  }
+
+  async generateVideo(req: VideoGenRequest): Promise<VideoGenResponse> {
+    const emit = req.onProgress;
+    emit?.({ percent: 0, phase: "submitting", label: "正在提交视频请求…" });
+
+    const body: Record<string, unknown> = {
+      model: req.model ?? "veo3.1-fast",
+      stream: false,
+      messages: [{ role: "user", content: req.prompt }],
+    };
+
+    const raw = await aiProxy("openai", "/v1/chat/completions", body);
+    throwIfError(raw.status, raw.body);
+
+    const data = JSON.parse(raw.body);
+
+    const taskIdMatch = raw.body.match(/"task_id"\s*:\s*(\d+)/);
+    if (data.task_id || taskIdMatch) {
+      const taskId = taskIdMatch ? taskIdMatch[1]! : String(data.task_id);
+      emit?.({ percent: 5, phase: "queued", label: "已提交，排队中…" });
+
+      const result = await waitForTask(taskId, (progress, status) => {
+        const st = status.toLowerCase();
+        if (st === "queued" || st === "pending") {
+          emit?.({ percent: Math.max(5, progress), phase: "queued", label: "排队中…" });
+        } else {
+          const pct = progress > 0 ? Math.min(progress, 90) : 10;
+          emit?.({ percent: pct, phase: "generating", label: "视频生成中…" });
+        }
+      });
+
+      const failed = result.status.toLowerCase();
+      if (failed === "failed" || failed === "error" || failed === "cancelled") {
+        throw new Error(result.errorMessage || "视频生成失败");
+      }
+      if (!result.resultUrl) {
+        throw new Error("视频生成完成但未返回结果地址");
+      }
+
+      emit?.({ percent: 92, phase: "saving", label: "正在保存视频…" });
+      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
+      emit?.({ percent: 100, phase: "saving", label: "完成" });
+      return { url: saved.localPath };
+    }
+
+    const content = data.choices?.[0]?.message?.content;
+    if (typeof content === "string") {
+      const urlMatch = content.match(/https?:\/\/\S+\.(mp4|webm|mov)/i);
+      if (urlMatch) {
+        emit?.({ percent: 80, phase: "saving", label: "正在保存视频…" });
+        const pid = useProjectStore.getState().currentProjectId ?? undefined;
+        const saved = await saveMedia(urlMatch[0], undefined, undefined, pid);
+        emit?.({ percent: 100, phase: "saving", label: "完成" });
+        return { url: saved.localPath };
+      }
+    }
+
+    throw new Error("未能从响应中获取视频地址");
   }
 }

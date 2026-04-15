@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { Sparkles, Loader2, RefreshCw, X, Eye, EyeOff, ArrowDownLeft, Lock } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, X, Eye, EyeOff, ArrowDownLeft, Lock, AlertCircle } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -9,6 +9,7 @@ import { getBase64ForApi } from "@/lib/media";
 import { modelService } from "@/services/models";
 import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
+import { friendlyError } from "@/lib/errors";
 import {
   getRefSlotsForModel,
   compactRefImages,
@@ -19,12 +20,14 @@ import { useProjectStore } from "@/stores/projectStore";
 import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize } from "@/shared/constants";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
+import SizeCombo from "./SizeCombo";
 
 interface MediaData {
   content?: string;
   imageUrl?: string;
   model?: string;
   size?: string;
+  resolution?: string;
   refImages?: Record<string, RefImageEntry>;
   upstreamTexts?: Record<string, string>;
   _locked?: boolean;
@@ -72,6 +75,9 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   const [currentSize, setCurrentSize] = useState(
     () => normalizeImageSize((card.data as MediaData).size) || useSettingsStore.getState().lastImageSize,
   );
+  const [currentResolution, setCurrentResolution] = useState(
+    () => (card.data as MediaData).resolution || "1K",
+  );
   const [error, setError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const data = card.data as MediaData;
@@ -112,7 +118,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       setCurrentSize(sizeValue);
       useSettingsStore.getState().setLastImageSize(sizeValue);
 
-      if (data.imageUrl) {
+      if (data.imageUrl || sizeValue === "auto") {
         updateCard(card.id, { data: { ...data, size: sizeValue } });
         autoSave.markDirty(card.id);
         return;
@@ -134,6 +140,15 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       autoSave.markDirty(card.id);
     },
     [card.id, card.x, card.y, card.width, card.height, data, updateCard],
+  );
+
+  const handleResolutionChange = useCallback(
+    (res: string) => {
+      setCurrentResolution(res);
+      updateCard(card.id, { data: { ...data, resolution: res } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
   );
 
   const onPromptChange = useCallback(
@@ -251,6 +266,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
     setCardProgress(card.id, { percent: 0, label: "正在提交请求…" });
     setError(null);
+    useUIStore.getState().setCardError(card.id, null);
 
     try {
       const provider = providerManager.getDefault();
@@ -307,11 +323,19 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         data: { ...data, imageUrl: result.url },
       });
       autoSave.markDirty(card.id);
+      useUIStore.getState().addToast({
+        type: "success",
+        title: "图片生成完成",
+        description: `${currentModel || "默认模型"} 已完成生成`,
+        duration: 3000,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[MediaEditor] 生成失败:", msg);
       console.groupEnd();
-      setError(msg);
+      const errMsg = friendlyError(msg);
+      setError(errMsg);
+      useUIStore.getState().setCardError(card.id, errMsg);
     } finally {
       setCardProgress(card.id, null);
     }
@@ -443,6 +467,19 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         </>
       )}
 
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+          <p className="min-w-0 flex-1 text-xs leading-relaxed text-destructive">{error}</p>
+          <button
+            onClick={() => { setError(null); useUIStore.getState().setCardError(card.id, null); }}
+            className="shrink-0 rounded p-0.5 text-destructive/60 hover:bg-destructive/10 hover:text-destructive"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
         <ModelSelector
           capability="IMAGE"
@@ -450,43 +487,13 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           onChange={handleModelChange}
         />
         {!isLocked && (
-          <div className="flex shrink-0 items-center rounded-lg border border-border p-0.5">
-            {IMAGE_SIZE_OPTIONS.map((opt) => {
-              const active = currentSize === opt.value;
-              const boxH = 12;
-              const boxW = opt.ratio >= 1 ? boxH : Math.round(boxH * opt.ratio);
-              const boxHFinal = opt.ratio >= 1 ? Math.round(boxH / opt.ratio) : boxH;
-              return (
-                <button
-                  key={opt.value}
-                  onClick={() => handleSizeChange(opt.value)}
-                  disabled={generating}
-                  title={opt.value}
-                  className={cn(
-                    "flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] transition-colors",
-                    active
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    generating && "cursor-not-allowed opacity-40",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "inline-block shrink-0 rounded-[2px] border",
-                      active ? "border-primary-foreground/50" : "border-current/40",
-                    )}
-                    style={{ width: boxW, height: boxHFinal }}
-                  />
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        {hasRefImages && (
-          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
-            +参考图
-          </span>
+          <SizeCombo
+            value={currentSize}
+            resolution={currentResolution}
+            onChange={handleSizeChange}
+            onResolutionChange={handleResolutionChange}
+            disabled={generating}
+          />
         )}
         {!isLocked && hasUpstream && (
           <button
@@ -499,9 +506,6 @@ export default function MediaEditor({ card }: MediaEditorProps) {
               : <><Eye className="h-3 w-3" />预览</>
             }
           </button>
-        )}
-        {error && (
-          <span className="min-w-0 truncate text-[11px] text-destructive">{error}</span>
         )}
         <div className="flex-1" />
         <button

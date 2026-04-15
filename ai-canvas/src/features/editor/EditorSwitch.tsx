@@ -4,6 +4,7 @@ import ChatEditor from "./ChatEditor";
 import MediaEditor from "./MediaEditor";
 import MultiangleEditor from "./MultiangleEditor";
 import TryOnEditor from "./TryOnEditor";
+import VideoEditor from "./VideoEditor";
 
 export default function EditorSwitch({ card }: { card: CanvasCard }) {
   switch (card.type) {
@@ -14,6 +15,8 @@ export default function EditorSwitch({ card }: { card: CanvasCard }) {
       return <ChatEditor card={card} />;
     case "ai_image":
       return <MediaEditor card={card} />;
+    case "ai_video":
+      return <VideoEditor card={card} />;
     case "ai_multiangle":
       return <MultiangleEditor card={card} />;
     case "ai_tryon":

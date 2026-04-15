@@ -34,6 +34,7 @@ interface UIState {
   };
   appView: AppView;
   generatingCards: Map<string, CardGenProgress>;
+  cardErrors: Map<string, string>;
 
   toggleSidebar: () => void;
   toggleAgentPanel: () => void;
@@ -55,6 +56,7 @@ interface UIState {
 
   setAppView: (view: AppView) => void;
   setCardProgress: (cardId: string, progress: CardGenProgress | null) => void;
+  setCardError: (cardId: string, error: string | null) => void;
 }
 
 let toastCounter = 0;
@@ -68,6 +70,7 @@ export const useUIStore = create<UIState>((set) => ({
   contextMenu: { visible: false, x: 0, y: 0, target: "canvas" },
   appView: "home",
   generatingCards: new Map(),
+  cardErrors: new Map(),
 
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   toggleAgentPanel: () =>
@@ -107,5 +110,13 @@ export const useUIStore = create<UIState>((set) => ({
       if (progress) next.set(cardId, progress);
       else next.delete(cardId);
       return { generatingCards: next };
+    }),
+
+  setCardError: (cardId, error) =>
+    set((s) => {
+      const next = new Map(s.cardErrors);
+      if (error) next.set(cardId, error);
+      else next.delete(cardId);
+      return { cardErrors: next };
     }),
 }));

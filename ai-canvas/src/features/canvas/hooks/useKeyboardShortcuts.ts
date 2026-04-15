@@ -15,10 +15,12 @@ function syncNodeCount(projectId: string) {
   void updateProjectMeta(projectId, { nodeCount: count });
 }
 
-function isEditing(e: KeyboardEvent): boolean {
-  const tag = (e.target as HTMLElement)?.tagName;
+function isFocusOnInput(): boolean {
+  const el = document.activeElement as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  if ((e.target as HTMLElement)?.isContentEditable) return true;
+  if (el.isContentEditable) return true;
   return false;
 }
 
@@ -46,9 +48,20 @@ async function deleteSelected() {
   if (pid) syncNodeCount(pid);
 }
 
+function exitEditingMode() {
+  const { editingCardId } = useCanvasStore.getState();
+  if (editingCardId) {
+    useCanvasStore.getState().setEditingCardId(null);
+  }
+  if (isFocusOnInput()) {
+    (document.activeElement as HTMLElement)?.blur();
+  }
+}
+
 function selectAll() {
   const projectId = useProjectStore.getState().currentProjectId;
   if (!projectId) return;
+  exitEditingMode();
   const cards = useCardStore.getState().getCardsByProject(projectId);
   useCanvasStore
     .getState()
@@ -61,8 +74,11 @@ export function useKeyboardShortcuts() {
       const appView = useUIStore.getState().appView;
       if (appView !== "canvas") return;
 
+      const mod = e.ctrlKey || e.metaKey;
+      const { editingCardId, selectedCardIds } = useCanvasStore.getState();
+
+      // ── Escape: exit editing → clear selection → close agent panel ──
       if (e.key === "Escape") {
-        const { editingCardId, selectedCardIds } = useCanvasStore.getState();
         if (editingCardId) {
           useCanvasStore.getState().setEditingCardId(null);
         } else if (selectedCardIds.size > 0) {
@@ -73,36 +89,39 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      if (
-        e.key === "Delete" &&
-        !e.ctrlKey &&
-        !e.metaKey
-      ) {
-        const target = e.target as HTMLElement;
-        const inCardResult = "cardResult" in target.dataset;
-        if (!isEditing(e) || inCardResult) {
-          e.preventDefault();
-          const connId = useConnectionStore.getState().selectedConnectionId;
-          if (connId) {
-            useConnectionStore.getState().removeConnection(connId);
-            autoSave.markDirty();
-            return;
-          }
-          void deleteSelected();
-          return;
-        }
-        return;
-      }
-
-      if (isEditing(e)) return;
-
-      if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+      // ── Ctrl+A: always select all (exit editing first) ──
+      if (mod && e.key === "a") {
         e.preventDefault();
-        void copyCards(useCanvasStore.getState().selectedCardIds);
+        selectAll();
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+      // ── Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y: always undo/redo ──
+      if (mod && e.key === "z" && !e.shiftKey) {
+        if (editingCardId || isFocusOnInput()) return;
+        e.preventDefault();
+        history.undo();
+        return;
+      }
+      if ((mod && e.shiftKey && e.key === "Z") || (mod && e.key === "y")) {
+        if (editingCardId || isFocusOnInput()) return;
+        e.preventDefault();
+        history.redo();
+        return;
+      }
+
+      // ── Ctrl+C: copy selected cards (not while editing text) ──
+      if (mod && e.key === "c") {
+        if (editingCardId) return;
+        if (selectedCardIds.size === 0) return;
+        e.preventDefault();
+        void copyCards(selectedCardIds);
+        return;
+      }
+
+      // ── Ctrl+V: paste cards (not while editing text) ──
+      if (mod && e.key === "v") {
+        if (editingCardId) return;
         e.preventDefault();
         const pid = useProjectStore.getState().currentProjectId;
         if (pid) {
@@ -114,24 +133,24 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key === "a") {
-        e.preventDefault();
-        selectAll();
-        return;
-      }
+      // ── Delete: delete selected cards ──
+      if (e.key === "Delete" && !mod) {
+        if (editingCardId) {
+          const target = e.target as HTMLElement;
+          const inCardResult = "cardResult" in target.dataset;
+          if (!inCardResult) return;
+        }
+        if (isFocusOnInput() && !editingCardId) return;
 
-      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
-        history.undo();
-        return;
-      }
-
-      if (
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "Z") ||
-        ((e.ctrlKey || e.metaKey) && e.key === "y")
-      ) {
-        e.preventDefault();
-        history.redo();
+        const connId = useConnectionStore.getState().selectedConnectionId;
+        if (connId) {
+          useConnectionStore.getState().removeConnection(connId);
+          autoSave.markDirty();
+          return;
+        }
+        exitEditingMode();
+        void deleteSelected();
         return;
       }
     };

@@ -30,6 +30,13 @@ function findInputPortAt(
     const port = el.closest("[data-port-input]") as HTMLElement | null;
     if (port && port.dataset.cardId !== excludeCardId) return port;
   }
+  for (const el of els) {
+    const cardEl = el.closest("[data-card-id]") as HTMLElement | null;
+    if (cardEl && cardEl.dataset.cardId !== excludeCardId) {
+      const port = cardEl.querySelector("[data-port-input]") as HTMLElement | null;
+      if (port) return port;
+    }
+  }
   return null;
 }
 

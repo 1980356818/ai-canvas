@@ -1,5 +1,5 @@
 import { memo, useState, useEffect } from "react";
-import { ImageIcon, Loader2, Shirt, Video, RotateCw } from "lucide-react";
+import { ImageIcon, Loader2, Shirt, Video, RotateCw, AlertCircle } from "lucide-react";
 import type { CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { getDisplayUrl } from "@/lib/media";
@@ -23,6 +23,7 @@ function useDeferredMount(delayMs: number, skipDelay: boolean): boolean {
 function ImagePreview({ card }: { card: CanvasCard }) {
   const data = card.data as { content?: string; imageUrl?: string };
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
+  const cardError = useUIStore((s) => s.cardErrors.get(card.id));
   const displayUrl = data.imageUrl ? getDisplayUrl(data.imageUrl) : undefined;
   const isMultiangle = card.type === "ai_multiangle";
   const PlaceholderIcon = isMultiangle ? RotateCw : ImageIcon;
@@ -56,15 +57,32 @@ function ImagePreview({ card }: { card: CanvasCard }) {
     );
   }
 
+  if (cardError && !displayUrl) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
+        <AlertCircle className="h-8 w-8 text-destructive/60" />
+        <p className="line-clamp-3 text-xs leading-relaxed text-destructive/80">{cardError}</p>
+        <span className="text-[10px] text-muted-foreground">点击卡片查看详情</span>
+      </div>
+    );
+  }
+
   if (displayUrl) {
     if (!imgReady) return <div className="h-full w-full bg-muted/20" />;
     return (
-      <img
-        src={displayUrl}
-        alt=""
-        decoding="async"
-        className="h-full w-full object-cover"
-      />
+      <div className="relative h-full w-full">
+        <img
+          src={displayUrl}
+          alt=""
+          decoding="async"
+          className="h-full w-full object-cover"
+        />
+        {cardError && (
+          <div className="absolute inset-x-0 bottom-0 bg-destructive/90 px-2 py-1">
+            <p className="truncate text-[10px] text-white">{cardError}</p>
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -79,6 +97,7 @@ function ImagePreview({ card }: { card: CanvasCard }) {
 function TryOnPreview({ card }: { card: CanvasCard }) {
   const data = card.data as { personImageUrl?: string; garmentImageUrl?: string; resultImageUrl?: string };
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
+  const cardError = useUIStore((s) => s.cardErrors.get(card.id));
   const rawUrl = data.resultImageUrl || data.personImageUrl;
   const displayUrl = rawUrl ? getDisplayUrl(rawUrl) : undefined;
   const alreadyCached = displayUrl ? isPreloaded(displayUrl) : false;
@@ -110,6 +129,16 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
     );
   }
 
+  if (cardError && !displayUrl) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
+        <AlertCircle className="h-8 w-8 text-destructive/60" />
+        <p className="line-clamp-3 text-xs leading-relaxed text-destructive/80">{cardError}</p>
+        <span className="text-[10px] text-muted-foreground">点击卡片查看详情</span>
+      </div>
+    );
+  }
+
   if (displayUrl) {
     if (!imgReady) return <div className="h-full w-full bg-muted/20" />;
     return (
@@ -119,6 +148,11 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
           <span className="absolute left-2 top-2 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white">
             换装结果
           </span>
+        )}
+        {cardError && (
+          <div className="absolute inset-x-0 bottom-0 bg-destructive/90 px-2 py-1">
+            <p className="truncate text-[10px] text-white">{cardError}</p>
+          </div>
         )}
       </div>
     );
@@ -135,6 +169,7 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
 function VideoPreview({ card }: { card: CanvasCard }) {
   const data = card.data as { content?: string; videoUrl?: string };
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
+  const cardError = useUIStore((s) => s.cardErrors.get(card.id));
 
   if (genProgress) {
     return (
@@ -162,14 +197,31 @@ function VideoPreview({ card }: { card: CanvasCard }) {
     );
   }
 
+  if (cardError && !data.videoUrl) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
+        <AlertCircle className="h-8 w-8 text-destructive/60" />
+        <p className="line-clamp-3 text-xs leading-relaxed text-destructive/80">{cardError}</p>
+        <span className="text-[10px] text-muted-foreground">点击卡片查看详情</span>
+      </div>
+    );
+  }
+
   if (data.videoUrl) {
     return (
-      <video
-        src={data.videoUrl}
-        className="h-full w-full object-cover"
-        controls
-        muted
-      />
+      <div className="relative h-full w-full">
+        <video
+          src={data.videoUrl}
+          className="h-full w-full object-cover"
+          controls
+          muted
+        />
+        {cardError && (
+          <div className="absolute inset-x-0 bottom-0 bg-destructive/90 px-2 py-1">
+            <p className="truncate text-[10px] text-white">{cardError}</p>
+          </div>
+        )}
+      </div>
     );
   }
 

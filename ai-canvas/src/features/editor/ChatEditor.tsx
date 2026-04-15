@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { Sparkles, RefreshCw, Loader2, Lock } from "lucide-react";
+import { Sparkles, RefreshCw, Loader2, Lock, X, AlertCircle } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
@@ -9,6 +9,7 @@ import { hasApiKey, aiProxy } from "@/lib/tauri";
 import { getBase64ForApi } from "@/lib/media";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
+import { friendlyError } from "@/lib/errors";
 import {
   getRefSlotsForChatModel,
   modelSupportsVision,
@@ -28,18 +29,6 @@ interface ChatData {
   _label?: string;
   _description?: string;
   _resultStale?: boolean;
-}
-
-function friendlyError(raw: string): string {
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    try {
-      const obj = JSON.parse(jsonMatch[0]);
-      const msg = obj.message || obj.error?.message;
-      if (msg) return msg;
-    } catch { /* use raw */ }
-  }
-  return raw;
 }
 
 export default function ChatEditor({ card }: { card: CanvasCard }) {
@@ -154,8 +143,9 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
 
     setCardProgress(card.id, { percent: 0, label: "正在生成…" });
     setError(null);
+    useUIStore.getState().setCardError(card.id, null);
 
-    const model = currentModel || "deepseek-v3.2";
+    const model = currentModel || "gemini-3.1-pro-preview-thinking-high";
 
     if (data.result) {
       updateCard(card.id, { data: { ...data, _resultStale: true } });
@@ -208,7 +198,9 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
 
       if (resp.status >= 400) {
         console.error(`[ChatEditor] AI 请求失败 (模型: ${model}, HTTP ${resp.status}):`, resp.body.slice(0, 1000));
-        setError(`[${model}] ${friendlyError(resp.body)}`);
+        const errMsg = friendlyError(resp.body);
+        setError(errMsg);
+        useUIStore.getState().setCardError(card.id, errMsg);
         setCardProgress(card.id, null);
         return;
       }
@@ -222,10 +214,18 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         data: { ...data, result, _resultStale: false },
       });
       autoSave.markDirty(card.id);
+      useUIStore.getState().addToast({
+        type: "success",
+        title: "生成完成",
+        description: `${model} 已完成回复`,
+        duration: 3000,
+      });
     } catch (err) {
       console.error("[ChatEditor] AI 请求异常:", err);
       const msg = err instanceof Error ? err.message : String(err);
-      setError(friendlyError(msg));
+      const errMsg = friendlyError(msg);
+      setError(errMsg);
+      useUIStore.getState().setCardError(card.id, errMsg);
     } finally {
       setCardProgress(card.id, null);
     }
@@ -275,20 +275,25 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         />
       )}
 
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+          <p className="min-w-0 flex-1 text-xs leading-relaxed text-destructive">{error}</p>
+          <button
+            onClick={() => { setError(null); useUIStore.getState().setCardError(card.id, null); }}
+            className="shrink-0 rounded p-0.5 text-destructive/60 hover:bg-destructive/10 hover:text-destructive"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
         <ModelSelector
           capability="CHAT"
           value={currentModel}
           onChange={handleModelChange}
         />
-        {hasRefImages && (
-          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
-            +参考图
-          </span>
-        )}
-        {error && (
-          <span className="min-w-0 truncate text-[11px] text-destructive">{error}</span>
-        )}
         <div className="flex-1" />
         <button
           onClick={handleGenerate}

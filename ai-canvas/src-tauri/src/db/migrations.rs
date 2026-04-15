@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: u32 = 3;
+const CURRENT_VERSION: u32 = 4;
 
 pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     let version: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -14,6 +14,9 @@ pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     }
     if version < 3 {
         migrate_v3(conn)?;
+    }
+    if version < 4 {
+        migrate_v4(conn)?;
     }
 
     Ok(())
@@ -96,5 +99,21 @@ fn migrate_v3(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
         ",
     )?;
 
+    Ok(())
+}
+
+fn migrate_v4(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::info!("running migration v4: seed comfly.chat API config");
+
+    conn.execute(
+        "INSERT OR IGNORE INTO settings (key, value) VALUES (?1, ?2)",
+        rusqlite::params!["openai_api_key", "sk-V3CT1nzrBVT39hZezULUjczUEy9e3jiCZCK8qBTRbbbfOZB6"],
+    )?;
+    conn.execute(
+        "INSERT OR IGNORE INTO settings (key, value) VALUES (?1, ?2)",
+        rusqlite::params!["openai_base_url", "https://ai.comfly.chat"],
+    )?;
+
+    conn.execute_batch("PRAGMA user_version = 4;")?;
     Ok(())
 }

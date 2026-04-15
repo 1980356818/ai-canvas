@@ -582,7 +582,7 @@ fn detect_extension(source: &str, filename: &Option<String>) -> String {
     if let Some(path_part) = source.split('?').next() {
         if let Some(ext) = path_part.rsplit('.').next() {
             let ext = ext.to_lowercase();
-            if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg") {
+            if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "mp4" | "webm" | "mov") {
                 return ext;
             }
         }
