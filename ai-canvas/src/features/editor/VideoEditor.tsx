@@ -1,11 +1,11 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { Sparkles, Loader2, RefreshCw, ArrowDownLeft, Lock, X, AlertCircle } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, ArrowDownLeft, Lock, X, AlertCircle, ImageIcon } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/lib/tauri";
 import { modelService } from "@/services/models";
-import { scheduleBackgroundSave, getBase64ForApi } from "@/lib/media";
+import { scheduleBackgroundSave, getBase64ForApi, getDisplayUrl } from "@/lib/media";
 import { useProjectStore } from "@/stores/projectStore";
 import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
@@ -15,13 +15,20 @@ import ModelSelector from "./ModelSelector";
 import SizeCombo from "./SizeCombo";
 import { normalizeImageSize } from "@/shared/constants";
 
+interface VideoFrameRef {
+  url: string;
+  sourceCardId: string;
+}
+
 interface VideoData {
   content?: string;
   videoUrl?: string;
   model?: string;
   size?: string;
   upstreamTexts?: Record<string, string>;
+  /** @deprecated use refFrames instead */
   upstreamImageUrl?: string;
+  refFrames?: VideoFrameRef[];
   upstreamCardId?: string;
   _locked?: boolean;
   _label?: string;
@@ -121,6 +128,42 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     [card.id],
   );
 
+  const frames = useMemo(() => {
+    if (data.refFrames && data.refFrames.length > 0) return data.refFrames;
+    if (data.upstreamImageUrl) {
+      return [{ url: data.upstreamImageUrl, sourceCardId: data.upstreamCardId ?? "" }];
+    }
+    return [];
+  }, [data.refFrames, data.upstreamImageUrl, data.upstreamCardId]);
+
+  const removeFrame = useCallback(
+    (index: number) => {
+      const frame = frames[index];
+      if (!frame) return;
+
+      if (frame.sourceCardId) {
+        const { connections, removeConnection } = useConnectionStore.getState();
+        for (const [id, c] of connections) {
+          if (c.sourceCardId === frame.sourceCardId && c.targetCardId === card.id) {
+            removeConnection(id);
+            break;
+          }
+        }
+      }
+
+      const newFrames = frames.filter((_, i) => i !== index);
+      updateCard(card.id, {
+        data: {
+          ...data,
+          refFrames: newFrames.length > 0 ? newFrames : undefined,
+          upstreamImageUrl: undefined,
+        },
+      });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, frames, updateCard],
+  );
+
   const handleGenerate = useCallback(async () => {
     const prompt = buildFinalPrompt(data);
     if (!prompt || generating) return;
@@ -150,9 +193,9 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       }
 
       const referenceImages: Array<{ url: string; role: string }> = [];
-      if (data.upstreamImageUrl) {
-        const dataUrl = await getBase64ForApi(data.upstreamImageUrl);
-        referenceImages.push({ url: dataUrl, role: "refImage0" });
+      for (let i = 0; i < frames.length; i++) {
+        const dataUrl = await getBase64ForApi(frames[i]!.url);
+        referenceImages.push({ url: dataUrl, role: i === 0 ? "firstFrame" : "lastFrame" });
       }
 
       const result = await provider.generateVideo({
@@ -194,7 +237,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, generating, updateCard, currentModel, setCardProgress]);
+  }, [data, card.id, generating, updateCard, currentModel, currentSize, setCardProgress, frames]);
 
   const isLocked = !!data._locked;
 
@@ -212,6 +255,36 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         </div>
       ) : (
         <>
+          {frames.length > 0 && (
+            <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
+              <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+                <ImageIcon className="h-3 w-3" />
+                参考帧 · 连线图片卡片自动填充（最多 2 帧）
+              </div>
+              <div className="flex gap-2">
+                {frames.map((frame, idx) => (
+                  <div key={frame.sourceCardId || idx} className="relative">
+                    <img
+                      src={getDisplayUrl(frame.url)}
+                      alt={idx === 0 ? "首帧" : "尾帧"}
+                      className="h-16 w-auto rounded border border-border object-cover"
+                    />
+                    <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">
+                      {idx === 0 ? "首帧" : "尾帧"}
+                    </span>
+                    <button
+                      onClick={() => removeFrame(idx)}
+                      disabled={generating}
+                      className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white shadow-sm transition-opacity hover:opacity-80 disabled:opacity-40"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {hasUpstream && (
             <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
               <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">

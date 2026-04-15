@@ -1,9 +1,10 @@
-import { memo, useState, useEffect } from "react";
+import { memo, useState, useEffect, useCallback } from "react";
 import { ImageIcon, Loader2, Shirt, Video, RotateCw, AlertCircle, Cloud } from "lucide-react";
-import type { CanvasCard } from "@/stores/cardStore";
+import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { getDisplayUrl } from "@/lib/media";
 import { isPreloaded } from "@/lib/imagePreloader";
+import { autoSave } from "@/lib/autoSave";
 import AIChatCard from "./AIChatCard";
 import TextCard from "./TextCard";
 import StickyNoteCard from "./StickyNoteCard";
@@ -20,16 +21,44 @@ function useDeferredMount(delayMs: number, skipDelay: boolean): boolean {
   return ready;
 }
 
+interface ImageCardData {
+  content?: string;
+  imageUrl?: string;
+  results?: Array<{ url: string; revisedPrompt?: string }>;
+  selectedIndex?: number;
+}
+
 function ImagePreview({ card }: { card: CanvasCard }) {
-  const data = card.data as { content?: string; imageUrl?: string };
+  const data = card.data as ImageCardData;
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
   const cardError = useUIStore((s) => s.cardErrors.get(card.id));
-  const displayUrl = data.imageUrl ? getDisplayUrl(data.imageUrl) : undefined;
+
+  const results = data.results ?? [];
+  const selectedIdx = data.selectedIndex ?? 0;
+  const activeUrl = results.length > 0
+    ? results[Math.min(selectedIdx, results.length - 1)]?.url
+    : data.imageUrl;
+
+  const displayUrl = activeUrl ? getDisplayUrl(activeUrl) : undefined;
   const isMultiangle = card.type === "ai_multiangle";
   const PlaceholderIcon = isMultiangle ? RotateCw : ImageIcon;
   const placeholderLabel = isMultiangle ? "多角度" : "AI 图片";
   const alreadyCached = displayUrl ? isPreloaded(displayUrl) : false;
   const imgReady = useDeferredMount(IMG_DEFER_MS, alreadyCached);
+
+  const handleSelect = useCallback(
+    (idx: number) => {
+      if (idx === selectedIdx) return;
+      const r = results[idx];
+      if (!r) return;
+      const store = useCardStore.getState();
+      store.updateCard(card.id, {
+        data: { ...card.data, selectedIndex: idx, imageUrl: r.url },
+      });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, card.data, results, selectedIdx],
+  );
 
   if (genProgress) {
     return (
@@ -69,7 +98,7 @@ function ImagePreview({ card }: { card: CanvasCard }) {
 
   if (displayUrl) {
     if (!imgReady) return <div className="h-full w-full bg-muted/20" />;
-    const isRemote = data.imageUrl!.startsWith("http://") || data.imageUrl!.startsWith("https://");
+    const isRemote = activeUrl!.startsWith("http://") || activeUrl!.startsWith("https://");
     return (
       <div className="relative h-full w-full">
         <img
@@ -87,6 +116,27 @@ function ImagePreview({ card }: { card: CanvasCard }) {
         {cardError && (
           <div className="absolute inset-x-0 bottom-0 bg-destructive/90 px-2 py-1">
             <p className="truncate text-[10px] text-white">{cardError}</p>
+          </div>
+        )}
+        {results.length > 1 && (
+          <div className="absolute inset-x-0 bottom-0 flex items-end justify-center gap-1 bg-gradient-to-t from-black/50 to-transparent px-2 pb-1.5 pt-6">
+            {results.map((r, i) => (
+              <button
+                key={i}
+                onClick={(e) => { e.stopPropagation(); handleSelect(i); }}
+                className={`h-8 w-8 shrink-0 overflow-hidden rounded border-2 transition-all ${
+                  i === selectedIdx
+                    ? "border-white shadow-lg scale-110"
+                    : "border-transparent opacity-70 hover:opacity-100"
+                }`}
+              >
+                <img
+                  src={getDisplayUrl(r.url)}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              </button>
+            ))}
           </div>
         )}
       </div>

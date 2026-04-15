@@ -31,6 +31,16 @@ function cardSizeFromPersist(
   return { width: CARD_DEFAULTS.ai_image.width, height: CARD_DEFAULTS.ai_image.height };
 }
 
+const VIDEO_EXTENSIONS = /\.(mp4|webm|mov|avi|mkv)$/i;
+
+function isVideoFile(file: File): boolean {
+  return file.type.startsWith("video/") || VIDEO_EXTENSIONS.test(file.name);
+}
+
+function isVideoPath(path: string): boolean {
+  return VIDEO_EXTENSIONS.test(path);
+}
+
 function canCardAcceptFileDrop(cardId: string): boolean {
   const card = useCardStore.getState().getCard(cardId);
   if (!card) return false;
@@ -165,8 +175,8 @@ export default function CanvasContainer() {
       e.preventDefault();
       if (!currentProjectId) return;
 
-      const files = Array.from(e.dataTransfer.files).filter((f) =>
-        f.type.startsWith("image/"),
+      const files = Array.from(e.dataTransfer.files).filter(
+        (f) => f.type.startsWith("image/") || isVideoFile(f),
       );
       if (files.length === 0) return;
 
@@ -229,16 +239,21 @@ export default function CanvasContainer() {
         let cursorX = 0;
 
         for (let idx = 0; idx < remaining.length; idx++) {
-          const dataUrl = await readFileAsDataUrl(remaining[idx]!);
+          const file = remaining[idx]!;
+          const video = isVideoFile(file);
+          const dataUrl = await readFileAsDataUrl(file);
           const saved = await persistImage(dataUrl, undefined, currentProjectId);
-          const { width: cardW, height: cardH } = cardSizeFromPersist(saved);
+
+          const { width: cardW, height: cardH } = video
+            ? { width: CARD_DEFAULTS.ai_video.width, height: CARD_DEFAULTS.ai_video.height }
+            : cardSizeFromPersist(saved);
 
           const now = new Date().toISOString();
           const { maxZIndex } = useCardStore.getState();
           const card: CanvasCard = {
             id: crypto.randomUUID(),
             projectId: currentProjectId,
-            type: "ai_image",
+            type: video ? "ai_video" : "ai_image",
             x: dropPos.x - cardW / 2 + cursorX,
             y: dropPos.y - cardH / 2,
             width: cardW,
@@ -246,7 +261,9 @@ export default function CanvasContainer() {
             zIndex: maxZIndex + 1 + idx,
             locked: false,
             collapsed: false,
-            data: { imageUrl: saved.localPath, content: "" },
+            data: video
+              ? { videoUrl: saved.localPath, content: "" }
+              : { imageUrl: saved.localPath, content: "" },
             createdAt: now,
             updatedAt: now,
           };
@@ -332,15 +349,20 @@ export default function CanvasContainer() {
       let tauriCursorX = 0;
       for (let i = startIdx; i < paths.length; i++) {
         try {
-          const saved = await persistImage(paths[i]!, undefined, pid);
-          const { width: cardW, height: cardH } = cardSizeFromPersist(saved);
+          const filePath = paths[i]!;
+          const video = isVideoPath(filePath);
+          const saved = await persistImage(filePath, undefined, pid);
+
+          const { width: cardW, height: cardH } = video
+            ? { width: CARD_DEFAULTS.ai_video.width, height: CARD_DEFAULTS.ai_video.height }
+            : cardSizeFromPersist(saved);
 
           const now = new Date().toISOString();
           const { maxZIndex } = useCardStore.getState();
           const card: CanvasCard = {
             id: crypto.randomUUID(),
             projectId: pid,
-            type: "ai_image",
+            type: video ? "ai_video" : "ai_image",
             x: dropX - cardW / 2 + tauriCursorX,
             y: dropY - cardH / 2,
             width: cardW,
@@ -348,7 +370,9 @@ export default function CanvasContainer() {
             zIndex: maxZIndex + 1 + (i - startIdx),
             locked: false,
             collapsed: false,
-            data: { imageUrl: saved.localPath, content: "" },
+            data: video
+              ? { videoUrl: saved.localPath, content: "" }
+              : { imageUrl: saved.localPath, content: "" },
             createdAt: now,
             updatedAt: now,
           };

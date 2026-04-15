@@ -694,10 +694,10 @@ export async function onTauriFileDrop(
         const pos = (event.payload as { position?: { x: number; y: number } })
           .position ?? { x: 0, y: 0 };
         const paths = (event.payload as { paths?: string[] }).paths ?? [];
-        const imagePaths = paths.filter((p: string) =>
-          /\.(png|jpe?g|gif|webp|bmp|svg|avif|tiff?)$/i.test(p),
+        const mediaPaths = paths.filter((p: string) =>
+          /\.(png|jpe?g|gif|webp|bmp|svg|avif|tiff?|mp4|webm|mov|avi|mkv)$/i.test(p),
         );
-        if (imagePaths.length > 0) cb(imagePaths, pos.x, pos.y);
+        if (mediaPaths.length > 0) cb(mediaPaths, pos.x, pos.y);
       }
     });
     return unlisten;

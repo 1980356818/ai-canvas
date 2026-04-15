@@ -84,6 +84,26 @@ export function removeUpstreamTextForSource(
   autoSave.markDirty(targetCardId);
 }
 
+export function removeVideoFrameForSource(
+  targetCardId: string,
+  sourceCardId: string,
+): void {
+  const cardStore = useCardStore.getState();
+  const target = cardStore.getCard(targetCardId);
+  if (!target || target.type !== "ai_video") return;
+
+  const d = { ...(target.data as Record<string, unknown>) };
+  type FrameRef = { url: string; sourceCardId: string };
+  const frames = (d.refFrames as FrameRef[]) || [];
+  const filtered = frames.filter((f) => f.sourceCardId !== sourceCardId);
+
+  if (filtered.length === frames.length) return;
+
+  d.refFrames = filtered.length > 0 ? filtered : undefined;
+  cardStore.updateCard(targetCardId, { data: d });
+  autoSave.markDirty(targetCardId);
+}
+
 export type OutputPayload =
   | { kind: "text"; text: string }
   | { kind: "image"; url: string }
@@ -102,6 +122,12 @@ export function extractOutput(card: CanvasCard): OutputPayload {
 
     case "ai_image":
     case "ai_multiangle": {
+      const results = d.results as Array<{ url: string }> | undefined;
+      if (results && results.length > 0) {
+        const idx = (d.selectedIndex as number) ?? 0;
+        const url = results[Math.min(idx, results.length - 1)]?.url;
+        if (url) return { kind: "image", url };
+      }
       if (typeof d.imageUrl === "string" && d.imageUrl)
         return { kind: "image", url: d.imageUrl };
       return { kind: "none" };
@@ -283,16 +309,31 @@ function injectIntoCard(
 
     case "ai_video": {
       if (payload.kind === "text") {
-        const prev = (d.content as string) ?? "";
-        if (!prev && payload.text) {
-          d.content = payload.text;
+        const upstreamTexts = {
+          ...((d.upstreamTexts as Record<string, string>) || {}),
+        };
+        if (upstreamTexts[sourceCardId] !== payload.text) {
+          upstreamTexts[sourceCardId] = payload.text;
+          d.upstreamTexts = upstreamTexts;
           d.upstreamCardId = sourceCardId;
           changed = true;
         }
       } else if (payload.kind === "image") {
-        const prev = (d.upstreamImageUrl as string) ?? "";
-        if (prev !== payload.url) {
-          d.upstreamImageUrl = payload.url;
+        const MAX_FRAMES = 2;
+        type FrameRef = { url: string; sourceCardId: string };
+        const frames = [...((d.refFrames as FrameRef[]) || [])];
+
+        const existIdx = frames.findIndex((f) => f.sourceCardId === sourceCardId);
+        if (existIdx >= 0) {
+          if (frames[existIdx]!.url !== payload.url) {
+            frames[existIdx] = { url: payload.url, sourceCardId };
+            d.refFrames = frames;
+            d.upstreamCardId = sourceCardId;
+            changed = true;
+          }
+        } else if (frames.length < MAX_FRAMES) {
+          frames.push({ url: payload.url, sourceCardId });
+          d.refFrames = frames;
           d.upstreamCardId = sourceCardId;
           changed = true;
         }

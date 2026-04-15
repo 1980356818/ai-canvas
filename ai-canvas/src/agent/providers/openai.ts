@@ -233,28 +233,29 @@ export class OpenAIProvider implements AIProvider {
     const emit = req.onProgress;
     emit?.({ percent: 0, phase: "submitting", label: "正在提交视频请求…" });
 
-    let messageContent: unknown = req.prompt;
-    if (req.referenceImages && req.referenceImages.length > 0) {
-      const parts: Array<Record<string, unknown>> = [
-        { type: "text", text: req.prompt },
-      ];
-      for (const ref of req.referenceImages) {
-        parts.push({ type: "image_url", image_url: { url: ref.url } });
-      }
-      messageContent = parts;
-    }
-
     const body: Record<string, unknown> = {
-      model: req.model ?? "veo3.1-fast",
-      stream: false,
-      messages: [{ role: "user", content: messageContent }],
+      prompt: req.prompt,
+      model: req.model ?? "veo3.1",
     };
 
-    if (req.size && req.size !== "auto") {
-      body.aspect_ratio = req.size;
+    if (req.referenceImages && req.referenceImages.length > 0) {
+      body.images = req.referenceImages.map((ref) => ref.url);
     }
 
-    const raw = await aiProxy("openai", "/v1/chat/completions", body);
+    if (req.size && req.size !== "auto") {
+      body.aspect_ratio = toAspectRatio(req.size);
+    }
+
+    console.log("[OpenAI] generateVideo 请求:", {
+      model: body.model,
+      promptLength: req.prompt.length,
+      promptPreview: req.prompt.slice(0, 200),
+      hasImages: !!body.images,
+      imagesCount: Array.isArray(body.images) ? (body.images as unknown[]).length : 0,
+      aspect_ratio: body.aspect_ratio,
+    });
+
+    const raw = await aiProxy("openai", "/v2/videos/generations", body);
     throwIfError(raw.status, raw.body);
 
     const data = JSON.parse(raw.body);
@@ -295,24 +296,6 @@ export class OpenAIProvider implements AIProvider {
       }
     }
 
-    const content = data.choices?.[0]?.message?.content;
-    if (typeof content === "string") {
-      const urlMatch = content.match(/https?:\/\/\S+\.(mp4|webm|mov)/i);
-      if (urlMatch) {
-        emit?.({ percent: 80, phase: "saving", label: "正在保存视频…" });
-        const pid = useProjectStore.getState().currentProjectId ?? undefined;
-        try {
-          const saved = await saveMedia(urlMatch[0], undefined, undefined, pid);
-          emit?.({ percent: 100, phase: "saving", label: "完成" });
-          return { url: saved.localPath };
-        } catch (e) {
-          console.warn("[OpenAI] 视频本地保存失败，降级使用远程地址:", e);
-          emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
-          return { url: urlMatch[0] };
-        }
-      }
-    }
-
-    throw new Error("未能从响应中获取视频地址");
+    throw new Error("未能从响应中获取视频任务ID");
   }
 }

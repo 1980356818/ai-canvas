@@ -8,7 +8,7 @@ import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { isTauri, loadCards, loadConnections, saveConnections, saveProjectViewport, loadProjectViewport, migrateApiConfig } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
-import { startDataFlowWatcher, removeRefImageForSource, removeUpstreamTextForSource } from "@/lib/dataFlow";
+import { startDataFlowWatcher, removeRefImageForSource, removeUpstreamTextForSource, removeVideoFrameForSource } from "@/lib/dataFlow";
 import { initMediaService } from "@/lib/media";
 
 import { useKeyboardShortcuts } from "@/features/canvas/hooks/useKeyboardShortcuts";
@@ -146,6 +146,7 @@ export default function App() {
           if (!state.connections.has(id)) {
             removeRefImageForSource(conn.targetCardId, conn.sourceCardId);
             removeUpstreamTextForSource(conn.targetCardId, conn.sourceCardId);
+            removeVideoFrameForSource(conn.targetCardId, conn.sourceCardId);
           }
         }
       }

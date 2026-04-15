@@ -23,9 +23,17 @@ import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
 import SizeCombo from "./SizeCombo";
 
+interface ImageResult {
+  url: string;
+  revisedPrompt?: string;
+}
+
 interface MediaData {
   content?: string;
   imageUrl?: string;
+  results?: ImageResult[];
+  selectedIndex?: number;
+  batchSize?: number;
   model?: string;
   size?: string;
   resolution?: string;
@@ -310,39 +318,76 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         ? modelService.resolveImageModelId(currentModel, currentResolution)
         : undefined;
 
-      const result = await provider.generateImage({
-        prompt,
-        size: currentSize,
-        model: resolvedModel,
-        quality: "standard",
-        referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
-        onProgress: (p) => {
-          setCardProgress(card.id, { percent: p.percent, label: p.label });
-        },
-      });
+      const count = data.batchSize ?? 1;
+      const results: ImageResult[] = [];
+      let lastError: unknown;
 
-      console.log("[MediaEditor] 生成成功:", { resultUrl: result.url?.slice(0, 100), revisedPrompt: result.revisedPrompt?.slice(0, 100) });
+      for (let i = 0; i < count; i++) {
+        try {
+          const r = await provider.generateImage!({
+            prompt,
+            size: currentSize,
+            model: resolvedModel,
+            quality: "standard",
+            referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+            onProgress: (p) => {
+              if (count === 1) {
+                setCardProgress(card.id, { percent: p.percent, label: p.label });
+              } else {
+                const base = (i / count) * 100;
+                const slice = p.percent / count;
+                setCardProgress(card.id, {
+                  percent: Math.round(base + slice),
+                  label: `生成中 (${i + 1}/${count})`,
+                });
+              }
+            },
+          });
+          results.push({ url: r.url, revisedPrompt: r.revisedPrompt });
+        } catch (e) {
+          console.warn(`[MediaEditor] 第 ${i + 1}/${count} 张生成失败:`, e);
+          lastError = e;
+        }
+      }
+
+      console.log(`[MediaEditor] 批量生成完成: ${results.length}/${count} 成功`);
       console.groupEnd();
 
-      updateCard(card.id, {
-        data: { ...data, imageUrl: result.url },
-      });
+      if (results.length === 0) {
+        throw lastError;
+      }
+
+      const newData: Record<string, unknown> = {
+        ...data,
+        imageUrl: results[0]!.url,
+        results,
+        selectedIndex: 0,
+      };
+      updateCard(card.id, { data: newData });
       autoSave.markDirty(card.id);
 
-      const isRemote = result.url.startsWith("http://") || result.url.startsWith("https://");
-      if (isRemote) {
+      const hasRemote = results.some(
+        (r) => r.url.startsWith("http://") || r.url.startsWith("https://"),
+      );
+      if (hasRemote) {
         const pid = useProjectStore.getState().currentProjectId ?? undefined;
-        scheduleBackgroundSave(card.id, result.url, "imageUrl", pid);
+        for (let i = 0; i < results.length; i++) {
+          if (results[i]!.url.startsWith("http")) {
+            scheduleBackgroundSave(card.id, results[i]!.url, i === 0 ? "imageUrl" : undefined, pid);
+          }
+        }
         useUIStore.getState().addToast({
           type: "warning",
-          title: "图片已生成，保存到本地失败",
-          description: "已使用远程地址显示，后台将自动重试保存",
+          title: `${results.length} 张图片已生成，部分保存到本地失败`,
+          description: "后台将自动重试保存",
           duration: 5000,
         });
       } else {
         useUIStore.getState().addToast({
           type: "success",
-          title: "图片生成完成",
+          title: results.length > 1
+            ? `${results.length} 张图片生成完成`
+            : "图片生成完成",
           description: `${currentModel || "默认模型"} 已完成生成`,
           duration: 3000,
         });
@@ -361,6 +406,15 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
   const hasRefImages = refSlots.some((s) => data.refImages?.[s.key]);
   const isLocked = !!data._locked;
+  const currentBatchSize = data.batchSize ?? 1;
+
+  const handleBatchSizeChange = useCallback(
+    (size: number) => {
+      updateCard(card.id, { data: { ...data, batchSize: size } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
 
   const handleParamChange = useCallback(
     (key: string, value: string) => {
@@ -512,6 +566,27 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             onResolutionChange={handleResolutionChange}
             disabled={generating}
           />
+        )}
+        {!isLocked && (
+          <div className="flex items-center rounded-md border border-input">
+            {[1, 2, 4].map((n) => (
+              <button
+                key={n}
+                onClick={() => handleBatchSizeChange(n)}
+                disabled={generating}
+                className={cn(
+                  "px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+                  "first:rounded-l-[5px] last:rounded-r-[5px]",
+                  currentBatchSize === n
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+                title={`生成 ${n} 张`}
+              >
+                x{n}
+              </button>
+            ))}
+          </div>
         )}
         {!isLocked && hasUpstream && (
           <button
