@@ -127,3 +127,89 @@ export async function revealInExplorer(storedPath: string): Promise<void> {
   const invoke = await ensureInvoke();
   await invoke("open_in_explorer", { path: storedPath });
 }
+
+// ── Background save retry ──────────────────────────────────
+
+interface PendingRetry {
+  cardId: string;
+  remoteUrl: string;
+  imageField: string;
+  projectId?: string;
+  attempt: number;
+  timerId: ReturnType<typeof setTimeout>;
+}
+
+const RETRY_DELAYS = [5_000, 15_000, 45_000, 120_000, 300_000];
+const _pendingRetries = new Map<string, PendingRetry>();
+
+export function scheduleBackgroundSave(
+  cardId: string,
+  remoteUrl: string,
+  imageField = "imageUrl",
+  projectId?: string,
+): void {
+  if (_pendingRetries.has(cardId)) return;
+  enqueueRetry(cardId, remoteUrl, imageField, projectId, 0);
+}
+
+function enqueueRetry(
+  cardId: string,
+  remoteUrl: string,
+  imageField: string,
+  projectId: string | undefined,
+  attempt: number,
+): void {
+  if (attempt >= RETRY_DELAYS.length) {
+    _pendingRetries.delete(cardId);
+    console.warn(`[bgSave] ${cardId} 已达最大重试次数，放弃后台保存`);
+    return;
+  }
+
+  const delay = RETRY_DELAYS[attempt]!;
+  console.log(`[bgSave] ${cardId} 将在 ${delay / 1000}s 后进行第 ${attempt + 1} 次重试`);
+
+  const timerId = setTimeout(() => void doRetry(cardId), delay);
+  _pendingRetries.set(cardId, { cardId, remoteUrl, imageField, projectId, attempt, timerId });
+}
+
+async function doRetry(cardId: string): Promise<void> {
+  const entry = _pendingRetries.get(cardId);
+  if (!entry) return;
+
+  const { useCardStore } = await import("@/stores/cardStore");
+  const { autoSave } = await import("@/lib/autoSave");
+
+  const card = useCardStore.getState().getCard(cardId);
+  if (!card) {
+    _pendingRetries.delete(cardId);
+    return;
+  }
+
+  const currentUrl = (card.data as Record<string, unknown>)[entry.imageField] as string | undefined;
+  if (!currentUrl || !currentUrl.startsWith("http")) {
+    _pendingRetries.delete(cardId);
+    return;
+  }
+
+  try {
+    const result = await saveMedia(entry.remoteUrl, undefined, card.title || undefined, entry.projectId);
+    useCardStore.getState().updateCard(cardId, {
+      data: { ...card.data, [entry.imageField]: result.localPath },
+    });
+    autoSave.markDirty(cardId);
+    _pendingRetries.delete(cardId);
+    console.log(`[bgSave] ${cardId} 后台保存成功`);
+  } catch (e) {
+    console.warn(`[bgSave] ${cardId} 第 ${entry.attempt + 1} 次重试失败:`, e);
+    _pendingRetries.delete(cardId);
+    enqueueRetry(cardId, entry.remoteUrl, entry.imageField, entry.projectId, entry.attempt + 1);
+  }
+}
+
+export function cancelBackgroundSave(cardId: string): void {
+  const entry = _pendingRetries.get(cardId);
+  if (entry) {
+    clearTimeout(entry.timerId);
+    _pendingRetries.delete(cardId);
+  }
+}

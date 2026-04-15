@@ -6,8 +6,7 @@ const CHAT_MODELS: ModelInfo[] = [
 ];
 
 const IMAGE_MODELS: ModelInfo[] = [
-  { id: "gemini-3.1-flash-image-preview-2k", display_name: "Gemini 3.1 Flash (2K)", capability: "IMAGE" },
-  { id: "gemini-3.1-flash-image-preview-4k", display_name: "Gemini 3.1 Flash (4K)", capability: "IMAGE" },
+  { id: "gemini-3.1-flash-image-preview", display_name: "Gemini 3.1 Image", capability: "IMAGE" },
 ];
 
 const VIDEO_MODELS: ModelInfo[] = [
@@ -59,6 +58,15 @@ export const modelService = {
 
   async getDefaultVideoModel(): Promise<string> {
     return VIDEO_MODELS[0]!.id;
+  },
+
+  resolveImageModelId(baseId: string, resolution: string): string {
+    if (baseId.startsWith("gemini-3.1-flash-image-preview")) {
+      return resolution === "4K"
+        ? "gemini-3.1-flash-image-preview-4k"
+        : "gemini-3.1-flash-image-preview-2k";
+    }
+    return baseId;
   },
 
   invalidateCache() {},

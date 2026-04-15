@@ -7,6 +7,7 @@ import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/lib/tauri";
 import { getBase64ForApi } from "@/lib/media";
 import { modelService } from "@/services/models";
+import { scheduleBackgroundSave } from "@/lib/media";
 import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
@@ -76,7 +77,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     () => normalizeImageSize((card.data as MediaData).size) || useSettingsStore.getState().lastImageSize,
   );
   const [currentResolution, setCurrentResolution] = useState(
-    () => (card.data as MediaData).resolution || "1K",
+    () => (card.data as MediaData).resolution || "2K",
   );
   const [error, setError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -305,10 +306,14 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         refImageCount: referenceImages.length,
       });
 
+      const resolvedModel = currentModel
+        ? modelService.resolveImageModelId(currentModel, currentResolution)
+        : undefined;
+
       const result = await provider.generateImage({
         prompt,
         size: currentSize,
-        model: currentModel || undefined,
+        model: resolvedModel,
         quality: "standard",
         referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
         onProgress: (p) => {
@@ -323,12 +328,25 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         data: { ...data, imageUrl: result.url },
       });
       autoSave.markDirty(card.id);
-      useUIStore.getState().addToast({
-        type: "success",
-        title: "图片生成完成",
-        description: `${currentModel || "默认模型"} 已完成生成`,
-        duration: 3000,
-      });
+
+      const isRemote = result.url.startsWith("http://") || result.url.startsWith("https://");
+      if (isRemote) {
+        const pid = useProjectStore.getState().currentProjectId ?? undefined;
+        scheduleBackgroundSave(card.id, result.url, "imageUrl", pid);
+        useUIStore.getState().addToast({
+          type: "warning",
+          title: "图片已生成，保存到本地失败",
+          description: "已使用远程地址显示，后台将自动重试保存",
+          duration: 5000,
+        });
+      } else {
+        useUIStore.getState().addToast({
+          type: "success",
+          title: "图片生成完成",
+          description: `${currentModel || "默认模型"} 已完成生成`,
+          duration: 3000,
+        });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[MediaEditor] 生成失败:", msg);
@@ -339,7 +357,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, generating, updateCard, currentModel, currentSize, setCardProgress, refSlots]);
+  }, [data, card.id, generating, updateCard, currentModel, currentSize, currentResolution, setCardProgress, refSlots]);
 
   const hasRefImages = refSlots.some((s) => data.refImages?.[s.key]);
   const isLocked = !!data._locked;

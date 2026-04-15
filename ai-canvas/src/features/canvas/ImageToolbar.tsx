@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, memo } from "react";
-import { Scissors, Download, ChevronDown } from "lucide-react";
+import { Scissors, Download, ChevronDown, HardDriveDownload, Loader2 } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
@@ -362,9 +362,43 @@ export default function ImageToolbar() {
     }
   }, [card]);
 
+  const [saving, setSaving] = useState(false);
+
+  const isRemoteUrl = useCallback((url?: string) => {
+    return !!url && (url.startsWith("http://") || url.startsWith("https://"));
+  }, []);
+
+  const handleSaveLocal = useCallback(async () => {
+    if (!card || saving) return;
+    const data = card.data as { imageUrl?: string };
+    if (!data.imageUrl || !isRemoteUrl(data.imageUrl)) return;
+
+    setSaving(true);
+    try {
+      const projectId = useProjectStore.getState().currentProjectId ?? undefined;
+      const { localPath } = await persistImage(data.imageUrl, card.title || undefined, projectId);
+      useCardStore.getState().updateCard(card.id, {
+        data: { ...card.data, imageUrl: localPath },
+      });
+      autoSave.markDirty(card.id);
+      useUIStore.getState().addToast({ type: "success", title: "图片已保存到本地", duration: 2500 });
+    } catch (err) {
+      useUIStore.getState().addToast({
+        type: "error",
+        title: "保存失败",
+        description: String(err),
+        duration: 5000,
+      });
+    } finally {
+      setSaving(false);
+    }
+  }, [card, saving, isRemoteUrl]);
+
   if (!card || (card.type !== "ai_image" && card.type !== "ai_multiangle")) return null;
   const imgData = card.data as { imageUrl?: string };
   if (!imgData.imageUrl) return null;
+
+  const showSaveLocal = isRemoteUrl(imgData.imageUrl);
 
   const zoom = viewport.zoom;
   const dragScreenDx = dragOffset ? dragOffset.dx * zoom : 0;
@@ -437,6 +471,28 @@ export default function ImageToolbar() {
         </div>
 
         <div className="mx-0.5 h-4 w-px bg-border" />
+
+        {showSaveLocal && (
+          <>
+            <button
+              title="保存到本地"
+              disabled={saving}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                "bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 dark:text-amber-400",
+                saving && "cursor-not-allowed opacity-60",
+              )}
+              onClick={() => void handleSaveLocal()}
+            >
+              {saving
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <HardDriveDownload className="h-3.5 w-3.5" />
+              }
+              <span>{saving ? "保存中…" : "保存到本地"}</span>
+            </button>
+            <div className="mx-0.5 h-4 w-px bg-border" />
+          </>
+        )}
 
         {/* Download button */}
         <button

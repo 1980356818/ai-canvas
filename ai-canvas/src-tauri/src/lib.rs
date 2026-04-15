@@ -39,8 +39,8 @@ pub fn run() {
             let conn = db::init(&db_path)?;
 
             let http_client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(120))
-                .connect_timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(600))
+                .connect_timeout(std::time::Duration::from_secs(30))
                 .build()
                 .expect("failed to create http client");
 

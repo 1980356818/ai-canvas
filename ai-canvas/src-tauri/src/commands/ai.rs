@@ -2,6 +2,7 @@ use crate::AppState;
 use super::config::read_api_config;
 use base64::Engine as _;
 use serde::Serialize;
+use std::error::Error as StdError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -45,10 +46,23 @@ pub async fn ai_proxy(
         _ => request.header("Authorization", format!("Bearer {}", api_key)),
     };
 
-    let resp = request
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {}", e))?;
+    let resp = match request.send().await {
+        Ok(r) => r,
+        Err(e) => {
+            let is_connect = e.is_connect();
+            let is_timeout = e.is_timeout();
+            let is_request = e.is_request();
+            let source = StdError::source(&e).map(|s| s.to_string()).unwrap_or_default();
+            tracing::error!(
+                "[ai_proxy] 请求发送失败: url={}, connect={}, timeout={}, request={}, source={}",
+                url, is_connect, is_timeout, is_request, source
+            );
+            return Err(format!(
+                "请求失败: {} (connect={}, timeout={}, detail={})",
+                e, is_connect, is_timeout, source
+            ));
+        }
+    };
 
     let status = resp.status().as_u16();
     let body = resp
@@ -328,18 +342,49 @@ pub async fn save_media(
             .map_err(|e| format!("Base64 解码失败: {}", e))?
     } else if source.starts_with("http://") || source.starts_with("https://") {
         let client = &state.http_client;
-        let resp = client
-            .get(&source)
-            .send()
-            .await
-            .map_err(|e| format!("下载失败: {}", e))?;
-        if !resp.status().is_success() {
-            return Err(format!("下载失败, HTTP {}", resp.status()));
+        let max_retries = 3u32;
+        let mut last_err = String::new();
+        let mut downloaded = None;
+
+        for attempt in 0..max_retries {
+            if attempt > 0 {
+                let delay = std::time::Duration::from_millis(500 * 2u64.pow(attempt - 1));
+                tracing::info!("[save_media] 重试下载 #{}, 等待 {:?}", attempt + 1, delay);
+                std::thread::sleep(delay);
+            }
+
+            match client
+                .get(&source)
+                .header("User-Agent", "AI-Canvas/1.0")
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    if !resp.status().is_success() {
+                        last_err = format!("HTTP {}", resp.status());
+                        tracing::warn!("[save_media] 下载返回非成功状态: {}", last_err);
+                        continue;
+                    }
+                    match resp.bytes().await {
+                        Ok(b) => {
+                            tracing::info!("[save_media] 下载成功, {} 字节", b.len());
+                            downloaded = Some(b.to_vec());
+                            break;
+                        }
+                        Err(e) => {
+                            last_err = format!("读取响应体失败: {}", e);
+                            tracing::warn!("[save_media] {}", last_err);
+                        }
+                    }
+                }
+                Err(e) => {
+                    last_err = format!("{}", e);
+                    tracing::warn!("[save_media] 下载请求失败 (attempt {}): {}", attempt + 1, last_err);
+                }
+            }
         }
-        resp.bytes()
-            .await
-            .map_err(|e| format!("读取数据失败: {}", e))?
-            .to_vec()
+
+        downloaded.ok_or_else(|| format!("下载失败 (重试{}次): {}", max_retries, last_err))?
     } else {
         std::fs::read(&source).map_err(|e| format!("读取文件失败: {}", e))?
     };

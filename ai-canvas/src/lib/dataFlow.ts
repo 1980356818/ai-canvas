@@ -394,7 +394,36 @@ export function startDataFlowWatcher(): () => void {
     prevSnapshots.set(id, JSON.stringify(card.data));
   }
 
-  const unsub = useCardStore.subscribe((state) => {
+  // 启动时一次性同步：把已有输出注入到下游卡片的空槽位
+  const conns = useConnectionStore.getState().connections;
+  console.log("[DataFlow] 初始同步开始, 连接数:", conns.size);
+  for (const conn of conns.values()) {
+    const source = useCardStore.getState().getCard(conn.sourceCardId);
+    const target = useCardStore.getState().getCard(conn.targetCardId);
+    if (!source || !target) continue;
+    const output = extractOutput(source);
+    console.log("[DataFlow] 初始同步检查连接:", {
+      sourceId: conn.sourceCardId.slice(0, 8),
+      sourceType: source.type,
+      sourceTitle: source.title,
+      targetId: conn.targetCardId.slice(0, 8),
+      targetType: target.type,
+      targetTitle: target.title,
+      outputKind: output.kind,
+      outputUrl: output.kind === "image" ? output.url?.slice(0, 60) : undefined,
+      targetRefImages: (target.data as Record<string, unknown>).refImages,
+    });
+    if (output.kind !== "none") {
+      const injected = injectIntoCard(target, output, conn.sourceCardId);
+      console.log("[DataFlow] 初始同步注入结果:", injected, "→", target.title);
+    }
+  }
+  // 同步后刷新快照，避免订阅器重复触发
+  for (const [id, card] of useCardStore.getState().cards) {
+    prevSnapshots.set(id, JSON.stringify(card.data));
+  }
+
+  const unsubCards = useCardStore.subscribe((state) => {
     const generating = useUIStore.getState().generatingCards;
 
     for (const [id, card] of state.cards) {
@@ -414,8 +443,25 @@ export function startDataFlowWatcher(): () => void {
     }
   });
 
+  let prevGeneratingIds = new Set(useUIStore.getState().generatingCards.keys());
+
+  const unsubUI = useUIStore.subscribe((state) => {
+    const currentIds = new Set(state.generatingCards.keys());
+    for (const id of prevGeneratingIds) {
+      if (!currentIds.has(id)) {
+        const card = useCardStore.getState().getCard(id);
+        if (card) {
+          prevSnapshots.set(id, JSON.stringify(card.data));
+          propagateFromCard(id);
+        }
+      }
+    }
+    prevGeneratingIds = currentIds;
+  });
+
   return () => {
-    unsub();
+    unsubCards();
+    unsubUI();
     prevSnapshots.clear();
   };
 }

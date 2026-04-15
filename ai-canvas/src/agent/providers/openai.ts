@@ -12,6 +12,7 @@ import type {
 import { throwIfError } from "./errors";
 import { waitForTask } from "@/services/tasks";
 import { aiProxy, saveMedia } from "@/lib/tauri";
+import { scheduleBackgroundSave } from "@/lib/media";
 import { useProjectStore } from "@/stores/projectStore";
 
 function gcd(a: number, b: number): number {
@@ -201,19 +202,31 @@ export class OpenAIProvider implements AIProvider {
 
       emit?.({ percent: 92, phase: "saving", label: "正在保存图片…" });
       const pid = useProjectStore.getState().currentProjectId ?? undefined;
-      const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
-      console.log("[OpenAI] 图片已保存:", saved.localPath);
-      emit?.({ percent: 100, phase: "saving", label: "完成" });
-      return { url: saved.localPath };
+      try {
+        const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
+        console.log("[OpenAI] 图片已保存:", saved.localPath);
+        emit?.({ percent: 100, phase: "saving", label: "完成" });
+        return { url: saved.localPath };
+      } catch (e) {
+        console.warn("[OpenAI] 本地保存失败，降级使用远程地址:", e);
+        emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
+        return { url: result.resultUrl };
+      }
     }
 
     emit?.({ percent: 80, phase: "saving", label: "正在保存图片…" });
     const img = data.data?.[0];
     if (!img?.url) throw new Error("No image returned");
     const pid = useProjectStore.getState().currentProjectId ?? undefined;
-    const saved = await saveMedia(img.url, undefined, undefined, pid);
-    emit?.({ percent: 100, phase: "saving", label: "完成" });
-    return { url: saved.localPath, revisedPrompt: img.revised_prompt };
+    try {
+      const saved = await saveMedia(img.url, undefined, undefined, pid);
+      emit?.({ percent: 100, phase: "saving", label: "完成" });
+      return { url: saved.localPath, revisedPrompt: img.revised_prompt };
+    } catch (e) {
+      console.warn("[OpenAI] 本地保存失败，降级使用远程地址:", e);
+      emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
+      return { url: img.url, revisedPrompt: img.revised_prompt };
+    }
   }
 
   async generateVideo(req: VideoGenRequest): Promise<VideoGenResponse> {
@@ -225,6 +238,10 @@ export class OpenAIProvider implements AIProvider {
       stream: false,
       messages: [{ role: "user", content: req.prompt }],
     };
+
+    if (req.size && req.size !== "auto") {
+      body.aspect_ratio = req.size;
+    }
 
     const raw = await aiProxy("openai", "/v1/chat/completions", body);
     throwIfError(raw.status, raw.body);
@@ -256,9 +273,15 @@ export class OpenAIProvider implements AIProvider {
 
       emit?.({ percent: 92, phase: "saving", label: "正在保存视频…" });
       const pid = useProjectStore.getState().currentProjectId ?? undefined;
-      const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
-      emit?.({ percent: 100, phase: "saving", label: "完成" });
-      return { url: saved.localPath };
+      try {
+        const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
+        emit?.({ percent: 100, phase: "saving", label: "完成" });
+        return { url: saved.localPath };
+      } catch (e) {
+        console.warn("[OpenAI] 视频本地保存失败，降级使用远程地址:", e);
+        emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
+        return { url: result.resultUrl };
+      }
     }
 
     const content = data.choices?.[0]?.message?.content;
@@ -267,9 +290,15 @@ export class OpenAIProvider implements AIProvider {
       if (urlMatch) {
         emit?.({ percent: 80, phase: "saving", label: "正在保存视频…" });
         const pid = useProjectStore.getState().currentProjectId ?? undefined;
-        const saved = await saveMedia(urlMatch[0], undefined, undefined, pid);
-        emit?.({ percent: 100, phase: "saving", label: "完成" });
-        return { url: saved.localPath };
+        try {
+          const saved = await saveMedia(urlMatch[0], undefined, undefined, pid);
+          emit?.({ percent: 100, phase: "saving", label: "完成" });
+          return { url: saved.localPath };
+        } catch (e) {
+          console.warn("[OpenAI] 视频本地保存失败，降级使用远程地址:", e);
+          emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
+          return { url: urlMatch[0] };
+        }
       }
     }
 

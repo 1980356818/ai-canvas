@@ -5,16 +5,21 @@ import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/lib/tauri";
 import { modelService } from "@/services/models";
+import { scheduleBackgroundSave } from "@/lib/media";
+import { useProjectStore } from "@/stores/projectStore";
 import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import { useConnectionStore } from "@/stores/connectionStore";
 import ModelSelector from "./ModelSelector";
+import SizeCombo from "./SizeCombo";
+import { normalizeImageSize } from "@/shared/constants";
 
 interface VideoData {
   content?: string;
   videoUrl?: string;
   model?: string;
+  size?: string;
   upstreamTexts?: Record<string, string>;
   upstreamCardId?: string;
   _locked?: boolean;
@@ -53,6 +58,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const generating = useUIStore((s) => s.generatingCards.has(card.id));
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [currentModel, setCurrentModel] = useState("");
+  const [currentSize, setCurrentSize] = useState(() => normalizeImageSize((card.data as VideoData).size));
   const [error, setError] = useState<string | null>(null);
   const data = card.data as VideoData;
 
@@ -77,6 +83,15 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     (modelId: string) => {
       setCurrentModel(modelId);
       updateCard(card.id, { data: { ...data, model: modelId } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const handleSizeChange = useCallback(
+    (size: string) => {
+      setCurrentSize(size);
+      updateCard(card.id, { data: { ...data, size } });
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
@@ -136,6 +151,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       const result = await provider.generateVideo({
         prompt,
         model: currentModel || undefined,
+        size: currentSize,
         onProgress: (p) => {
           setCardProgress(card.id, { percent: p.percent, label: p.label });
         },
@@ -143,12 +159,25 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
 
       updateCard(card.id, { data: { ...data, videoUrl: result.url } });
       autoSave.markDirty(card.id);
-      useUIStore.getState().addToast({
-        type: "success",
-        title: "视频生成完成",
-        description: `${currentModel || "默认模型"} 已完成生成`,
-        duration: 3000,
-      });
+
+      const isRemote = result.url.startsWith("http://") || result.url.startsWith("https://");
+      if (isRemote) {
+        const pid = useProjectStore.getState().currentProjectId ?? undefined;
+        scheduleBackgroundSave(card.id, result.url, "videoUrl", pid);
+        useUIStore.getState().addToast({
+          type: "warning",
+          title: "视频已生成，保存到本地失败",
+          description: "已使用远程地址播放，后台将自动重试保存",
+          duration: 5000,
+        });
+      } else {
+        useUIStore.getState().addToast({
+          type: "success",
+          title: "视频生成完成",
+          description: `${currentModel || "默认模型"} 已完成生成`,
+          duration: 3000,
+        });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const errMsg = friendlyError(msg);
@@ -231,6 +260,13 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
           value={currentModel}
           onChange={handleModelChange}
         />
+        {!isLocked && (
+          <SizeCombo
+            value={currentSize}
+            onChange={handleSizeChange}
+            disabled={generating}
+          />
+        )}
         <div className="flex-1" />
         <button
           onClick={() => void handleGenerate()}

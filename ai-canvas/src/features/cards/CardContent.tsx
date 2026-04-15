@@ -1,5 +1,5 @@
 import { memo, useState, useEffect } from "react";
-import { ImageIcon, Loader2, Shirt, Video, RotateCw, AlertCircle } from "lucide-react";
+import { ImageIcon, Loader2, Shirt, Video, RotateCw, AlertCircle, Cloud } from "lucide-react";
 import type { CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { getDisplayUrl } from "@/lib/media";
@@ -69,6 +69,7 @@ function ImagePreview({ card }: { card: CanvasCard }) {
 
   if (displayUrl) {
     if (!imgReady) return <div className="h-full w-full bg-muted/20" />;
+    const isRemote = data.imageUrl!.startsWith("http://") || data.imageUrl!.startsWith("https://");
     return (
       <div className="relative h-full w-full">
         <img
@@ -77,6 +78,12 @@ function ImagePreview({ card }: { card: CanvasCard }) {
           decoding="async"
           className="h-full w-full object-cover"
         />
+        {isRemote && (
+          <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-amber-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm">
+            <Cloud className="h-3 w-3" />
+            远程
+          </span>
+        )}
         {cardError && (
           <div className="absolute inset-x-0 bottom-0 bg-destructive/90 px-2 py-1">
             <p className="truncate text-[10px] text-white">{cardError}</p>

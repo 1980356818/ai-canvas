@@ -85,6 +85,7 @@ export interface VideoGenProgress {
 export interface VideoGenRequest {
   prompt: string;
   model?: string;
+  size?: string;
   onProgress?: (progress: VideoGenProgress) => void;
 }
 

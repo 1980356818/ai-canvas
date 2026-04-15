@@ -84,8 +84,8 @@ const Wire = memo(function Wire({
     <g>
       <defs>
         <linearGradient id={baseId} x1={x1} y1={y1} x2={x2} y2={y2} gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor={sourceColor} stopOpacity={0.45} />
-          <stop offset="100%" stopColor={targetColor} stopOpacity={0.45} />
+          <stop offset="0%" stopColor={sourceColor} stopOpacity={0.9} />
+          <stop offset="100%" stopColor={targetColor} stopOpacity={0.9} />
         </linearGradient>
         <linearGradient id={pulseId} x1={x1} y1={y1} x2={x2} y2={y2} gradientUnits="userSpaceOnUse">
           <stop offset="0%" stopColor={flowing ? "#4ade80" : sourceColor} />
@@ -119,26 +119,26 @@ const Wire = memo(function Wire({
         />
       )}
 
-      {/* Base solid line — always visible, muted */}
+      {/* Base solid line — always visible */}
       <path
         d={d}
         fill="none"
         stroke={active ? `url(#${pulseId})` : `url(#${baseId})`}
-        strokeWidth={active ? 2.5 : 2}
+        strokeWidth={active ? 4.5 : 4}
         strokeLinecap="round"
         style={{ pointerEvents: "none" }}
       />
 
-      {/* Traveling light pulse */}
+      {/* Traveling light pulse — always visible, brighter when active */}
       <path
         d={d}
         fill="none"
         stroke={`url(#${pulseId})`}
-        strokeWidth={flowing ? 4 : active ? 3.5 : 2.5}
+        strokeWidth={flowing ? 6 : active ? 5.5 : 4}
         strokeLinecap="round"
-        opacity={flowing ? 0.9 : active ? 0.75 : 0}
+        opacity={flowing ? 1 : active ? 0.9 : 0.65}
         style={{ pointerEvents: "none" }}
-        className={flowing ? "wire-sweep-data" : active ? "wire-sweep-active" : undefined}
+        className={flowing ? "wire-sweep-data" : active ? "wire-sweep-active" : "wire-sweep-idle-anim"}
       />
 
       {/* Selected highlight */}

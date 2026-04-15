@@ -108,21 +108,21 @@ export default function App() {
         startTransition(() => {
           useCardStore.getState().setCards(cards);
         });
+
+        const connRows = loadConnections(currentProjectId);
+        const conns: Connection[] = connRows.map((r) => ({
+          id: r.id,
+          projectId: r.project_id,
+          sourceCardId: r.source_card_id,
+          targetCardId: r.target_card_id,
+          createdAt: r.created_at,
+        }));
+        useConnectionStore.getState().setConnections(conns);
+
+        dataFlowCleanup.current?.();
+        dataFlowCleanup.current = startDataFlowWatcher();
       })
       .catch(console.error);
-
-    const connRows = loadConnections(currentProjectId);
-    const conns: Connection[] = connRows.map((r) => ({
-      id: r.id,
-      projectId: r.project_id,
-      sourceCardId: r.source_card_id,
-      targetCardId: r.target_card_id,
-      createdAt: r.created_at,
-    }));
-    useConnectionStore.getState().setConnections(conns);
-
-    dataFlowCleanup.current?.();
-    dataFlowCleanup.current = startDataFlowWatcher();
 
     return () => {
       dataFlowCleanup.current?.();

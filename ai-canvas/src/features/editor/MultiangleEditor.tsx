@@ -62,7 +62,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
     () => normalizeImageSize(data.size) || useSettingsStore.getState().lastImageSize,
   );
   const [currentResolution, setCurrentResolution] = useState(
-    () => data.resolution || "1K",
+    () => data.resolution || "2K",
   );
 
   const handleSizeChange = useCallback(

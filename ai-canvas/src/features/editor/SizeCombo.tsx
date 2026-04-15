@@ -4,7 +4,6 @@ import { IMAGE_SIZE_OPTIONS } from "@/shared/constants";
 import { cn } from "@/lib/utils";
 
 const RESOLUTION_OPTIONS = [
-  { value: "1K", label: "1K", px: 1024 },
   { value: "2K", label: "2K", px: 2048 },
   { value: "4K", label: "4K", px: 4096 },
 ] as const;
@@ -56,7 +55,7 @@ function RatioIcon({
 
 export default function SizeCombo({
   value,
-  resolution = "1K",
+  resolution = "2K",
   onChange,
   onResolutionChange,
   disabled,
@@ -103,36 +102,39 @@ export default function SizeCombo({
       {/* Popup panel — opens upward */}
       {open && (
         <div className="absolute bottom-full left-0 z-50 mb-1 w-[260px] rounded-xl border border-border bg-popover p-3 shadow-xl">
-          {/* Resolution row */}
-          <div className="mb-2.5">
-            <div className="mb-1.5 text-[10px] font-medium text-muted-foreground">
-              分辨率
-            </div>
-            <div className="flex gap-1.5">
-              {RESOLUTION_OPTIONS.map((res) => {
-                const active = resolution === res.value;
-                return (
-                  <button
-                    key={res.value}
-                    disabled={disabled}
-                    onClick={() => onResolutionChange?.(res.value)}
-                    className={cn(
-                      "flex-1 rounded-lg py-1.5 text-center text-xs font-medium transition-colors",
-                      active
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                      disabled && "cursor-not-allowed opacity-40",
-                    )}
-                  >
-                    {res.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="mb-2.5 h-px bg-border" />
+          {onResolutionChange && (
+            <>
+              {/* Resolution row */}
+              <div className="mb-2.5">
+                <div className="mb-1.5 text-[10px] font-medium text-muted-foreground">
+                  分辨率
+                </div>
+                <div className="flex gap-1.5">
+                  {RESOLUTION_OPTIONS.map((res) => {
+                    const active = resolution === res.value;
+                    return (
+                      <button
+                        key={res.value}
+                        disabled={disabled}
+                        onClick={() => onResolutionChange(res.value)}
+                        className={cn(
+                          "flex-1 rounded-lg py-1.5 text-center text-xs font-medium transition-colors",
+                          active
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                          disabled && "cursor-not-allowed opacity-40",
+                        )}
+                      >
+                        {res.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* Divider */}
+              <div className="mb-2.5 h-px bg-border" />
+            </>
+          )}
 
           {/* Ratio grid */}
           <div>

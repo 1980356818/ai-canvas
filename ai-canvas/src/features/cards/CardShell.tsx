@@ -640,8 +640,8 @@ export default memo(
 
         <div
           className={cn(
-            "relative h-full w-full overflow-hidden rounded-xl bg-card transition-shadow",
-            selected ? "shadow-lg" : "group-hover:shadow-md",
+            "relative h-full w-full overflow-hidden rounded-xl border border-border/40 bg-card transition-shadow dark:border-border",
+            selected ? "shadow-lg dark:shadow-[0_4px_24px_rgba(0,0,0,0.6)]" : "shadow-sm group-hover:shadow-md dark:shadow-[0_2px_8px_rgba(0,0,0,0.5)] dark:group-hover:shadow-[0_4px_16px_rgba(0,0,0,0.6)]",
             card.locked && "cursor-not-allowed opacity-90",
             resizing && "transition-none",
           )}
