@@ -44,10 +44,12 @@ const Port = memo(function Port({
   side,
   cardId,
   color,
+  inset = 0,
 }: {
   side: "input" | "output";
   cardId: string;
   color: string;
+  inset?: number;
 }) {
   const isOutput = side === "output";
   const isDraftTarget = useConnectionStore(
@@ -155,9 +157,10 @@ const Port = memo(function Port({
       data-card-id={cardId}
       className={cn(
         "absolute top-1/2 z-20 -translate-y-1/2 transition-transform duration-150",
-        isOutput ? "right-0 translate-x-1/2" : "left-0 -translate-x-1/2",
+        isOutput ? "translate-x-1/2" : "-translate-x-1/2",
         isDraftTarget && "scale-[1.4]",
       )}
+      style={{ [isOutput ? 'right' : 'left']: inset }}
       onPointerDown={onPortPointerDown}
     >
       <div
@@ -617,61 +620,66 @@ export default memo(
         onPointerDown={onPointerDown}
         onContextMenu={onContextMenu}
       >
-        <div
-          className={cn(
-            "relative h-full w-full overflow-hidden rounded-xl bg-card transition-shadow",
-            selected ? "shadow-lg dark:shadow-[0_4px_24px_rgba(0,0,0,0.6)]" : "shadow-sm group-hover:shadow-md dark:shadow-[0_2px_8px_rgba(0,0,0,0.5)] dark:group-hover:shadow-[0_4px_16px_rgba(0,0,0,0.6)]",
-            card.locked && "cursor-not-allowed opacity-90",
-            resizing && "transition-none",
-          )}
-        >
-          <div className="h-full w-full">{children}</div>
+        <div className="relative h-full w-full overflow-hidden rounded-xl">
+          <div
+            className={cn(
+              "pointer-events-none absolute transition-opacity duration-200",
+              selected
+                ? "card-selected-border opacity-100"
+                : "opacity-[0.35] group-hover:opacity-[0.55]",
+            )}
+            style={{
+              inset: 0,
+              padding: selected ? 3 : 2,
+              borderRadius: 'inherit',
+              zIndex: 10,
+              background: selected
+                ? "linear-gradient(135deg, #38bdf8, #818cf8, #c084fc, #f472b6, #38bdf8)"
+                : `linear-gradient(135deg, ${accentColor}, #a855f7, #ec4899)`,
+              backgroundSize: selected ? "400% 400%" : undefined,
+              WebkitMask: [
+                `radial-gradient(circle 9px at ${selected ? 1.5 : 1}px 50%,#fff 100%,transparent 0) border-box`,
+                `radial-gradient(circle 9px at calc(100% - ${selected ? 1.5 : 1}px) 50%,#fff 100%,transparent 0) border-box`,
+                'linear-gradient(#fff 0 0) content-box',
+                'linear-gradient(#fff 0 0)',
+              ].join(', '),
+              WebkitMaskComposite: 'destination-out, destination-out, xor, source-over',
+            }}
+          />
 
-          {hasImage && !card.locked && (
-            <div
-              draggable
-              onDragStart={onRefDragStart}
-              title="拖拽到参考图插槽"
-              className="absolute bottom-1.5 left-1.5 z-20 flex h-6 w-6 cursor-move items-center justify-center rounded-md bg-black/50 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-primary/80 group-hover:opacity-100 active:cursor-grabbing"
-              style={{ userSelect: "auto", WebkitUserSelect: "auto" }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <GripVertical className="h-3.5 w-3.5" />
-            </div>
-          )}
+          <div
+            className={cn(
+              "relative h-full w-full overflow-hidden rounded-xl bg-card transition-shadow",
+              selected ? "shadow-lg dark:shadow-[0_4px_24px_rgba(0,0,0,0.6)]" : "shadow-sm group-hover:shadow-md dark:shadow-[0_2px_8px_rgba(0,0,0,0.5)] dark:group-hover:shadow-[0_4px_16px_rgba(0,0,0,0.6)]",
+              card.locked && "cursor-not-allowed opacity-90",
+              resizing && "transition-none",
+            )}
+          >
+            <div className="h-full w-full">{children}</div>
 
-          {isPickTarget && (
-            <div className="pointer-events-none absolute inset-0 z-10 animate-pulse rounded-xl ring-2 ring-primary ring-offset-2" />
-          )}
+            {hasImage && !card.locked && (
+              <div
+                draggable
+                onDragStart={onRefDragStart}
+                title="拖拽到参考图插槽"
+                className="absolute bottom-1.5 left-1.5 z-20 flex h-6 w-6 cursor-move items-center justify-center rounded-md bg-black/50 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-primary/80 group-hover:opacity-100 active:cursor-grabbing"
+                style={{ userSelect: "auto", WebkitUserSelect: "auto" }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <GripVertical className="h-3.5 w-3.5" />
+              </div>
+            )}
 
+            {isPickTarget && (
+              <div className="pointer-events-none absolute inset-0 z-10 animate-pulse rounded-xl ring-2 ring-primary ring-offset-2" />
+            )}
+
+          </div>
         </div>
 
-        <div
-          className={cn(
-            "pointer-events-none absolute transition-opacity duration-200",
-            selected
-              ? "card-selected-border opacity-100"
-              : "opacity-[0.35] group-hover:opacity-[0.55]",
-          )}
-          style={{
-            inset: selected ? -3 : -2,
-            padding: selected ? 3 : 2,
-            borderRadius: selected ? 17 : 16,
-            zIndex: 10,
-            background: selected
-              ? "linear-gradient(135deg, #38bdf8, #818cf8, #c084fc, #f472b6, #38bdf8)"
-              : `linear-gradient(135deg, ${accentColor}, #a855f7, #ec4899)`,
-            backgroundSize: selected ? "400% 400%" : undefined,
-            WebkitMask:
-              "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-            WebkitMaskComposite: "xor",
-            maskComposite: "exclude",
-          }}
-        />
-
-        <Port side="input" cardId={card.id} color={accentColor} />
-        <Port side="output" cardId={card.id} color={accentColor} />
+        <Port side="input" cardId={card.id} color={accentColor} inset={selected ? 1.5 : 1} />
+        <Port side="output" cardId={card.id} color={accentColor} inset={selected ? 1.5 : 1} />
 
         {!card.locked && (
           <div
