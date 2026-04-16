@@ -232,7 +232,7 @@
   content: "";
   position: absolute;
   inset: -3px;
-  border-radius: 14px;
+  border-radius: 17px;
   border: 2.5px dashed rgba(139, 92, 246, 0.8);
   background: rgba(139, 92, 246, 0.08);
   z-index: 30;
@@ -258,7 +258,7 @@
   content: "";
   position: absolute;
   inset: -3px;
-  border-radius: 14px;
+  border-radius: 17px;
   border: 2.5px dashed rgba(139, 92, 246, 0.7);
   background-image: linear-gradient(
     rgba(139, 92, 246, 0.14),
@@ -296,7 +296,7 @@
   content: "";
   position: absolute;
   inset: -3px;
-  border-radius: 14px;
+  border-radius: 17px;
   border: 2.5px solid rgba(34, 197, 94, 0.8);
   background: rgba(34, 197, 94, 0.1);
   z-index: 30;

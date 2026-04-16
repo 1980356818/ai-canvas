@@ -619,29 +619,7 @@ export default memo(
       >
         <div
           className={cn(
-            "pointer-events-none absolute transition-opacity duration-200",
-            selected
-              ? "card-selected-border opacity-100"
-              : "opacity-[0.35] group-hover:opacity-[0.55]",
-          )}
-          style={{
-            inset: selected ? -3 : -2,
-            padding: selected ? 3 : 2,
-            borderRadius: selected ? 15 : 14,
-            background: selected
-              ? "linear-gradient(135deg, #38bdf8, #818cf8, #c084fc, #f472b6, #38bdf8)"
-              : `linear-gradient(135deg, ${accentColor}, #a855f7, #ec4899)`,
-            backgroundSize: selected ? "400% 400%" : undefined,
-            WebkitMask:
-              "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-            WebkitMaskComposite: "xor",
-            maskComposite: "exclude",
-          }}
-        />
-
-        <div
-          className={cn(
-            "relative h-full w-full transform-gpu overflow-hidden rounded-xl bg-card transition-shadow",
+            "relative h-full w-full overflow-hidden rounded-xl bg-card transition-shadow",
             selected ? "shadow-lg dark:shadow-[0_4px_24px_rgba(0,0,0,0.6)]" : "shadow-sm group-hover:shadow-md dark:shadow-[0_2px_8px_rgba(0,0,0,0.5)] dark:group-hover:shadow-[0_4px_16px_rgba(0,0,0,0.6)]",
             card.locked && "cursor-not-allowed opacity-90",
             resizing && "transition-none",
@@ -668,6 +646,29 @@ export default memo(
           )}
 
         </div>
+
+        <div
+          className={cn(
+            "pointer-events-none absolute transition-opacity duration-200",
+            selected
+              ? "card-selected-border opacity-100"
+              : "opacity-[0.35] group-hover:opacity-[0.55]",
+          )}
+          style={{
+            inset: selected ? -3 : -2,
+            padding: selected ? 3 : 2,
+            borderRadius: selected ? 17 : 16,
+            zIndex: 10,
+            background: selected
+              ? "linear-gradient(135deg, #38bdf8, #818cf8, #c084fc, #f472b6, #38bdf8)"
+              : `linear-gradient(135deg, ${accentColor}, #a855f7, #ec4899)`,
+            backgroundSize: selected ? "400% 400%" : undefined,
+            WebkitMask:
+              "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+            WebkitMaskComposite: "xor",
+            maskComposite: "exclude",
+          }}
+        />
 
         <Port side="input" cardId={card.id} color={accentColor} />
         <Port side="output" cardId={card.id} color={accentColor} />

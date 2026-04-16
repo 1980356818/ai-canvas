@@ -120,12 +120,12 @@ function ImagePreview({ card }: { card: CanvasCard }) {
     if (!imgReady) return <div className="h-full w-full bg-muted/20" />;
     const isRemote = activeUrl!.startsWith("http://") || activeUrl!.startsWith("https://");
     return (
-      <div className="relative h-full w-full overflow-hidden rounded-xl">
+      <div className="relative h-full w-full">
         <img
           src={displayUrl}
           alt=""
           decoding="async"
-          className="h-full w-full rounded-xl object-cover"
+          className="h-full w-full object-cover"
         />
         {isRemote && (
           <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-amber-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm">
@@ -220,8 +220,8 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
   if (displayUrl) {
     if (!imgReady) return <div className="h-full w-full bg-muted/20" />;
     return (
-      <div className="relative h-full w-full overflow-hidden rounded-xl">
-        <img src={displayUrl} alt="" decoding="async" className="h-full w-full rounded-xl object-cover" />
+      <div className="relative h-full w-full">
+        <img src={displayUrl} alt="" decoding="async" className="h-full w-full object-cover" />
         {data.resultImageUrl && (
           <span className="absolute left-2 top-2 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white">
             换装结果
@@ -289,10 +289,10 @@ function VideoPreview({ card }: { card: CanvasCard }) {
 
   if (displayUrl) {
     return (
-      <div className="relative h-full w-full overflow-hidden rounded-xl">
+      <div className="relative h-full w-full">
         <video
           src={displayUrl}
-          className="h-full w-full rounded-xl object-cover"
+          className="h-full w-full object-cover"
           controls
           muted
         />
