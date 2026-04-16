@@ -582,9 +582,6 @@ export default function CanvasContainer() {
       className="relative flex-1 overflow-hidden bg-background"
       style={{
         cursor: isPanning ? "grabbing" : spaceDown ? "crosshair" : "default",
-        backgroundImage: "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
-        backgroundSize: `${20 * viewport.zoom}px ${20 * viewport.zoom}px`,
-        backgroundPosition: `${viewport.x}px ${viewport.y}px`,
       }}
       onWheel={onWheel}
       onPointerDown={handlePointerDown}

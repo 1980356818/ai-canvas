@@ -156,16 +156,7 @@ export async function pasteCards(
   }
 
   const payload = parseClipboard(text);
-
-  if (!payload) {
-    if (!text.trim()) return [];
-    const card = createTextCard(projectId, text);
-    useCardStore.getState().addCard(card);
-    autoSave.markDirty(card.id);
-    syncNodeCount(projectId);
-    useCanvasStore.getState().setSelectedCardIds([card.id]);
-    return [card.id];
-  }
+  if (!payload) return [];
 
   return materialize(payload, projectId, position);
 }

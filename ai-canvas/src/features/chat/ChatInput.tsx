@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from "react";
 import {
   SendHorizonal,
   Loader2,
@@ -7,11 +7,15 @@ import {
   Video,
   Paperclip,
   X,
+  ImagePlus,
 } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { persistImage, getDisplayUrl } from "@/lib/media";
+import { CARD_REF_MIME, type CardRefPayload } from "@/config/model-ref-images";
 import { cn } from "@/lib/utils";
+
+const IMAGE_MIME = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 
 const isTauri =
   typeof window !== "undefined" &&
@@ -27,13 +31,20 @@ interface ImageAttachment {
   displayUrl: string;
 }
 
-export default function ChatInput() {
+export interface ChatInputHandle {
+  addImage: (src: string) => Promise<void>;
+}
+
+const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
   const [input, setInput] = useState("");
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [selectedSlashIdx, setSelectedSlashIdx] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropZoneRef = useRef<HTMLDivElement>(null);
+  const dragCounterRef = useRef(0);
   const generating = useChatStore((s) => s.generating);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const stopGenerating = useChatStore((s) => s.stopGenerating);
@@ -60,7 +71,7 @@ export default function ChatInput() {
         const selected = await open({
           multiple: false,
           filters: [
-            { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp"] },
+            { name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp"] },
           ],
         });
         if (!selected) return;
@@ -103,6 +114,125 @@ export default function ChatInput() {
   const removeImage = useCallback((idx: number) => {
     setImages((prev) => prev.filter((_, i) => i !== idx));
   }, []);
+
+  const isAlreadyPersisted = useCallback((src: string) => {
+    return (
+      !!src &&
+      !src.startsWith("data:") &&
+      !src.startsWith("http://") &&
+      !src.startsWith("https://") &&
+      !src.startsWith("blob:")
+    );
+  }, []);
+
+  const addImageFromUrl = useCallback(async (src: string) => {
+    if (generating) return;
+    try {
+      if (isAlreadyPersisted(src)) {
+        setImages((prev) => [
+          ...prev,
+          { url: src, displayUrl: getDisplayUrl(src) },
+        ]);
+        return;
+      }
+      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const { localPath } = await persistImage(src, undefined, pid);
+      setImages((prev) => [
+        ...prev,
+        { url: localPath, displayUrl: getDisplayUrl(localPath) },
+      ]);
+    } catch (err) {
+      console.error("Failed to add image:", err);
+    }
+  }, [generating, isAlreadyPersisted]);
+
+  useImperativeHandle(ref, () => ({ addImage: addImageFromUrl }), [addImageFromUrl]);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (generating) return;
+    dragCounterRef.current++;
+    const types = Array.from(e.dataTransfer.types);
+    if (types.includes("Files") || types.includes("application/x-chat-media") || types.includes(CARD_REF_MIME) || types.includes("text/uri-list")) {
+      setDragOver(true);
+    }
+  }, [generating]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setDragOver(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const types = Array.from(e.dataTransfer.types);
+    e.dataTransfer.dropEffect = types.includes(CARD_REF_MIME) ? "link" : "copy";
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setDragOver(false);
+    if (generating) return;
+
+    const chatMediaRaw = e.dataTransfer.getData("application/x-chat-media");
+    if (chatMediaRaw) {
+      try {
+        const media = JSON.parse(chatMediaRaw) as { type: string; url: string };
+        if (media.type === "image" && media.url) {
+          await addImageFromUrl(media.url);
+        }
+      } catch { /* ignore */ }
+      return;
+    }
+
+    const cardRefRaw = e.dataTransfer.getData(CARD_REF_MIME);
+    if (cardRefRaw) {
+      try {
+        const payload = JSON.parse(cardRefRaw) as CardRefPayload;
+        if (payload.imageUrl) {
+          await addImageFromUrl(payload.imageUrl);
+        }
+      } catch { /* ignore */ }
+      return;
+    }
+
+    const htmlData = e.dataTransfer.getData("text/html");
+    if (htmlData) {
+      const match = htmlData.match(/<img[^>]+src="([^"]+)"/);
+      if (match?.[1]) {
+        await addImageFromUrl(match[1]);
+        return;
+      }
+    }
+
+    const files = Array.from(e.dataTransfer.files).filter((f) => IMAGE_MIME.has(f.type));
+    if (files.length > 0) {
+      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      for (const file of files) {
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        try {
+          const { localPath } = await persistImage(dataUrl, undefined, pid);
+          setImages((prev) => [
+            ...prev,
+            { url: localPath, displayUrl: getDisplayUrl(localPath) },
+          ]);
+        } catch { /* skip */ }
+      }
+    }
+  }, [generating, addImageFromUrl]);
 
   const canSend = input.trim() || images.length > 0;
 
@@ -173,7 +303,28 @@ export default function ChatInput() {
       : null;
 
   return (
-    <div className="border-t border-border p-3">
+    <div
+      ref={dropZoneRef}
+      className={cn(
+        "relative border-t p-3 transition-colors",
+        dragOver
+          ? "border-primary/60 bg-primary/5"
+          : "border-border",
+      )}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {dragOver && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-b-xl bg-primary/5 backdrop-blur-sm">
+          <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 px-4 py-2">
+            <ImagePlus className="h-4 w-4 text-primary/60" />
+            <span className="text-sm font-medium text-primary/80">松开添加图片</span>
+          </div>
+        </div>
+      )}
+
       {/* Slash command menu */}
       {showSlashMenu && (
         <div className="mb-2 overflow-hidden rounded-lg border border-border bg-popover shadow-md">
@@ -300,4 +451,6 @@ export default function ChatInput() {
       </div>
     </div>
   );
-}
+});
+
+export default ChatInput;

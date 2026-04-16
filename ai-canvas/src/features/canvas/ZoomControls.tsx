@@ -1,13 +1,16 @@
 import { useCallback } from "react";
-import { Minus, Plus, Maximize } from "lucide-react";
+import { Minus, Plus, Maximize, MessageSquare } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { useUIStore } from "@/stores/uiStore";
 import { MIN_ZOOM, MAX_ZOOM } from "@/shared/constants";
 
 export default function ZoomControls({ zoom }: { zoom: number }) {
   const setViewport = useCanvasStore((s) => s.setViewport);
   const viewport = useCanvasStore((s) => s.viewport);
+  const chatPanelVisible = useUIStore((s) => s.chatPanelVisible);
+  const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
 
   const zoomTo = useCallback(
     (newZoom: number) => {
@@ -60,10 +63,22 @@ export default function ZoomControls({ zoom }: { zoom: number }) {
 
   return (
     <div
-      className="absolute bottom-3 right-3 z-20 flex items-center rounded-lg border border-border/60 bg-background/80 shadow-sm backdrop-blur-xl"
+      className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5"
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
+      <button
+        onClick={toggleChatPanel}
+        title={chatPanelVisible ? "关闭 AI 聊天" : "打开 AI 聊天"}
+        className={`flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 shadow-sm backdrop-blur-xl transition-colors ${
+          chatPanelVisible
+            ? "bg-primary text-primary-foreground"
+            : "bg-background/80 text-muted-foreground hover:bg-accent hover:text-foreground"
+        }`}
+      >
+        <MessageSquare className="h-3.5 w-3.5" />
+      </button>
+      <div className="flex items-center rounded-lg border border-border/60 bg-background/80 shadow-sm backdrop-blur-xl">
       <button
         onClick={() => zoomTo(zoom / 1.2)}
         title="缩小"
@@ -93,6 +108,7 @@ export default function ZoomControls({ zoom }: { zoom: number }) {
       >
         <Maximize className="h-3.5 w-3.5" />
       </button>
+      </div>
     </div>
   );
 }

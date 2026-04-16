@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Minus, Square, X, PanelLeft, Plus, Pencil } from "lucide-react";
+import { Minus, Square, X, PanelLeft, Plus, Pencil, MessageSquare } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { NewProjectDialog } from "@/features/overlays/NewProjectDialog";
 import { useUIStore, type SaveStatus } from "@/stores/uiStore";
@@ -111,6 +111,8 @@ export default function TitleBar() {
   const saveStatus = useUIStore((s) => s.saveStatus);
   const sidebarVisible = useUIStore((s) => s.sidebarVisible);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const chatPanelVisible = useUIStore((s) => s.chatPanelVisible);
+  const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
   const isCanvas = appView === "canvas";
 
   const projects = useProjectStore((s) => s.projects);
@@ -307,6 +309,20 @@ export default function TitleBar() {
 
       {isTauri && (
         <div className="flex">
+          {isCanvas && (
+            <button
+              onClick={toggleChatPanel}
+              title={chatPanelVisible ? "关闭 AI 聊天" : "打开 AI 聊天"}
+              className={cn(
+                "flex h-7 w-10 items-center justify-center rounded-sm transition-colors",
+                chatPanelVisible
+                  ? "text-primary hover:bg-accent"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             onClick={() => appWindow?.minimize()}
             className="flex h-7 w-10 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"

@@ -18,6 +18,7 @@ import {
   generateImage,
   generateVideo,
   generateTitle,
+  extractSizeFromPrompt,
 } from "@/lib/chatService";
 import { modelService } from "@/services/models";
 
@@ -52,6 +53,9 @@ interface ChatState {
 
   generating: boolean;
   generatingType: Intent | null;
+  generatingProgress: number;
+  generatingStatus: string;
+  generatingStartedAt: number;
   streamingText: string;
 
   chatModel: string;
@@ -73,7 +77,7 @@ function rowToSession(r: ChatSessionRow): ChatSession {
   return {
     id: r.id,
     projectId: r.project_id ?? undefined,
-    title: r.title,
+    title: r.title === "New Chat" ? "新对话" : r.title,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -110,6 +114,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   generating: false,
   generatingType: null,
+  generatingProgress: 0,
+  generatingStatus: "",
+  generatingStartedAt: 0,
   streamingText: "",
 
   chatModel: "",
@@ -143,7 +150,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   async createSession() {
     const id = crypto.randomUUID();
-    const row = await createChatSession(id, "New Chat");
+    const row = await createChatSession(id, "新对话");
     const session = rowToSession(row);
     set((s) => ({
       sessions: [session, ...s.sessions],
@@ -200,16 +207,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const state = get();
     if (state.generating) return;
 
-    let sessionId = state.currentSessionId;
-    if (!sessionId) {
-      sessionId = await get().createSession();
-    }
-
     const hasImages = imageUrls && imageUrls.length > 0;
     const parsed = parseIntent(text);
     const intent = hasImages ? "chat" as Intent : parsed.intent;
     const prompt = parsed.prompt;
     if (!prompt && !hasImages) return;
+
+    if (!state.chatModel || !state.imageModel || !state.videoModel) {
+      const [chat, image, video] = await Promise.all([
+        state.chatModel ? Promise.resolve(state.chatModel) : modelService.getDefaultChatModel(),
+        state.imageModel ? Promise.resolve(state.imageModel) : modelService.getDefaultImageModel(),
+        state.videoModel ? Promise.resolve(state.videoModel) : modelService.getDefaultVideoModel(),
+      ]);
+      set({ chatModel: chat, imageModel: image, videoModel: video });
+    }
+
+    set({
+      generating: true,
+      generatingType: intent,
+      generatingProgress: 0,
+      generatingStatus: "",
+      generatingStartedAt: Date.now(),
+      streamingText: "",
+    });
+
+    let sessionId = state.currentSessionId;
+    if (!sessionId) {
+      sessionId = await get().createSession();
+    }
 
     const userContent: ChatContentPart[] = [];
     if (text) userContent.push({ type: "text", text });
@@ -230,9 +255,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     set((s) => ({
       messages: [...s.messages, userMsg],
-      generating: true,
-      generatingType: intent,
-      streamingText: "",
     }));
 
     await saveChatMessage(messageToRow(userMsg));
@@ -244,13 +266,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       let resultParts: ChatContentPart[];
 
+      const handleProgress = (progress: number, status: string) => {
+        set({ generatingProgress: progress, generatingStatus: status });
+      };
+
+      const currentState = get();
+
       if (intent === "image") {
-        set({ generatingType: "image" });
-        const result = await generateImage(prompt, state.imageModel || undefined);
-        resultParts = [{ type: "image", url: result.url, prompt }];
+        const { cleanPrompt, size } = extractSizeFromPrompt(prompt);
+        const result = await generateImage(cleanPrompt, currentState.imageModel || undefined, handleProgress, size);
+        resultParts = [{ type: "image", url: result.url, prompt: cleanPrompt }];
       } else if (intent === "video") {
-        set({ generatingType: "video" });
-        const result = await generateVideo(prompt, state.videoModel || undefined);
+        const result = await generateVideo(prompt, currentState.videoModel || undefined, handleProgress);
         resultParts = [{ type: "video", url: result.url, prompt }];
       } else {
         const history = get().messages.map((m) => ({
@@ -259,7 +286,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }));
         resultParts = await chatCompletion(
           history,
-          state.chatModel,
+          currentState.chatModel,
           {
             onStreamChunk(chunk) {
               set((s) => ({ streamingText: s.streamingText + chunk }));
@@ -268,8 +295,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               set({ streamingText: "" });
             },
             onMediaGenerating(mediaType) {
-              set({ generatingType: mediaType });
+              set({ generatingType: mediaType, generatingProgress: 0, generatingStatus: "" });
             },
+            onMediaProgress: handleProgress,
           },
         );
       }
@@ -282,10 +310,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         metadata: {
           model:
             intent === "image"
-              ? state.imageModel
+              ? get().imageModel
               : intent === "video"
-                ? state.videoModel
-                : state.chatModel,
+                ? get().videoModel
+                : get().chatModel,
           intent,
         },
         createdAt: new Date().toISOString(),
@@ -295,6 +323,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messages: [...s.messages, assistantMsg],
         generating: false,
         generatingType: null,
+        generatingProgress: 0,
+        generatingStatus: "",
+        generatingStartedAt: 0,
         streamingText: "",
       }));
 
@@ -302,10 +333,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (isFirstMessage && sessionId) {
         const firstText = text.slice(0, 200);
-        const titleModel = state.chatModel || get().chatModel;
+        const titleModel = get().chatModel;
         if (titleModel) {
           generateTitle(firstText, titleModel).then((title) => {
-            if (title && title !== "New Chat") {
+            if (title && title !== "新对话") {
               get().renameSession(sessionId, title);
             }
           }).catch(() => {});
@@ -327,6 +358,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messages: [...s.messages, errorMsg],
         generating: false,
         generatingType: null,
+        generatingProgress: 0,
+        generatingStatus: "",
+        generatingStartedAt: 0,
         streamingText: "",
       }));
 
@@ -338,7 +372,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   stopGenerating() {
     _abortController?.abort();
-    set({ generating: false, generatingType: null, streamingText: "" });
+    set({ generating: false, generatingType: null, generatingProgress: 0, generatingStatus: "", generatingStartedAt: 0, streamingText: "" });
   },
 
   async clearMessages() {

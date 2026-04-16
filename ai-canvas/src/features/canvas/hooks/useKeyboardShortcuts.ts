@@ -111,18 +111,18 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // ── Ctrl+C: copy selected cards (not while editing text) ──
+      // ── Ctrl+C: copy selected cards (not while editing text or focus on input) ──
       if (mod && e.key === "c") {
-        if (editingCardId) return;
+        if (editingCardId || isFocusOnInput()) return;
         if (selectedCardIds.size === 0) return;
         e.preventDefault();
         void copyCards(selectedCardIds);
         return;
       }
 
-      // ── Ctrl+V: paste cards (not while editing text) ──
+      // ── Ctrl+V: paste cards (not while editing text or focus on input) ──
       if (mod && e.key === "v") {
-        if (editingCardId) return;
+        if (editingCardId || isFocusOnInput()) return;
         e.preventDefault();
         const pid = useProjectStore.getState().currentProjectId;
         if (pid) {

@@ -22,6 +22,7 @@ export interface ChatServiceCallbacks {
   onStreamDone?: () => void;
   onIntentDetected?: (intent: Intent) => void;
   onMediaGenerating?: (mediaType: "image" | "video") => void;
+  onMediaProgress?: (progress: number, status: string) => void;
 }
 
 export interface ChatHistoryMessage {
@@ -42,6 +43,16 @@ export function parseIntent(input: string): IntentResult {
   return { intent: "chat", prompt: trimmed };
 }
 
+const VALID_SIZES = new Set(["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"]);
+
+export function extractSizeFromPrompt(prompt: string): { cleanPrompt: string; size?: string } {
+  const match = prompt.match(/\b(\d{1,2}:\d{1,2})\b/);
+  if (match && VALID_SIZES.has(match[1])) {
+    return { cleanPrompt: prompt.replace(match[0], "").replace(/\s{2,}/g, " ").trim(), size: match[1] };
+  }
+  return { cleanPrompt: prompt };
+}
+
 // ── Chat completion (streaming) ─────────────────────────────
 
 const CHAT_TOOLS = [
@@ -57,6 +68,11 @@ const CHAT_TOOLS = [
           prompt: {
             type: "string",
             description: "Detailed English prompt for image generation",
+          },
+          size: {
+            type: "string",
+            description: "Image aspect ratio. Extract from user request if specified (e.g. 9:16, 16:9, 4:3, 3:4, 1:1). Default is 1:1.",
+            enum: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"],
           },
         },
         required: ["prompt"],
@@ -203,6 +219,8 @@ export async function chatCompletion(
             const imgResult = await generateImage(
               args.prompt,
               undefined,
+              callbacks.onMediaProgress,
+              args.size,
             );
             result.push({
               type: "image",
@@ -214,6 +232,7 @@ export async function chatCompletion(
             const vidResult = await generateVideo(
               args.prompt,
               undefined,
+              callbacks.onMediaProgress,
             );
             result.push({
               type: "video",
@@ -240,15 +259,19 @@ export async function chatCompletion(
 export async function generateImage(
   prompt: string,
   model?: string,
+  onProgress?: (progress: number, status: string) => void,
+  size?: string,
 ): Promise<{ url: string; revisedPrompt?: string }> {
   const body: Record<string, unknown> = {
     model: model ?? "gemini-3.1-flash-image-preview-2k",
     prompt,
-    size: "1:1",
+    size: size || "1:1",
     quality: "standard",
     n: 1,
     response_format: "url",
   };
+
+  onProgress?.(0, "submitting");
 
   const raw = await aiProxy("openai", "/v1/images/generations", body);
   if (raw.status >= 400) {
@@ -260,7 +283,10 @@ export async function generateImage(
   const taskIdMatch = raw.body.match(/"task_id"\s*:\s*(\d+)/);
   if (data.task_id || taskIdMatch) {
     const taskId = taskIdMatch ? taskIdMatch[1]! : String(data.task_id);
-    const result = await waitForTask(taskId);
+    onProgress?.(5, "queued");
+    const result = await waitForTask(taskId, (progress, status) => {
+      onProgress?.(Math.max(5, Math.min(90, progress)), status);
+    });
     if (
       result.status.toLowerCase() === "failed" ||
       result.status.toLowerCase() === "error"
@@ -269,10 +295,13 @@ export async function generateImage(
     }
     if (!result.resultUrl) throw new Error("No result URL from image task");
 
+    onProgress?.(92, "downloading");
     try {
       const saved = await saveMedia(result.resultUrl);
+      onProgress?.(100, "done");
       return { url: saved.localPath };
     } catch {
+      onProgress?.(100, "done");
       return { url: result.resultUrl };
     }
   }
@@ -280,10 +309,13 @@ export async function generateImage(
   const img = data.data?.[0];
   if (!img?.url) throw new Error("No image returned");
 
+  onProgress?.(92, "downloading");
   try {
     const saved = await saveMedia(img.url);
+    onProgress?.(100, "done");
     return { url: saved.localPath, revisedPrompt: img.revised_prompt };
   } catch {
+    onProgress?.(100, "done");
     return { url: img.url, revisedPrompt: img.revised_prompt };
   }
 }
@@ -293,11 +325,14 @@ export async function generateImage(
 export async function generateVideo(
   prompt: string,
   model?: string,
+  onProgress?: (progress: number, status: string) => void,
 ): Promise<{ url: string }> {
   const body: Record<string, unknown> = {
     model: model ?? "veo3.1-fast",
     prompt,
   };
+
+  onProgress?.(0, "submitting");
 
   const raw = await aiProxy("openai", "/v2/videos/generations", body);
   if (raw.status >= 400) {
@@ -308,7 +343,10 @@ export async function generateVideo(
   const taskIdMatch = raw.body.match(/"task_id"\s*:\s*(\d+)/);
   if (data.task_id || taskIdMatch) {
     const taskId = taskIdMatch ? taskIdMatch[1]! : String(data.task_id);
-    const result = await waitForTask(taskId);
+    onProgress?.(5, "queued");
+    const result = await waitForTask(taskId, (progress, status) => {
+      onProgress?.(Math.max(5, Math.min(90, progress)), status);
+    });
     if (
       result.status.toLowerCase() === "failed" ||
       result.status.toLowerCase() === "error"
@@ -317,10 +355,13 @@ export async function generateVideo(
     }
     if (!result.resultUrl) throw new Error("No result URL from video task");
 
+    onProgress?.(92, "downloading");
     try {
       const saved = await saveMedia(result.resultUrl);
+      onProgress?.(100, "done");
       return { url: saved.localPath };
     } catch {
+      onProgress?.(100, "done");
       return { url: result.resultUrl };
     }
   }
@@ -348,15 +389,15 @@ export async function generateTitle(
   };
 
   const raw = await aiProxy("openai", "/v1/chat/completions", body);
-  if (raw.status >= 400) return "New Chat";
+  if (raw.status >= 400) return "新对话";
 
   try {
     const data = JSON.parse(raw.body);
     let title = data.choices?.[0]?.message?.content?.trim() ?? "";
     title = title.replace(/^["'"""'']+|["'"""'']+$/g, "").trim();
     if (title.length > 20) title = title.slice(0, 20);
-    return title || "New Chat";
+    return title || "新对话";
   } catch {
-    return "New Chat";
+    return "新对话";
   }
 }

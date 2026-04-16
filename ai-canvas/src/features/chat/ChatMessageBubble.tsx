@@ -1,17 +1,19 @@
 import { memo, useState, useCallback } from "react";
 import {
   Download,
-  Maximize2,
   Copy,
   Play,
   Pause,
-  X,
 } from "lucide-react";
 import type { ChatMessage } from "@/stores/chatStore";
 import type { ChatContentPart } from "@/lib/chatService";
 import { getDisplayUrl } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import MarkdownContent from "@/shared/MarkdownContent";
+
+const isTauri =
+  typeof window !== "undefined" &&
+  ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
 
 interface Props {
   message: ChatMessage;
@@ -20,27 +22,33 @@ interface Props {
 export default memo(function ChatMessageBubble({ message }: Props) {
   const isUser = message.role === "user";
 
+  if (isUser) {
+    const imageParts = message.content.filter((p) => p.type === "image");
+    const otherParts = message.content.filter((p) => p.type !== "image");
+
+    return (
+      <div className="mb-3 flex justify-end">
+        <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-primary text-primary-foreground px-3.5 py-2.5">
+          {imageParts.length > 0 && (
+            <div className="mb-1.5 flex flex-wrap gap-1.5">
+              {imageParts.map((part, idx) => (
+                <UserImageThumb key={idx} url={(part as { url: string }).url} />
+              ))}
+            </div>
+          )}
+          {otherParts.map((part, idx) => (
+            <ContentPartRenderer key={idx} part={part} isUser />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={cn(
-        "mb-3 flex",
-        isUser ? "justify-end" : "justify-start",
-      )}
-    >
-      <div
-        className={cn(
-          "max-w-[85%] rounded-2xl px-3.5 py-2.5",
-          isUser
-            ? "rounded-tr-sm bg-primary text-primary-foreground"
-            : "rounded-tl-sm bg-muted/60",
-        )}
-      >
+    <div className="mb-3 flex justify-start">
+      <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-muted/60 px-3.5 py-2.5">
         {message.content.map((part, idx) => (
-          <ContentPartRenderer
-            key={idx}
-            part={part}
-            isUser={isUser}
-          />
+          <ContentPartRenderer key={idx} part={part} isUser={false} />
         ))}
       </div>
     </div>
@@ -79,6 +87,20 @@ function ContentPartRenderer({
   }
 }
 
+// ── User image thumbnail ────────────────────────────────────
+
+function UserImageThumb({ url }: { url: string }) {
+  const displayUrl = getDisplayUrl(url);
+  return (
+    <img
+      src={displayUrl}
+      alt=""
+      className="h-16 w-16 rounded-md border border-white/20 object-cover"
+      loading="lazy"
+    />
+  );
+}
+
 // ── Image block ─────────────────────────────────────────────
 
 function ImageBlock({
@@ -88,7 +110,6 @@ function ImageBlock({
   url: string;
   prompt?: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const displayUrl = getDisplayUrl(url);
 
   const handleCopyPrompt = useCallback(() => {
@@ -106,67 +127,45 @@ function ImageBlock({
     [url, prompt],
   );
 
-  return (
-    <>
-      <div className="group relative mt-1.5 mb-1 overflow-hidden rounded-lg">
-        <img
-          src={displayUrl}
-          alt={prompt || "Generated image"}
-          className="max-w-[320px] w-full rounded-lg object-cover cursor-grab active:cursor-grabbing"
-          onClick={() => setExpanded(true)}
-          draggable
-          onDragStart={handleDragStart}
-          loading="lazy"
-        />
-        <div className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <button
-            onClick={() => setExpanded(true)}
-            className="flex h-7 w-7 items-center justify-center rounded-md bg-black/50 text-white backdrop-blur-sm transition-colors hover:bg-black/70"
-            title="放大"
-          >
-            <Maximize2 className="h-3.5 w-3.5" />
-          </button>
-          {prompt && (
-            <button
-              onClick={handleCopyPrompt}
-              className="flex h-7 w-7 items-center justify-center rounded-md bg-black/50 text-white backdrop-blur-sm transition-colors hover:bg-black/70"
-              title="复制 Prompt"
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </button>
-          )}
-          <a
-            href={displayUrl}
-            download
-            className="flex h-7 w-7 items-center justify-center rounded-md bg-black/50 text-white backdrop-blur-sm transition-colors hover:bg-black/70"
-            title="下载"
-          >
-            <Download className="h-3.5 w-3.5" />
-          </a>
-        </div>
-      </div>
+  const handleRevealFile = useCallback(async () => {
+    if (!isTauri) return;
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("open_in_explorer", { path: url, projectId: null });
+    } catch (err) {
+      console.error("Reveal file failed:", err);
+    }
+  }, [url]);
 
-      {/* Lightbox */}
-      {expanded && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-          onClick={() => setExpanded(false)}
-        >
+  return (
+    <div className="group relative mt-1.5 mb-1 overflow-hidden rounded-lg">
+      <img
+        src={displayUrl}
+        alt={prompt || "生成的图片"}
+        className="max-w-[320px] w-full rounded-lg object-cover cursor-grab active:cursor-grabbing"
+        draggable
+        onDragStart={handleDragStart}
+        loading="lazy"
+      />
+      <div className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        {prompt && (
           <button
-            onClick={() => setExpanded(false)}
-            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+            onClick={handleCopyPrompt}
+            className="flex h-7 w-7 items-center justify-center rounded-md bg-black/50 text-white backdrop-blur-sm transition-colors hover:bg-black/70"
+            title="复制 Prompt"
           >
-            <X className="h-5 w-5" />
+            <Copy className="h-3.5 w-3.5" />
           </button>
-          <img
-            src={displayUrl}
-            alt={prompt || "Generated image"}
-            className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
-    </>
+        )}
+        <button
+          onClick={handleRevealFile}
+          className="flex h-7 w-7 items-center justify-center rounded-md bg-black/50 text-white backdrop-blur-sm transition-colors hover:bg-black/70"
+          title="在文件管理器中显示"
+        >
+          <Download className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -255,14 +254,21 @@ function VideoBlock({
             <Copy className="h-3.5 w-3.5" />
           </button>
         )}
-        <a
-          href={displayUrl}
-          download
+        <button
+          onClick={async () => {
+            if (!isTauri) return;
+            try {
+              const { invoke } = await import("@tauri-apps/api/core");
+              await invoke("open_in_explorer", { path: url, projectId: null });
+            } catch (err) {
+              console.error("Reveal file failed:", err);
+            }
+          }}
           className="flex h-7 w-7 items-center justify-center rounded-md bg-black/50 text-white backdrop-blur-sm transition-colors hover:bg-black/70"
-          title="下载"
+          title="在文件管理器中显示"
         >
           <Download className="h-3.5 w-3.5" />
-        </a>
+        </button>
       </div>
     </div>
   );

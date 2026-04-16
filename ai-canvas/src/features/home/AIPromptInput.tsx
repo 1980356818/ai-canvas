@@ -2,16 +2,12 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { MessageSquare, ImageIcon, SendHorizonal, X, ImagePlus } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
-import { useCardStore } from "@/stores/cardStore";
-import { createProject, hasApiKey, updateProjectMeta, isTauri } from "@/lib/tauri";
+import { useChatStore } from "@/stores/chatStore";
+import { createProject, hasApiKey, isTauri } from "@/lib/tauri";
 import { persistImage, getDisplayUrl } from "@/lib/media";
-import { autoSave } from "@/lib/autoSave";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
-import { CARD_DEFAULTS } from "@/shared/constants";
 import ModelSelector from "@/features/editor/ModelSelector";
-import type { CardType } from "@/shared/types";
-import type { RefImageEntry } from "@/config/model-ref-images";
 
 type InputMode = "chat" | "image";
 
@@ -29,20 +25,17 @@ const MODE_CONFIG: Record<
   {
     label: string;
     icon: typeof MessageSquare;
-    cardType: CardType;
     placeholder: string;
   }
 > = {
   chat: {
     label: "文字",
     icon: MessageSquare,
-    cardType: "ai_chat",
-    placeholder: "描述你的需求，AI 将在画布上为你生成内容...",
+    placeholder: "描述你的需求，AI 将为你解答...",
   },
   image: {
     label: "图片",
     icon: ImageIcon,
-    cardType: "ai_image",
     placeholder:
       "描述你想生成的图片，例如「户外运动风格的模特穿搭图，蓝色系背景」...",
   },
@@ -146,7 +139,7 @@ export default function AIPromptInput() {
         const selected = await open({
           multiple: true,
           filters: [
-            { name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp"] },
+            { name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp"] },
           ],
         });
         if (!selected) return;
@@ -182,6 +175,12 @@ export default function AIPromptInput() {
     [addImages],
   );
 
+  const clearInput = useCallback(() => {
+    setPrompt("");
+    setImages([]);
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+  }, []);
+
   const handleSend = useCallback(async () => {
     const trimmed = prompt.trim();
     if (!trimmed || sending) return;
@@ -206,51 +205,19 @@ export default function AIPromptInput() {
       const project = await createProject(trimmed.slice(0, 40));
       useProjectStore.getState().addProject(project);
       useProjectStore.getState().openProject(project.id);
-
-      const now = new Date().toISOString();
-      const cardType = config.cardType;
-      const defaults = CARD_DEFAULTS[cardType];
-
-      const refImages: Record<string, RefImageEntry> | undefined =
-        images.length > 0
-          ? Object.fromEntries(
-              images.map((img, i) => [
-                `refImage${i}`,
-                { url: img.url, sourceType: "file" as const },
-              ]),
-            )
-          : undefined;
-
-      const cardData =
-        cardType === "ai_chat"
-          ? { messages: [{ role: "user", content: trimmed }], model: selectedModel || undefined, refImages }
-          : { content: trimmed, model: selectedModel || undefined, refImages };
-
-      const card = {
-        id: crypto.randomUUID(),
-        projectId: project.id,
-        type: cardType,
-        x: 320,
-        y: 80,
-        width: defaults.width,
-        height: defaults.height,
-        zIndex: 1,
-        locked: false,
-        collapsed: false,
-        data: cardData,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      useCardStore.getState().addCard(card);
-      autoSave.markDirty(card.id);
-      await autoSave.forceSave();
-      const meta = { nodeCount: 1 };
-      useProjectStore.getState().updateProject(project.id, meta);
-      await updateProjectMeta(project.id, meta);
       useUIStore.getState().setAppView("canvas");
-      setPrompt("");
-      setImages([]);
+
+      if (!useUIStore.getState().chatPanelVisible) {
+        useUIStore.getState().toggleChatPanel();
+      }
+
+      const chatText = mode === "image" ? `/image ${trimmed}` : trimmed;
+      const chatImages = images.map((img) => img.url);
+
+      clearInput();
+
+      await useChatStore.getState().createSession();
+      await useChatStore.getState().sendMessage(chatText, chatImages.length > 0 ? chatImages : undefined);
     } catch (err) {
       useUIStore.getState().addToast({
         type: "error",
@@ -261,7 +228,7 @@ export default function AIPromptInput() {
     } finally {
       setSending(false);
     }
-  }, [prompt, sending, config, selectedModel, images]);
+  }, [prompt, sending, mode, images, clearInput]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -385,6 +352,18 @@ export default function AIPromptInput() {
           />
 
           <div className="flex-1" />
+
+          {(prompt.trim() || images.length > 0) && (
+            <button
+              type="button"
+              onClick={clearInput}
+              className="mr-1 flex h-8 items-center gap-1 rounded-full px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+              title="清空内容"
+            >
+              <X className="h-3.5 w-3.5" />
+              清空
+            </button>
+          )}
 
           {images.length === 0 && (
             <button
