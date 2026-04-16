@@ -178,7 +178,7 @@ const Port = memo(function Port({
       onPointerDown={onPortPointerDown}
     >
       <div
-        className="absolute inset-[-1px] rounded-full bg-card"
+        className="absolute inset-[-1px] rounded-full"
         aria-hidden
       />
       <div

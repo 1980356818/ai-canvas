@@ -8,6 +8,7 @@ const GAP = 12;
 const EDITOR_SIZES: Record<string, { height: number; minWidth: number }> = {
   ai_chat: { height: 280, minWidth: 560 },
   ai_image: { height: 320, minWidth: 560 },
+  ai_video: { height: 300, minWidth: 560 },
   ai_tryon: { height: 300, minWidth: 560 },
   ai_multiangle: { height: 290, minWidth: 440 },
 };
@@ -37,8 +38,20 @@ export default function FloatingEditor() {
   if (!card) return null;
   if (card.type === "text" || card.type === "sticky_note") return null;
 
-  const { height, minWidth } = EDITOR_SIZES[card.type] ?? DEFAULT_SIZE;
+  const { height: baseHeight, minWidth } = EDITOR_SIZES[card.type] ?? DEFAULT_SIZE;
   const zoom = viewport.zoom;
+
+  const data = card.data as Record<string, unknown> | undefined;
+  const refImages = data?.refImages as Record<string, unknown> | undefined;
+  const hasRefImages = refImages && Object.keys(refImages).length > 0;
+  const upstreamTexts = data?.upstreamTexts as Record<string, unknown> | undefined;
+  const hasUpstream = upstreamTexts && Object.keys(upstreamTexts).length > 0;
+  const refFrames = data?.refFrames as unknown[] | undefined;
+  const hasRefFrames = refFrames && refFrames.length > 0;
+  let height = baseHeight;
+  if (hasRefImages) height += 112;
+  if (hasUpstream) height += 64;
+  if (hasRefFrames) height += 90;
 
   const baseWidth = Math.max(minWidth, card.width);
   const scaledWidth = baseWidth * zoom;

@@ -8,7 +8,6 @@ import {
 import type { ChatMessage } from "@/stores/chatStore";
 import type { ChatContentPart } from "@/lib/chatService";
 import { getDisplayUrl } from "@/lib/media";
-import { cn } from "@/lib/utils";
 import MarkdownContent from "@/shared/MarkdownContent";
 
 const isTauri =

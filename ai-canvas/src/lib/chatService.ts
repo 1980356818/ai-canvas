@@ -47,7 +47,7 @@ const VALID_SIZES = new Set(["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"])
 
 export function extractSizeFromPrompt(prompt: string): { cleanPrompt: string; size?: string } {
   const match = prompt.match(/\b(\d{1,2}:\d{1,2})\b/);
-  if (match && VALID_SIZES.has(match[1])) {
+  if (match && match[1] && VALID_SIZES.has(match[1])) {
     return { cleanPrompt: prompt.replace(match[0], "").replace(/\s{2,}/g, " ").trim(), size: match[1] };
   }
   return { cleanPrompt: prompt };

@@ -31,7 +31,7 @@ export default function SettingsDialog() {
   const [autoSavePath, setAutoSavePath] = useState("");
   const [exportPath, setExportPath] = useState("");
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saved, _setSaved] = useState(false);
   const [connStatus, setConnStatus] = useState<ConnectionStatus>("idle");
   const [connError, setConnError] = useState("");
 

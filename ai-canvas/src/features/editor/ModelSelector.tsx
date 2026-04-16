@@ -61,7 +61,9 @@ export default function ModelSelector({
         className="h-7 appearance-none rounded border border-input bg-background pl-2 pr-6 text-xs outline-none ring-ring focus:ring-1"
       >
         {!models.some((m) => m.id === value) && value && (
-          <option value={value}>{value}</option>
+          <option value={value}>
+            {modelService.getDisplayName(value)}
+          </option>
         )}
         {models.map((m) => (
           <option key={m.id} value={m.id}>

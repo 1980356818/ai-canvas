@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from "react";
 import {
   SendHorizonal,
-  Loader2,
   Square,
   Image as ImageIcon,
   Video,

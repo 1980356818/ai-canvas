@@ -34,6 +34,17 @@ function toSeedanceRatio(size: string): string | undefined {
   return ratioMap[key] ?? key;
 }
 
+const LEGACY_MODEL_MAP: Record<string, string> = {
+  "doubao-seedance-2-0-v2-250528": "doubao-seedance-2-0-260128",
+  "doubao-seedance-2-0-v2-250528-fast": "doubao-seedance-2-0-fast-260128",
+  "doubao-seedance-2-0-fast-v2-250528": "doubao-seedance-2-0-fast-260128",
+};
+
+function resolveModel(model: string | undefined): string {
+  if (!model) return "doubao-seedance-2-0-260128";
+  return LEGACY_MODEL_MAP[model] ?? model;
+}
+
 export class SeedanceProvider implements AIProvider {
   readonly descriptor = {
     id: "seedance",
@@ -73,7 +84,7 @@ export class SeedanceProvider implements AIProvider {
     }
 
     const body: Record<string, unknown> = {
-      model: req.model ?? "doubao-seedance-2-0-v2-250528",
+      model: resolveModel(req.model),
       content,
     };
 

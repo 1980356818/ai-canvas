@@ -31,29 +31,6 @@ function syncNodeCount(projectId: string) {
   void updateProjectMeta(projectId, { nodeCount: count });
 }
 
-function createTextCard(projectId: string, content: string): CanvasCard {
-  const vp = useCanvasStore.getState().viewport;
-  const cx = (-vp.x + vp.width / 2) / vp.zoom;
-  const cy = (-vp.y + vp.height / 2) / vp.zoom;
-  const { maxZIndex } = useCardStore.getState();
-  const now = new Date().toISOString();
-  return {
-    id: crypto.randomUUID(),
-    projectId,
-    type: "text",
-    x: cx - 160,
-    y: cy - 120,
-    width: 320,
-    height: 240,
-    zIndex: maxZIndex + 1,
-    locked: false,
-    collapsed: false,
-    data: { content },
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Core: collect
 // ---------------------------------------------------------------------------

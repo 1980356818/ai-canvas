@@ -13,8 +13,8 @@ const VIDEO_MODELS: ModelInfo[] = [
   { id: "veo3.1-fast", display_name: "Veo 3.1 Fast", capability: "VIDEO" },
   { id: "veo3.1-4k", display_name: "Veo 3.1 (4K)", capability: "VIDEO" },
   { id: "veo3.1-pro-4k", display_name: "Veo 3.1 Pro (4K)", capability: "VIDEO" },
-  { id: "doubao-seedance-2-0-v2-250528", display_name: "Seedance 2.0", capability: "VIDEO" },
-  { id: "doubao-seedance-2-0-v2-250528-fast", display_name: "Seedance 2.0 Fast", capability: "VIDEO" },
+  { id: "doubao-seedance-2-0-260128", display_name: "Seedance 2.0", capability: "VIDEO" },
+  { id: "doubao-seedance-2-0-fast-260128", display_name: "Seedance 2.0 Fast", capability: "VIDEO" },
 ];
 
 const CAPABILITY_MAP: Record<string, ModelInfo[]> = {
@@ -28,6 +28,12 @@ const ALL_MODELS: ModelInfo[] = [
   ...IMAGE_MODELS,
   ...VIDEO_MODELS,
 ];
+
+const LEGACY_DISPLAY: Record<string, string> = {
+  "doubao-seedance-2-0-v2-250528": "Seedance 2.0 (旧)",
+  "doubao-seedance-2-0-v2-250528-fast": "Seedance 2.0 Fast (旧)",
+  "doubao-seedance-2-0-fast-v2-250528": "Seedance 2.0 Fast (旧)",
+};
 
 export const modelService = {
   async getAll(): Promise<ModelInfo[]> {
@@ -69,6 +75,12 @@ export const modelService = {
         : "gemini-3.1-flash-image-preview-2k";
     }
     return baseId;
+  },
+
+  getDisplayName(modelId: string): string {
+    const model = ALL_MODELS.find((m) => m.id === modelId);
+    if (model) return model.display_name;
+    return LEGACY_DISPLAY[modelId] ?? modelId;
   },
 
   invalidateCache() {},
