@@ -97,22 +97,16 @@ export default function SettingsDialog() {
 
       invalidateApiKeyCache();
       modelService.invalidateCache();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-
-      setConnStatus("testing");
-      setConnError("");
-      try {
-        await validateConnection();
-        setConnStatus("ok");
-      } catch (err) {
-        setConnStatus("error");
-        setConnError(err instanceof Error ? err.message : String(err));
-      }
+      toggleSettings();
+      useUIStore.getState().addToast({
+        type: "info",
+        title: "设置已保存",
+        duration: 2000,
+      });
     } finally {
       setSaving(false);
     }
-  }, [apiKey.value, baseUrl, autoSavePath, exportPath]);
+  }, [apiKey.value, baseUrl, autoSavePath, exportPath, toggleSettings]);
 
   if (!visible) return null;
 

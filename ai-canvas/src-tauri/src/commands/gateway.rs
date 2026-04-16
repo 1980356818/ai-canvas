@@ -32,21 +32,27 @@ pub async fn list_models(
         .map_err(|e| format!("解析模型列表失败: {}", e))
 }
 
-/// Poll a task's current status and result from /v1/tasks/{taskId}.
+/// Poll a task's current status and result.
+/// When `endpoint` is provided, uses that path (with `{task_id}` placeholder replaced).
+/// Otherwise defaults to `/v1/tasks/{task_id}`.
 #[tauri::command]
 pub async fn poll_task(
     state: State<'_, AppState>,
     task_id: String,
+    endpoint: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let config = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         read_api_config(&db, "openai")?
     };
 
+    let path = endpoint
+        .unwrap_or_else(|| format!("/v1/tasks/{}", task_id))
+        .replace("{task_id}", &task_id);
     let url = format!(
-        "{}/v1/tasks/{}",
+        "{}{}",
         config.base_url.trim_end_matches('/'),
-        task_id
+        path
     );
     let resp = state
         .http_client

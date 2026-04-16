@@ -562,6 +562,18 @@ export async function listModels(): Promise<ModelInfo[]> {
   return data.data ?? [];
 }
 
+function extractNestedUrl(raw: Record<string, unknown>): string | undefined {
+  const output = raw.output as Record<string, unknown> | undefined;
+  if (output) {
+    return (output.video_url ?? output.result_url ?? output.url) as string | undefined;
+  }
+  const content = raw.content as Record<string, unknown> | undefined;
+  if (content) {
+    return (content.video_url ?? content.url) as string | undefined;
+  }
+  return undefined;
+}
+
 function normalizeTaskInfo(raw: Record<string, unknown>): TaskInfo {
   console.log("[TaskPoll] 原始响应字段:", Object.keys(raw));
   console.log("[TaskPoll] 原始响应（不含大数据）:", JSON.stringify(raw, (_key, value) => {
@@ -572,13 +584,13 @@ function normalizeTaskInfo(raw: Record<string, unknown>): TaskInfo {
     id: String(raw.id ?? ""),
     status: String(raw.status ?? ""),
     progress: Number(raw.progress ?? 0),
-    resultUrl: (raw.resultUrl ?? raw.result_url) as string | undefined,
+    resultUrl: (raw.resultUrl ?? raw.result_url ?? raw.video_url ?? extractNestedUrl(raw)) as string | undefined,
     thumbnailUrl: (raw.thumbnailUrl ?? raw.thumbnail_url) as string | undefined,
-    errorMessage: (raw.errorMessage ?? raw.error_message) as string | undefined,
+    errorMessage: (raw.errorMessage ?? raw.error_message ?? raw.error_msg) as string | undefined,
     createdAt: (raw.createdAt ?? raw.created_at) as string | undefined,
     finishedAt: (raw.finishedAt ?? raw.finished_at) as string | undefined,
   };
-  if (info.status && /complet|success|fail|error|cancel/i.test(info.status)) {
+  if (info.status && /complet|succeed|success|fail|error|cancel|expir/i.test(info.status)) {
     console.log("[TaskPoll] 任务终态:", {
       status: info.status,
       resultUrl: info.resultUrl?.slice(0, 100),
@@ -588,14 +600,17 @@ function normalizeTaskInfo(raw: Record<string, unknown>): TaskInfo {
   return info;
 }
 
-export async function pollTask(taskId: string): Promise<TaskInfo> {
+export async function pollTask(taskId: string, endpoint?: string): Promise<TaskInfo> {
   if (isTauri) {
     await ensureTauriAPIs();
-    const raw = await _invoke<Record<string, unknown>>("poll_task", { taskId });
+    const raw = await _invoke<Record<string, unknown>>("poll_task", { taskId, endpoint });
     return normalizeTaskInfo(raw);
   }
 
-  const url = buildProxyUrl(`/v1/tasks/${taskId}`);
+  const path = endpoint
+    ? endpoint.replace("{task_id}", taskId)
+    : `/v1/tasks/${taskId}`;
+  const url = buildProxyUrl(path);
   const resp = await fetch(url, { headers: getAuthHeaders() });
   if (!resp.ok) throw new Error(`Failed to poll task: ${resp.status}`);
   const raw = await resp.json();

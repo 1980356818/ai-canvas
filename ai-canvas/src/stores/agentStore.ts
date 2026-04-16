@@ -3,6 +3,7 @@ import type { AgentMessage, AgentStatus } from "@/agent/types";
 import { ToolRegistry } from "@/agent/tools/registry";
 import { ProviderManager } from "@/agent/providers/manager";
 import { OpenAIProvider } from "@/agent/providers/openai";
+import { SeedanceProvider } from "@/agent/providers/seedance";
 import { registerAllTools } from "@/agent/plugins";
 import { buildSystemPrompt } from "@/agent/prompts";
 import { createAgentContext } from "@/agent/context";
@@ -13,6 +14,7 @@ import { modelService } from "@/services/models";
 
 const providerManager = new ProviderManager();
 providerManager.register(new OpenAIProvider());
+providerManager.register(new SeedanceProvider());
 
 const toolRegistry = new ToolRegistry();
 registerAllTools(toolRegistry);

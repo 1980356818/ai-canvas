@@ -13,6 +13,8 @@ const VIDEO_MODELS: ModelInfo[] = [
   { id: "veo3.1-fast", display_name: "Veo 3.1 Fast", capability: "VIDEO" },
   { id: "veo3.1-4k", display_name: "Veo 3.1 (4K)", capability: "VIDEO" },
   { id: "veo3.1-pro-4k", display_name: "Veo 3.1 Pro (4K)", capability: "VIDEO" },
+  { id: "doubao-seedance-2-0-v2-250528", display_name: "Seedance 2.0", capability: "VIDEO" },
+  { id: "doubao-seedance-2-0-v2-250528-fast", display_name: "Seedance 2.0 Fast", capability: "VIDEO" },
 ];
 
 const CAPABILITY_MAP: Record<string, ModelInfo[]> = {

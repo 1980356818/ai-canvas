@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { Sparkles, Loader2, RefreshCw, ArrowDownLeft, Lock, X, AlertCircle, ImageIcon } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, ArrowDownLeft, Lock, X, AlertCircle, ImageIcon, Volume2, VolumeX } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
@@ -37,6 +37,9 @@ interface VideoData {
   _locked?: boolean;
   _label?: string;
   _description?: string;
+  duration?: number;
+  resolution?: string;
+  generateAudio?: boolean;
 }
 
 function buildFinalPrompt(data: VideoData): string {
@@ -74,6 +77,11 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const [currentSize, setCurrentSize] = useState(() => normalizeImageSize((card.data as VideoData).size));
   const [error, setError] = useState<string | null>(null);
   const data = card.data as VideoData;
+  const isSeedance = currentModel.startsWith("doubao-seedance");
+
+  const [duration, setDuration] = useState<number>(data.duration ?? 5);
+  const [resolution, setResolution] = useState<string>(data.resolution ?? "720p");
+  const [generateAudio, setGenerateAudio] = useState<boolean>(data.generateAudio ?? true);
 
   const upstreamEntries = useMemo(
     () => Object.entries(data.upstreamTexts || {}),
@@ -107,6 +115,33 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     (size: string) => {
       setCurrentSize(size);
       updateCard(card.id, { data: { ...data, size } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const handleDurationChange = useCallback(
+    (val: number) => {
+      setDuration(val);
+      updateCard(card.id, { data: { ...data, duration: val } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const handleResolutionChange = useCallback(
+    (val: string) => {
+      setResolution(val);
+      updateCard(card.id, { data: { ...data, resolution: val } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const handleAudioChange = useCallback(
+    (val: boolean) => {
+      setGenerateAudio(val);
+      updateCard(card.id, { data: { ...data, generateAudio: val } });
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
@@ -193,7 +228,10 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     useUIStore.getState().setCardError(card.id, null);
 
     try {
-      const provider = providerManager.getDefault();
+      const isSeedance = (currentModel || "").startsWith("doubao-seedance");
+      const provider = isSeedance
+        ? providerManager.get("seedance") ?? providerManager.getDefault()
+        : providerManager.getDefault();
       if (!provider.generateVideo) {
         throw new Error("当前 Provider 不支持视频生成");
       }
@@ -212,6 +250,11 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         onProgress: (p) => {
           setCardProgress(card.id, { percent: p.percent, label: p.label });
         },
+        ...(isSeedance && {
+          duration,
+          resolution,
+          generateAudio,
+        }),
       });
 
       updateCard(card.id, { data: { ...data, videoUrl: result.url } });
@@ -243,7 +286,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, generating, updateCard, currentModel, currentSize, setCardProgress, frames]);
+  }, [data, card.id, generating, updateCard, currentModel, currentSize, setCardProgress, frames, isSeedance, duration, resolution, generateAudio]);
 
   const isLocked = !!data._locked;
 
@@ -338,6 +381,52 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
             className="shrink-0 rounded p-0.5 text-destructive/60 hover:bg-destructive/10 hover:text-destructive"
           >
             <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {isSeedance && !isLocked && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-border/50 bg-muted/30 px-2.5 py-1.5">
+          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            时长
+            <select
+              value={duration}
+              onChange={(e) => handleDurationChange(Number(e.target.value))}
+              disabled={generating}
+              className="h-6 rounded border border-border bg-background px-1.5 text-[11px] text-foreground disabled:opacity-40"
+            >
+              <option value={-1}>自动</option>
+              {[4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((s) => (
+                <option key={s} value={s}>{s}s</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            分辨率
+            <select
+              value={resolution}
+              onChange={(e) => handleResolutionChange(e.target.value)}
+              disabled={generating}
+              className="h-6 rounded border border-border bg-background px-1.5 text-[11px] text-foreground disabled:opacity-40"
+            >
+              <option value="480p">480p</option>
+              <option value="720p">720p</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => handleAudioChange(!generateAudio)}
+            disabled={generating}
+            className={cn(
+              "flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors",
+              generateAudio
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted",
+              generating && "opacity-40",
+            )}
+          >
+            {generateAudio ? <Volume2 className="h-3 w-3" /> : <VolumeX className="h-3 w-3" />}
+            {generateAudio ? "有声" : "无声"}
           </button>
         </div>
       )}

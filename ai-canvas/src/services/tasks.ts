@@ -6,11 +6,15 @@ const TERMINAL_STATUSES = new Set([
   "cancelled",
   "error",
   "success",
+  "succeeded",
+  "expired",
   "COMPLETED",
   "FAILED",
   "CANCELLED",
   "ERROR",
   "SUCCESS",
+  "SUCCEEDED",
+  "EXPIRED",
 ]);
 
 const INITIAL_DELAY = 1000;
@@ -46,6 +50,7 @@ export async function waitForTask(
   taskId: string,
   onProgress?: (progress: number, status: string) => void,
   signal?: AbortSignal,
+  endpoint?: string,
 ): Promise<TaskResult> {
   let delay = INITIAL_DELAY;
 
@@ -54,7 +59,7 @@ export async function waitForTask(
       throw new DOMException("Aborted", "AbortError");
     }
 
-    const info: TaskInfo = await pollTask(taskId);
+    const info: TaskInfo = await pollTask(taskId, endpoint);
 
     onProgress?.(info.progress ?? 0, info.status);
 

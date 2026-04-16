@@ -88,6 +88,11 @@ export interface VideoGenRequest {
   size?: string;
   referenceImages?: ImageRefInput[];
   onProgress?: (progress: VideoGenProgress) => void;
+  duration?: number;
+  resolution?: string;
+  generateAudio?: boolean;
+  seed?: number;
+  watermark?: boolean;
 }
 
 export interface VideoGenResponse {
