@@ -164,6 +164,10 @@ const Port = memo(function Port({
       onPointerDown={onPortPointerDown}
     >
       <div
+        className="absolute inset-[-1px] rounded-full bg-card"
+        aria-hidden
+      />
+      <div
         className={cn(
           "port-socket flex items-center justify-center rounded-full",
           "h-[18px] w-[18px] transition-all duration-150",
@@ -637,13 +641,9 @@ export default memo(
                 ? "linear-gradient(135deg, #38bdf8, #818cf8, #c084fc, #f472b6, #38bdf8)"
                 : `linear-gradient(135deg, ${accentColor}, #a855f7, #ec4899)`,
               backgroundSize: selected ? "400% 400%" : undefined,
-              WebkitMask: [
-                `radial-gradient(circle 9px at ${selected ? 1.5 : 1}px 50%,#fff 100%,transparent 0) border-box`,
-                `radial-gradient(circle 9px at calc(100% - ${selected ? 1.5 : 1}px) 50%,#fff 100%,transparent 0) border-box`,
-                'linear-gradient(#fff 0 0) content-box',
-                'linear-gradient(#fff 0 0)',
-              ].join(', '),
-              WebkitMaskComposite: 'destination-out, destination-out, xor, source-over',
+              WebkitMask:
+                "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+              WebkitMaskComposite: "xor",
             }}
           />
 
