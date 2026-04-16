@@ -121,6 +121,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const sessions = rows.map(rowToSession);
     set({ sessions });
 
+    let sid = get().currentSessionId;
+
+    if (!sid && sessions.length > 0) {
+      sid = sessions[0]!.id;
+      set({ currentSessionId: sid });
+    }
+
+    if (sid && get().messages.length === 0) {
+      const msgRows = await loadChatMessages(sid);
+      set({ messages: msgRows.map(rowToMessage) });
+    }
+
     if (!get().chatModel) {
       const chat = await modelService.getDefaultChatModel();
       const image = await modelService.getDefaultImageModel();
@@ -290,9 +302,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (isFirstMessage && sessionId) {
         const firstText = text.slice(0, 200);
-        generateTitle(firstText, state.chatModel).then((title) => {
-          get().renameSession(sessionId, title);
-        });
+        const titleModel = state.chatModel || get().chatModel;
+        if (titleModel) {
+          generateTitle(firstText, titleModel).then((title) => {
+            if (title && title !== "New Chat") {
+              get().renameSession(sessionId, title);
+            }
+          }).catch(() => {});
+        }
       }
     } catch (e) {
       const errorText =

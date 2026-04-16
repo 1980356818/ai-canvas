@@ -352,7 +352,9 @@ export async function generateTitle(
 
   try {
     const data = JSON.parse(raw.body);
-    const title = data.choices?.[0]?.message?.content?.trim();
+    let title = data.choices?.[0]?.message?.content?.trim() ?? "";
+    title = title.replace(/^["'"""'']+|["'"""'']+$/g, "").trim();
+    if (title.length > 20) title = title.slice(0, 20);
     return title || "New Chat";
   } catch {
     return "New Chat";

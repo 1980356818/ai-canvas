@@ -45,10 +45,10 @@ export default function ChatInput() {
     : SLASH_COMMANDS;
 
   useEffect(() => {
-    if (input === "/") {
+    if (input.startsWith("/") && !input.includes(" ")) {
       setShowSlashMenu(true);
       setSelectedSlashIdx(0);
-    } else if (!input.startsWith("/") || input.includes(" ")) {
+    } else {
       setShowSlashMenu(false);
     }
   }, [input]);
