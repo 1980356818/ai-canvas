@@ -1,0 +1,334 @@
+import { create } from "zustand";
+import {
+  listChatSessions,
+  createChatSession,
+  renameChatSession,
+  deleteChatSession,
+  loadChatMessages,
+  saveChatMessage,
+  clearChatMessages,
+  type ChatSessionRow,
+  type ChatMessageRow,
+} from "@/lib/tauri";
+import {
+  type ChatContentPart,
+  type Intent,
+  parseIntent,
+  chatCompletion,
+  generateImage,
+  generateVideo,
+  generateTitle,
+} from "@/lib/chatService";
+import { modelService } from "@/services/models";
+
+// ── Public types ────────────────────────────────────────────
+
+export interface ChatSession {
+  id: string;
+  projectId?: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  sessionId: string;
+  role: "user" | "assistant" | "system";
+  content: ChatContentPart[];
+  metadata?: {
+    model?: string;
+    intent?: Intent;
+  };
+  createdAt: string;
+}
+
+// ── Store ───────────────────────────────────────────────────
+
+interface ChatState {
+  sessions: ChatSession[];
+  currentSessionId: string | null;
+  messages: ChatMessage[];
+
+  generating: boolean;
+  generatingType: Intent | null;
+  streamingText: string;
+
+  chatModel: string;
+  imageModel: string;
+  videoModel: string;
+
+  loadSessions: () => Promise<void>;
+  createSession: () => Promise<string>;
+  switchSession: (id: string) => Promise<void>;
+  deleteSession: (id: string) => Promise<void>;
+  renameSession: (id: string, title: string) => Promise<void>;
+
+  sendMessage: (text: string, imageUrls?: string[]) => Promise<void>;
+  stopGenerating: () => void;
+  clearMessages: () => Promise<void>;
+}
+
+function rowToSession(r: ChatSessionRow): ChatSession {
+  return {
+    id: r.id,
+    projectId: r.project_id ?? undefined,
+    title: r.title,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
+
+function rowToMessage(r: ChatMessageRow): ChatMessage {
+  return {
+    id: r.id,
+    sessionId: r.session_id,
+    role: r.role as ChatMessage["role"],
+    content: JSON.parse(r.content),
+    metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
+    createdAt: r.created_at,
+  };
+}
+
+function messageToRow(m: ChatMessage): ChatMessageRow {
+  return {
+    id: m.id,
+    session_id: m.sessionId,
+    role: m.role,
+    content: JSON.stringify(m.content),
+    metadata: m.metadata ? JSON.stringify(m.metadata) : null,
+    created_at: m.createdAt,
+  };
+}
+
+let _abortController: AbortController | null = null;
+
+export const useChatStore = create<ChatState>((set, get) => ({
+  sessions: [],
+  currentSessionId: null,
+  messages: [],
+
+  generating: false,
+  generatingType: null,
+  streamingText: "",
+
+  chatModel: "",
+  imageModel: "",
+  videoModel: "",
+
+  async loadSessions() {
+    const rows = await listChatSessions();
+    const sessions = rows.map(rowToSession);
+    set({ sessions });
+
+    if (!get().chatModel) {
+      const chat = await modelService.getDefaultChatModel();
+      const image = await modelService.getDefaultImageModel();
+      const video = await modelService.getDefaultVideoModel();
+      set({ chatModel: chat, imageModel: image, videoModel: video });
+    }
+  },
+
+  async createSession() {
+    const id = crypto.randomUUID();
+    const row = await createChatSession(id, "New Chat");
+    const session = rowToSession(row);
+    set((s) => ({
+      sessions: [session, ...s.sessions],
+      currentSessionId: id,
+      messages: [],
+      streamingText: "",
+    }));
+    return id;
+  },
+
+  async switchSession(id) {
+    const rows = await loadChatMessages(id);
+    set({
+      currentSessionId: id,
+      messages: rows.map(rowToMessage),
+      streamingText: "",
+    });
+  },
+
+  async deleteSession(id) {
+    await deleteChatSession(id);
+    set((s) => {
+      const sessions = s.sessions.filter((x) => x.id !== id);
+      const isCurrent = s.currentSessionId === id;
+      return {
+        sessions,
+        currentSessionId: isCurrent
+          ? sessions[0]?.id ?? null
+          : s.currentSessionId,
+        messages: isCurrent
+          ? []
+          : s.messages,
+        streamingText: isCurrent ? "" : s.streamingText,
+      };
+    });
+
+    const state = get();
+    if (state.currentSessionId && state.currentSessionId !== id) {
+      const rows = await loadChatMessages(state.currentSessionId);
+      set({ messages: rows.map(rowToMessage) });
+    }
+  },
+
+  async renameSession(id, title) {
+    await renameChatSession(id, title);
+    set((s) => ({
+      sessions: s.sessions.map((x) =>
+        x.id === id ? { ...x, title } : x,
+      ),
+    }));
+  },
+
+  async sendMessage(text, imageUrls) {
+    const state = get();
+    if (state.generating) return;
+
+    let sessionId = state.currentSessionId;
+    if (!sessionId) {
+      sessionId = await get().createSession();
+    }
+
+    const hasImages = imageUrls && imageUrls.length > 0;
+    const parsed = parseIntent(text);
+    const intent = hasImages ? "chat" as Intent : parsed.intent;
+    const prompt = parsed.prompt;
+    if (!prompt && !hasImages) return;
+
+    const userContent: ChatContentPart[] = [];
+    if (text) userContent.push({ type: "text", text });
+    if (hasImages) {
+      for (const url of imageUrls) {
+        userContent.push({ type: "image", url });
+      }
+    }
+
+    const userMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      sessionId,
+      role: "user",
+      content: userContent,
+      metadata: { intent },
+      createdAt: new Date().toISOString(),
+    };
+
+    set((s) => ({
+      messages: [...s.messages, userMsg],
+      generating: true,
+      generatingType: intent,
+      streamingText: "",
+    }));
+
+    await saveChatMessage(messageToRow(userMsg));
+
+    const isFirstMessage = get().messages.length === 1;
+
+    _abortController = new AbortController();
+
+    try {
+      let resultParts: ChatContentPart[];
+
+      if (intent === "image") {
+        set({ generatingType: "image" });
+        const result = await generateImage(prompt, state.imageModel || undefined);
+        resultParts = [{ type: "image", url: result.url, prompt }];
+      } else if (intent === "video") {
+        set({ generatingType: "video" });
+        const result = await generateVideo(prompt, state.videoModel || undefined);
+        resultParts = [{ type: "video", url: result.url, prompt }];
+      } else {
+        const history = get().messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+        resultParts = await chatCompletion(
+          history,
+          state.chatModel,
+          {
+            onStreamChunk(chunk) {
+              set((s) => ({ streamingText: s.streamingText + chunk }));
+            },
+            onStreamDone() {
+              set({ streamingText: "" });
+            },
+            onMediaGenerating(mediaType) {
+              set({ generatingType: mediaType });
+            },
+          },
+        );
+      }
+
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        sessionId,
+        role: "assistant",
+        content: resultParts,
+        metadata: {
+          model:
+            intent === "image"
+              ? state.imageModel
+              : intent === "video"
+                ? state.videoModel
+                : state.chatModel,
+          intent,
+        },
+        createdAt: new Date().toISOString(),
+      };
+
+      set((s) => ({
+        messages: [...s.messages, assistantMsg],
+        generating: false,
+        generatingType: null,
+        streamingText: "",
+      }));
+
+      await saveChatMessage(messageToRow(assistantMsg));
+
+      if (isFirstMessage && sessionId) {
+        const firstText = text.slice(0, 200);
+        generateTitle(firstText, state.chatModel).then((title) => {
+          get().renameSession(sessionId, title);
+        });
+      }
+    } catch (e) {
+      const errorText =
+        e instanceof Error ? e.message : String(e);
+
+      const errorMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        sessionId,
+        role: "assistant",
+        content: [{ type: "text", text: `Error: ${errorText}` }],
+        createdAt: new Date().toISOString(),
+      };
+
+      set((s) => ({
+        messages: [...s.messages, errorMsg],
+        generating: false,
+        generatingType: null,
+        streamingText: "",
+      }));
+
+      await saveChatMessage(messageToRow(errorMsg));
+    }
+
+    _abortController = null;
+  },
+
+  stopGenerating() {
+    _abortController?.abort();
+    set({ generating: false, generatingType: null, streamingText: "" });
+  },
+
+  async clearMessages() {
+    const sid = get().currentSessionId;
+    if (!sid) return;
+    await clearChatMessages(sid);
+    set({ messages: [], streamingText: "" });
+  },
+
+}));

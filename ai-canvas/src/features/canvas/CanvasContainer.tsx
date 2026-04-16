@@ -123,9 +123,14 @@ export default function CanvasContainer() {
   const handleFileDragOver = useCallback(
     (e: React.DragEvent) => {
       if (!currentProjectId) return;
+      const hasChatMedia = Array.from(e.dataTransfer.types).includes("application/x-chat-media");
       const hasFiles = Array.from(e.dataTransfer.types).includes("Files");
-      if (!hasFiles) return;
+      if (!hasFiles && !hasChatMedia) return;
       e.preventDefault();
+      if (hasChatMedia) {
+        e.dataTransfer.dropEffect = "copy";
+        return;
+      }
 
       const el = document.elementFromPoint(e.clientX, e.clientY);
       const cardEl = el?.closest("[data-card-id]") as HTMLElement | null;
@@ -174,6 +179,51 @@ export default function CanvasContainer() {
     (e: React.DragEvent) => {
       e.preventDefault();
       if (!currentProjectId) return;
+
+      const chatMediaRaw = e.dataTransfer.getData("application/x-chat-media");
+      if (chatMediaRaw) {
+        try {
+          const media = JSON.parse(chatMediaRaw) as {
+            type: "image" | "video";
+            url: string;
+            prompt?: string;
+          };
+          const dropPos = screenToCanvas(e.clientX, e.clientY);
+          const isVideo = media.type === "video";
+          const { width: cardW, height: cardH } = isVideo
+            ? { width: CARD_DEFAULTS.ai_video.width, height: CARD_DEFAULTS.ai_video.height }
+            : { width: CARD_DEFAULTS.ai_image.width, height: CARD_DEFAULTS.ai_image.height };
+
+          const now = new Date().toISOString();
+          const { maxZIndex } = useCardStore.getState();
+          const card: CanvasCard = {
+            id: crypto.randomUUID(),
+            projectId: currentProjectId,
+            type: isVideo ? "ai_video" : "ai_image",
+            x: dropPos.x - cardW / 2,
+            y: dropPos.y - cardH / 2,
+            width: cardW,
+            height: cardH,
+            zIndex: maxZIndex + 1,
+            locked: false,
+            collapsed: false,
+            data: isVideo
+              ? { videoUrl: media.url, content: media.prompt ?? "" }
+              : { imageUrl: media.url, content: media.prompt ?? "" },
+            createdAt: now,
+            updatedAt: now,
+          };
+          useCardStore.getState().addCard(card);
+          autoSave.markDirty(card.id);
+
+          const count = useCardStore.getState().getCardsByProject(currentProjectId).length;
+          useProjectStore.getState().updateProject(currentProjectId, { nodeCount: count });
+          void updateProjectMeta(currentProjectId, { nodeCount: count });
+        } catch {
+          console.warn("[CanvasContainer] Failed to parse chat media drop data");
+        }
+        return;
+      }
 
       const files = Array.from(e.dataTransfer.files).filter(
         (f) => f.type.startsWith("image/") || isVideoFile(f),

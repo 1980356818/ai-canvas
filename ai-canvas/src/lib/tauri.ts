@@ -770,6 +770,131 @@ export async function clearProjectConnections(projectId: string): Promise<void> 
   lsSet("connections_" + projectId, []);
 }
 
+// ── Chat Session / Message persistence ───────────────────────
+
+export interface ChatSessionRow {
+  id: string;
+  project_id: string | null;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatMessageRow {
+  id: string;
+  session_id: string;
+  role: string;
+  content: string;
+  metadata: string | null;
+  created_at: string;
+}
+
+export async function listChatSessions(): Promise<ChatSessionRow[]> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    return _invoke<ChatSessionRow[]>("list_chat_sessions");
+  }
+  return lsGet<ChatSessionRow[]>("chat_sessions", []);
+}
+
+export async function createChatSession(
+  id: string,
+  title: string,
+  projectId?: string,
+): Promise<ChatSessionRow> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    return _invoke<ChatSessionRow>("create_chat_session", {
+      id,
+      title,
+      projectId: projectId ?? null,
+    });
+  }
+  const now = new Date().toISOString();
+  const session: ChatSessionRow = {
+    id,
+    project_id: projectId ?? null,
+    title,
+    created_at: now,
+    updated_at: now,
+  };
+  const sessions = lsGet<ChatSessionRow[]>("chat_sessions", []);
+  sessions.unshift(session);
+  lsSet("chat_sessions", sessions);
+  return session;
+}
+
+export async function renameChatSession(
+  id: string,
+  title: string,
+): Promise<void> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    await _invoke("rename_chat_session", { id, title });
+    return;
+  }
+  const sessions = lsGet<ChatSessionRow[]>("chat_sessions", []);
+  const s = sessions.find((x) => x.id === id);
+  if (s) {
+    s.title = title;
+    s.updated_at = new Date().toISOString();
+    lsSet("chat_sessions", sessions);
+  }
+}
+
+export async function deleteChatSession(id: string): Promise<void> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    await _invoke("delete_chat_session", { id });
+    return;
+  }
+  const sessions = lsGet<ChatSessionRow[]>("chat_sessions", []);
+  lsSet("chat_sessions", sessions.filter((s) => s.id !== id));
+  localStorage.removeItem(LS_PREFIX + "chat_msgs_" + id);
+}
+
+export async function loadChatMessages(
+  sessionId: string,
+): Promise<ChatMessageRow[]> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    return _invoke<ChatMessageRow[]>("load_chat_messages", { sessionId });
+  }
+  return lsGet<ChatMessageRow[]>("chat_msgs_" + sessionId, []);
+}
+
+export async function saveChatMessage(
+  message: ChatMessageRow,
+): Promise<void> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    await _invoke("save_chat_message", { message });
+    return;
+  }
+  const key = "chat_msgs_" + message.session_id;
+  const msgs = lsGet<ChatMessageRow[]>(key, []);
+  const idx = msgs.findIndex((m) => m.id === message.id);
+  if (idx >= 0) msgs[idx] = message;
+  else msgs.push(message);
+  lsSet(key, msgs);
+
+  const sessions = lsGet<ChatSessionRow[]>("chat_sessions", []);
+  const s = sessions.find((x) => x.id === message.session_id);
+  if (s) {
+    s.updated_at = new Date().toISOString();
+    lsSet("chat_sessions", sessions);
+  }
+}
+
+export async function clearChatMessages(sessionId: string): Promise<void> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    await _invoke("clear_chat_messages", { sessionId });
+    return;
+  }
+  lsSet("chat_msgs_" + sessionId, []);
+}
+
 // ── Clipboard (native via Rust arboard) ──────────────────────
 
 export async function clipboardWriteText(text: string): Promise<void> {

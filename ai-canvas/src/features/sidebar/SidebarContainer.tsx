@@ -1,4 +1,4 @@
-import { Bot } from "lucide-react";
+import { Bot, MessageSquare } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { cn } from "@/lib/utils";
 import { ProjectPanel } from "./ProjectPanel";
@@ -6,6 +6,7 @@ import { ProjectPanel } from "./ProjectPanel";
 export function SidebarContainer() {
   const sidebarVisible = useUIStore((s) => s.sidebarVisible);
   const toggleAgentPanel = useUIStore((s) => s.toggleAgentPanel);
+  const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
 
   return (
     <aside
@@ -20,14 +21,22 @@ export function SidebarContainer() {
         <ProjectPanel />
       </div>
 
-      <div className="flex items-center border-t border-border px-3 py-2">
+      <div className="flex items-center gap-1 border-t border-border px-3 py-2">
         <button
           onClick={toggleAgentPanel}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          title="AI 助手"
+          title="AI 助手 (画布操作)"
         >
           <Bot className="h-3.5 w-3.5" />
           AI 助手
+        </button>
+        <button
+          onClick={toggleChatPanel}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          title="AI 聊天 (对话+生图+生视频)"
+        >
+          <MessageSquare className="h-3.5 w-3.5" />
+          AI 聊天
         </button>
       </div>
     </aside>

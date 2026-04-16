@@ -97,6 +97,13 @@ pub fn run() {
             commands::gateway::validate_connection,
             commands::clipboard::clipboard_write,
             commands::clipboard::clipboard_read,
+            commands::chat::list_chat_sessions,
+            commands::chat::create_chat_session,
+            commands::chat::rename_chat_session,
+            commands::chat::delete_chat_session,
+            commands::chat::load_chat_messages,
+            commands::chat::save_chat_message,
+            commands::chat::clear_chat_messages,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

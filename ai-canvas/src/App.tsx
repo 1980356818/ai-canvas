@@ -20,6 +20,7 @@ import ProjectsPage from "@/features/projects/ProjectsPage";
 import CanvasContainer from "@/features/canvas/CanvasContainer";
 import { SidebarContainer } from "@/features/sidebar/SidebarContainer";
 import AgentPanel from "@/features/agent/AgentPanel";
+import ChatPanel from "@/features/chat/ChatPanel";
 import { Toast } from "@/features/overlays/Toast";
 import { ContextMenu } from "@/features/overlays/ContextMenu";
 import SettingsDialog from "@/features/overlays/SettingsDialog";
@@ -31,6 +32,7 @@ export default function App() {
   const appView = useUIStore((s) => s.appView);
   const dataFlowCleanup = useRef<(() => void) | null>(null);
   const agentPanelVisible = useUIStore((s) => s.agentPanelVisible);
+  const chatPanelVisible = useUIStore((s) => s.chatPanelVisible);
   const prevProjectIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -237,6 +239,7 @@ export default function App() {
             <CanvasContainer />
             <SidebarContainer />
             {agentPanelVisible && <AgentPanel />}
+            {chatPanelVisible && <ChatPanel />}
           </div>
         )}
       </ErrorBoundary>

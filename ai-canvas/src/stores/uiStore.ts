@@ -26,6 +26,7 @@ export interface ToastItem {
 interface UIState {
   sidebarVisible: boolean;
   agentPanelVisible: boolean;
+  chatPanelVisible: boolean;
   settingsVisible: boolean;
   saveStatus: SaveStatus;
   toasts: ToastItem[];
@@ -44,6 +45,7 @@ interface UIState {
 
   toggleSidebar: () => void;
   toggleAgentPanel: () => void;
+  toggleChatPanel: () => void;
   toggleSettings: () => void;
   setSaveStatus: (status: SaveStatus) => void;
 
@@ -70,6 +72,7 @@ let toastCounter = 0;
 export const useUIStore = create<UIState>((set) => ({
   sidebarVisible: false,
   agentPanelVisible: false,
+  chatPanelVisible: false,
   settingsVisible: false,
   saveStatus: "saved",
   toasts: [],
@@ -81,6 +84,11 @@ export const useUIStore = create<UIState>((set) => ({
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   toggleAgentPanel: () =>
     set((s) => ({ agentPanelVisible: !s.agentPanelVisible })),
+  toggleChatPanel: () =>
+    set((s) => ({
+      chatPanelVisible: !s.chatPanelVisible,
+      agentPanelVisible: !s.chatPanelVisible ? false : s.agentPanelVisible,
+    })),
   toggleSettings: () =>
     set((s) => ({ settingsVisible: !s.settingsVisible })),
   setSaveStatus: (status) => set({ saveStatus: status }),
