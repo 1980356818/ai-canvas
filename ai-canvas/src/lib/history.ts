@@ -1,10 +1,11 @@
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { useUIStore } from "@/stores/uiStore";
 import { deleteCard as deleteCardFromDb } from "@/lib/tauri";
 import { autoSave } from "@/lib/autoSave";
 
 export type UndoAction =
-  | { type: "delete"; card: CanvasCard }
+  | { type: "delete"; card: CanvasCard; connections: Connection[] }
   | { type: "create"; cardId: string }
   | { type: "update"; cardId: string; prev: Partial<CanvasCard> }
   | { type: "batch"; actions: UndoAction[] };
@@ -83,19 +84,25 @@ class HistoryManager {
 
   private apply(action: UndoAction): UndoAction | null {
     const store = useCardStore.getState();
+    const connStore = useConnectionStore.getState();
     switch (action.type) {
       case "delete": {
         store.addCard(action.card);
+        for (const conn of action.connections) {
+          connStore.addConnection(conn);
+        }
         autoSave.markDirty(action.card.id);
         return { type: "create", cardId: action.card.id };
       }
       case "create": {
         const card = store.getCard(action.cardId);
         if (!card) return null;
+        const savedConns = collectConnectionsForCard(action.cardId);
         store.removeCard(action.cardId);
+        useConnectionStore.getState().removeConnectionsForCard(action.cardId);
         void deleteCardFromDb(action.cardId).catch(() => {});
         autoSave.markDirty();
-        return { type: "delete", card };
+        return { type: "delete", card, connections: savedConns };
       }
       case "update": {
         const card = store.getCard(action.cardId);
@@ -124,8 +131,19 @@ class HistoryManager {
 
 export const history = new HistoryManager();
 
+function collectConnectionsForCard(cardId: string): Connection[] {
+  const conns: Connection[] = [];
+  for (const c of useConnectionStore.getState().connections.values()) {
+    if (c.sourceCardId === cardId || c.targetCardId === cardId) {
+      conns.push({ ...c });
+    }
+  }
+  return conns;
+}
+
 export function recordDelete(card: CanvasCard) {
-  history.push({ type: "delete", card: { ...card } });
+  const connections = collectConnectionsForCard(card.id);
+  history.push({ type: "delete", card: { ...card }, connections });
 }
 
 export function recordCreate(cardId: string) {
@@ -140,9 +158,23 @@ export function recordBatchDelete(cards: CanvasCard[]) {
   if (cards.length === 1) {
     recordDelete(cards[0]!);
   } else if (cards.length > 1) {
+    const allConns = new Map<string, Connection>();
+    for (const c of cards) {
+      for (const conn of collectConnectionsForCard(c.id)) {
+        allConns.set(conn.id, conn);
+      }
+    }
+    const connsByCard = (cardId: string) =>
+      [...allConns.values()].filter(
+        (c) => c.sourceCardId === cardId || c.targetCardId === cardId,
+      );
     history.push({
       type: "batch",
-      actions: cards.map((c) => ({ type: "delete", card: { ...c } })),
+      actions: cards.map((c) => ({
+        type: "delete" as const,
+        card: { ...c },
+        connections: connsByCard(c.id),
+      })),
     });
   }
 }

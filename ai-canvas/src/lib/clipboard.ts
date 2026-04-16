@@ -26,7 +26,8 @@ interface ClipboardPayload {
 
 function syncNodeCount(projectId: string) {
   const count = useCardStore.getState().getCardsByProject(projectId).length;
-  useProjectStore.getState().updateProject(projectId, { nodeCount: count });
+  const updatedAt = new Date().toISOString();
+  useProjectStore.getState().updateProject(projectId, { nodeCount: count, updatedAt });
   void updateProjectMeta(projectId, { nodeCount: count });
 }
 

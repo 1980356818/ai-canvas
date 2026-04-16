@@ -86,6 +86,8 @@ class AutoSaveManager {
 
       if (cardsToSave.length > 0) {
         await saveCardsBatch(cardsToSave.map(cardToRow));
+        const updatedAt = new Date().toISOString();
+        useProjectStore.getState().updateProject(projectId, { updatedAt });
       }
 
       ui.setSaveStatus("saved");

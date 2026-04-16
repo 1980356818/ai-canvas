@@ -9,6 +9,12 @@ export interface ProjectInfo {
   updatedAt: string;
 }
 
+function sortByUpdatedDesc(projects: ProjectInfo[]): ProjectInfo[] {
+  return [...projects].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+}
+
 interface ProjectState {
   projects: ProjectInfo[];
   deletedProjects: ProjectInfo[];
@@ -34,14 +40,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   currentProjectId: null,
   openProjectIds: [],
 
-  setProjects: (projects) => set({ projects }),
+  setProjects: (projects) => set({ projects: sortByUpdatedDesc(projects) }),
 
   setDeletedProjects: (deletedProjects) => set({ deletedProjects }),
 
   setCurrentProjectId: (id) => set({ currentProjectId: id }),
 
   addProject: (project) =>
-    set((s) => ({ projects: [project, ...s.projects] })),
+    set((s) => ({ projects: sortByUpdatedDesc([project, ...s.projects]) })),
 
   removeProject: (id) =>
     set((s) => {
@@ -62,7 +68,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const restored = s.deletedProjects.find((p) => p.id === id);
       return {
         deletedProjects: s.deletedProjects.filter((p) => p.id !== id),
-        projects: restored ? [restored, ...s.projects] : s.projects,
+        projects: restored
+          ? sortByUpdatedDesc([restored, ...s.projects])
+          : s.projects,
       };
     }),
 
@@ -72,11 +80,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     })),
 
   updateProject: (id, partial) =>
-    set((s) => ({
-      projects: s.projects.map((p) =>
+    set((s) => {
+      const updated = s.projects.map((p) =>
         p.id === id ? { ...p, ...partial } : p,
-      ),
-    })),
+      );
+      return {
+        projects: partial.updatedAt ? sortByUpdatedDesc(updated) : updated,
+      };
+    }),
 
   getCurrentProject: () => {
     const { projects, currentProjectId } = get();

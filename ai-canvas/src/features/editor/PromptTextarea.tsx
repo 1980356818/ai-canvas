@@ -3,6 +3,8 @@ import {
   useState,
   useCallback,
   useEffect,
+  forwardRef,
+  useImperativeHandle,
 } from "react";
 import { createPortal } from "react-dom";
 import type { ImageRefOption } from "@/hooks/useImageRefSources";
@@ -19,6 +21,10 @@ const CHIP_CLS =
   "inline-flex items-center gap-0.5 rounded-sm bg-primary/15 px-1 py-px text-xs text-primary align-middle cursor-default select-none whitespace-nowrap";
 const CHIP_IMG_CLS =
   "inline-block h-3.5 w-3.5 rounded-sm object-cover";
+
+export interface PromptTextareaHandle {
+  insertRef: (option: ImageRefOption) => void;
+}
 
 interface PromptTextareaProps {
   value: string;
@@ -111,7 +117,7 @@ function isEditorEmpty(el: HTMLElement): boolean {
 
 // ── Component ──────────────────────────────────────────────
 
-export default function PromptTextarea({
+const PromptTextarea = forwardRef<PromptTextareaHandle, PromptTextareaProps>(function PromptTextarea({
   value,
   inlineRefs,
   imageOptions,
@@ -120,7 +126,7 @@ export default function PromptTextarea({
   disabled,
   className,
   onHoverRef,
-}: PromptTextareaProps) {
+}, ref) {
   const editorRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -291,6 +297,59 @@ export default function PromptTextarea({
     editorRef.current?.focus();
   }, []);
 
+  // ── Imperative: insert ref at cursor from outside ───────
+  const insertRefAtCursor = useCallback(
+    (option: ImageRefOption) => {
+      const el = editorRef.current;
+      if (!el) return;
+
+      el.focus();
+      const newRef = createInlineRef(option);
+      const sel = window.getSelection();
+
+      const chip = document.createElement("span");
+      chip.setAttribute(REF_ATTR, newRef.id);
+      chip.contentEditable = "false";
+      chip.className = CHIP_CLS;
+      if (option.thumbnailUrl) {
+        const img = document.createElement("img");
+        img.src = option.thumbnailUrl;
+        img.className = CHIP_IMG_CLS;
+        chip.appendChild(img);
+      }
+      const labelSpan = document.createElement("span");
+      labelSpan.textContent = newRef.displayLabel;
+      chip.appendChild(labelSpan);
+
+      const space = document.createTextNode("\u00A0");
+
+      if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(space);
+        range.insertNode(chip);
+        const newRange = document.createRange();
+        newRange.setStartAfter(space);
+        newRange.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+      } else {
+        el.appendChild(chip);
+        el.appendChild(space);
+        const range = document.createRange();
+        range.setStartAfter(space);
+        range.collapse(true);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
+
+      emitChange(el, [...inlineRefs, newRef]);
+    },
+    [inlineRefs, emitChange],
+  );
+
+  useImperativeHandle(ref, () => ({ insertRef: insertRefAtCursor }), [insertRefAtCursor]);
+
   // ── Click outside ────────────────────────────────────────
   useEffect(() => {
     if (!mentionOpen) return;
@@ -362,4 +421,6 @@ export default function PromptTextarea({
         )}
     </div>
   );
-}
+});
+
+export default PromptTextarea;

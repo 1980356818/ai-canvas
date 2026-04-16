@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { ChevronUp } from "lucide-react";
 import { IMAGE_SIZE_OPTIONS } from "@/shared/constants";
 import { cn } from "@/lib/utils";
@@ -53,35 +54,64 @@ function RatioIcon({
   );
 }
 
+function getEditorZoom(el: HTMLElement): number {
+  const editor = el.closest("[data-editor-zoom]");
+  if (!editor) return 1;
+  return parseFloat((editor as HTMLElement).dataset.editorZoom ?? "1") || 1;
+}
+
 export default function SizeCombo({
   value,
-  resolution = "2K",
+  resolution,
   onChange,
   onResolutionChange,
   disabled,
 }: SizeComboProps) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ bottom: number; left: number } | null>(null);
+
+  const reposition = useCallback(() => {
+    const btn = triggerRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const zoom = getEditorZoom(btn);
+    const panelW = 260 * zoom;
+    let left = rect.left;
+    if (left + panelW > window.innerWidth - 8) {
+      left = window.innerWidth - 8 - panelW;
+    }
+    const gap = 4 * zoom;
+    setPos({ bottom: window.innerHeight - rect.top + gap, left });
+  }, []);
 
   useEffect(() => {
     if (!open) return;
+    reposition();
     const onPointerDown = (e: PointerEvent) => {
-      if (containerRef.current?.contains(e.target as Node)) return;
+      if (triggerRef.current?.contains(e.target as Node)) return;
+      if (panelRef.current?.contains(e.target as Node)) return;
       setOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown, true);
-    return () =>
+    window.addEventListener("scroll", reposition, true);
+    return () => {
       document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [open]);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [open, reposition]);
 
   const current =
     IMAGE_SIZE_OPTIONS.find((o) => o.value === value) ?? IMAGE_SIZE_OPTIONS[0]!;
   const isAuto = current.value === "auto";
 
+  const zoom = triggerRef.current ? getEditorZoom(triggerRef.current) : 1;
+
   return (
-    <div className="relative" ref={containerRef}>
-      {/* Trigger button */}
+    <>
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
@@ -99,12 +129,19 @@ export default function SizeCombo({
         <ChevronUp className={cn("h-3 w-3 transition-transform", open && "rotate-180")} />
       </button>
 
-      {/* Popup panel — opens upward */}
-      {open && (
-        <div className="absolute bottom-full left-0 z-50 mb-1 w-[260px] rounded-xl border border-border bg-popover p-3 shadow-xl">
+      {open && pos && createPortal(
+        <div
+          ref={panelRef}
+          className="fixed z-[99999] w-[260px] rounded-xl border border-border bg-popover p-3 shadow-xl"
+          style={{
+            bottom: pos.bottom,
+            left: pos.left,
+            transform: `scale(${zoom})`,
+            transformOrigin: "bottom left",
+          }}
+        >
           {onResolutionChange && (
             <>
-              {/* Resolution row */}
               <div className="mb-2.5">
                 <div className="mb-1.5 text-[10px] font-medium text-muted-foreground">
                   分辨率
@@ -131,12 +168,10 @@ export default function SizeCombo({
                   })}
                 </div>
               </div>
-              {/* Divider */}
               <div className="mb-2.5 h-px bg-border" />
             </>
           )}
 
-          {/* Ratio grid */}
           <div>
             <div className="mb-1.5 text-[10px] font-medium text-muted-foreground">
               画面比例
@@ -178,8 +213,9 @@ export default function SizeCombo({
               })}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }

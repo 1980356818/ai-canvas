@@ -20,7 +20,8 @@ import { copyCards, pasteCards } from "@/lib/clipboard";
 
 function syncNodeCount(projectId: string) {
   const count = useCardStore.getState().getCardsByProject(projectId).length;
-  useProjectStore.getState().updateProject(projectId, { nodeCount: count });
+  const updatedAt = new Date().toISOString();
+  useProjectStore.getState().updateProject(projectId, { nodeCount: count, updatedAt });
   void updateProjectMeta(projectId, { nodeCount: count });
 }
 
@@ -342,6 +343,7 @@ function ContextMenuPanel({
     recordBatchDelete(cards);
     for (const id of ids) {
       useCardStore.getState().removeCard(id);
+      useConnectionStore.getState().removeConnectionsForCard(id);
       try {
         await deleteCard(id);
       } catch {

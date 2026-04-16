@@ -277,6 +277,10 @@ fn upsert_card(
             card.created_at,
         ],
     )?;
+    conn.execute(
+        "UPDATE projects SET updated_at = datetime('now') WHERE id = ?1",
+        rusqlite::params![card.project_id],
+    )?;
     Ok(())
 }
 

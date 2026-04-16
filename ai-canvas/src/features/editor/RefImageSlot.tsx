@@ -16,6 +16,7 @@ interface RefImageSlotProps {
   entry?: RefImageEntry;
   onImage: (entry: RefImageEntry) => void;
   onClear: () => void;
+  onRefClick?: () => void;
   disabled?: boolean;
   targetCardId: string;
   slotKey: string;
@@ -29,6 +30,7 @@ export default function RefImageSlot({
   entry,
   onImage,
   onClear,
+  onRefClick,
   disabled,
   targetCardId,
   slotKey,
@@ -147,12 +149,18 @@ export default function RefImageSlot({
         className={cn(
           "relative aspect-square w-[96px] shrink-0 transition-all duration-200",
           highlighted && "scale-105 drop-shadow-md",
+          onRefClick && "cursor-pointer",
         )}
       >
-        <div className={cn(
-          "h-full w-full overflow-hidden rounded-lg border bg-muted/30 transition-colors",
-          highlighted ? "border-primary ring-2 ring-primary/30" : "border-input",
-        )}>
+        <div
+          className={cn(
+            "h-full w-full overflow-hidden rounded-lg border bg-muted/30 transition-colors",
+            highlighted ? "border-primary ring-2 ring-primary/30" : "border-input",
+            onRefClick && "hover:border-primary/60 hover:shadow-sm",
+          )}
+          onClick={onRefClick}
+          title={onRefClick ? "点击插入引用到提示词" : undefined}
+        >
           <img
             src={displayUrl}
             alt={label}

@@ -14,6 +14,7 @@ import {
   getRefSlotsForChatModel,
   modelSupportsVision,
   compactRefImages,
+  buildCompactKeyMap,
   type RefImageEntry,
 } from "@/config/model-ref-images";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
@@ -22,10 +23,11 @@ import {
   serializeForApi,
   getInlineRefUrls,
   toDisplayText,
+  remapInlineRefs,
 } from "@/lib/promptSerializer";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
-import PromptTextarea from "./PromptTextarea";
+import PromptTextarea, { type PromptTextareaHandle } from "./PromptTextarea";
 
 interface ChatData {
   content?: string;
@@ -45,6 +47,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
   const setCardProgress = useUIStore((s) => s.setCardProgress);
   const generating = useUIStore((s) => s.generatingCards.has(card.id));
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const promptRef = useRef<PromptTextareaHandle>(null);
   const [currentModel, setCurrentModel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const data = card.data as ChatData;
@@ -128,8 +131,19 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       }
       const refImages = { ...data.refImages };
       delete refImages[slotKey];
+      const keyMap = buildCompactKeyMap(refImages, refSlots);
       const compacted = compactRefImages(refImages, refSlots);
-      updateCard(card.id, { data: { ...data, refImages: compacted } });
+
+      const { content: newContent, inlineRefs: newInlineRefs } = remapInlineRefs(
+        data.content ?? "",
+        data.inlineRefs ?? [],
+        keyMap,
+        slotKey,
+      );
+
+      updateCard(card.id, {
+        data: { ...data, refImages: compacted, content: newContent, inlineRefs: newInlineRefs },
+      });
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard, refSlots],
@@ -279,6 +293,10 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
                 entry={entry}
                 onImage={(e) => setRefImage(slot.key, e)}
                 onClear={() => clearRefImage(slot.key)}
+                onRefClick={() => {
+                  const opt = imageOptions.find((o) => o.id === `slot:${slot.key}`);
+                  if (opt) promptRef.current?.insertRef(opt);
+                }}
                 disabled={generating}
                 targetCardId={card.id}
                 slotKey={slot.key}
@@ -302,6 +320,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         </div>
       ) : (
         <PromptTextarea
+          ref={promptRef}
           value={data.content ?? ""}
           inlineRefs={data.inlineRefs ?? []}
           imageOptions={imageOptions}
