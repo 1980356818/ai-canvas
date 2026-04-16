@@ -18,11 +18,20 @@ export interface DraftWire {
   endY: number;
 }
 
+export interface PendingDrop {
+  sourceCardId: string;
+  screenX: number;
+  screenY: number;
+  canvasX: number;
+  canvasY: number;
+}
+
 interface ConnectionState {
   connections: Map<string, Connection>;
   selectedConnectionId: string | null;
   hoveredConnectionId: string | null;
   draftWire: DraftWire | null;
+  pendingDrop: PendingDrop | null;
   flowingConnectionIds: Set<string>;
 
   setConnections: (list: Connection[]) => void;
@@ -34,6 +43,7 @@ interface ConnectionState {
   setSelectedConnectionId: (id: string | null) => void;
   setHoveredConnectionId: (id: string | null) => void;
   setDraftWire: (wire: DraftWire | null) => void;
+  setPendingDrop: (drop: PendingDrop | null) => void;
   setFlowingConnectionIds: (ids: Set<string>) => void;
   clear: () => void;
 }
@@ -43,6 +53,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   selectedConnectionId: null,
   hoveredConnectionId: null,
   draftWire: null,
+  pendingDrop: null,
   flowingConnectionIds: new Set(),
 
   setConnections: (list) => {
@@ -98,6 +109,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   setSelectedConnectionId: (id) => set({ selectedConnectionId: id }),
   setHoveredConnectionId: (id) => set({ hoveredConnectionId: id }),
   setDraftWire: (wire) => set({ draftWire: wire }),
+  setPendingDrop: (drop) => set({ pendingDrop: drop }),
   setFlowingConnectionIds: (ids) => set({ flowingConnectionIds: ids }),
   clear: () =>
     set({
@@ -105,6 +117,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       selectedConnectionId: null,
       hoveredConnectionId: null,
       draftWire: null,
+      pendingDrop: null,
       flowingConnectionIds: new Set(),
     }),
 }));

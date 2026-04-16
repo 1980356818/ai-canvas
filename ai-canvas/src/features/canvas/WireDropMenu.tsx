@@ -1,0 +1,127 @@
+import { useEffect, useRef, useCallback } from "react";
+import { MessageSquare, ImageIcon, Video, Shirt, RotateCw, Type, StickyNote } from "lucide-react";
+import { useConnectionStore, type Connection } from "@/stores/connectionStore";
+import { useCardStore } from "@/stores/cardStore";
+import { useCanvasStore } from "@/stores/canvasStore";
+import { useProjectStore } from "@/stores/projectStore";
+import { autoSave } from "@/lib/autoSave";
+import { injectOnConnect } from "@/lib/dataFlow";
+import { cn } from "@/lib/utils";
+import { CARD_DEFAULTS } from "@/shared/constants";
+import type { CardType } from "@/shared/types";
+
+const MENU_ITEMS: Array<{ type: CardType; icon: typeof MessageSquare; label: string }> = [
+  { type: "ai_chat", icon: MessageSquare, label: CARD_DEFAULTS.ai_chat.label },
+  { type: "ai_image", icon: ImageIcon, label: CARD_DEFAULTS.ai_image.label },
+  { type: "ai_video", icon: Video, label: CARD_DEFAULTS.ai_video.label },
+  { type: "ai_tryon", icon: Shirt, label: CARD_DEFAULTS.ai_tryon.label },
+  { type: "ai_multiangle", icon: RotateCw, label: CARD_DEFAULTS.ai_multiangle.label },
+  { type: "text", icon: Type, label: CARD_DEFAULTS.text.label },
+  { type: "sticky_note", icon: StickyNote, label: CARD_DEFAULTS.sticky_note.label },
+];
+
+export default function WireDropMenu() {
+  const pendingDrop = useConnectionStore((s) => s.pendingDrop);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const close = useCallback(() => {
+    useConnectionStore.getState().setPendingDrop(null);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingDrop) return;
+
+    const onClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        close();
+      }
+    };
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("mousedown", onClickOutside, true);
+    window.addEventListener("keydown", onEsc);
+    return () => {
+      window.removeEventListener("mousedown", onClickOutside, true);
+      window.removeEventListener("keydown", onEsc);
+    };
+  }, [pendingDrop, close]);
+
+  const handleCreate = useCallback(
+    (type: CardType) => {
+      if (!pendingDrop) return;
+      const projectId = useProjectStore.getState().currentProjectId;
+      if (!projectId) return;
+
+      const now = new Date().toISOString();
+      const defaults = CARD_DEFAULTS[type];
+      const { maxZIndex } = useCardStore.getState();
+
+      const card = {
+        id: crypto.randomUUID(),
+        projectId,
+        type,
+        x: pendingDrop.canvasX - defaults.width / 2,
+        y: pendingDrop.canvasY - defaults.height / 2,
+        width: defaults.width,
+        height: defaults.height,
+        zIndex: maxZIndex + 1,
+        locked: false,
+        collapsed: false,
+        data: { ...defaults.data },
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      useCardStore.getState().addCard(card);
+
+      const conn: Connection = {
+        id: crypto.randomUUID(),
+        projectId,
+        sourceCardId: pendingDrop.sourceCardId,
+        targetCardId: card.id,
+        createdAt: now,
+      };
+      useConnectionStore.getState().addConnection(conn);
+
+      useCanvasStore.getState().setSelectedCardIds([card.id]);
+      useCanvasStore.getState().setEditingCardId(card.id);
+
+      autoSave.markDirty(card.id);
+      injectOnConnect(pendingDrop.sourceCardId, card.id);
+      close();
+    },
+    [pendingDrop, close],
+  );
+
+  if (!pendingDrop) return null;
+
+  return (
+    <div
+      className="absolute z-50"
+      style={{ left: pendingDrop.screenX, top: pendingDrop.screenY }}
+    >
+      <div
+        ref={menuRef}
+        className="min-w-[160px] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-lg"
+      >
+        <div className="px-3 py-1.5 text-[10px] font-medium text-muted-foreground">
+          创建并连接
+        </div>
+        {MENU_ITEMS.map(({ type, icon: Icon, label }) => (
+          <button
+            key={type}
+            onClick={() => handleCreate(type)}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-foreground transition-colors",
+              "hover:bg-accent hover:text-accent-foreground",
+            )}
+          >
+            <Icon className="h-4 w-4 text-muted-foreground" />
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}

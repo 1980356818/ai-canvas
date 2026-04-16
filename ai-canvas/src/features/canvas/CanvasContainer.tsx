@@ -13,6 +13,7 @@ import ConnectionLayer from "./ConnectionLayer";
 import CanvasBirdView from "./CanvasBirdView";
 import ZoomControls from "./ZoomControls";
 import ImageToolbar from "./ImageToolbar";
+import WireDropMenu from "./WireDropMenu";
 import { CARD_DEFAULTS, sizeFromRatio, BIRDVIEW_ENTER_ZOOM, BIRDVIEW_EXIT_ZOOM } from "@/shared/constants";
 import { autoSave } from "@/lib/autoSave";
 import {
@@ -655,6 +656,8 @@ export default function CanvasContainer() {
           </p>
         </div>
       )}
+
+      <WireDropMenu />
 
       {!isBirdView && <ImageToolbar />}
 

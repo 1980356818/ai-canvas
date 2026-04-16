@@ -106,6 +106,7 @@ const Port = memo(function Port({
         document.removeEventListener("pointerup", onUp);
         lastHighlight?.classList.remove("port-drop-target");
 
+        const wire = useConnectionStore.getState().draftWire;
         useConnectionStore.getState().setDraftWire(null);
 
         const target = findInputPortAt(ev.clientX, ev.clientY, cardId);
@@ -141,6 +142,19 @@ const Port = memo(function Port({
             autoSave.markDirty();
             injectOnConnect(cardId, targetCardId);
           }
+        } else if (wire) {
+          const vp = useCanvasStore.getState().viewport;
+          const root = document.querySelector("[data-canvas-viewport]");
+          const rect = root?.getBoundingClientRect();
+          const left = rect?.left ?? 0;
+          const top = rect?.top ?? 0;
+          useConnectionStore.getState().setPendingDrop({
+            sourceCardId: cardId,
+            screenX: ev.clientX,
+            screenY: ev.clientY,
+            canvasX: (ev.clientX - left - vp.x) / vp.zoom,
+            canvasY: (ev.clientY - top - vp.y) / vp.zoom,
+          });
         }
       };
 
@@ -169,7 +183,7 @@ const Port = memo(function Port({
       />
       <div
         className={cn(
-          "port-socket flex items-center justify-center rounded-full",
+          "port-socket relative flex items-center justify-center rounded-full",
           "h-[18px] w-[18px] transition-all duration-150",
           isOutput ? "cursor-crosshair" : "cursor-default",
           isDraftTarget && "animate-pulse",
