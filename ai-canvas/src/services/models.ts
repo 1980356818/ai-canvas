@@ -79,7 +79,7 @@ export const modelService = {
 
   getDisplayName(modelId: string): string {
     const model = ALL_MODELS.find((m) => m.id === modelId);
-    if (model) return model.display_name;
+    if (model) return model.display_name ?? model.id;
     return LEGACY_DISPLAY[modelId] ?? modelId;
   },
 
