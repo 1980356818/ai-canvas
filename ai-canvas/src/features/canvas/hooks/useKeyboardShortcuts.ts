@@ -133,6 +133,12 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // ── Backspace: never delete cards/connections ──
+      if (e.key === "Backspace" && !editingCardId && !isFocusOnInput()) {
+        e.preventDefault();
+        return;
+      }
+
       // ── Delete: delete selected cards ──
       if (e.key === "Delete" && !mod) {
         if (editingCardId) {

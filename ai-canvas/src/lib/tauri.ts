@@ -731,7 +731,7 @@ export function removeProjectViewport(projectId: string): void {
   localStorage.removeItem(LS_PREFIX + "viewport_" + projectId);
 }
 
-// ── Connection persistence (localStorage-only for now) ───────
+// ── Connection persistence ───────────────────────────────────
 
 export interface ConnectionRow {
   id: string;
@@ -741,15 +741,33 @@ export interface ConnectionRow {
   created_at: string;
 }
 
-export function loadConnections(projectId: string): ConnectionRow[] {
+export async function loadConnections(projectId: string): Promise<ConnectionRow[]> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    return _invoke<ConnectionRow[]>("load_connections", { projectId });
+  }
   return lsGet<ConnectionRow[]>("connections_" + projectId, []);
 }
 
-export function saveConnections(
+export async function saveConnections(
   projectId: string,
   connections: ConnectionRow[],
-): void {
+): Promise<void> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    await _invoke("save_connections_batch", { connections });
+    return;
+  }
   lsSet("connections_" + projectId, connections);
+}
+
+export async function clearProjectConnections(projectId: string): Promise<void> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    await _invoke("clear_project_connections", { projectId });
+    return;
+  }
+  lsSet("connections_" + projectId, []);
 }
 
 // ── Clipboard (native via Rust arboard) ──────────────────────

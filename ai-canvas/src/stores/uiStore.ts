@@ -3,9 +3,15 @@ import { create } from "zustand";
 export type SaveStatus = "saved" | "unsaved" | "saving" | "error";
 export type AppView = "home" | "canvas" | "projects";
 
+export interface CardGenSubProgress {
+  percent: number;
+  status: "pending" | "running" | "done" | "error";
+}
+
 export interface CardGenProgress {
   percent: number;
   label: string;
+  subs?: CardGenSubProgress[];
 }
 
 export interface ToastItem {

@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: u32 = 4;
+const CURRENT_VERSION: u32 = 5;
 
 pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     let version: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -17,6 +17,9 @@ pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     }
     if version < 4 {
         migrate_v4(conn)?;
+    }
+    if version < 5 {
+        migrate_v5(conn)?;
     }
 
     Ok(())
@@ -115,5 +118,29 @@ fn migrate_v4(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     conn.execute_batch("PRAGMA user_version = 4;")?;
+    Ok(())
+}
+
+fn migrate_v5(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::info!("running migration v5: connections table");
+
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS connections (
+            id              TEXT PRIMARY KEY,
+            project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            source_card_id  TEXT NOT NULL,
+            target_card_id  TEXT NOT NULL,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(project_id, source_card_id, target_card_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_connections_project ON connections(project_id);
+        CREATE INDEX IF NOT EXISTS idx_connections_source ON connections(source_card_id);
+        CREATE INDEX IF NOT EXISTS idx_connections_target ON connections(target_card_id);
+
+        PRAGMA user_version = 5;
+        ",
+    )?;
+
     Ok(())
 }

@@ -19,9 +19,12 @@ import {
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize } from "@/shared/constants";
+import { useImageRefSources } from "@/hooks/useImageRefSources";
+import { type InlineImageRef, toDisplayText } from "@/lib/promptSerializer";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
 import SizeCombo from "./SizeCombo";
+import PromptTextarea from "./PromptTextarea";
 
 interface ImageResult {
   url: string;
@@ -38,6 +41,7 @@ interface MediaData {
   size?: string;
   resolution?: string;
   refImages?: Record<string, RefImageEntry>;
+  inlineRefs?: InlineImageRef[];
   upstreamTexts?: Record<string, string>;
   _locked?: boolean;
   _label?: string;
@@ -54,7 +58,8 @@ function buildFinalPrompt(data: MediaData): string {
     }
   }
   if (data.content?.trim()) {
-    parts.push(data.content.trim());
+    const display = toDisplayText(data.content.trim(), data.inlineRefs ?? []);
+    parts.push(display);
   }
   return parts.join("\n\n");
 }
@@ -113,6 +118,10 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     [currentModel],
   );
 
+  const [hoveredRefId, setHoveredRefId] = useState<string | null>(null);
+
+  const imageOptions = useImageRefSources(card.id, refSlots, data.refImages);
+
   const handleModelChange = useCallback(
     (modelId: string) => {
       setCurrentModel(modelId);
@@ -161,9 +170,8 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   );
 
   const onPromptChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const content = e.target.value;
-      updateCard(card.id, { data: { ...data, content } });
+    (newContent: string, newRefs: InlineImageRef[]) => {
+      updateCard(card.id, { data: { ...data, content: newContent, inlineRefs: newRefs } });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
     },
@@ -319,42 +327,73 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         : undefined;
 
       const count = data.batchSize ?? 1;
-      const results: ImageResult[] = [];
-      let lastError: unknown;
+      let results: ImageResult[];
 
-      for (let i = 0; i < count; i++) {
-        try {
-          const r = await provider.generateImage!({
-            prompt,
-            size: currentSize,
-            model: resolvedModel,
-            quality: "standard",
-            referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
-            onProgress: (p) => {
-              if (count === 1) {
-                setCardProgress(card.id, { percent: p.percent, label: p.label });
-              } else {
-                const base = (i / count) * 100;
-                const slice = p.percent / count;
-                setCardProgress(card.id, {
-                  percent: Math.round(base + slice),
-                  label: `生成中 (${i + 1}/${count})`,
-                });
-              }
-            },
+      if (count === 1) {
+        const r = await provider.generateImage!({
+          prompt,
+          size: currentSize,
+          model: resolvedModel,
+          quality: "standard",
+          referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+          onProgress: (p) => setCardProgress(card.id, { percent: p.percent, label: p.label }),
+        });
+        console.groupEnd();
+        results = [{ url: r.url, revisedPrompt: r.revisedPrompt }];
+      } else {
+        type SubStatus = "pending" | "running" | "done" | "error";
+        const perProgress = new Array<number>(count).fill(0);
+        const perStatus = new Array<SubStatus>(count).fill("pending");
+
+        const syncProgress = () => {
+          const avg = perProgress.reduce((a, b) => a + b, 0) / count;
+          const doneCount = perStatus.filter((s) => s === "done").length;
+          setCardProgress(card.id, {
+            percent: Math.round(avg),
+            label: `并行生成中 (${doneCount}/${count} 完成)`,
+            subs: perProgress.map((p, i) => ({ percent: p, status: perStatus[i]! })),
           });
-          results.push({ url: r.url, revisedPrompt: r.revisedPrompt });
-        } catch (e) {
-          console.warn(`[MediaEditor] 第 ${i + 1}/${count} 张生成失败:`, e);
-          lastError = e;
+        };
+
+        console.log(`[MediaEditor] 并行启动 ${count} 张生成`);
+        syncProgress();
+
+        const settled = await Promise.allSettled(
+          Array.from({ length: count }, (_, i) => {
+            perStatus[i] = "running";
+            return provider.generateImage!({
+              prompt,
+              size: currentSize,
+              model: resolvedModel,
+              quality: "standard",
+              referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+              onProgress: (p) => {
+                perProgress[i] = p.percent;
+                syncProgress();
+              },
+            });
+          }),
+        );
+
+        results = [];
+        for (let i = 0; i < settled.length; i++) {
+          const s = settled[i]!;
+          if (s.status === "fulfilled") {
+            perStatus[i] = "done";
+            perProgress[i] = 100;
+            results.push({ url: s.value.url, revisedPrompt: s.value.revisedPrompt });
+          } else {
+            perStatus[i] = "error";
+            console.warn(`[MediaEditor] 第 ${i + 1}/${count} 张生成失败:`, s.reason);
+          }
         }
+        syncProgress();
+        console.log(`[MediaEditor] 并行生成完成: ${results.length}/${count} 成功`);
+        console.groupEnd();
       }
 
-      console.log(`[MediaEditor] 批量生成完成: ${results.length}/${count} 成功`);
-      console.groupEnd();
-
       if (results.length === 0) {
-        throw lastError;
+        throw new Error("所有图片生成均失败");
       }
 
       const newData: Record<string, unknown> = {
@@ -404,7 +443,6 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     }
   }, [data, card.id, generating, updateCard, currentModel, currentSize, currentResolution, setCardProgress, refSlots]);
 
-  const hasRefImages = refSlots.some((s) => data.refImages?.[s.key]);
   const isLocked = !!data._locked;
   const currentBatchSize = data.batchSize ?? 1;
 
@@ -434,22 +472,27 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
   return (
     <div className="flex h-full flex-col gap-2 p-3">
-      {refSlots.length > 0 && (
-        <div className="flex shrink-0 gap-2">
-          {refSlots.map((slot, idx) => (
-            <RefImageSlot
-              key={slot.key}
-              label={slot.label}
-              description={slot.description}
-              entry={data.refImages?.[slot.key]}
-              onImage={(entry) => setRefImage(slot.key, entry)}
-              onClear={() => clearRefImage(slot.key)}
-              disabled={generating}
-              targetCardId={card.id}
-              slotKey={slot.key}
-              index={idx}
-            />
-          ))}
+      {refSlots.some((s) => data.refImages?.[s.key]) && (
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {refSlots.map((slot, idx) => {
+            const entry = data.refImages?.[slot.key];
+            if (!entry) return null;
+            return (
+              <RefImageSlot
+                key={slot.key}
+                label={slot.label}
+                description={slot.description}
+                entry={entry}
+                onImage={(e) => setRefImage(slot.key, e)}
+                onClear={() => clearRefImage(slot.key)}
+                disabled={generating}
+                targetCardId={card.id}
+                slotKey={slot.key}
+                index={idx}
+                highlighted={hoveredRefId === `slot:${slot.key}`}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -518,12 +561,14 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             </div>
           )}
 
-          <textarea
-            className="min-h-[3rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+          <PromptTextarea
             value={data.content ?? ""}
+            inlineRefs={data.inlineRefs ?? []}
+            imageOptions={imageOptions}
             onChange={onPromptChange}
-            placeholder={hasUpstream ? "追加你的提示词（可选）…" : "描述你想生成的图片…"}
+            placeholder={hasUpstream ? "追加你的提示词，按 @ 引用图片…" : "描述你想生成的图片，按 @ 引用图片…"}
             disabled={generating}
+            onHoverRef={setHoveredRefId}
           />
 
           {showPreview && canGenerate && (

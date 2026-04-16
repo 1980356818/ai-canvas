@@ -489,12 +489,21 @@ pub async fn export_file(
         let db = state.db.lock().map_err(|e| e.to_string())?;
         let dir = db
             .query_row(
-                "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
+                "SELECT value FROM settings WHERE key = 'file_export_path'",
                 [],
                 |row| row.get::<_, String>(0),
             )
             .ok()
             .filter(|s| !s.trim().is_empty())
+            .or_else(|| {
+                db.query_row(
+                    "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+            })
             .or_else(|| {
                 db.query_row(
                     "SELECT value FROM settings WHERE key IN ('image_export_path', 'image_auto_save_path') ORDER BY key ASC LIMIT 1",
@@ -520,7 +529,7 @@ pub async fn export_file(
         (dir, folder)
     };
 
-    let dir = base_dir.ok_or("请先在设置中配置「文件自动保存路径」")?;
+    let dir = base_dir.ok_or("请先在设置中配置「手动保存路径」或「文件自动保存路径」")?;
 
     let target_dir = if let Some(ref folder) = project_folder_name {
         std::path::Path::new(&dir).join(folder)
@@ -540,11 +549,20 @@ pub async fn export_file(
 }
 
 /// Open the system file explorer and highlight the given file.
+/// When an auto-save path is configured, opens the user's project folder
+/// instead of the internal app_data_dir.
 #[tauri::command]
-pub async fn open_in_explorer(app: AppHandle, path: String) -> Result<(), String> {
+pub async fn open_in_explorer(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+    project_id: Option<String>,
+) -> Result<(), String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
     let abs_path = if path.starts_with("media/") {
-        app_data_dir.join(&path)
+        let user_path = resolve_user_media_path(&state, &app_data_dir, &path, &project_id);
+        user_path.unwrap_or_else(|| app_data_dir.join(&path))
     } else {
         std::path::PathBuf::from(&path)
     };
@@ -553,30 +571,116 @@ pub async fn open_in_explorer(app: AppHandle, path: String) -> Result<(), String
         return Err(format!("文件不存在: {}", abs_path.display()));
     }
 
+    reveal_path(&abs_path)
+}
+
+fn resolve_user_media_path(
+    state: &AppState,
+    app_data_dir: &std::path::Path,
+    internal_path: &str,
+    project_id: &Option<String>,
+) -> Option<std::path::PathBuf> {
+    let db = state.db.lock().ok()?;
+
+    let auto_dir = db
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| {
+            db.query_row(
+                "SELECT value FROM settings WHERE key = 'image_auto_save_path'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+        })?;
+
+    let project_folder = project_id.as_ref().and_then(|pid| {
+        db.query_row(
+            "SELECT title FROM projects WHERE id = ?1",
+            rusqlite::params![pid],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .map(|t| build_project_folder_name(&t, pid))
+    });
+
+    let target_dir = if let Some(ref folder) = project_folder {
+        std::path::Path::new(&auto_dir).join(folder)
+    } else {
+        std::path::PathBuf::from(&auto_dir)
+    };
+
+    if !target_dir.exists() {
+        return None;
+    }
+
+    let internal_abs = app_data_dir.join(internal_path);
+    let internal_stem = internal_abs
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+
+    if let Ok(entries) = std::fs::read_dir(&target_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            let short_id = &internal_stem[..8.min(internal_stem.len())];
+            if name_str.contains(short_id) {
+                return Some(entry.path());
+            }
+        }
+    }
+
+    Some(target_dir)
+}
+
+fn reveal_path(abs_path: &std::path::Path) -> Result<(), String> {
+    let is_dir = abs_path.is_dir();
+
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
         let win_path = abs_path.to_string_lossy().replace('/', "\\");
         tracing::info!("open_in_explorer: {}", win_path);
-        std::process::Command::new("explorer")
-            .raw_arg(format!("/select,\"{}\"", win_path))
-            .spawn()
-            .map_err(|e| format!("打开资源管理器失败: {}", e))?;
+        if is_dir {
+            std::process::Command::new("explorer")
+                .raw_arg(format!("\"{}\"", win_path))
+                .spawn()
+                .map_err(|e| format!("打开资源管理器失败: {}", e))?;
+        } else {
+            std::process::Command::new("explorer")
+                .raw_arg(format!("/select,\"{}\"", win_path))
+                .spawn()
+                .map_err(|e| format!("打开资源管理器失败: {}", e))?;
+        }
     }
 
     #[cfg(target_os = "macos")]
     {
-        std::process::Command::new("open")
-            .args(["-R", &abs_path.to_string_lossy()])
-            .spawn()
-            .map_err(|e| format!("打开 Finder 失败: {}", e))?;
+        if is_dir {
+            std::process::Command::new("open")
+                .arg(&abs_path.to_string_lossy().as_ref())
+                .spawn()
+                .map_err(|e| format!("打开 Finder 失败: {}", e))?;
+        } else {
+            std::process::Command::new("open")
+                .args(["-R", &abs_path.to_string_lossy()])
+                .spawn()
+                .map_err(|e| format!("打开 Finder 失败: {}", e))?;
+        }
     }
 
     #[cfg(target_os = "linux")]
     {
-        let parent = abs_path.parent().unwrap_or(&abs_path);
+        let target = if is_dir { abs_path } else { abs_path.parent().unwrap_or(abs_path) };
         std::process::Command::new("xdg-open")
-            .arg(parent)
+            .arg(target)
             .spawn()
             .map_err(|e| format!("打开文件管理器失败: {}", e))?;
     }

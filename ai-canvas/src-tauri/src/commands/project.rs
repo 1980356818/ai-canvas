@@ -339,7 +339,96 @@ pub fn save_cards_batch(state: State<AppState>, cards: Vec<CardRow>) -> Result<(
 #[tauri::command]
 pub fn delete_card(state: State<AppState>, id: String) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.execute(
+        "DELETE FROM connections WHERE source_card_id = ?1 OR target_card_id = ?1",
+        rusqlite::params![id],
+    )
+    .map_err(|e| e.to_string())?;
     db.execute("DELETE FROM cards WHERE id = ?1", rusqlite::params![id])
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ── Connection Commands ──────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConnectionRow {
+    pub id: String,
+    pub project_id: String,
+    pub source_card_id: String,
+    pub target_card_id: String,
+    pub created_at: String,
+}
+
+#[tauri::command]
+pub fn load_connections(state: State<AppState>, project_id: String) -> Result<Vec<ConnectionRow>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let mut stmt = db
+        .prepare(
+            "SELECT id, project_id, source_card_id, target_card_id, created_at
+             FROM connections WHERE project_id = ?1 ORDER BY created_at",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map(rusqlite::params![project_id], |row| {
+            Ok(ConnectionRow {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                source_card_id: row.get(2)?,
+                target_card_id: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn save_connections_batch(state: State<AppState>, connections: Vec<ConnectionRow>) -> Result<(), String> {
+    if connections.is_empty() {
+        return Ok(());
+    }
+    let project_id = connections[0].project_id.clone();
+
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    let tx = db.transaction().map_err(|e| e.to_string())?;
+
+    tx.execute(
+        "DELETE FROM connections WHERE project_id = ?1",
+        rusqlite::params![project_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+    for conn in &connections {
+        tx.execute(
+            "INSERT INTO connections (id, project_id, source_card_id, target_card_id, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                conn.id,
+                conn.project_id,
+                conn.source_card_id,
+                conn.target_card_id,
+                conn.created_at,
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn clear_project_connections(state: State<AppState>, project_id: String) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.execute(
+        "DELETE FROM connections WHERE project_id = ?1",
+        rusqlite::params![project_id],
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }

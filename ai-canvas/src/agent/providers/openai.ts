@@ -12,7 +12,6 @@ import type {
 import { throwIfError } from "./errors";
 import { waitForTask } from "@/services/tasks";
 import { aiProxy, saveMedia } from "@/lib/tauri";
-import { scheduleBackgroundSave } from "@/lib/media";
 import { useProjectStore } from "@/stores/projectStore";
 
 function gcd(a: number, b: number): number {
@@ -140,24 +139,19 @@ export class OpenAIProvider implements AIProvider {
     };
 
     if (req.referenceImages && req.referenceImages.length > 0) {
-      body.images = req.referenceImages.map((ref) => ref.url);
+      body.image = req.referenceImages.map((ref) => ref.url);
     }
 
+    const imagesCount = Array.isArray(body.image) ? (body.image as unknown[]).length : 0;
     console.group("[OpenAI] generateImage 请求");
-    console.log("[OpenAI] 请求体（不含图片数据）:", {
-      model: body.model,
-      promptLength: req.prompt.length,
-      promptPreview: req.prompt.slice(0, 300),
-      size: body.size,
-      quality: body.quality,
-      n: body.n,
-      response_format: body.response_format,
-      hasImagesField: !!body.images,
-      imagesCount: Array.isArray(body.images) ? (body.images as unknown[]).length : 0,
-      imageUrlPrefixes: Array.isArray(body.images)
-        ? (body.images as string[]).map((u) => u.slice(0, 60))
-        : [],
-    });
+    console.log(
+      `[OpenAI] 参考图: ${imagesCount > 0 ? `✅ ${imagesCount} 张` : "❌ 无"}`,
+      `| 模型: ${body.model}`,
+      `| prompt: ${req.prompt.slice(0, 100)}`,
+    );
+    if (imagesCount > 0) {
+      console.log("[OpenAI] 参考图URL前缀:", (body.image as string[]).map((u) => u.slice(0, 80)));
+    }
 
     const raw = await aiProxy("openai", "/v1/images/generations", body);
 

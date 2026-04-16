@@ -20,6 +20,7 @@ interface RefImageSlotProps {
   targetCardId: string;
   slotKey: string;
   index?: number;
+  highlighted?: boolean;
 }
 
 export default function RefImageSlot({
@@ -32,6 +33,7 @@ export default function RefImageSlot({
   targetCardId,
   slotKey,
   index,
+  highlighted,
 }: RefImageSlotProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const slotRef = useRef<HTMLDivElement>(null);
@@ -142,9 +144,15 @@ export default function RefImageSlot({
       <div
         ref={slotRef}
         data-ref-slot
-        className="relative aspect-square w-[96px] shrink-0"
+        className={cn(
+          "relative aspect-square w-[96px] shrink-0 transition-all duration-200",
+          highlighted && "scale-105 drop-shadow-md",
+        )}
       >
-        <div className="h-full w-full overflow-hidden rounded-lg border border-input bg-muted/30">
+        <div className={cn(
+          "h-full w-full overflow-hidden rounded-lg border bg-muted/30 transition-colors",
+          highlighted ? "border-primary ring-2 ring-primary/30" : "border-input",
+        )}>
           <img
             src={displayUrl}
             alt={label}
@@ -177,8 +185,10 @@ export default function RefImageSlot({
         isHighlighted && "scale-[1.02] border-primary bg-primary/5 shadow-sm",
         cardDragOver && "ring-2 ring-primary ring-offset-1",
         isPickingThis && "animate-pulse border-primary bg-primary/10",
+        highlighted && "scale-105 border-primary bg-primary/10 ring-2 ring-primary/30 drop-shadow-md",
         !disabled &&
           !isHighlighted &&
+          !highlighted &&
           "hover:border-primary/50 hover:text-foreground",
       )}
       onClick={() => !disabled && inputRef.current?.click()}

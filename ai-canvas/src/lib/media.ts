@@ -123,11 +123,12 @@ export async function exportFile(
 
 /**
  * Open the system file explorer and highlight the given file.
+ * When an auto-save path is configured, opens the user's project folder instead.
  */
-export async function revealInExplorer(storedPath: string): Promise<void> {
+export async function revealInExplorer(storedPath: string, projectId?: string): Promise<void> {
   if (!isTauri) return;
   const invoke = await ensureInvoke();
-  await invoke("open_in_explorer", { path: storedPath });
+  await invoke("open_in_explorer", { path: storedPath, projectId: projectId ?? null });
 }
 
 // ── Background save retry ──────────────────────────────────

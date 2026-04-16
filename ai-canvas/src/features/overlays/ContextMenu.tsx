@@ -475,7 +475,7 @@ function ContextMenuPanel({
         label: "在文件夹中显示",
         disabled: !hasLocalMedia,
         onSelect: () => {
-          if (cardMediaPath) void revealInExplorer(cardMediaPath);
+          if (cardMediaPath) void revealInExplorer(cardMediaPath, projectId ?? undefined);
           hide();
         },
       },

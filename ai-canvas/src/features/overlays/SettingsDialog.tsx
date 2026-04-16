@@ -29,6 +29,7 @@ export default function SettingsDialog() {
   const [apiKey, setApiKey] = useState<FieldState>({ value: "", show: false });
   const [baseUrl, setBaseUrl] = useState("");
   const [autoSavePath, setAutoSavePath] = useState("");
+  const [exportPath, setExportPath] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [connStatus, setConnStatus] = useState<ConnectionStatus>("idle");
@@ -43,16 +44,23 @@ export default function SettingsDialog() {
       getSetting("openai_base_url"),
       getSetting("file_auto_save_path"),
       getSetting("image_auto_save_path"),
-    ]).then(([key, url, fsp, legacyAsp]) => {
+      getSetting("file_export_path"),
+    ]).then(([key, url, fsp, legacyAsp, exp]) => {
       setApiKey({ value: key ?? "", show: false });
       setBaseUrl(url ?? "");
       setAutoSavePath(fsp || legacyAsp || "");
+      setExportPath(exp || "");
     });
   }, [visible]);
 
   const handlePickAutoSavePath = useCallback(async () => {
     const dir = await pickDirectory();
     if (dir) setAutoSavePath(dir);
+  }, []);
+
+  const handlePickExportPath = useCallback(async () => {
+    const dir = await pickDirectory();
+    if (dir) setExportPath(dir);
   }, []);
 
   const handleTestConnection = useCallback(async () => {
@@ -73,6 +81,7 @@ export default function SettingsDialog() {
       const trimmedKey = apiKey.value.trim();
       const trimmedUrl = baseUrl.trim();
       const trimmedAutoSave = autoSavePath.trim();
+      const trimmedExport = exportPath.trim();
       if (trimmedKey) {
         await setSetting("openai_api_key", trimmedKey);
         setApiKey((s) => ({ ...s, value: trimmedKey }));
@@ -83,6 +92,8 @@ export default function SettingsDialog() {
       }
       await setSetting("file_auto_save_path", trimmedAutoSave);
       setAutoSavePath(trimmedAutoSave);
+      await setSetting("file_export_path", trimmedExport);
+      setExportPath(trimmedExport);
 
       invalidateApiKeyCache();
       modelService.invalidateCache();
@@ -101,7 +112,7 @@ export default function SettingsDialog() {
     } finally {
       setSaving(false);
     }
-  }, [apiKey.value, baseUrl, autoSavePath]);
+  }, [apiKey.value, baseUrl, autoSavePath, exportPath]);
 
   if (!visible) return null;
 
@@ -195,6 +206,42 @@ export default function SettingsDialog() {
               <button
                 type="button"
                 onClick={() => setAutoSavePath("")}
+                className="mt-1 text-[11px] text-muted-foreground hover:text-destructive"
+              >
+                清除路径
+              </button>
+            )}
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium">
+              手动保存/导出路径
+              <span className="ml-1 text-xs text-muted-foreground">
+                (点击下载按钮时保存到此目录，未设置则使用自动保存路径)
+              </span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={exportPath}
+                placeholder="未设置则使用上方自动保存路径"
+                className="min-w-0 flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+                readOnly
+              />
+              <button
+                type="button"
+                onClick={handlePickExportPath}
+                className="flex items-center gap-1.5 rounded-lg border border-input px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                title="选择文件夹"
+              >
+                <FolderOpen className="h-3.5 w-3.5" />
+                选择
+              </button>
+            </div>
+            {exportPath && (
+              <button
+                type="button"
+                onClick={() => setExportPath("")}
                 className="mt-1 text-[11px] text-muted-foreground hover:text-destructive"
               >
                 清除路径

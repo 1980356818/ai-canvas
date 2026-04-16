@@ -16,14 +16,23 @@ import {
   compactRefImages,
   type RefImageEntry,
 } from "@/config/model-ref-images";
+import { useImageRefSources } from "@/hooks/useImageRefSources";
+import {
+  type InlineImageRef,
+  serializeForApi,
+  getInlineRefUrls,
+  toDisplayText,
+} from "@/lib/promptSerializer";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
+import PromptTextarea from "./PromptTextarea";
 
 interface ChatData {
   content?: string;
   result?: string;
   model?: string;
   refImages?: Record<string, RefImageEntry>;
+  inlineRefs?: InlineImageRef[];
   _locked?: boolean;
   _systemPrompt?: string;
   _label?: string;
@@ -56,6 +65,10 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     return slots;
   }, [currentModel, data._locked]);
 
+  const [hoveredRefId, setHoveredRefId] = useState<string | null>(null);
+
+  const imageOptions = useImageRefSources(card.id, refSlots, data.refImages);
+
   const handleModelChange = useCallback(
     (modelId: string) => {
       setCurrentModel(modelId);
@@ -66,9 +79,8 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
   );
 
   const onPromptChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const content = e.target.value;
-      updateCard(card.id, { data: { ...data, content } });
+    (newContent: string, newRefs: InlineImageRef[]) => {
+      updateCard(card.id, { data: { ...data, content: newContent, inlineRefs: newRefs } });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
     },
@@ -124,8 +136,9 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
   );
 
   const handleGenerate = useCallback(async () => {
-    const prompt = data.content?.trim();
-    if (!prompt || generating) return;
+    const rawPrompt = data.content?.trim();
+    const displayPrompt = rawPrompt ? toDisplayText(rawPrompt, data.inlineRefs ?? []) : "";
+    if (!displayPrompt.trim() || generating) return;
 
     if (!(await hasApiKey())) {
       useUIStore.getState().addToast({
@@ -151,41 +164,58 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       updateCard(card.id, { data: { ...data, _resultStale: true } });
     }
 
+    const inlineRefs = data.inlineRefs ?? [];
+    const hasInlineRefs = inlineRefs.length > 0;
+
     const imageEntries = refSlots
       .map((slot) => data.refImages?.[slot.key])
       .filter((e): e is RefImageEntry => !!e);
 
-    let resolvedImageUrls: string[] = [];
-    if (modelSupportsVision(model)) {
-      for (const img of imageEntries) {
-        const dataUrl = await getBase64ForApi(img.url);
-        resolvedImageUrls.push(dataUrl);
-      }
-    } else if (imageEntries.length > 0) {
-      useUIStore.getState().addToast({
-        type: "warning",
-        title: "当前模型不支持图片输入",
-        description: `${model} 不支持视觉能力，已忽略参考图。`,
-        duration: 5000,
-      });
-    }
-
-    type ContentPart =
+    type ApiContentPart =
       | { type: "text"; text: string }
       | { type: "image_url"; image_url: { url: string } };
 
-    const userContent: ContentPart[] = [];
-    for (const url of resolvedImageUrls) {
-      userContent.push({ type: "image_url", image_url: { url } });
+    let userContent: ApiContentPart[];
+
+    if (hasInlineRefs && modelSupportsVision(model)) {
+      userContent = await serializeForApi(
+        rawPrompt!,
+        inlineRefs,
+        data.refImages,
+        imageOptions,
+      );
+
+      const inlineUrls = getInlineRefUrls(inlineRefs, data.refImages, imageOptions);
+      for (const entry of imageEntries) {
+        if (inlineUrls.has(entry.url)) continue;
+        const dataUrl = await getBase64ForApi(entry.url);
+        userContent.unshift({ type: "image_url", image_url: { url: dataUrl } });
+      }
+    } else {
+      userContent = [];
+      if (modelSupportsVision(model)) {
+        for (const img of imageEntries) {
+          const dataUrl = await getBase64ForApi(img.url);
+          userContent.push({ type: "image_url", image_url: { url: dataUrl } });
+        }
+      } else if (imageEntries.length > 0) {
+        useUIStore.getState().addToast({
+          type: "warning",
+          title: "当前模型不支持图片输入",
+          description: `${model} 不支持视觉能力，已忽略参考图。`,
+          duration: 5000,
+        });
+      }
+      userContent.push({ type: "text", text: displayPrompt });
     }
-    userContent.push({ type: "text", text: prompt });
 
     const systemPrompt = data._systemPrompt || "你是一个有帮助的 AI 助手，请用中文回复。请直接回答用户的问题。";
+    const hasImages = userContent.some((p) => p.type === "image_url");
     const apiMessages = [
       { role: "system", content: systemPrompt },
       {
         role: "user",
-        content: resolvedImageUrls.length > 0 ? userContent : prompt,
+        content: hasImages ? userContent : displayPrompt,
       },
     ];
 
@@ -229,29 +259,34 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, generating, updateCard, currentModel, setCardProgress, refSlots]);
+  }, [data, card.id, generating, updateCard, currentModel, setCardProgress, refSlots, imageOptions]);
 
-  const hasRefImages = refSlots.some((s) => data.refImages?.[s.key]);
+  const hasContent = !!(data.content?.trim());
   const isLocked = !!data._locked;
 
   return (
     <div className="flex h-full flex-col gap-2 p-3">
-      {refSlots.length > 0 && (
-        <div className="flex shrink-0 gap-2">
-          {refSlots.map((slot, idx) => (
-            <RefImageSlot
-              key={slot.key}
-              label={slot.label}
-              description={slot.description}
-              entry={data.refImages?.[slot.key]}
-              onImage={(entry) => setRefImage(slot.key, entry)}
-              onClear={() => clearRefImage(slot.key)}
-              disabled={generating}
-              targetCardId={card.id}
-              slotKey={slot.key}
-              index={idx}
-            />
-          ))}
+      {refSlots.some((s) => data.refImages?.[s.key]) && (
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {refSlots.map((slot, idx) => {
+            const entry = data.refImages?.[slot.key];
+            if (!entry) return null;
+            return (
+              <RefImageSlot
+                key={slot.key}
+                label={slot.label}
+                description={slot.description}
+                entry={entry}
+                onImage={(e) => setRefImage(slot.key, e)}
+                onClear={() => clearRefImage(slot.key)}
+                disabled={generating}
+                targetCardId={card.id}
+                slotKey={slot.key}
+                index={idx}
+                highlighted={hoveredRefId === `slot:${slot.key}`}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -266,12 +301,14 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
           </div>
         </div>
       ) : (
-        <textarea
-          className="min-h-[3rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+        <PromptTextarea
           value={data.content ?? ""}
+          inlineRefs={data.inlineRefs ?? []}
+          imageOptions={imageOptions}
           onChange={onPromptChange}
-          placeholder="输入提示词，生成文字内容…"
+          placeholder="输入提示词，按 @ 引用图片…"
           disabled={generating}
+          onHoverRef={setHoveredRefId}
         />
       )}
 
@@ -297,11 +334,11 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         <div className="flex-1" />
         <button
           onClick={handleGenerate}
-          disabled={generating || !data.content?.trim()}
+          disabled={generating || !hasContent}
           className={cn(
             "flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
             "bg-primary text-primary-foreground hover:bg-primary/90",
-            (generating || !data.content?.trim()) && "cursor-not-allowed opacity-40",
+            (generating || !hasContent) && "cursor-not-allowed opacity-40",
           )}
         >
           {generating ? (

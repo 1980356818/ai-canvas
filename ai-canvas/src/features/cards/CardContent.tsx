@@ -61,20 +61,40 @@ function ImagePreview({ card }: { card: CanvasCard }) {
   );
 
   if (genProgress) {
+    const subs = genProgress.subs;
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
         <Loader2 className="h-8 w-8 animate-spin text-primary/60" />
         <div className="w-full max-w-[80%] space-y-1.5">
-          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-            {genProgress.percent > 0 ? (
-              <div
-                className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
-                style={{ width: `${genProgress.percent}%` }}
-              />
-            ) : (
-              <div className="h-full w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full bg-primary/60" />
-            )}
-          </div>
+          {subs && subs.length > 1 ? (
+            <div className="flex flex-col gap-1">
+              {subs.map((sub, i) => (
+                <div key={i} className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  {sub.status === "error" ? (
+                    <div className="h-full w-full rounded-full bg-destructive/60" />
+                  ) : sub.percent > 0 ? (
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+                      style={{ width: `${sub.percent}%` }}
+                    />
+                  ) : (
+                    <div className="h-full w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full bg-primary/60" />
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+              {genProgress.percent > 0 ? (
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+                  style={{ width: `${genProgress.percent}%` }}
+                />
+              ) : (
+                <div className="h-full w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full bg-primary/60" />
+              )}
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <p className="text-[10px] text-muted-foreground">{genProgress.label}</p>
             {genProgress.percent > 0 && (
@@ -123,6 +143,7 @@ function ImagePreview({ card }: { card: CanvasCard }) {
             {results.map((r, i) => (
               <button
                 key={i}
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => { e.stopPropagation(); handleSelect(i); }}
                 className={`h-8 w-8 shrink-0 overflow-hidden rounded border-2 transition-all ${
                   i === selectedIdx

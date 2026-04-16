@@ -47,11 +47,12 @@ const FALLBACK_SLOTS: RefImageSlot[] = [
   { key: "refImage0", label: "参考图", description: "参考图（如模型支持）", required: false },
 ];
 
-const CHAT_REF_SLOTS: RefImageSlot[] = [
-  { key: "refImage0", label: "参考图1", description: "图片参考", required: false },
-  { key: "refImage1", label: "参考图2", description: "图片参考", required: false },
-  { key: "refImage2", label: "参考图3", description: "图片参考", required: false },
-];
+const CHAT_REF_SLOTS: RefImageSlot[] = Array.from({ length: 10 }, (_, i) => ({
+  key: `refImage${i}`,
+  label: `参考图${i + 1}`,
+  description: "图片参考",
+  required: false,
+}));
 
 const NON_VISION_PATTERNS: RegExp[] = [
   /^spark/i,
@@ -99,6 +100,26 @@ export function compactRefImages(
     if (slots[i]) result[slots[i].key] = entry;
   });
   return result;
+}
+
+/**
+ * Build a mapping from old slot keys to new slot keys after compaction.
+ * Returns a Map where key = old slotKey, value = new slotKey.
+ * Only includes entries whose key actually changed.
+ */
+export function buildCompactKeyMap(
+  refImages: Record<string, RefImageEntry>,
+  slots: RefImageSlot[],
+): Map<string, string> {
+  const occupied = slots.filter((s) => refImages[s.key]);
+  const map = new Map<string, string>();
+  occupied.forEach((slot, i) => {
+    const newKey = slots[i]!.key;
+    if (slot.key !== newKey) {
+      map.set(slot.key, newKey);
+    }
+  });
+  return map;
 }
 
 export function extractCardImage(card: CanvasCard): string | null {

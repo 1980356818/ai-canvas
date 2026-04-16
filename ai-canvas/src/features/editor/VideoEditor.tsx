@@ -11,8 +11,11 @@ import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import { useConnectionStore } from "@/stores/connectionStore";
+import { useImageRefSources } from "@/hooks/useImageRefSources";
+import { type InlineImageRef, toDisplayText } from "@/lib/promptSerializer";
 import ModelSelector from "./ModelSelector";
 import SizeCombo from "./SizeCombo";
+import PromptTextarea from "./PromptTextarea";
 import { normalizeImageSize } from "@/shared/constants";
 
 interface VideoFrameRef {
@@ -26,6 +29,7 @@ interface VideoData {
   model?: string;
   size?: string;
   upstreamTexts?: Record<string, string>;
+  inlineRefs?: InlineImageRef[];
   /** @deprecated use refFrames instead */
   upstreamImageUrl?: string;
   refFrames?: VideoFrameRef[];
@@ -43,7 +47,8 @@ function buildFinalPrompt(data: VideoData): string {
     }
   }
   if (data.content?.trim()) {
-    parts.push(data.content.trim());
+    const display = toDisplayText(data.content.trim(), data.inlineRefs ?? []);
+    parts.push(display);
   }
   return parts.join("\n\n");
 }
@@ -87,6 +92,8 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     }
   }, [data.model]);
 
+  const imageOptions = useImageRefSources(card.id, [], undefined);
+
   const handleModelChange = useCallback(
     (modelId: string) => {
       setCurrentModel(modelId);
@@ -106,9 +113,8 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   );
 
   const onPromptChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const content = e.target.value;
-      updateCard(card.id, { data: { ...data, content } });
+    (newContent: string, newRefs: InlineImageRef[]) => {
+      updateCard(card.id, { data: { ...data, content: newContent, inlineRefs: newRefs } });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
     },
@@ -312,11 +318,12 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
             </div>
           )}
 
-          <textarea
-            className="min-h-[3rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+          <PromptTextarea
             value={data.content ?? ""}
+            inlineRefs={data.inlineRefs ?? []}
+            imageOptions={imageOptions}
             onChange={onPromptChange}
-            placeholder={hasUpstream ? "追加你的提示词（可选）…" : "描述你想生成的视频…"}
+            placeholder={hasUpstream ? "追加你的提示词，按 @ 引用图片…" : "描述你想生成的视频，按 @ 引用图片…"}
             disabled={generating}
           />
         </>

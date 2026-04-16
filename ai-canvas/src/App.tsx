@@ -1,4 +1,4 @@
-import { useEffect, useRef, startTransition } from "react";
+import { useEffect, useRef } from "react";
 import { useUIStore } from "@/stores/uiStore";
 import { useCardStore } from "@/stores/cardStore";
 import { useCanvasStore } from "@/stores/canvasStore";
@@ -6,6 +6,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { isTauri, loadCards, loadConnections, saveConnections, saveProjectViewport, loadProjectViewport, migrateApiConfig } from "@/lib/tauri";
+import { rebuildMissingConnections } from "@/lib/connectionRecovery";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
 import { startDataFlowWatcher, removeRefImageForSource, removeUpstreamTextForSource, removeVideoFrameForSource } from "@/lib/dataFlow";
@@ -57,7 +58,7 @@ export default function App() {
         saveProjectViewport(prevId, { x: vp.x, y: vp.y, zoom: vp.zoom });
 
         const conns = useConnectionStore.getState().getConnectionsByProject(prevId);
-        saveConnections(
+        void saveConnections(
           prevId,
           conns.map((c) => ({
             id: c.id,
@@ -86,43 +87,42 @@ export default function App() {
       useCanvasStore.getState().setViewport({ x: 0, y: 0, zoom: 1 });
     }
 
-    loadCards(currentProjectId)
-      .then((rows) => {
-        const cards = rows.map((r) => ({
-          id: r.id,
-          projectId: r.project_id,
-          type: r.type as CardType,
-          x: r.x,
-          y: r.y,
-          width: r.width,
-          height: r.height,
-          zIndex: r.z_index,
-          locked: r.locked,
-          collapsed: r.collapsed,
-          color: r.color ?? undefined,
-          title: r.title ?? undefined,
-          data: JSON.parse(r.data),
-          createdAt: r.created_at,
-          updatedAt: r.updated_at,
-        }));
-        startTransition(() => {
-          useCardStore.getState().setCards(cards);
-        });
+    (async () => {
+      const rows = await loadCards(currentProjectId);
+      const cards = rows.map((r) => ({
+        id: r.id,
+        projectId: r.project_id,
+        type: r.type as CardType,
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height,
+        zIndex: r.z_index,
+        locked: r.locked,
+        collapsed: r.collapsed,
+        color: r.color ?? undefined,
+        title: r.title ?? undefined,
+        data: JSON.parse(r.data),
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      }));
+      useCardStore.getState().setCards(cards);
 
-        const connRows = loadConnections(currentProjectId);
-        const conns: Connection[] = connRows.map((r) => ({
-          id: r.id,
-          projectId: r.project_id,
-          sourceCardId: r.source_card_id,
-          targetCardId: r.target_card_id,
-          createdAt: r.created_at,
-        }));
-        useConnectionStore.getState().setConnections(conns);
+      const connRows = await loadConnections(currentProjectId);
+      const conns: Connection[] = connRows.map((r) => ({
+        id: r.id,
+        projectId: r.project_id,
+        sourceCardId: r.source_card_id,
+        targetCardId: r.target_card_id,
+        createdAt: r.created_at,
+      }));
 
-        dataFlowCleanup.current?.();
-        dataFlowCleanup.current = startDataFlowWatcher();
-      })
-      .catch(console.error);
+      const rebuilt = rebuildMissingConnections(currentProjectId, cards, conns);
+      useConnectionStore.getState().setConnections(rebuilt);
+
+      dataFlowCleanup.current?.();
+      dataFlowCleanup.current = startDataFlowWatcher();
+    })().catch(console.error);
 
     return () => {
       dataFlowCleanup.current?.();
@@ -139,8 +139,6 @@ export default function App() {
 
       const pid = useProjectStore.getState().currentProjectId;
 
-      // Skip per-connection cleanup when all connections were cleared (project switch/delete).
-      // The card store is already cleared in that case, so the cleanup is unnecessary.
       if (state.connections.size > 0 || pid) {
         for (const [id, conn] of prev.connections) {
           if (!state.connections.has(id)) {
@@ -161,7 +159,7 @@ export default function App() {
           target_card_id: c.targetCardId,
           created_at: c.createdAt,
         }));
-      saveConnections(pid, rows);
+      void saveConnections(pid, rows);
     });
     return unsub;
   }, []);
@@ -177,7 +175,7 @@ export default function App() {
       saveProjectViewport(pid, { x: vp.x, y: vp.y, zoom: vp.zoom });
 
       const conns = useConnectionStore.getState().getConnectionsByProject(pid);
-      saveConnections(
+      await saveConnections(
         pid,
         conns.map((c) => ({
           id: c.id,
