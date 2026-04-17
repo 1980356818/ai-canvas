@@ -43,7 +43,7 @@ const MODEL_REF_CONFIGS: ModelRefConfig[] = [
   },
 ];
 
-const FALLBACK_SLOTS: RefImageSlot[] = Array.from({ length: 5 }, (_, i) => ({
+const FALLBACK_SLOTS: RefImageSlot[] = Array.from({ length: 10 }, (_, i) => ({
   key: `refImage${i}`,
   label: `参考图${i + 1}`,
   description: "参考图（如模型支持）",

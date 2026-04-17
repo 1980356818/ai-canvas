@@ -202,25 +202,66 @@ const PromptTextarea = forwardRef<PromptTextareaHandle, PromptTextareaProps>(fun
     }
   }, [emitChange, inlineRefs, mentionOpen]);
 
-  // ── Keyboard: forward to popover ─────────────────────────
+  // ── Keyboard: forward to popover + Backspace chip deletion
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (!mentionOpen) return;
-      switch (e.key) {
-        case "ArrowDown":
-        case "ArrowUp":
-        case "Enter":
-        case "Tab":
+      if (mentionOpen) {
+        switch (e.key) {
+          case "ArrowDown":
+          case "ArrowUp":
+          case "Enter":
+          case "Tab":
+            e.preventDefault();
+            popoverKeyRef.current?.(e.key);
+            return;
+          case "Escape":
+            e.preventDefault();
+            setMentionOpen(false);
+            return;
+        }
+      }
+
+      if (e.key === "Backspace" || e.key === "Delete") {
+        const el = editorRef.current;
+        if (!el) return;
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return;
+
+        const range = sel.getRangeAt(0);
+        const { startContainer: node, startOffset: offset } = range;
+
+        let chip: Element | null = null;
+
+        if (e.key === "Backspace") {
+          if (node.nodeType === Node.TEXT_NODE && offset === 0) {
+            const prev = node.previousSibling;
+            if (prev instanceof HTMLElement && prev.hasAttribute(REF_ATTR))
+              chip = prev;
+          } else if (node.nodeType === Node.ELEMENT_NODE && offset > 0) {
+            const child = node.childNodes[offset - 1];
+            if (child instanceof HTMLElement && child.hasAttribute(REF_ATTR))
+              chip = child;
+          }
+        } else {
+          if (node.nodeType === Node.TEXT_NODE && offset === (node.textContent?.length ?? 0)) {
+            const next = node.nextSibling;
+            if (next instanceof HTMLElement && next.hasAttribute(REF_ATTR))
+              chip = next;
+          } else if (node.nodeType === Node.ELEMENT_NODE) {
+            const child = node.childNodes[offset];
+            if (child instanceof HTMLElement && child.hasAttribute(REF_ATTR))
+              chip = child;
+          }
+        }
+
+        if (chip) {
           e.preventDefault();
-          popoverKeyRef.current?.(e.key);
-          break;
-        case "Escape":
-          e.preventDefault();
-          setMentionOpen(false);
-          break;
+          chip.remove();
+          emitChange(el, inlineRefs);
+        }
       }
     },
-    [mentionOpen],
+    [mentionOpen, inlineRefs, emitChange],
   );
 
   // ── Paste: plain text only ───────────────────────────────

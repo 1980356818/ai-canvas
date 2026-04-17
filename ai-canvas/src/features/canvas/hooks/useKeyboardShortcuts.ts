@@ -82,6 +82,9 @@ export function useKeyboardShortcuts() {
       if (e.key === "Escape") {
         if (editingCardId) {
           useCanvasStore.getState().setEditingCardId(null);
+          if (isFocusOnInput()) {
+            (document.activeElement as HTMLElement)?.blur();
+          }
         } else if (selectedCardIds.size > 0) {
           useCanvasStore.getState().clearSelection();
         } else if (useUIStore.getState().agentPanelVisible) {
@@ -134,35 +137,36 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // ── Backspace: never delete cards/connections ──
-      if (e.key === "Backspace" && !editingCardId && !isFocusOnInput()) {
-        e.preventDefault();
-        return;
-      }
-
-      // ── Delete: delete selected cards ──
+      // ── Delete: delete selected cards or connections ──
       if (e.key === "Delete" && !mod) {
-        if (editingCardId) {
-          const target = e.target as HTMLElement;
-          const inCardResult = "cardResult" in target.dataset;
-          if (!inCardResult) return;
+        if (isFocusOnInput()) {
+          const el = document.activeElement as HTMLElement | null;
+          if (el) {
+            const inputEl = el as HTMLInputElement | HTMLTextAreaElement;
+            const hasText = "value" in el
+              ? inputEl.value.length > 0
+              : (el.textContent ?? "").length > 0;
+            if (hasText) return;
+          }
         }
-        if (isFocusOnInput() && !editingCardId) return;
 
         e.preventDefault();
-        const connId = useConnectionStore.getState().selectedConnectionId;
-        if (connId) {
+
+        if (selectedCardIds.size === 0) {
+          const connId = useConnectionStore.getState().selectedConnectionId;
+          if (!connId) return;
           useConnectionStore.getState().removeConnection(connId);
           autoSave.markDirty();
           return;
         }
+
         exitEditingMode();
         void deleteSelected();
         return;
       }
     };
 
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
   }, []);
 }

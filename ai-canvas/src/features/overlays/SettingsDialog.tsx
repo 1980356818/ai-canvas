@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   XCircle,
   FolderOpen,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { getSetting, setSetting, validateConnection, invalidateApiKeyCache, pickDirectory } from "@/lib/tauri";
 import { modelService } from "@/services/models";
@@ -17,21 +19,33 @@ import { cn } from "@/lib/utils";
 
 type ConnectionStatus = "idle" | "testing" | "ok" | "error";
 
-interface FieldState {
-  value: string;
-  show: boolean;
+interface ApiKeyEntry {
+  id: string;
+  name: string;
+  key: string;
+}
+
+function generateId() {
+  return crypto.randomUUID().slice(0, 8);
+}
+
+function maskKey(key: string): string {
+  if (key.length <= 8) return "••••••••";
+  return key.slice(0, 4) + "••••" + key.slice(-4);
 }
 
 export default function SettingsDialog() {
   const visible = useUIStore((s) => s.settingsVisible);
   const toggleSettings = useUIStore((s) => s.toggleSettings);
 
-  const [apiKey, setApiKey] = useState<FieldState>({ value: "", show: false });
+  const [apiKeys, setApiKeys] = useState<ApiKeyEntry[]>([]);
+  const [activeKeyId, setActiveKeyId] = useState<string>("");
+  const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
+  const [showKeyIds, setShowKeyIds] = useState<Set<string>>(new Set());
   const [baseUrl, setBaseUrl] = useState("");
   const [autoSavePath, setAutoSavePath] = useState("");
   const [exportPath, setExportPath] = useState("");
   const [saving, setSaving] = useState(false);
-  const [saved, _setSaved] = useState(false);
   const [connStatus, setConnStatus] = useState<ConnectionStatus>("idle");
   const [connError, setConnError] = useState("");
 
@@ -39,14 +53,32 @@ export default function SettingsDialog() {
     if (!visible) return;
     setConnStatus("idle");
     setConnError("");
+    setEditingKeyId(null);
+    setShowKeyIds(new Set());
     Promise.all([
+      getSetting("api_keys_list"),
+      getSetting("active_api_key_id"),
       getSetting("openai_api_key"),
       getSetting("openai_base_url"),
       getSetting("file_auto_save_path"),
       getSetting("image_auto_save_path"),
       getSetting("file_export_path"),
-    ]).then(([key, url, fsp, legacyAsp, exp]) => {
-      setApiKey({ value: key ?? "", show: false });
+    ]).then(([listJson, activeId, legacyKey, url, fsp, legacyAsp, exp]) => {
+      let keys: ApiKeyEntry[] = [];
+      let active = activeId ?? "";
+
+      if (listJson) {
+        try { keys = JSON.parse(listJson); } catch { keys = []; }
+      }
+
+      if (keys.length === 0 && legacyKey) {
+        const entry: ApiKeyEntry = { id: generateId(), name: "默认", key: legacyKey };
+        keys = [entry];
+        active = entry.id;
+      }
+
+      setApiKeys(keys);
+      setActiveKeyId(active || (keys.length > 0 ? keys[0]!.id : ""));
       setBaseUrl(url ?? "");
       setAutoSavePath(fsp || legacyAsp || "");
       setExportPath(exp || "");
@@ -75,17 +107,60 @@ export default function SettingsDialog() {
     }
   }, []);
 
+  const handleAddKey = useCallback(() => {
+    const entry: ApiKeyEntry = { id: generateId(), name: "", key: "" };
+    setApiKeys((prev) => [...prev, entry]);
+    setEditingKeyId(entry.id);
+    if (apiKeys.length === 0) setActiveKeyId(entry.id);
+  }, [apiKeys.length]);
+
+  const handleRemoveKey = useCallback((id: string) => {
+    setApiKeys((prev) => {
+      const next = prev.filter((e) => e.id !== id);
+      return next;
+    });
+    setActiveKeyId((prev) => {
+      if (prev !== id) return prev;
+      const remaining = apiKeys.filter((e) => e.id !== id);
+      return remaining.length > 0 ? remaining[0]!.id : "";
+    });
+    setEditingKeyId((prev) => (prev === id ? null : prev));
+  }, [apiKeys]);
+
+  const handleUpdateKey = useCallback((id: string, patch: Partial<ApiKeyEntry>) => {
+    setApiKeys((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  }, []);
+
+  const toggleShowKey = useCallback((id: string) => {
+    setShowKeyIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const activeEntry = apiKeys.find((e) => e.id === activeKeyId);
+
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      const trimmedKey = apiKey.value.trim();
       const trimmedUrl = baseUrl.trim();
       const trimmedAutoSave = autoSavePath.trim();
       const trimmedExport = exportPath.trim();
-      if (trimmedKey) {
-        await setSetting("openai_api_key", trimmedKey);
-        setApiKey((s) => ({ ...s, value: trimmedKey }));
-      }
+
+      const cleanKeys = apiKeys.map((e) => ({
+        ...e,
+        name: e.name.trim() || `Key ${apiKeys.indexOf(e) + 1}`,
+        key: e.key.trim(),
+      })).filter((e) => e.key);
+
+      await setSetting("api_keys_list", JSON.stringify(cleanKeys));
+      await setSetting("active_api_key_id", activeKeyId);
+
+      const active = cleanKeys.find((e) => e.id === activeKeyId);
+      await setSetting("openai_api_key", active?.key ?? "");
+
       if (trimmedUrl) {
         await setSetting("openai_base_url", trimmedUrl);
         setBaseUrl(trimmedUrl);
@@ -94,6 +169,8 @@ export default function SettingsDialog() {
       setAutoSavePath(trimmedAutoSave);
       await setSetting("file_export_path", trimmedExport);
       setExportPath(trimmedExport);
+
+      setApiKeys(cleanKeys);
 
       invalidateApiKeyCache();
       modelService.invalidateCache();
@@ -106,13 +183,13 @@ export default function SettingsDialog() {
     } finally {
       setSaving(false);
     }
-  }, [apiKey.value, baseUrl, autoSavePath, exportPath, toggleSettings]);
+  }, [apiKeys, activeKeyId, baseUrl, autoSavePath, exportPath, toggleSettings]);
 
   if (!visible) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-2xl">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-background p-6 shadow-2xl">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Settings className="h-5 w-5 text-primary" />
@@ -127,32 +204,143 @@ export default function SettingsDialog() {
         </div>
 
         <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void handleSave(); }} autoComplete="off">
+          {/* API Keys list */}
           <div>
-            <label className="mb-1.5 block text-sm font-medium">API Key</label>
-            <div className="relative">
-              <input
-                type={apiKey.show ? "text" : "password"}
-                value={apiKey.value}
-                onChange={(e) =>
-                  setApiKey((s) => ({ ...s, value: e.target.value }))
-                }
-                placeholder="sk-..."
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 pr-10 text-sm outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
-              />
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-sm font-medium">API Key</label>
               <button
                 type="button"
-                onClick={() =>
-                  setApiKey((s) => ({ ...s, show: !s.show }))
-                }
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={handleAddKey}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-primary hover:bg-primary/10"
               >
-                {apiKey.show ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
+                <Plus className="h-3 w-3" />
+                添加
               </button>
             </div>
+
+            {apiKeys.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-xs text-muted-foreground">
+                暂无 API Key，点击上方「添加」创建
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {apiKeys.map((entry) => {
+                  const isActive = entry.id === activeKeyId;
+                  const isEditing = entry.id === editingKeyId;
+                  const isShown = showKeyIds.has(entry.id);
+
+                  return (
+                    <div
+                      key={entry.id}
+                      className={cn(
+                        "rounded-lg border px-3 py-2.5 transition-colors",
+                        isActive
+                          ? "border-primary/40 bg-primary/5"
+                          : "border-border hover:border-border/80",
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        {/* Radio */}
+                        <button
+                          type="button"
+                          onClick={() => setActiveKeyId(entry.id)}
+                          className="flex-shrink-0"
+                          title="设为当前使用"
+                        >
+                          <div
+                            className={cn(
+                              "flex h-4 w-4 items-center justify-center rounded-full border-2 transition-colors",
+                              isActive
+                                ? "border-primary"
+                                : "border-muted-foreground/40 hover:border-muted-foreground",
+                            )}
+                          >
+                            {isActive && (
+                              <div className="h-2 w-2 rounded-full bg-primary" />
+                            )}
+                          </div>
+                        </button>
+
+                        {/* Name + Key */}
+                        <div className="min-w-0 flex-1">
+                          {isEditing ? (
+                            <div className="space-y-1.5">
+                              <input
+                                type="text"
+                                value={entry.name}
+                                onChange={(e) => handleUpdateKey(entry.id, { name: e.target.value })}
+                                placeholder="名称（如：生产环境）"
+                                className="w-full rounded border border-input bg-background px-2 py-1 text-xs outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+                                autoFocus
+                              />
+                              <div className="relative">
+                                <input
+                                  type={isShown ? "text" : "password"}
+                                  value={entry.key}
+                                  onChange={(e) => handleUpdateKey(entry.id, { key: e.target.value })}
+                                  placeholder="sk-..."
+                                  className="w-full rounded border border-input bg-background px-2 py-1 pr-8 text-xs outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => toggleShowKey(entry.id)}
+                                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                >
+                                  {isShown ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className="w-full text-left"
+                              onClick={() => setEditingKeyId(entry.id)}
+                            >
+                              <div className="text-xs font-medium leading-tight">
+                                {entry.name || "未命名"}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground">
+                                {maskKey(entry.key)}
+                              </div>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex flex-shrink-0 items-center gap-1">
+                          {isEditing ? (
+                            <button
+                              type="button"
+                              onClick={() => setEditingKeyId(null)}
+                              className="rounded p-1 text-xs text-primary hover:bg-primary/10"
+                            >
+                              完成
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setEditingKeyId(entry.id)}
+                              className="rounded p-1 text-muted-foreground hover:text-foreground"
+                              title="编辑"
+                            >
+                              <Settings className="h-3 w-3" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveKey(entry.id)}
+                            className="rounded p-1 text-muted-foreground hover:text-destructive"
+                            title="删除"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div>
@@ -277,16 +465,13 @@ export default function SettingsDialog() {
             <button
               type="button"
               onClick={handleTestConnection}
-              disabled={connStatus === "testing" || !apiKey.value}
+              disabled={connStatus === "testing" || !activeEntry?.key}
               className="rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent disabled:opacity-40"
             >
               测试连接
             </button>
 
             <div className="flex items-center gap-2">
-              {saved && (
-                <span className="text-xs text-emerald-500">已保存</span>
-              )}
               <button
                 type="button"
                 onClick={toggleSettings}
