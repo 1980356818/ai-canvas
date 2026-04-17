@@ -78,6 +78,7 @@ export default function FloatingEditor() {
       }}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.stopPropagation()}
     >
       <div className="h-full overflow-auto">
         <EditorSwitch card={card} />

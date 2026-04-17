@@ -35,6 +35,8 @@ interface PromptTextareaProps {
   disabled?: boolean;
   className?: string;
   onHoverRef?: (refId: string | null) => void;
+  onPasteImage?: (files: File[]) => void;
+  onDropImage?: (files: File[]) => void;
 }
 
 // ── DOM → raw text ─────────────────────────────────────────
@@ -117,6 +119,13 @@ function isEditorEmpty(el: HTMLElement): boolean {
 
 // ── Component ──────────────────────────────────────────────
 
+const MEDIA_MIME = new Set([
+  "image/png", "image/jpeg", "image/gif", "image/webp",
+  "image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence",
+  "video/mp4", "video/webm", "video/quicktime",
+  "video/x-msvideo", "video/x-matroska", "video/mpeg",
+]);
+
 const PromptTextarea = forwardRef<PromptTextareaHandle, PromptTextareaProps>(function PromptTextarea({
   value,
   inlineRefs,
@@ -126,6 +135,8 @@ const PromptTextarea = forwardRef<PromptTextareaHandle, PromptTextareaProps>(fun
   disabled,
   className,
   onHoverRef,
+  onPasteImage,
+  onDropImage,
 }, ref) {
   const editorRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -264,12 +275,19 @@ const PromptTextarea = forwardRef<PromptTextareaHandle, PromptTextareaProps>(fun
     [mentionOpen, inlineRefs, emitChange],
   );
 
-  // ── Paste: plain text only ───────────────────────────────
+  // ── Paste: plain text + detect images/videos ─────────────
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     e.preventDefault();
+    const mediaFiles = Array.from(e.clipboardData.files).filter(
+      (f) => MEDIA_MIME.has(f.type) || f.type.startsWith("image/") || f.type.startsWith("video/"),
+    );
+    if (mediaFiles.length > 0 && onPasteImage) {
+      onPasteImage(mediaFiles);
+      return;
+    }
     const text = e.clipboardData.getData("text/plain");
     document.execCommand("insertText", false, text);
-  }, []);
+  }, [onPasteImage]);
 
   // ── Mention selection: insert chip ───────────────────────
   const handleSelect = useCallback(
@@ -420,22 +438,66 @@ const PromptTextarea = forwardRef<PromptTextareaHandle, PromptTextareaProps>(fun
     onHoverRef?.(null);
   }, [onHoverRef]);
 
+  const [dragOver, setDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    if (!onDropImage) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (Array.from(e.dataTransfer.types).includes("Files")) setDragOver(true);
+  }, [onDropImage]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setDragOver(false);
+    }
+  }, []);
+
+  const handleDragOverEvt = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setDragOver(false);
+    if (!onDropImage) return;
+    const mediaFiles = Array.from(e.dataTransfer.files).filter(
+      (f) => MEDIA_MIME.has(f.type) || f.type.startsWith("image/") || f.type.startsWith("video/"),
+    );
+    if (mediaFiles.length > 0) onDropImage(mediaFiles);
+  }, [onDropImage]);
+
   return (
     <div
       ref={containerRef}
-      className={cn("relative min-h-[3rem] flex-1", className)}
+      className={cn("relative min-h-[3rem] flex-1 overflow-hidden", className)}
     >
       <div
         ref={editorRef}
         contentEditable={!disabled}
         className={cn(
-          "h-full min-h-[3rem] w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring focus:ring-1",
+          "h-full min-h-[3rem] w-full overflow-y-auto rounded-lg border border-input bg-background px-3 py-1.5 text-sm leading-relaxed text-foreground outline-none ring-ring focus:ring-1",
+          dragOver && "ring-1 ring-primary border-primary/60",
           disabled && "cursor-not-allowed opacity-50",
         )}
         style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOverEvt}
+        onDrop={handleDrop}
         onMouseOver={handleMouseOver}
         onMouseLeave={handleMouseLeave}
         spellCheck={false}

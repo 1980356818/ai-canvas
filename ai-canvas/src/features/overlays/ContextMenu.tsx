@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { CARD_DEFAULTS, WORKFLOW_TEMPLATES } from "@/shared/constants";
 import type { CardType } from "@/shared/types";
 import { extractCardMedia } from "@/config/model-ref-images";
-import { exportFile, revealInExplorer } from "@/lib/media";
+import { exportFile, revealInExplorer, batchExportFiles } from "@/lib/media";
 import { copyCards, pasteCards } from "@/lib/clipboard";
 
 function syncNodeCount(projectId: string) {
@@ -491,6 +491,26 @@ function ContextMenuPanel({
       },
     ];
   } else if (contextMenu.target === "multi") {
+    const mediaCards: { storedPath: string; cardTitle: string; isVideo: boolean }[] = [];
+    for (const id of selectedCardIds) {
+      const c = useCardStore.getState().getCard(id);
+      if (!c) continue;
+      const media = extractCardMedia(c);
+      if (media && !media.startsWith("data:") && !media.startsWith("http")) {
+        mediaCards.push({
+          storedPath: media,
+          cardTitle: (c.data as Record<string, unknown>)?.content as string || c.title || (c.type === "ai_video" ? "AI视频" : "AI图片"),
+          isVideo: c.type === "ai_video",
+        });
+      }
+    }
+    const imageCount = mediaCards.filter((m) => !m.isVideo).length;
+    const videoCount = mediaCards.filter((m) => m.isVideo).length;
+    const mediaLabel = [
+      imageCount > 0 ? `${imageCount}张图片` : "",
+      videoCount > 0 ? `${videoCount}个视频` : "",
+    ].filter(Boolean).join(" + ");
+
     entries = [
       {
         type: "item",
@@ -498,6 +518,35 @@ function ContextMenuPanel({
         shortcut: "Ctrl+C",
         disabled: selectedCardIds.size === 0,
         onSelect: () => void runCopyCards(selectedCardIds),
+      },
+      {
+        type: "item",
+        label: mediaLabel ? `批量导出文件 (${mediaLabel})` : "批量导出文件",
+        disabled: mediaCards.length === 0,
+        onSelect: () => {
+          void batchExportFiles(
+            mediaCards.map((m) => ({
+              storedPath: m.storedPath,
+              cardTitle: m.cardTitle,
+              projectId: projectId ?? undefined,
+            })),
+          ).then(({ success, failed }) => {
+            if (failed === 0) {
+              useUIStore.getState().addToast({
+                type: "success",
+                title: `已导出 ${success} 个文件`,
+                duration: 3000,
+              });
+            } else {
+              useUIStore.getState().addToast({
+                type: "error",
+                title: `导出完成：${success} 成功，${failed} 失败`,
+                duration: 5000,
+              });
+            }
+          });
+          hide();
+        },
       },
       { type: "sep" },
       {

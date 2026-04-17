@@ -600,6 +600,12 @@ fn resolve_user_media_path(
             .filter(|s| !s.trim().is_empty())
         })?;
 
+    let auto_dir_path = std::path::Path::new(&auto_dir);
+
+    let short_pid = project_id
+        .as_ref()
+        .map(|pid| &pid[..8.min(pid.len())]);
+
     let project_folder = project_id.as_ref().and_then(|pid| {
         db.query_row(
             "SELECT title FROM projects WHERE id = ?1",
@@ -611,14 +617,26 @@ fn resolve_user_media_path(
     });
 
     let target_dir = if let Some(ref folder) = project_folder {
-        std::path::Path::new(&auto_dir).join(folder)
+        auto_dir_path.join(folder)
     } else {
-        std::path::PathBuf::from(&auto_dir)
+        auto_dir_path.to_path_buf()
     };
 
-    if !target_dir.exists() {
-        return None;
-    }
+    let search_dir = if target_dir.exists() {
+        target_dir
+    } else if let Some(sid) = short_pid {
+        if let Ok(entries) = std::fs::read_dir(auto_dir_path) {
+            let found = entries.flatten().find(|e| {
+                e.file_type().map(|ft| ft.is_dir()).unwrap_or(false)
+                    && e.file_name().to_string_lossy().contains(sid)
+            });
+            found.map(|e| e.path()).unwrap_or_else(|| auto_dir_path.to_path_buf())
+        } else {
+            auto_dir_path.to_path_buf()
+        }
+    } else {
+        auto_dir_path.to_path_buf()
+    };
 
     let internal_abs = app_data_dir.join(internal_path);
     let internal_stem = internal_abs
@@ -626,18 +644,20 @@ fn resolve_user_media_path(
         .and_then(|s| s.to_str())
         .unwrap_or("");
 
-    if let Ok(entries) = std::fs::read_dir(&target_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            let short_id = &internal_stem[..8.min(internal_stem.len())];
-            if name_str.contains(short_id) {
-                return Some(entry.path());
+    if !internal_stem.is_empty() && search_dir.is_dir() {
+        let short_id = &internal_stem[..8.min(internal_stem.len())];
+        if let Ok(entries) = std::fs::read_dir(&search_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.contains(short_id) {
+                    return Some(entry.path());
+                }
             }
         }
     }
 
-    Some(target_dir)
+    Some(search_dir)
 }
 
 fn reveal_path(abs_path: &std::path::Path) -> Result<(), String> {

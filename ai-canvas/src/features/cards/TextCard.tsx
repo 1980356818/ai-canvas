@@ -1,4 +1,5 @@
 import { memo, useRef, useCallback, useEffect } from "react";
+import { Type } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { autoSave } from "@/lib/autoSave";
@@ -32,6 +33,15 @@ export default memo(function TextCard({ card }: { card: CanvasCard }) {
   const stopDrag = useCallback((e: React.PointerEvent | React.MouseEvent) => {
     e.stopPropagation();
   }, []);
+
+  if (!content && !isEditing) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+        <Type className="h-12 w-12 opacity-40" />
+        <span className="text-sm font-medium opacity-50">文本</span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full w-full flex-col p-4">

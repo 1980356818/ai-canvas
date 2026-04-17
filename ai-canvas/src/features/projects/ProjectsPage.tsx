@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Plus, FolderOpen, Trash2, Search, Undo2, Trash, ChevronDown, ChevronRight, Pencil } from "lucide-react";
+import { Plus, FolderOpen, Trash2, Search, Undo2, Trash, ChevronDown, ChevronRight, Pencil, Layers } from "lucide-react";
 import { NewProjectDialog } from "@/features/overlays/NewProjectDialog";
 import { ConfirmDialog } from "@/features/overlays/ConfirmDialog";
 import {
@@ -10,7 +10,9 @@ import {
   listDeletedProjects,
   restoreProject,
   permanentlyDeleteProject,
+  loadCards,
 } from "@/lib/tauri";
+import { getDisplayUrl } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { useProjectStore, type ProjectInfo } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -105,8 +107,57 @@ function ProjectContextMenu({ x, y, onRename, onDelete, onClose }: ProjectContex
   );
 }
 
+function ImageCollage({ images }: { images: string[] }) {
+  const count = images.length;
+
+  if (count === 0) {
+    return (
+      <div className="flex h-full items-center justify-center bg-gradient-to-br from-muted to-muted/60">
+        <Layers className="h-7 w-7 text-muted-foreground/25" />
+      </div>
+    );
+  }
+
+  if (count === 1) {
+    return (
+      <img src={images[0]} alt="" className="h-full w-full object-cover" />
+    );
+  }
+
+  if (count === 2) {
+    return (
+      <div className="grid h-full grid-cols-2 gap-px bg-border/40">
+        {images.slice(0, 2).map((src, i) => (
+          <img key={i} src={src} alt="" className="h-full w-full object-cover" />
+        ))}
+      </div>
+    );
+  }
+
+  if (count === 3) {
+    return (
+      <div className="grid h-full grid-cols-2 gap-px bg-border/40">
+        <img src={images[0]} alt="" className="row-span-2 h-full w-full object-cover" />
+        <div className="grid grid-rows-2 gap-px bg-border/40">
+          <img src={images[1]} alt="" className="h-full w-full object-cover" />
+          <img src={images[2]} alt="" className="h-full w-full object-cover" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid h-full grid-cols-2 grid-rows-2 gap-px bg-border/40">
+      {images.slice(0, 4).map((src, i) => (
+        <img key={i} src={src} alt="" className="h-full w-full object-cover" />
+      ))}
+    </div>
+  );
+}
+
 function ProjectCard({
   project,
+  images,
   onRename,
   onRequestDelete,
   onContextMenu,
@@ -114,6 +165,7 @@ function ProjectCard({
   onEditingDone,
 }: {
   project: ProjectInfo;
+  images: string[];
   onRename: (id: string, title: string) => void;
   onRequestDelete: (project: ProjectInfo) => void;
   onContextMenu: (e: React.MouseEvent, project: ProjectInfo) => void;
@@ -177,72 +229,66 @@ function ProjectCard({
         onContextMenu(e, project);
       }}
       className={cn(
-        "group relative flex items-start gap-4 rounded-xl border bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
-        active ? "border-primary/50 ring-1 ring-primary/20" : "border-border",
+        "group relative flex flex-col overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md",
+        active ? "border-primary/50 ring-1 ring-primary/20" : "border-border/60",
       )}
     >
-      <div
-        className={cn(
-          "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg",
-          active
-            ? "bg-primary text-primary-foreground"
-            : "bg-primary/10 text-primary",
-        )}
-      >
-        <FolderOpen className="h-5 w-5" />
+      <div className="aspect-[3/2] w-full overflow-hidden">
+        <ImageCollage images={images} />
       </div>
 
-      <div className="min-w-0 flex-1">
-        {editing ? (
-          <input
-            ref={inputRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                commitRename(draft);
-              }
-              if (e.key === "Escape") {
-                e.preventDefault();
-                setEditing(false);
-              }
-            }}
-            onBlur={() => commitRename(draft)}
-            className="w-full rounded border border-border bg-background px-1.5 py-0.5 text-sm font-semibold text-foreground outline-none ring-ring focus-visible:ring-2"
-          />
-        ) : (
-          <p
-            className="truncate text-sm font-semibold text-foreground"
-            onDoubleClick={(e) => {
-              e.stopPropagation();
-              setEditing(true);
-              setDraft(project.title);
-            }}
-          >
-            {project.title}
+      <div className="flex items-start gap-2 px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitRename(draft);
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setEditing(false);
+                }
+              }}
+              onBlur={() => commitRename(draft)}
+              className="w-full rounded border border-border bg-background px-1.5 py-0.5 text-xs font-semibold text-foreground outline-none ring-ring focus-visible:ring-2"
+            />
+          ) : (
+            <p
+              className="truncate text-xs font-semibold text-foreground"
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                setEditing(true);
+                setDraft(project.title);
+              }}
+            >
+              {project.title}
+            </p>
+          )}
+          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+            {project.nodeCount} 张卡片 · {formatRelativeTime(project.updatedAt)}
           </p>
-        )}
-        <p className="mt-1 text-xs text-muted-foreground">
-          {project.nodeCount} 张卡片 · 更新于{" "}
-          {formatRelativeTime(project.updatedAt)}
-        </p>
-      </div>
+        </div>
 
-      {!editing && (
-        <button
-          type="button"
-          aria-label="删除项目"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRequestDelete(project);
-          }}
-          className="shrink-0 rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      )}
+        {!editing && (
+          <button
+            type="button"
+            aria-label="删除项目"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRequestDelete(project);
+            }}
+            className="shrink-0 rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -311,6 +357,8 @@ export default function ProjectsPage() {
   const [trashExpanded, setTrashExpanded] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; project: ProjectInfo } | null>(null);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [projectImages, setProjectImages] = useState<Record<string, string[]>>({});
+  const imagesCacheRef = useRef<Record<string, string[]>>({});
 
   useEffect(() => {
     listProjects()
@@ -322,6 +370,43 @@ export default function ProjectsPage() {
       .then(setDeletedProjects)
       .catch(console.error);
   }, [addToast, setProjects, setDeletedProjects]);
+
+  useEffect(() => {
+    if (projects.length === 0) return;
+    const toLoad = projects.filter((p) => !(p.id in imagesCacheRef.current));
+    if (toLoad.length === 0) {
+      const map: Record<string, string[]> = {};
+      for (const p of projects) map[p.id] = imagesCacheRef.current[p.id] ?? [];
+      setProjectImages(map);
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      toLoad.map(async (p) => {
+        try {
+          const cards = await loadCards(p.id);
+          const urls: string[] = [];
+          for (const c of cards) {
+            if (c.type !== "ai_image") continue;
+            try {
+              const d = JSON.parse(c.data);
+              if (d.imageUrl) urls.push(getDisplayUrl(d.imageUrl));
+            } catch { /* skip */ }
+          }
+          return { id: p.id, urls };
+        } catch {
+          return { id: p.id, urls: [] as string[] };
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      for (const r of results) imagesCacheRef.current[r.id] = r.urls;
+      const map: Record<string, string[]> = {};
+      for (const p of projects) map[p.id] = imagesCacheRef.current[p.id] ?? [];
+      setProjectImages(map);
+    });
+    return () => { cancelled = true; };
+  }, [projects]);
 
   const onCreated = useCallback(
     (project: ProjectInfo) => {
@@ -437,11 +522,12 @@ export default function ProjectsPage() {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {filtered.map((p) => (
                 <ProjectCard
                   key={p.id}
                   project={p}
+                  images={projectImages[p.id] ?? []}
                   onRename={(id, title) => void handleRename(id, title)}
                   onRequestDelete={setPendingDelete}
                   onContextMenu={(e, proj) => setCtxMenu({ x: e.clientX, y: e.clientY, project: proj })}

@@ -614,8 +614,13 @@ export default memo(
       (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        useCanvasStore.getState().setSelectedCardIds([card.id]);
-        showContextMenu(e.clientX, e.clientY, "card", card.id);
+        const { selectedCardIds } = useCanvasStore.getState();
+        if (selectedCardIds.has(card.id) && selectedCardIds.size > 1) {
+          showContextMenu(e.clientX, e.clientY, "multi", card.id);
+        } else {
+          useCanvasStore.getState().setSelectedCardIds([card.id]);
+          showContextMenu(e.clientX, e.clientY, "card", card.id);
+        }
       },
       [card.id, showContextMenu],
     );

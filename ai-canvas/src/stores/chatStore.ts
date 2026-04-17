@@ -68,7 +68,7 @@ interface ChatState {
   deleteSession: (id: string) => Promise<void>;
   renameSession: (id: string, title: string) => Promise<void>;
 
-  sendMessage: (text: string, imageUrls?: string[]) => Promise<void>;
+  sendMessage: (text: string, imageUrls?: string[], videoUrls?: string[]) => Promise<void>;
   stopGenerating: () => void;
   clearMessages: () => Promise<void>;
 }
@@ -203,15 +203,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
-  async sendMessage(text, imageUrls) {
+  async sendMessage(text, imageUrls, videoUrls) {
     const state = get();
     if (state.generating) return;
 
     const hasImages = imageUrls && imageUrls.length > 0;
+    const hasVideos = videoUrls && videoUrls.length > 0;
+    const hasMedia = hasImages || hasVideos;
     const parsed = parseIntent(text);
-    const intent = hasImages ? "chat" as Intent : parsed.intent;
+    const intent = hasMedia ? "chat" as Intent : parsed.intent;
     const prompt = parsed.prompt;
-    if (!prompt && !hasImages) return;
+    if (!prompt && !hasMedia) return;
 
     if (!state.chatModel || !state.imageModel || !state.videoModel) {
       const [chat, image, video] = await Promise.all([
@@ -241,6 +243,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (hasImages) {
       for (const url of imageUrls) {
         userContent.push({ type: "image", url });
+      }
+    }
+    if (hasVideos) {
+      for (const url of videoUrls) {
+        userContent.push({ type: "video", url });
       }
     }
 

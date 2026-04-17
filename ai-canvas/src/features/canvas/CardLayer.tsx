@@ -23,21 +23,39 @@ function getCardImageUrl(card: CanvasCard): string | undefined {
   return undefined;
 }
 
+const TYPE_LABELS: Record<string, string> = {
+  ai_chat: "T",
+  ai_image: "I",
+  ai_video: "V",
+  ai_tryon: "换",
+  ai_multiangle: "M",
+  text: "T",
+  sticky_note: "N",
+};
+
 function CardThumbnail({ card }: { card: CanvasCard }) {
   const color = card.color || TYPE_COLORS[card.type] || "#6B7280";
+  const label = TYPE_LABELS[card.type] ?? "?";
   return (
     <div
-      className="absolute rounded-lg"
+      className="absolute flex items-center justify-center rounded-lg"
       style={{
         left: card.x,
         top: card.y,
         width: card.width,
         height: card.height,
         zIndex: card.zIndex,
-        backgroundColor: `color-mix(in srgb, ${color} 15%, var(--color-card))`,
-        border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
+        backgroundColor: `color-mix(in srgb, ${color} 35%, var(--color-card))`,
+        border: `2px solid color-mix(in srgb, ${color} 60%, transparent)`,
+        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 12%, transparent)`,
+        fontSize: Math.min(card.width, card.height) * 0.35,
+        color: `color-mix(in srgb, ${color} 80%, var(--color-card-foreground))`,
+        fontWeight: 700,
+        lineHeight: 1,
       }}
-    />
+    >
+      {label}
+    </div>
   );
 }
 

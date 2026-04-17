@@ -93,8 +93,9 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // ── Ctrl+A: always select all (exit editing first) ──
+      // ── Ctrl+A: select all cards OR select all text ──
       if (mod && e.key === "a") {
+        if (isFocusOnInput()) return;
         e.preventDefault();
         selectAll();
         return;
@@ -114,18 +115,18 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // ── Ctrl+C: copy selected cards (not while editing text or focus on input) ──
+      // ── Ctrl+C: copy selected cards (not while focus on text input) ──
       if (mod && e.key === "c") {
-        if (editingCardId || isFocusOnInput()) return;
+        if (isFocusOnInput()) return;
         if (selectedCardIds.size === 0) return;
         e.preventDefault();
         void copyCards(selectedCardIds);
         return;
       }
 
-      // ── Ctrl+V: paste cards (not while editing text or focus on input) ──
+      // ── Ctrl+V: paste cards (not while focus on text input) ──
       if (mod && e.key === "v") {
-        if (editingCardId || isFocusOnInput()) return;
+        if (isFocusOnInput()) return;
         e.preventDefault();
         const pid = useProjectStore.getState().currentProjectId;
         if (pid) {

@@ -113,6 +113,9 @@ async function historyToOpenAI(
       } else if (p.type === "image") {
         const apiUrl = await getBase64ForApi(p.url);
         parts.push({ type: "image_url", image_url: { url: apiUrl } });
+      } else if (p.type === "video") {
+        const apiUrl = await getBase64ForApi(p.url);
+        parts.push({ type: "video_url", video_url: { url: apiUrl } });
       }
     }
 

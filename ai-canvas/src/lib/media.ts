@@ -131,6 +131,43 @@ export async function revealInExplorer(storedPath: string, projectId?: string): 
   await invoke("open_in_explorer", { path: storedPath, projectId: projectId ?? null });
 }
 
+/**
+ * Batch export multiple media files. Returns counts of successes and failures.
+ */
+export async function batchExportFiles(
+  items: { storedPath: string; cardTitle: string; projectId?: string }[],
+): Promise<{ success: number; failed: number }> {
+  if (!isTauri || items.length === 0) return { success: 0, failed: 0 };
+
+  const invoke = await ensureInvoke();
+  let success = 0;
+  let failed = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const { storedPath, cardTitle, projectId } = items[i]!;
+    try {
+      const ext = storedPath.split(".").pop() || "png";
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[-:T]/g, "")
+        .slice(0, 15);
+      const safeName = (cardTitle || "AI文件").replace(/[<>:"/\\|?*]/g, "_");
+      const exportName = `${safeName}_${timestamp}_${i + 1}.${ext}`;
+
+      await invoke<string>("export_file", {
+        sourcePath: storedPath,
+        exportName,
+        projectId: projectId ?? null,
+      });
+      success++;
+    } catch {
+      failed++;
+    }
+  }
+
+  return { success, failed };
+}
+
 // ── Background save retry ──────────────────────────────────
 
 interface PendingRetry {

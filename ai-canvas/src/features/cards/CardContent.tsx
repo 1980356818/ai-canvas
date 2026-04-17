@@ -165,9 +165,9 @@ function ImagePreview({ card }: { card: CanvasCard }) {
   }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground/50">
-      <PlaceholderIcon className="h-8 w-8" />
-      <span className="text-xs">{data.content ? "等待生成" : placeholderLabel}</span>
+    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+      <PlaceholderIcon className="h-12 w-12 opacity-40" />
+      <span className="text-sm font-medium opacity-50">{data.content ? "等待生成" : placeholderLabel}</span>
     </div>
   );
 }
@@ -237,9 +237,9 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
   }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground/50">
-      <Shirt className="h-8 w-8" />
-      <span className="text-xs">AI 换装</span>
+    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+      <Shirt className="h-12 w-12 opacity-40" />
+      <span className="text-sm font-medium opacity-50">AI 换装</span>
     </div>
   );
 }
@@ -312,9 +312,9 @@ function VideoPreview({ card }: { card: CanvasCard }) {
   }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground/50">
-      <Video className="h-8 w-8" />
-      <span className="text-xs">{data.content ? "等待生成" : "AI 视频"}</span>
+    <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+      <Video className="h-12 w-12 opacity-40" />
+      <span className="text-sm font-medium opacity-50">{data.content ? "等待生成" : "AI 视频"}</span>
     </div>
   );
 }

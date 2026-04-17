@@ -1,12 +1,13 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { Sparkles, RefreshCw, Loader2, Lock, X, AlertCircle } from "lucide-react";
+import { Sparkles, RefreshCw, Loader2, Lock, X, AlertCircle, Paperclip, Video } from "lucide-react";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey, aiProxy } from "@/lib/tauri";
-import { getBase64ForApi } from "@/lib/media";
+import { persistImage, getDisplayUrl, getBase64ForApi } from "@/lib/media";
+import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
@@ -29,12 +30,25 @@ import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
 import PromptTextarea, { type PromptTextareaHandle } from "./PromptTextarea";
 
+const isTauri =
+  typeof window !== "undefined" &&
+  ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+
+const VIDEO_EXTS = new Set(["mp4", "webm", "mov", "avi", "mkv", "mpeg"]);
+
+interface MediaAttachment {
+  url: string;
+  displayUrl: string;
+  kind: "image" | "video";
+}
+
 interface ChatData {
   content?: string;
   result?: string;
   model?: string;
   refImages?: Record<string, RefImageEntry>;
   inlineRefs?: InlineImageRef[];
+  directMedia?: MediaAttachment[];
   _locked?: boolean;
   _systemPrompt?: string;
   _label?: string;
@@ -48,9 +62,11 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
   const generating = useUIStore((s) => s.generatingCards.has(card.id));
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const promptRef = useRef<PromptTextareaHandle>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentModel, setCurrentModel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const data = card.data as ChatData;
+  const directMedia = data.directMedia ?? [];
 
   useEffect(() => {
     if (data.model) {
@@ -79,6 +95,100 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
+  );
+
+  const addDirectMedia = useCallback(
+    async (src: string, kind: "image" | "video") => {
+      if (generating) return;
+      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      try {
+        const isLocal = !!src && !src.startsWith("data:") && !src.startsWith("http") && !src.startsWith("blob:");
+        let url: string;
+        if (isLocal) {
+          url = src;
+        } else {
+          const { localPath } = await persistImage(src, undefined, pid);
+          url = localPath;
+        }
+        const newMedia = [...directMedia, { url, displayUrl: getDisplayUrl(url), kind }];
+        updateCard(card.id, { data: { ...data, directMedia: newMedia } });
+        autoSave.markDirty(card.id);
+      } catch (err) {
+        console.error(`Failed to add ${kind}:`, err);
+      }
+    },
+    [card.id, data, directMedia, generating, updateCard],
+  );
+
+  const addFilesAsMedia = useCallback(
+    async (files: File[]) => {
+      if (generating) return;
+      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const newMedia = [...directMedia];
+      for (const raw of files) {
+        try {
+          const isVideo = raw.type.startsWith("video/");
+          const file = isVideo ? raw : await ensureDisplayableImage(raw);
+          const dataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          });
+          const { localPath } = await persistImage(dataUrl, undefined, pid);
+          newMedia.push({ url: localPath, displayUrl: getDisplayUrl(localPath), kind: isVideo ? "video" : "image" });
+        } catch { /* skip */ }
+      }
+      if (newMedia.length > directMedia.length) {
+        updateCard(card.id, { data: { ...data, directMedia: newMedia } });
+        autoSave.markDirty(card.id);
+      }
+    },
+    [card.id, data, directMedia, generating, updateCard],
+  );
+
+  const removeDirectMedia = useCallback(
+    (idx: number) => {
+      const newMedia = directMedia.filter((_, i) => i !== idx);
+      updateCard(card.id, { data: { ...data, directMedia: newMedia } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, directMedia, updateCard],
+  );
+
+  const handlePickMedia = useCallback(async () => {
+    if (generating) return;
+    if (isTauri) {
+      try {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const selected = await open({
+          multiple: true,
+          filters: [
+            { name: "图片/视频", extensions: ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "mp4", "webm", "mov", "avi", "mkv"] },
+          ],
+        });
+        if (!selected) return;
+        const paths = Array.isArray(selected) ? selected : [selected];
+        for (const sel of paths) {
+          const filePath = typeof sel === "string" ? sel : (sel as { path: string }).path;
+          const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+          await addDirectMedia(filePath, VIDEO_EXTS.has(ext) ? "video" : "image");
+        }
+      } catch (err) {
+        console.error("Failed to pick media:", err);
+      }
+    } else {
+      fileInputRef.current?.click();
+    }
+  }, [generating, addDirectMedia]);
+
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      await addFilesAsMedia(Array.from(files));
+      e.target.value = "";
+    },
+    [addFilesAsMedia],
   );
 
   const onPromptChange = useCallback(
@@ -187,9 +297,15 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
 
     type ApiContentPart =
       | { type: "text"; text: string }
-      | { type: "image_url"; image_url: { url: string } };
+      | { type: "image_url"; image_url: { url: string } }
+      | { type: "video_url"; video_url: { url: string } };
 
     let userContent: ApiContentPart[];
+
+    const allMedia = data.directMedia ?? [];
+    const directImageItems = allMedia.filter((m) => m.kind === "image");
+    const directVideoItems = allMedia.filter((m) => m.kind === "video");
+    const totalMedia = imageEntries.length + allMedia.length;
 
     if (hasInlineRefs && modelSupportsVision(model)) {
       userContent = await serializeForApi(
@@ -197,13 +313,21 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         inlineRefs,
         data.refImages,
         imageOptions,
-      );
+      ) as ApiContentPart[];
 
       const inlineUrls = getInlineRefUrls(inlineRefs, data.refImages, imageOptions);
       for (const entry of imageEntries) {
         if (inlineUrls.has(entry.url)) continue;
         const dataUrl = await getBase64ForApi(entry.url);
         userContent.unshift({ type: "image_url", image_url: { url: dataUrl } });
+      }
+      for (const img of directImageItems) {
+        const dataUrl = await getBase64ForApi(img.url);
+        userContent.unshift({ type: "image_url", image_url: { url: dataUrl } });
+      }
+      for (const vid of directVideoItems) {
+        const dataUrl = await getBase64ForApi(vid.url);
+        userContent.unshift({ type: "video_url", video_url: { url: dataUrl } });
       }
     } else {
       userContent = [];
@@ -212,11 +336,19 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
           const dataUrl = await getBase64ForApi(img.url);
           userContent.push({ type: "image_url", image_url: { url: dataUrl } });
         }
-      } else if (imageEntries.length > 0) {
+        for (const img of directImageItems) {
+          const dataUrl = await getBase64ForApi(img.url);
+          userContent.push({ type: "image_url", image_url: { url: dataUrl } });
+        }
+        for (const vid of directVideoItems) {
+          const dataUrl = await getBase64ForApi(vid.url);
+          userContent.push({ type: "video_url", video_url: { url: dataUrl } });
+        }
+      } else if (totalMedia > 0) {
         useUIStore.getState().addToast({
           type: "warning",
-          title: "当前模型不支持图片输入",
-          description: `${model} 不支持视觉能力，已忽略参考图。`,
+          title: "当前模型不支持媒体输入",
+          description: `${model} 不支持视觉能力，已忽略参考图/视频。`,
           duration: 5000,
         });
       }
@@ -224,12 +356,12 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     }
 
     const systemPrompt = data._systemPrompt || "你是一个有帮助的 AI 助手，请用中文回复。请直接回答用户的问题。";
-    const hasImages = userContent.some((p) => p.type === "image_url");
+    const hasMedia = userContent.some((p) => p.type === "image_url" || p.type === "video_url");
     const apiMessages = [
       { role: "system", content: systemPrompt },
       {
         role: "user",
-        content: hasImages ? userContent : displayPrompt,
+        content: hasMedia ? userContent : displayPrompt,
       },
     ];
 
@@ -308,6 +440,40 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         </div>
       )}
 
+      {directMedia.length > 0 && (
+        <div className="flex shrink-0 flex-wrap gap-1.5">
+          {directMedia.map((item, idx) => (
+            <div key={idx} className="group relative">
+              {item.kind === "video" ? (
+                <div className="relative h-14 w-20 overflow-hidden rounded-lg border border-border bg-black/5">
+                  <video
+                    src={item.displayUrl}
+                    className="h-full w-full object-cover"
+                    preload="metadata"
+                    muted
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Video className="h-4 w-4 text-white drop-shadow-md" />
+                  </div>
+                </div>
+              ) : (
+                <img
+                  src={item.displayUrl}
+                  alt=""
+                  className="h-14 w-14 rounded-lg border border-border object-cover"
+                />
+              )}
+              <button
+                onClick={() => removeDirectMedia(idx)}
+                className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {isLocked ? (
         <div className="flex flex-1 items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3 py-2">
           <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -328,6 +494,8 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
           placeholder="输入提示词，按 @ 引用图片…"
           disabled={generating}
           onHoverRef={setHoveredRefId}
+          onPasteImage={addFilesAsMedia}
+          onDropImage={addFilesAsMedia}
         />
       )}
 
@@ -344,12 +512,30 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         </div>
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <ModelSelector
           capability="CHAT"
           value={currentModel}
           onChange={handleModelChange}
         />
+        <button
+          onClick={handlePickMedia}
+          disabled={generating}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+          title="上传图片/视频"
+        >
+          <Paperclip className="h-3.5 w-3.5" />
+        </button>
+        {!isTauri && (
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*,.heic,.heif,.mp4,.webm,.mov,.avi,.mkv"
+            multiple
+            className="hidden"
+            onChange={handleFileChange}
+          />
+        )}
         <div className="flex-1" />
         <button
           onClick={handleGenerate}

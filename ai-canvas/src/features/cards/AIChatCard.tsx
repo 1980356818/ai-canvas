@@ -1,5 +1,5 @@
 import { memo, useCallback, useRef, useEffect } from "react";
-import { Loader2, AlertTriangle } from "lucide-react";
+import { Loader2, AlertTriangle, MessageSquareText } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
@@ -55,6 +55,17 @@ export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
             {genProgress.label}
           </p>
         </div>
+      </div>
+    );
+  }
+
+  const isEmpty = !data.result && !cardError;
+
+  if (isEmpty && !isEditing) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+        <MessageSquareText className="h-12 w-12 opacity-40" />
+        <span className="text-sm font-medium opacity-50">生成文字</span>
       </div>
     );
   }

@@ -20,6 +20,11 @@ const IMAGE_MIME = new Set([
   "image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence",
 ]);
 
+const VIDEO_MIME = new Set([
+  "video/mp4", "video/webm", "video/quicktime",
+  "video/x-msvideo", "video/x-matroska", "video/mpeg",
+]);
+
 const isTauri =
   typeof window !== "undefined" &&
   ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
@@ -29,18 +34,20 @@ const SLASH_COMMANDS = [
   { command: "/video ", label: "生成视频", icon: Video, description: "输入 prompt 生成视频" },
 ];
 
-interface ImageAttachment {
+interface MediaAttachment {
   url: string;
   displayUrl: string;
+  kind: "image" | "video";
 }
 
 export interface ChatInputHandle {
   addImage: (src: string) => Promise<void>;
+  addVideo: (src: string) => Promise<void>;
 }
 
 const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
   const [input, setInput] = useState("");
-  const [images, setImages] = useState<ImageAttachment[]>([]);
+  const [media, setMedia] = useState<MediaAttachment[]>([]);
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [selectedSlashIdx, setSelectedSlashIdx] = useState(0);
   const [dragOver, setDragOver] = useState(false);
@@ -67,58 +74,6 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
     }
   }, [input]);
 
-  const handlePickImage = useCallback(async () => {
-    if (isTauri) {
-      try {
-        const { open } = await import("@tauri-apps/plugin-dialog");
-        const selected = await open({
-          multiple: false,
-          filters: [
-            { name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif"] },
-          ],
-        });
-        if (!selected) return;
-        const filePath =
-          typeof selected === "string" ? selected : (selected as { path: string }).path;
-        const pid = useProjectStore.getState().currentProjectId ?? undefined;
-        const { localPath } = await persistImage(filePath, undefined, pid);
-        setImages((prev) => [
-          ...prev,
-          { url: localPath, displayUrl: getDisplayUrl(localPath) },
-        ]);
-      } catch (err) {
-        console.error("Failed to pick image:", err);
-      }
-    } else {
-      fileInputRef.current?.click();
-    }
-  }, []);
-
-  const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const raw = e.target.files?.[0];
-      if (!raw) return;
-      const file = await ensureDisplayableImage(raw);
-      const dataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-      const pid = useProjectStore.getState().currentProjectId ?? undefined;
-      const { localPath } = await persistImage(dataUrl, undefined, pid);
-      setImages((prev) => [
-        ...prev,
-        { url: localPath, displayUrl: getDisplayUrl(localPath) },
-      ]);
-      e.target.value = "";
-    },
-    [],
-  );
-
-  const removeImage = useCallback((idx: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== idx));
-  }, []);
-
   const isAlreadyPersisted = useCallback((src: string) => {
     return (
       !!src &&
@@ -129,28 +84,99 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
     );
   }, []);
 
-  const addImageFromUrl = useCallback(async (src: string) => {
+  const addMediaFromUrl = useCallback(async (src: string, kind: "image" | "video") => {
     if (generating) return;
     try {
       if (isAlreadyPersisted(src)) {
-        setImages((prev) => [
+        setMedia((prev) => [
           ...prev,
-          { url: src, displayUrl: getDisplayUrl(src) },
+          { url: src, displayUrl: getDisplayUrl(src), kind },
         ]);
         return;
       }
       const pid = useProjectStore.getState().currentProjectId ?? undefined;
       const { localPath } = await persistImage(src, undefined, pid);
-      setImages((prev) => [
+      setMedia((prev) => [
         ...prev,
-        { url: localPath, displayUrl: getDisplayUrl(localPath) },
+        { url: localPath, displayUrl: getDisplayUrl(localPath), kind },
       ]);
     } catch (err) {
-      console.error("Failed to add image:", err);
+      console.error(`Failed to add ${kind}:`, err);
     }
   }, [generating, isAlreadyPersisted]);
 
-  useImperativeHandle(ref, () => ({ addImage: addImageFromUrl }), [addImageFromUrl]);
+  const addImageFromUrl = useCallback(
+    (src: string) => addMediaFromUrl(src, "image"),
+    [addMediaFromUrl],
+  );
+
+  const addVideoFromUrl = useCallback(
+    (src: string) => addMediaFromUrl(src, "video"),
+    [addMediaFromUrl],
+  );
+
+  useImperativeHandle(ref, () => ({ addImage: addImageFromUrl, addVideo: addVideoFromUrl }), [addImageFromUrl, addVideoFromUrl]);
+
+  const handlePickMedia = useCallback(async () => {
+    if (isTauri) {
+      try {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const selected = await open({
+          multiple: true,
+          filters: [
+            { name: "图片/视频", extensions: ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "mp4", "webm", "mov", "avi", "mkv"] },
+          ],
+        });
+        if (!selected) return;
+        const paths = Array.isArray(selected) ? selected : [selected];
+        const pid = useProjectStore.getState().currentProjectId ?? undefined;
+        for (const sel of paths) {
+          const filePath = typeof sel === "string" ? sel : (sel as { path: string }).path;
+          const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+          const isVideo = ["mp4", "webm", "mov", "avi", "mkv", "mpeg"].includes(ext);
+          const { localPath } = await persistImage(filePath, undefined, pid);
+          setMedia((prev) => [
+            ...prev,
+            { url: localPath, displayUrl: getDisplayUrl(localPath), kind: isVideo ? "video" : "image" },
+          ]);
+        }
+      } catch (err) {
+        console.error("Failed to pick media:", err);
+      }
+    } else {
+      fileInputRef.current?.click();
+    }
+  }, []);
+
+  const handleFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      for (const raw of Array.from(files)) {
+        const isVideo = raw.type.startsWith("video/") || VIDEO_MIME.has(raw.type);
+        const file = isVideo ? raw : await ensureDisplayableImage(raw);
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        try {
+          const { localPath } = await persistImage(dataUrl, undefined, pid);
+          setMedia((prev) => [
+            ...prev,
+            { url: localPath, displayUrl: getDisplayUrl(localPath), kind: isVideo ? "video" : "image" },
+          ]);
+        } catch { /* skip */ }
+      }
+      e.target.value = "";
+    },
+    [],
+  );
+
+  const removeMedia = useCallback((idx: number) => {
+    setMedia((prev) => prev.filter((_, i) => i !== idx));
+  }, []);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -190,9 +216,11 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
     const chatMediaRaw = e.dataTransfer.getData("application/x-chat-media");
     if (chatMediaRaw) {
       try {
-        const media = JSON.parse(chatMediaRaw) as { type: string; url: string };
-        if (media.type === "image" && media.url) {
-          await addImageFromUrl(media.url);
+        const m = JSON.parse(chatMediaRaw) as { type: string; url: string };
+        if (m.type === "image" && m.url) {
+          await addImageFromUrl(m.url);
+        } else if (m.type === "video" && m.url) {
+          await addVideoFromUrl(m.url);
         }
       } catch { /* ignore */ }
       return;
@@ -218,38 +246,57 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
       }
     }
 
-    const rawFiles = Array.from(e.dataTransfer.files).filter((f) => IMAGE_MIME.has(f.type));
-    if (rawFiles.length > 0) {
-      const pid = useProjectStore.getState().currentProjectId ?? undefined;
-      for (const raw of rawFiles) {
-        const file = await ensureDisplayableImage(raw);
-        const dataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
-        try {
-          const { localPath } = await persistImage(dataUrl, undefined, pid);
-          setImages((prev) => [
-            ...prev,
-            { url: localPath, displayUrl: getDisplayUrl(localPath) },
-          ]);
-        } catch { /* skip */ }
-      }
-    }
-  }, [generating, addImageFromUrl]);
+    const allFiles = Array.from(e.dataTransfer.files);
+    const imageFiles = allFiles.filter((f) => IMAGE_MIME.has(f.type) || (f.type.startsWith("image/") && !f.type.startsWith("video/")));
+    const videoFiles = allFiles.filter((f) => VIDEO_MIME.has(f.type) || f.type.startsWith("video/"));
 
-  const canSend = input.trim() || images.length > 0;
+    const pid = useProjectStore.getState().currentProjectId ?? undefined;
+
+    for (const raw of imageFiles) {
+      const file = await ensureDisplayableImage(raw);
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      try {
+        const { localPath } = await persistImage(dataUrl, undefined, pid);
+        setMedia((prev) => [
+          ...prev,
+          { url: localPath, displayUrl: getDisplayUrl(localPath), kind: "image" },
+        ]);
+      } catch { /* skip */ }
+    }
+
+    for (const raw of videoFiles) {
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(raw);
+      });
+      try {
+        const { localPath } = await persistImage(dataUrl, undefined, pid);
+        setMedia((prev) => [
+          ...prev,
+          { url: localPath, displayUrl: getDisplayUrl(localPath), kind: "video" },
+        ]);
+      } catch { /* skip */ }
+    }
+  }, [generating, addImageFromUrl, addVideoFromUrl]);
+
+  const canSend = input.trim() || media.length > 0;
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if ((!text && images.length === 0) || generating) return;
-    const attachedImages = [...images];
+    if ((!text && media.length === 0) || generating) return;
+    const attached = [...media];
     setInput("");
-    setImages([]);
+    setMedia([]);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
-    await sendMessage(text, attachedImages.map((img) => img.url));
-  }, [input, images, generating, sendMessage]);
+    const imageUrls = attached.filter((m) => m.kind === "image").map((m) => m.url);
+    const videoUrls = attached.filter((m) => m.kind === "video").map((m) => m.url);
+    await sendMessage(text, imageUrls.length > 0 ? imageUrls : undefined, videoUrls.length > 0 ? videoUrls : undefined);
+  }, [input, media, generating, sendMessage]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -325,7 +372,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-b-xl bg-primary/5 backdrop-blur-sm">
           <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/40 px-4 py-2">
             <ImagePlus className="h-4 w-4 text-primary/60" />
-            <span className="text-sm font-medium text-primary/80">松开添加图片</span>
+            <span className="text-sm font-medium text-primary/80">松开添加图片/视频</span>
           </div>
         </div>
       )}
@@ -358,18 +405,32 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
         </div>
       )}
 
-      {/* Image attachments preview */}
-      {images.length > 0 && (
+      {/* Media attachments preview */}
+      {media.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1.5">
-          {images.map((img, idx) => (
+          {media.map((item, idx) => (
             <div key={idx} className="group relative">
-              <img
-                src={img.displayUrl}
-                alt=""
-                className="h-14 w-14 rounded-lg border border-border object-cover"
-              />
+              {item.kind === "video" ? (
+                <div className="relative h-14 w-20 overflow-hidden rounded-lg border border-border bg-black/5">
+                  <video
+                    src={item.displayUrl}
+                    className="h-full w-full object-cover"
+                    preload="metadata"
+                    muted
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Video className="h-4 w-4 text-white drop-shadow-md" />
+                  </div>
+                </div>
+              ) : (
+                <img
+                  src={item.displayUrl}
+                  alt=""
+                  className="h-14 w-14 rounded-lg border border-border object-cover"
+                />
+              )}
               <button
-                onClick={() => removeImage(idx)}
+                onClick={() => removeMedia(idx)}
                 className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex"
               >
                 <X className="h-2.5 w-2.5" />
@@ -402,10 +463,10 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
 
       <div className="flex items-end gap-2">
         <button
-          onClick={handlePickImage}
+          onClick={handlePickMedia}
           disabled={generating}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
-          title="上传图片"
+          title="上传图片/视频"
         >
           <Paperclip className="h-4 w-4" />
         </button>
@@ -414,7 +475,8 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,.heic,.heif"
+            accept="image/*,video/*,.heic,.heif,.mp4,.webm,.mov,.avi,.mkv"
+            multiple
             className="hidden"
             onChange={handleFileChange}
           />

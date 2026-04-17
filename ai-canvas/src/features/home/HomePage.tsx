@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Trash2, Layers, ChevronRight } from "lucide-react";
+import { Trash2, Layers, ChevronRight, Plus } from "lucide-react";
 import AIPromptInput from "@/features/home/AIPromptInput";
 import WorkflowGrid from "@/features/home/WorkflowGrid";
 import { ConfirmDialog } from "@/features/overlays/ConfirmDialog";
 import { useProjectStore, type ProjectInfo } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
-import { listProjects, deleteProject, loadCards } from "@/lib/tauri";
+import { useChatStore } from "@/stores/chatStore";
+import { listProjects, deleteProject, loadCards, createProject } from "@/lib/tauri";
 import { getDisplayUrl } from "@/lib/media";
 
 
@@ -131,6 +132,81 @@ function ProjectCard({
   );
 }
 
+function NameProjectDialog({
+  open,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  onConfirm: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setName("");
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onCancel]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div
+        className="w-full max-w-sm rounded-xl border border-border bg-background p-5 shadow-2xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <h3 className="mb-4 text-base font-semibold">新建项目</h3>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onConfirm(name.trim() || "未命名项目");
+          }}
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="输入项目名称..."
+            className="mb-4 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-lg px-4 py-2 text-sm text-muted-foreground hover:bg-accent"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              创建
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function RecentProjects() {
   const projects = useProjectStore((s) => s.projects);
   const removeProject = useProjectStore((s) => s.removeProject);
@@ -141,6 +217,7 @@ function RecentProjects() {
     {},
   );
   const [pendingDelete, setPendingDelete] = useState<ProjectInfo | null>(null);
+  const [showNameDialog, setShowNameDialog] = useState(false);
   const imagesCacheRef = useRef<Record<string, string[]>>({});
 
   useEffect(() => {
@@ -202,13 +279,36 @@ function RecentProjects() {
     addToast({ type: "success", title: "已移入回收站", duration: 3000 });
   }, [pendingDelete, removeProject, addToast]);
 
-  const top4 = projects.slice(0, 4);
+  const handleCreateBlank = useCallback(
+    async (name: string) => {
+      setShowNameDialog(false);
+      try {
+        const project = await createProject(name);
+        useProjectStore.getState().addProject(project);
+        useProjectStore.getState().openProject(project.id);
+        setAppView("canvas");
+        const ui = useUIStore.getState();
+        if (!ui.chatPanelVisible) ui.toggleChatPanel();
+        void useChatStore.getState().createSession();
+      } catch (err) {
+        addToast({
+          type: "error",
+          title: "创建项目失败",
+          description: String(err),
+          duration: 4000,
+        });
+      }
+    },
+    [setAppView, addToast],
+  );
+
+  const top3 = projects.slice(0, 3);
 
   return (
     <div className="mx-auto w-full max-w-6xl">
       <div className="mb-5 flex items-baseline justify-between">
         <h2 className="text-base font-semibold text-foreground">最近项目</h2>
-        {projects.length > 4 && (
+        {projects.length > 3 && (
           <button
             onClick={() => setAppView("projects")}
             className="flex items-center gap-0.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -219,12 +319,32 @@ function RecentProjects() {
         )}
       </div>
       <div className="grid grid-cols-4 gap-3">
-        {top4.map((p, i) => (
+        {/* 空白项目入口 */}
+        <button
+          onClick={() => setShowNameDialog(true)}
+          className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-xl border border-dashed border-border/80 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+        >
+          <div className="image-collage flex aspect-[3/2] w-full items-center justify-center bg-gradient-to-br from-muted/60 to-muted/30">
+            <Plus className="h-10 w-10 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
+          </div>
+          <div className="flex items-start gap-2 px-3 py-2.5">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-foreground">
+                新建空白项目
+              </p>
+              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                从空白画布开始创作
+              </p>
+            </div>
+          </div>
+        </button>
+
+        {top3.map((p, i) => (
           <ProjectCard
             key={p.id}
             project={p}
             images={projectImages[p.id] ?? []}
-            index={i}
+            index={i + 1}
             onRequestDelete={setPendingDelete}
           />
         ))}
@@ -237,6 +357,11 @@ function RecentProjects() {
         variant="danger"
         onConfirm={handleConfirmDelete}
         onCancel={() => setPendingDelete(null)}
+      />
+      <NameProjectDialog
+        open={showNameDialog}
+        onConfirm={handleCreateBlank}
+        onCancel={() => setShowNameDialog(false)}
       />
     </div>
   );
