@@ -9,6 +9,7 @@ import {
 } from "@/config/model-ref-images";
 import { cn } from "@/lib/utils";
 import { persistImage, getDisplayUrl } from "@/lib/media";
+import { ensureDisplayableImage } from "@/lib/heicConverter";
 
 interface RefImageSlotProps {
   label: string;
@@ -73,8 +74,9 @@ export default function RefImageSlot({
 
 
   const handleFile = useCallback(
-    async (file: File) => {
-      if (!file.type.startsWith("image/")) return;
+    async (rawFile: File) => {
+      if (!rawFile.type.startsWith("image/")) return;
+      const file = await ensureDisplayableImage(rawFile);
       const dataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
@@ -217,7 +219,7 @@ export default function RefImageSlot({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];

@@ -3,6 +3,7 @@ import { Paperclip, X, ImageIcon } from "lucide-react";
 import type { ContentPart } from "@/agent/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { persistImage, getDisplayUrl } from "@/lib/media";
+import { ensureDisplayableImage } from "@/lib/heicConverter";
 
 const isTauri =
   typeof window !== "undefined" &&
@@ -30,7 +31,7 @@ export default function AttachmentPicker({
           filters: [
             {
               name: "Images",
-              extensions: ["png", "jpg", "jpeg", "gif", "webp"],
+              extensions: ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif"],
             },
           ],
         });
@@ -52,8 +53,9 @@ export default function AttachmentPicker({
 
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+      const raw = e.target.files?.[0];
+      if (!raw) return;
+      const file = await ensureDisplayableImage(raw);
       const dataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
@@ -88,7 +90,7 @@ export default function AttachmentPicker({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,.heic,.heif"
           className="hidden"
           onChange={handleFileChange}
         />

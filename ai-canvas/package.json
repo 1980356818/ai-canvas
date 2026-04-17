@@ -17,6 +17,7 @@
     "@tauri-apps/plugin-shell": "^2.0.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
+    "heic2any": "^0.0.4",
     "lucide-react": "^0.400.0",
     "rbush": "^4.0.1",
     "react": "^19.0.0",

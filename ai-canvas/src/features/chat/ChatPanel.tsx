@@ -3,13 +3,14 @@ import { MessageSquare, X, PanelLeftClose, PanelLeftOpen, ImagePlus } from "luci
 import { useChatStore } from "@/stores/chatStore";
 import { useUIStore } from "@/stores/uiStore";
 import { CARD_REF_MIME, type CardRefPayload } from "@/config/model-ref-images";
+import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { cn } from "@/lib/utils";
 import ChatSessionList from "./ChatSessionList";
 import ChatMessageList from "./ChatMessageList";
 import ChatInput from "./ChatInput";
 import type { ChatInputHandle } from "./ChatInput";
 
-const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp"];
+const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif"];
 const isImageFile = (f: File) => f.type.startsWith("image/") || IMAGE_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(`.${ext}`));
 
 export default function ChatPanel() {
@@ -121,8 +122,9 @@ export default function ChatPanel() {
       }
     }
 
-    const files = Array.from(e.dataTransfer.files).filter(isImageFile);
-    for (const file of files) {
+    const rawFiles = Array.from(e.dataTransfer.files).filter(isImageFile);
+    for (const raw of rawFiles) {
+      const file = await ensureDisplayableImage(raw);
       const dataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);

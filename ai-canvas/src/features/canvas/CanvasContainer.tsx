@@ -22,6 +22,7 @@ import {
   isTauri,
 } from "@/lib/tauri";
 import { persistImage, type PersistImageResult } from "@/lib/media";
+import { ensureDisplayableImage, isHeicFile, convertHeicPath } from "@/lib/heicConverter";
 
 function cardSizeFromPersist(
   saved: PersistImageResult,
@@ -226,10 +227,10 @@ export default function CanvasContainer() {
         return;
       }
 
-      const files = Array.from(e.dataTransfer.files).filter(
-        (f) => f.type.startsWith("image/") || isVideoFile(f),
+      const rawFiles = Array.from(e.dataTransfer.files).filter(
+        (f) => f.type.startsWith("image/") || isVideoFile(f) || isHeicFile(f),
       );
-      if (files.length === 0) return;
+      if (rawFiles.length === 0) return;
 
       dropHandledAt.current = Date.now();
 
@@ -251,6 +252,7 @@ export default function CanvasContainer() {
         });
 
       (async () => {
+        const files = await Promise.all(rawFiles.map(ensureDisplayableImage));
         let startIdx = 0;
 
         if (targetCardId) {
@@ -372,7 +374,8 @@ export default function CanvasContainer() {
 
       if (targetCardId && canCardAcceptFileDrop(targetCardId)) {
         try {
-          const saved = await persistImage(paths[0]!, undefined, pid);
+          const src0 = await convertHeicPath(paths[0]!);
+          const saved = await persistImage(src0, undefined, pid);
           const target = useCardStore.getState().getCard(targetCardId);
           if (target) {
             const d = { ...target.data } as Record<string, unknown>;
@@ -400,8 +403,9 @@ export default function CanvasContainer() {
       let tauriCursorX = 0;
       for (let i = startIdx; i < paths.length; i++) {
         try {
-          const filePath = paths[i]!;
-          const video = isVideoPath(filePath);
+          const rawPath = paths[i]!;
+          const video = isVideoPath(rawPath);
+          const filePath = video ? rawPath : await convertHeicPath(rawPath);
           const saved = await persistImage(filePath, undefined, pid);
 
           const { width: cardW, height: cardH } = video

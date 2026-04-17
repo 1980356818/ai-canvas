@@ -5,6 +5,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useChatStore } from "@/stores/chatStore";
 import { createProject, hasApiKey, isTauri } from "@/lib/tauri";
 import { persistImage, getDisplayUrl } from "@/lib/media";
+import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
 import ModelSelector from "@/features/editor/ModelSelector";
@@ -18,7 +19,10 @@ interface UploadedImage {
 
 const IMAGE_LABELS = ["图一", "图二", "图三", "图四", "图五"];
 const MAX_IMAGES = 5;
-const ACCEPTED_MIME = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const ACCEPTED_MIME = [
+  "image/png", "image/jpeg", "image/gif", "image/webp",
+  "image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence",
+];
 
 const MODE_CONFIG: Record<
   InputMode,
@@ -114,13 +118,14 @@ export default function AIPromptInput() {
     dragCounterRef.current = 0;
     setDragOver(false);
 
-    const files = Array.from(e.dataTransfer.files).filter((f) =>
+    const rawFiles = Array.from(e.dataTransfer.files).filter((f) =>
       ACCEPTED_MIME.includes(f.type),
     );
-    if (files.length === 0) return;
+    if (rawFiles.length === 0) return;
 
+    const converted = await Promise.all(rawFiles.map(ensureDisplayableImage));
     const dataUrls = await Promise.all(
-      files.map(
+      converted.map(
         (f) =>
           new Promise<string>((resolve) => {
             const reader = new FileReader();
@@ -139,7 +144,7 @@ export default function AIPromptInput() {
         const selected = await open({
           multiple: true,
           filters: [
-            { name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp"] },
+            { name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif"] },
           ],
         });
         if (!selected) return;
@@ -157,10 +162,11 @@ export default function AIPromptInput() {
 
   const handleFileInputChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files ?? []);
-      if (files.length === 0) return;
+      const rawFiles = Array.from(e.target.files ?? []);
+      if (rawFiles.length === 0) return;
+      const converted = await Promise.all(rawFiles.map(ensureDisplayableImage));
       const dataUrls = await Promise.all(
-        files.map(
+        converted.map(
           (f) =>
             new Promise<string>((resolve) => {
               const reader = new FileReader();
@@ -380,7 +386,7 @@ export default function AIPromptInput() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp"
+              accept="image/png,image/jpeg,image/gif,image/webp,image/heic,image/heif,.heic,.heif"
               multiple
               className="hidden"
               onChange={handleFileInputChange}

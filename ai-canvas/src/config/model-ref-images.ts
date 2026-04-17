@@ -43,11 +43,14 @@ const MODEL_REF_CONFIGS: ModelRefConfig[] = [
   },
 ];
 
-const FALLBACK_SLOTS: RefImageSlot[] = [
-  { key: "refImage0", label: "参考图", description: "参考图（如模型支持）", required: false },
-];
+const FALLBACK_SLOTS: RefImageSlot[] = Array.from({ length: 5 }, (_, i) => ({
+  key: `refImage${i}`,
+  label: `参考图${i + 1}`,
+  description: "参考图（如模型支持）",
+  required: false,
+}));
 
-const CHAT_REF_SLOTS: RefImageSlot[] = Array.from({ length: 10 }, (_, i) => ({
+const CHAT_REF_SLOTS: RefImageSlot[] = Array.from({ length: 12 }, (_, i) => ({
   key: `refImage${i}`,
   label: `参考图${i + 1}`,
   description: "图片参考",

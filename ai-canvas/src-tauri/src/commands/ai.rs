@@ -715,6 +715,8 @@ pub async fn read_media_base64(app: AppHandle, path: String) -> Result<String, S
         "gif" => "image/gif",
         "webp" => "image/webp",
         "svg" => "image/svg+xml",
+        "heic" => "image/heic",
+        "heif" => "image/heif",
         _ => "application/octet-stream",
     };
 
@@ -770,6 +772,8 @@ fn ext_from_content_type(headers: &reqwest::header::HeaderMap) -> Option<String>
         "image/gif" => Some("gif".into()),
         "image/webp" => Some("webp".into()),
         "image/svg+xml" => Some("svg".into()),
+        "image/heic" | "image/heic-sequence" => Some("heic".into()),
+        "image/heif" | "image/heif-sequence" => Some("heif".into()),
         _ if mime.starts_with("video/") => Some("mp4".into()),
         _ => None,
     }
@@ -785,6 +789,8 @@ fn detect_extension(source: &str, filename: &Option<String>) -> String {
     if source.starts_with("data:image/jpeg") || source.starts_with("data:image/jpg") { return "jpg".into(); }
     if source.starts_with("data:image/gif") { return "gif".into(); }
     if source.starts_with("data:image/webp") { return "webp".into(); }
+    if source.starts_with("data:image/heic") { return "heic".into(); }
+    if source.starts_with("data:image/heif") { return "heif".into(); }
     if source.starts_with("data:video/mp4") { return "mp4".into(); }
     if source.starts_with("data:video/webm") { return "webm".into(); }
     if source.starts_with("data:video/quicktime") { return "mov".into(); }

@@ -12,9 +12,13 @@ import { useChatStore } from "@/stores/chatStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { persistImage, getDisplayUrl } from "@/lib/media";
 import { CARD_REF_MIME, type CardRefPayload } from "@/config/model-ref-images";
+import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { cn } from "@/lib/utils";
 
-const IMAGE_MIME = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+const IMAGE_MIME = new Set([
+  "image/png", "image/jpeg", "image/gif", "image/webp",
+  "image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence",
+]);
 
 const isTauri =
   typeof window !== "undefined" &&
@@ -70,7 +74,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
         const selected = await open({
           multiple: false,
           filters: [
-            { name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp"] },
+            { name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif"] },
           ],
         });
         if (!selected) return;
@@ -92,8 +96,9 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
 
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+      const raw = e.target.files?.[0];
+      if (!raw) return;
+      const file = await ensureDisplayableImage(raw);
       const dataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
@@ -213,10 +218,11 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
       }
     }
 
-    const files = Array.from(e.dataTransfer.files).filter((f) => IMAGE_MIME.has(f.type));
-    if (files.length > 0) {
+    const rawFiles = Array.from(e.dataTransfer.files).filter((f) => IMAGE_MIME.has(f.type));
+    if (rawFiles.length > 0) {
       const pid = useProjectStore.getState().currentProjectId ?? undefined;
-      for (const file of files) {
+      for (const raw of rawFiles) {
+        const file = await ensureDisplayableImage(raw);
         const dataUrl = await new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result as string);
@@ -408,7 +414,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif"
             className="hidden"
             onChange={handleFileChange}
           />

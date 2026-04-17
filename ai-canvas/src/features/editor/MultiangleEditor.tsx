@@ -226,8 +226,10 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const handleFile = useCallback(
-    async (file: File) => {
-      if (!file.type.startsWith("image/")) return;
+    async (rawFile: File) => {
+      if (!rawFile.type.startsWith("image/")) return;
+      const { ensureDisplayableImage } = await import("@/lib/heicConverter");
+      const file = await ensureDisplayableImage(rawFile);
       const { persistImage } = await import("@/lib/media");
       const { useProjectStore } = await import("@/stores/projectStore");
       const dataUrl = await new Promise<string>((resolve) => {
@@ -280,11 +282,11 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
             <input
               ref={inputRef}
               type="file"
-              accept="image/*"
+              accept="image/*,.heic,.heif"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) handleFile(file);
+                if (file) void handleFile(file);
                 e.target.value = "";
               }}
             />
