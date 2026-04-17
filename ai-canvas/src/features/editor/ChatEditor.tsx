@@ -521,10 +521,10 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         <button
           onClick={handlePickMedia}
           disabled={generating}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
           title="上传图片/视频"
         >
-          <Paperclip className="h-3.5 w-3.5" />
+          <Paperclip className="h-4 w-4" />
         </button>
         {!isTauri && (
           <input

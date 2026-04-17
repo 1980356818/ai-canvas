@@ -1,9 +1,11 @@
-import { useRef, useCallback, useEffect } from "react";
+import { useRef, useCallback, useEffect, useState } from "react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import EditorSwitch from "./EditorSwitch";
 
 const GAP = 12;
+const MIN_EDITOR_WIDTH = 360;
+const MIN_EDITOR_HEIGHT = 180;
 
 const EDITOR_SIZES: Record<string, { height: number; minWidth: number }> = {
   ai_chat: { height: 280, minWidth: 560 },
@@ -21,6 +23,13 @@ export default function FloatingEditor() {
     editingCardId ? s.cards.get(editingCardId) : undefined,
   );
   const panelRef = useRef<HTMLDivElement>(null);
+  const [userSize, setUserSize] = useState<{ w: number; h: number } | null>(null);
+  const prevCardId = useRef<string | null>(null);
+
+  if (editingCardId !== prevCardId.current) {
+    prevCardId.current = editingCardId;
+    setUserSize(null);
+  }
 
   const close = useCallback(() => {
     useCanvasStore.getState().setEditingCardId(null);
@@ -35,6 +44,38 @@ export default function FloatingEditor() {
     return () => window.removeEventListener("keydown", onKey);
   }, [editingCardId, close]);
 
+  const startResize = useCallback(
+    (e: React.PointerEvent, edge: "right" | "bottom" | "corner") => {
+      e.preventDefault();
+      e.stopPropagation();
+      const el = panelRef.current;
+      if (!el) return;
+
+      const zoom = useCanvasStore.getState().viewport.zoom;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startW = el.offsetWidth;
+      const startH = el.offsetHeight;
+
+      const onMove = (ev: PointerEvent) => {
+        const dx = (ev.clientX - startX) / zoom;
+        const dy = (ev.clientY - startY) / zoom;
+        const newW = edge === "bottom" ? startW : Math.max(MIN_EDITOR_WIDTH, startW + dx);
+        const newH = edge === "right" ? startH : Math.max(MIN_EDITOR_HEIGHT, startH + dy);
+        setUserSize({ w: newW, h: newH });
+      };
+
+      const onUp = () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+      };
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    },
+    [],
+  );
+
   if (!card) return null;
   if (card.type === "text" || card.type === "sticky_note") return null;
 
@@ -48,14 +89,15 @@ export default function FloatingEditor() {
   const hasUpstream = upstreamTexts && Object.keys(upstreamTexts).length > 0;
   const refFrames = data?.refFrames as unknown[] | undefined;
   const hasRefFrames = refFrames && refFrames.length > 0;
-  let height = baseHeight;
-  if (hasRefImages) height += 112;
-  if (hasUpstream) height += 64;
-  if (hasRefFrames) height += 90;
+  let autoHeight = baseHeight;
+  if (hasRefImages) autoHeight += 112;
+  if (hasUpstream) autoHeight += 64;
+  if (hasRefFrames) autoHeight += 90;
 
-  const baseWidth = Math.max(minWidth, card.width);
-  const scaledWidth = baseWidth * zoom;
+  const width = userSize ? userSize.w : Math.max(minWidth, card.width);
+  const height = userSize ? userSize.h : autoHeight;
 
+  const scaledWidth = width * zoom;
   const cardScreenLeft = card.x * zoom + viewport.x;
   const cardScreenCenterX = cardScreenLeft + card.width * zoom / 2;
 
@@ -71,7 +113,7 @@ export default function FloatingEditor() {
       style={{
         left: screenLeft,
         top: screenTop,
-        width: baseWidth,
+        width,
         height,
         transform: `scale(${zoom})`,
         transformOrigin: "top left",
@@ -82,6 +124,32 @@ export default function FloatingEditor() {
     >
       <div className="h-full overflow-auto">
         <EditorSwitch card={card} />
+      </div>
+
+      {/* Right edge resize handle */}
+      <div
+        className="absolute right-0 top-0 h-full w-1.5 cursor-e-resize opacity-0 transition-opacity hover:opacity-100 hover:bg-primary/20"
+        onPointerDown={(e) => startResize(e, "right")}
+      />
+      {/* Bottom edge resize handle */}
+      <div
+        className="absolute bottom-0 left-0 h-1.5 w-full cursor-s-resize opacity-0 transition-opacity hover:opacity-100 hover:bg-primary/20"
+        onPointerDown={(e) => startResize(e, "bottom")}
+      />
+      {/* Corner resize handle */}
+      <div
+        className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize"
+        onPointerDown={(e) => startResize(e, "corner")}
+      >
+        <svg
+          className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
+          viewBox="0 0 10 10"
+          fill="currentColor"
+        >
+          <circle cx="8" cy="8" r="1.2" />
+          <circle cx="4" cy="8" r="1.2" />
+          <circle cx="8" cy="4" r="1.2" />
+        </svg>
       </div>
     </div>
   );

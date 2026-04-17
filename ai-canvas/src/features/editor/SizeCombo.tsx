@@ -116,7 +116,7 @@ export default function SizeCombo({
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs font-medium transition-colors",
+          "flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-sm font-medium transition-colors",
           "text-muted-foreground hover:bg-muted hover:text-foreground",
           disabled && "cursor-not-allowed opacity-40",
         )}

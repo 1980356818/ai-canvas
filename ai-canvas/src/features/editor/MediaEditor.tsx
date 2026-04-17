@@ -638,7 +638,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
                 onClick={() => handleBatchSizeChange(n)}
                 disabled={generating}
                 className={cn(
-                  "px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+                  "px-2 py-1 text-xs font-medium transition-colors",
                   "first:rounded-l-[5px] last:rounded-r-[5px]",
                   currentBatchSize === n
                     ? "bg-primary text-primary-foreground"
@@ -654,7 +654,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         {!isLocked && hasUpstream && (
           <button
             onClick={() => setShowPreview((v) => !v)}
-            className="flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+            className="flex items-center gap-1 rounded bg-muted px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
             title={showPreview ? "隐藏预览" : "预览最终提示词"}
           >
             {showPreview

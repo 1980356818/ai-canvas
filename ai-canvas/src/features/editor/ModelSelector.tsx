@@ -41,13 +41,13 @@ export default function ModelSelector({
 
   if (loading) {
     return (
-      <div className={cn("h-7 w-28 animate-pulse rounded bg-muted", className)} />
+      <div className={cn("h-8 w-32 animate-pulse rounded bg-muted", className)} />
     );
   }
 
   if (models.length === 0) {
     return (
-      <span className={cn("text-xs text-muted-foreground", className)}>
+      <span className={cn("text-sm text-muted-foreground", className)}>
         {value || "无可用模型"}
       </span>
     );
@@ -58,7 +58,7 @@ export default function ModelSelector({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-7 appearance-none rounded border border-input bg-background pl-2 pr-6 text-xs outline-none ring-ring focus:ring-1"
+        className="h-8 appearance-none rounded border border-input bg-background pl-2.5 pr-7 text-sm outline-none ring-ring focus:ring-1"
       >
         {!models.some((m) => m.id === value) && value && (
           <option value={value}>
@@ -71,7 +71,7 @@ export default function ModelSelector({
           </option>
         ))}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+      <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
     </div>
   );
 }
