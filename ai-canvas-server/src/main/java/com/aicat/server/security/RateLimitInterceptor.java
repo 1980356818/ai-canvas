@@ -41,7 +41,8 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             limit = 200; windowMs = 60_000;
         }
 
-        String key = ip + ":" + path.split("/")[2];
+        String pathSegment = path.split("/").length > 3 ? path.split("/")[2] + "/" + path.split("/")[3] : path.split("/")[2];
+        String key = ip + ":" + pathSegment;
         long now = System.currentTimeMillis();
 
         Bucket b = buckets.compute(key, (k, old) -> {

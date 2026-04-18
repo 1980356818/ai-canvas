@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI猫 管理后台</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus@2.9.7/dist/index.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
+        #app { min-height: 100vh; }
+        .login-wrapper { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .login-box { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.2); width: 400px; }
+        .login-box h2 { text-align: center; margin-bottom: 30px; color: #303133; font-size: 24px; }
+        .layout { display: flex; min-height: 100vh; }
+        .sidebar { width: 220px; background: #304156; color: #bfcbd9; flex-shrink: 0; }
+        .sidebar-title { padding: 20px; font-size: 18px; font-weight: bold; color: #fff; border-bottom: 1px solid rgba(255,255,255,.1); text-align: center; }
+        .sidebar-menu { list-style: none; padding: 10px 0; }
+        .sidebar-menu li { padding: 14px 24px; cursor: pointer; transition: all .2s; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+        .sidebar-menu li:hover { background: rgba(255,255,255,.08); }
+        .sidebar-menu li.active { background: #409eff; color: #fff; }
+        .main-area { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+        .topbar { height: 56px; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.08); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; flex-shrink: 0; }
+        .topbar-right { display: flex; align-items: center; gap: 16px; }
+        .content { flex: 1; padding: 24px; overflow: auto; }
+        .stat-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+        .stat-card .label { font-size: 13px; color: #909399; margin-bottom: 8px; }
+        .stat-card .value { font-size: 28px; font-weight: bold; color: #303133; }
+        .page-card { background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,.06); overflow: hidden; }
+        .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+        .page-title { font-size: 16px; font-weight: 600; color: #303133; }
+        .el-pagination { justify-content: flex-end; margin-top: 16px; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <!-- 登录页 -->
+    <div v-if="!token" class="login-wrapper">
+        <div class="login-box">
+            <h2>🐱 AI猫 管理后台</h2>
+            <el-form :model="loginForm" @submit.prevent="handleLogin">
+                <el-form-item>
+                    <el-input v-model="loginForm.username" placeholder="管理员用户名" prefix-icon="User" size="large" />
+                </el-form-item>
+                <el-form-item>
+                    <el-input v-model="loginForm.password" type="password" placeholder="密码" prefix-icon="Lock" size="large" show-password @keyup.enter="handleLogin" />
+                </el-form-item>
+                <el-button type="primary" style="width:100%" size="large" @click="handleLogin" :loading="loginLoading">登 录</el-button>
+            </el-form>
+        </div>
+    </div>
+
+    <!-- 改密码弹窗 -->
+    <el-dialog v-model="showChangePwd" title="修改密码" width="400" :close-on-click-modal="false" :show-close="!forcePwdChange">
+        <el-alert v-if="forcePwdChange" title="首次登录，请修改默认密码" type="warning" :closable="false" style="margin-bottom:16px" />
+        <el-form :model="pwdForm">
+            <el-form-item label="旧密码"><el-input v-model="pwdForm.oldPassword" type="password" show-password /></el-form-item>
+            <el-form-item label="新密码"><el-input v-model="pwdForm.newPassword" type="password" show-password /></el-form-item>
+        </el-form>
+        <template #footer>
+            <el-button @click="showChangePwd=false" v-if="!forcePwdChange">取消</el-button>
+            <el-button type="primary" @click="handleChangePwd" :loading="pwdLoading">确认修改</el-button>
+        </template>
+    </el-dialog>
+
+    <!-- 主布局 -->
+    <div v-if="token" class="layout">
+        <div class="sidebar">
+            <div class="sidebar-title">🐱 AI猫</div>
+            <ul class="sidebar-menu">
+                <li :class="{active: currentPage==='dashboard'}" @click="currentPage='dashboard'">📊 仪表盘</li>
+                <li :class="{active: currentPage==='users'}" @click="switchPage('users')">👥 用户管理</li>
+                <li :class="{active: currentPage==='codes'}" @click="switchPage('codes')">🎫 兑换码管理</li>
+                <li :class="{active: currentPage==='config'}" @click="switchPage('config')">⚙️ 系统配置</li>
+                <li :class="{active: currentPage==='logs'}" @click="switchPage('logs')">📋 操作日志</li>
+            </ul>
+        </div>
+        <div class="main-area">
+            <div class="topbar">
+                <span style="font-size:15px;color:#606266">{{ pageTitle }}</span>
+                <div class="topbar-right">
+                    <span style="font-size:13px;color:#909399">{{ adminUsername }}</span>
+                    <el-button size="small" @click="showChangePwd=true">改密码</el-button>
+                    <el-button size="small" type="danger" plain @click="logout">退出</el-button>
+                </div>
+            </div>
+            <div class="content">
+
+                <!-- 仪表盘 -->
+                <div v-if="currentPage==='dashboard'">
+                    <div class="stat-cards">
+                        <div class="stat-card"><div class="label">总用户数</div><div class="value">{{ dash.totalUsers || 0 }}</div></div>
+                        <div class="stat-card"><div class="label">活跃会员</div><div class="value">{{ dash.activeMembers || 0 }}</div></div>
+                        <div class="stat-card"><div class="label">今日注册</div><div class="value">{{ dash.todayRegistered || 0 }}</div></div>
+                        <div class="stat-card"><div class="label">兑换码总数</div><div class="value">{{ dash.total || 0 }}</div></div>
+                        <div class="stat-card"><div class="label">未使用</div><div class="value tag-unused">{{ dash.unused || 0 }}</div></div>
+                        <div class="stat-card"><div class="label">已使用</div><div class="value tag-used">{{ dash.used || 0 }}</div></div>
+                    </div>
+                </div>
+
+                <!-- 用户管理 -->
+                <div v-if="currentPage==='users'" class="page-card">
+                    <div class="page-header">
+                        <span class="page-title">用户列表</span>
+                        <el-input v-model="userKeyword" placeholder="搜索用户名/邮箱" style="width:240px" clearable @clear="loadUsers" @keyup.enter="loadUsers">
+                            <template #append><el-button @click="loadUsers">搜索</el-button></template>
+                        </el-input>
+                    </div>
+                    <el-table :data="users.records" stripe v-loading="usersLoading">
+                        <el-table-column prop="id" label="ID" width="60"></el-table-column>
+                        <el-table-column prop="username" label="用户名" min-width="100" show-overflow-tooltip></el-table-column>
+                        <el-table-column prop="email" label="邮箱" min-width="140" show-overflow-tooltip></el-table-column>
+                        <el-table-column label="会员到期" width="140">
+                            <template #default="{row}">
+                                <span :style="{color: isExpired(row.memberExpireAt)?'#f56c6c':'#67c23a'}">
+                                    {{ formatTime(row.memberExpireAt) || '未激活' }}
+                                </span>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="状态" width="72" align="center">
+                            <template #default="{row}">
+                                <el-tag :type="row.status===1?'success':'danger'" size="small">{{ row.status===1?'正常':'禁用' }}</el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="注册时间" width="140">
+                            <template #default="{row}">{{ formatTime(row.createdAt) }}</template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="230" align="center">
+                            <template #default="{row}">
+                                <el-button size="small" @click="openAdjust(row)">调整会员</el-button>
+                                <el-button size="small" :type="row.status===1?'danger':'success'" @click="toggleStatus(row)">
+                                    {{ row.status===1?'禁用':'启用' }}
+                                </el-button>
+                                <el-button size="small" type="warning" @click="openForceUnbind(row)">解绑</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                    <el-pagination
+                        v-model:current-page="userPage" :page-size="20" :total="users.total"
+                        layout="total, prev, pager, next" @current-change="loadUsers" />
+                </div>
+
+                <!-- 调整会员弹窗 -->
+                <el-dialog v-model="adjustVisible" title="调整会员时长" width="400">
+                    <p style="margin-bottom:12px">用户：<b>{{ adjustUser?.username }}</b></p>
+                    <el-input-number v-model="adjustDays" :min="-9999" :max="9999" />
+                    <span style="margin-left:8px">天（负数为减少）</span>
+                    <template #footer>
+                        <el-button @click="adjustVisible=false">取消</el-button>
+                        <el-button type="primary" @click="doAdjust">确定</el-button>
+                    </template>
+                </el-dialog>
+
+                <!-- 强制解绑弹窗 -->
+                <el-dialog v-model="unbindVisible" title="强制解绑设备" width="440">
+                    <p style="margin-bottom:12px">用户：<b>{{ unbindUser?.username }}</b></p>
+                    <el-form-item label="新机器码"><el-input v-model="unbindForm.newMachineCode" placeholder="留空则仅解绑" /></el-form-item>
+                    <el-form-item label="设备信息"><el-input v-model="unbindForm.deviceInfo" placeholder="可选" /></el-form-item>
+                    <template #footer>
+                        <el-button @click="unbindVisible=false">取消</el-button>
+                        <el-button type="primary" @click="doForceUnbind">确定解绑</el-button>
+                    </template>
+                </el-dialog>
+
+                <!-- 兑换码管理 -->
+                <div v-if="currentPage==='codes'" class="page-card">
+                    <div class="page-header">
+                        <span class="page-title">兑换码管理</span>
+                        <div style="display:flex;gap:8px;align-items:center">
+                            <el-select v-model="codeStatusFilter" placeholder="全部状态" clearable style="width:130px" @change="loadCodes">
+                                <el-option label="未使用" value="unused" /><el-option label="已使用" value="used" />
+                                <el-option label="已禁用" value="disabled" /><el-option label="已过期" value="expired" />
+                            </el-select>
+                            <el-button type="primary" @click="genVisible=true">批量生成</el-button>
+                        </div>
+                    </div>
+                    <el-table :data="codes.records" stripe v-loading="codesLoading">
+                        <el-table-column prop="code" label="兑换码" min-width="200" show-overflow-tooltip></el-table-column>
+                        <el-table-column prop="days" label="天数" width="60" align="center"></el-table-column>
+                        <el-table-column label="状态" width="80" align="center">
+                            <template #default="{row}">
+                                <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="有效期至" width="140">
+                            <template #default="{row}">{{ formatTime(row.expireAt) }}</template>
+                        </el-table-column>
+                        <el-table-column prop="usedBy" label="使用者" width="70" align="center"></el-table-column>
+                        <el-table-column label="使用时间" width="140">
+                            <template #default="{row}">{{ formatTime(row.usedAt) }}</template>
+                        </el-table-column>
+                        <el-table-column prop="remark" label="备注" min-width="100" show-overflow-tooltip></el-table-column>
+                        <el-table-column label="操作" width="80" align="center">
+                            <template #default="{row}">
+                                <el-button size="small" type="danger" v-if="row.status==='unused'" @click="disableCode(row)">禁用</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                    <el-pagination
+                        v-model:current-page="codePage" :page-size="20" :total="codes.total"
+                        layout="total, prev, pager, next" @current-change="loadCodes" />
+                </div>
+
+                <!-- 生成兑换码弹窗 -->
+                <el-dialog v-model="genVisible" title="批量生成兑换码" width="440">
+                    <el-form label-width="100px">
+                        <el-form-item label="数量"><el-input-number v-model="genForm.count" :min="1" :max="1000" /></el-form-item>
+                        <el-form-item label="会员天数"><el-input-number v-model="genForm.days" :min="1" /></el-form-item>
+                        <el-form-item label="有效期(天)"><el-input-number v-model="genForm.validDays" :min="0" /></el-form-item>
+                        <el-form-item label="备注"><el-input v-model="genForm.remark" placeholder="如: 推广活动" /></el-form-item>
+                    </el-form>
+                    <template #footer>
+                        <el-button @click="genVisible=false">取消</el-button>
+                        <el-button type="primary" @click="doGenerate" :loading="genLoading">生成</el-button>
+                    </template>
+                </el-dialog>
+
+                <!-- 生成结果弹窗 -->
+                <el-dialog v-model="genResultVisible" title="生成完成" width="520">
+                    <el-alert :title="'成功生成 '+genResult.count+' 个兑换码，批次号: '+genResult.batchNo" type="success" :closable="false" style="margin-bottom:12px" />
+                    <el-input type="textarea" :model-value="(genResult.codes||[]).join('\n')" :rows="10" readonly />
+                    <template #footer>
+                        <el-button @click="copyGenResult">复制全部</el-button>
+                        <el-button type="primary" @click="genResultVisible=false">关闭</el-button>
+                    </template>
+                </el-dialog>
+
+                <!-- 系统配置 -->
+                <div v-if="currentPage==='config'" class="page-card">
+                    <div class="page-header"><span class="page-title">系统配置</span></div>
+                    <el-table :data="configList" stripe v-loading="configLoading">
+                        <el-table-column prop="key" label="配置键" min-width="240"></el-table-column>
+                        <el-table-column label="配置值" min-width="200">
+                            <template #default="{row}">
+                                <el-input v-model="row.value" size="small"></el-input>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="说明" min-width="220">
+                            <template #default="{row}">
+                                <span style="color:#909399;font-size:13px">{{ configDesc(row.key) }}</span>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="90" align="center">
+                            <template #default="{row}">
+                                <el-button size="small" type="primary" @click="saveConfig(row)">保存</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+
+                <!-- 操作日志 -->
+                <div v-if="currentPage==='logs'" class="page-card">
+                    <div class="page-header"><span class="page-title">操作日志</span></div>
+                    <el-table :data="logs.records" stripe v-loading="logsLoading">
+                        <el-table-column prop="id" label="ID" width="60"></el-table-column>
+                        <el-table-column prop="adminName" label="操作员" width="90"></el-table-column>
+                        <el-table-column label="操作" width="110">
+                            <template #default="{row}">
+                                <el-tag size="small" :type="actionTagType(row.action)">{{ actionLabel(row.action) }}</el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="targetType" label="目标" width="80"></el-table-column>
+                        <el-table-column prop="targetId" label="目标ID" width="70" align="center"></el-table-column>
+                        <el-table-column prop="detail" label="详情" min-width="180" show-overflow-tooltip></el-table-column>
+                        <el-table-column prop="ip" label="IP" width="130"></el-table-column>
+                        <el-table-column label="时间" width="140">
+                            <template #default="{row}">{{ formatTime(row.createdAt) }}</template>
+                        </el-table-column>
+                    </el-table>
+                    <el-pagination
+                        v-model:current-page="logPage" :page-size="20" :total="logs.total"
+                        layout="total, prev, pager, next" @current-change="loadLogs" />
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus@2.9.7/dist/index.full.min.js"></script>
+<script>
+const API = '/api';
+const { createApp, ref, reactive, computed, onMounted } = Vue;
+
+createApp({
+    setup() {
+        const token = ref(localStorage.getItem('aicat_admin_token') || '');
+        const adminUsername = ref(localStorage.getItem('aicat_admin_user') || '');
+        const forcePwdChange = ref(false);
+        const currentPage = ref('dashboard');
+        const loginForm = reactive({ username: '', password: '' });
+        const loginLoading = ref(false);
+
+        const pageTitle = computed(() => ({
+            dashboard: '仪表盘', users: '用户管理', codes: '兑换码管理',
+            config: '系统配置', logs: '操作日志'
+        })[currentPage.value]);
+
+        async function api(path, opts = {}) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (token.value) headers['Authorization'] = 'Bearer ' + token.value;
+            const res = await fetch(API + path, { ...opts, headers });
+            const json = await res.json();
+            if (json.code === 40102) { logout(); throw new Error('登录过期'); }
+            if (json.code !== 0) { ElementPlus.ElMessage.error(json.msg); throw new Error(json.msg); }
+            return json.data;
+        }
+
+        async function handleLogin() {
+            loginLoading.value = true;
+            try {
+                const data = await api('/admin/login', {
+                    method: 'POST', body: JSON.stringify(loginForm)
+                });
+                token.value = data.token;
+                adminUsername.value = data.username;
+                localStorage.setItem('aicat_admin_token', data.token);
+                localStorage.setItem('aicat_admin_user', data.username);
+                if (data.forcePwdChange) { forcePwdChange.value = true; showChangePwd.value = true; }
+                loadDashboard();
+            } catch(e) {} finally { loginLoading.value = false; }
+        }
+
+        function logout() {
+            token.value = '';
+            adminUsername.value = '';
+            localStorage.removeItem('aicat_admin_token');
+            localStorage.removeItem('aicat_admin_user');
+        }
+
+        // 改密码
+        const showChangePwd = ref(false);
+        const pwdForm = reactive({ oldPassword: '', newPassword: '' });
+        const pwdLoading = ref(false);
+        async function handleChangePwd() {
+            if (!pwdForm.newPassword || pwdForm.newPassword.length < 6) {
+                return ElementPlus.ElMessage.warning('新密码至少6位');
+            }
+            pwdLoading.value = true;
+            try {
+                await api('/admin/change-password', {
+                    method: 'POST', body: JSON.stringify(pwdForm)
+                });
+                ElementPlus.ElMessage.success('密码修改成功，请重新登录');
+                showChangePwd.value = false;
+                forcePwdChange.value = false;
+                logout();
+            } catch(e) {} finally { pwdLoading.value = false; }
+        }
+
+        // 仪表盘
+        const dash = ref({});
+        async function loadDashboard() {
+            try { dash.value = await api('/admin/dashboard'); } catch(e) {}
+        }
+
+        // 用户管理
+        const users = ref({ records: [], total: 0 });
+        const userPage = ref(1);
+        const userKeyword = ref('');
+        const usersLoading = ref(false);
+        async function loadUsers() {
+            usersLoading.value = true;
+            try {
+                const kw = userKeyword.value ? '&keyword=' + encodeURIComponent(userKeyword.value) : '';
+                users.value = await api('/admin/users?page=' + userPage.value + '&size=20' + kw);
+            } catch(e) {} finally { usersLoading.value = false; }
+        }
+
+        // 调整会员
+        const adjustVisible = ref(false);
+        const adjustUser = ref(null);
+        const adjustDays = ref(30);
+        function openAdjust(row) { adjustUser.value = row; adjustDays.value = 30; adjustVisible.value = true; }
+        async function doAdjust() {
+            try {
+                await api('/admin/user/adjust-membership', {
+                    method: 'POST', body: JSON.stringify({ userId: adjustUser.value.id, days: adjustDays.value })
+                });
+                ElementPlus.ElMessage.success('调整成功');
+                adjustVisible.value = false;
+                loadUsers();
+            } catch(e) {}
+        }
+
+        // 禁用/启用
+        async function toggleStatus(row) {
+            try {
+                await api('/admin/user/set-status', {
+                    method: 'POST', body: JSON.stringify({ userId: row.id, status: row.status === 1 ? 0 : 1 })
+                });
+                ElementPlus.ElMessage.success('操作成功');
+                loadUsers();
+            } catch(e) {}
+        }
+
+        // 强制解绑
+        const unbindVisible = ref(false);
+        const unbindUser = ref(null);
+        const unbindForm = reactive({ newMachineCode: '', deviceInfo: '' });
+        function openForceUnbind(row) { unbindUser.value = row; unbindForm.newMachineCode = ''; unbindForm.deviceInfo = ''; unbindVisible.value = true; }
+        async function doForceUnbind() {
+            if (!unbindForm.newMachineCode) return ElementPlus.ElMessage.warning('请填写新机器码');
+            try {
+                await api('/admin/user/force-unbind', {
+                    method: 'POST', body: JSON.stringify({ userId: unbindUser.value.id, ...unbindForm })
+                });
+                ElementPlus.ElMessage.success('解绑成功');
+                unbindVisible.value = false;
+            } catch(e) {}
+        }
+
+        function isExpired(d) { return !d || new Date(d) < new Date(); }
+
+        function formatTime(t) {
+            if (!t) return '';
+            return t.replace('T', ' ').substring(0, 16);
+        }
+
+        function configDesc(key) {
+            const map = { 'unbind_limit_per_month': '每月允许解绑次数', 'unbind_cooldown_days': '两次解绑最短间隔天数' };
+            return map[key] || '';
+        }
+
+        function actionLabel(a) {
+            const map = {
+                'generate_codes': '生成兑换码', 'disable_code': '禁用兑换码', 'ban_user': '封禁用户',
+                'unban_user': '解封用户', 'adjust_membership': '调整会员', 'force_unbind': '强制解绑',
+                'update_config': '更新配置'
+            };
+            return map[a] || a;
+        }
+
+        function actionTagType(a) {
+            if (a === 'ban_user' || a === 'disable_code') return 'danger';
+            if (a === 'unban_user') return 'success';
+            if (a === 'generate_codes') return '';
+            return 'info';
+        }
+
+        // 兑换码
+        const codes = ref({ records: [], total: 0 });
+        const codePage = ref(1);
+        const codeStatusFilter = ref('');
+        const codesLoading = ref(false);
+        async function loadCodes() {
+            codesLoading.value = true;
+            try {
+                let q = '?page=' + codePage.value + '&size=20';
+                if (codeStatusFilter.value) q += '&status=' + codeStatusFilter.value;
+                codes.value = await api('/admin/redeem-codes' + q);
+            } catch(e) {} finally { codesLoading.value = false; }
+        }
+
+        function statusType(s) { return { unused:'success', used:'info', disabled:'danger', expired:'warning' }[s] || 'info'; }
+        function statusLabel(s) { return { unused:'未使用', used:'已使用', disabled:'已禁用', expired:'已过期' }[s] || s; }
+
+        async function disableCode(row) {
+            try {
+                await ElementPlus.ElMessageBox.confirm('确定要禁用此兑换码？', '确认');
+                await api('/admin/redeem-codes/disable/' + row.id, { method: 'POST' });
+                ElementPlus.ElMessage.success('已禁用');
+                loadCodes();
+            } catch(e) {}
+        }
+
+        // 生成
+        const genVisible = ref(false);
+        const genLoading = ref(false);
+        const genForm = reactive({ count: 10, days: 30, validDays: 180, remark: '' });
+        const genResultVisible = ref(false);
+        const genResult = ref({});
+        async function doGenerate() {
+            genLoading.value = true;
+            try {
+                genResult.value = await api('/admin/redeem-codes/generate', {
+                    method: 'POST', body: JSON.stringify(genForm)
+                });
+                genVisible.value = false;
+                genResultVisible.value = true;
+                loadCodes();
+            } catch(e) {} finally { genLoading.value = false; }
+        }
+        function copyGenResult() {
+            navigator.clipboard.writeText((genResult.value.codes || []).join('\n'));
+            ElementPlus.ElMessage.success('已复制');
+        }
+
+        // 配置
+        const configList = ref([]);
+        const configLoading = ref(false);
+        async function loadConfig() {
+            configLoading.value = true;
+            try {
+                const m = await api('/admin/config');
+                configList.value = Object.entries(m).map(([key, value]) => ({ key, value }));
+            } catch(e) {} finally { configLoading.value = false; }
+        }
+        async function saveConfig(row) {
+            try {
+                await api('/admin/config', {
+                    method: 'POST', body: JSON.stringify({ key: row.key, value: row.value })
+                });
+                ElementPlus.ElMessage.success('已保存');
+            } catch(e) {}
+        }
+
+        // 操作日志
+        const logs = ref({ records: [], total: 0 });
+        const logPage = ref(1);
+        const logsLoading = ref(false);
+        async function loadLogs() {
+            logsLoading.value = true;
+            try { logs.value = await api('/admin/operation-logs?page=' + logPage.value + '&size=20'); }
+            catch(e) {} finally { logsLoading.value = false; }
+        }
+
+        function switchPage(page) { currentPage.value = page; loadPage(page); }
+        function loadPage(page) {
+            if (page === 'users') loadUsers();
+            else if (page === 'codes') loadCodes();
+            else if (page === 'config') loadConfig();
+            else if (page === 'logs') loadLogs();
+        }
+
+        onMounted(() => { if (token.value) loadDashboard(); });
+
+        return {
+            token, adminUsername, currentPage, pageTitle,
+            loginForm, loginLoading, handleLogin, logout,
+            showChangePwd, forcePwdChange, pwdForm, pwdLoading, handleChangePwd,
+            dash,
+            users, userPage, userKeyword, usersLoading, loadUsers,
+            adjustVisible, adjustUser, adjustDays, openAdjust, doAdjust,
+            toggleStatus, isExpired, formatTime, configDesc, actionLabel, actionTagType,
+            unbindVisible, unbindUser, unbindForm, openForceUnbind, doForceUnbind,
+            codes, codePage, codeStatusFilter, codesLoading, loadCodes,
+            statusType, statusLabel, disableCode,
+            genVisible, genLoading, genForm, doGenerate,
+            genResultVisible, genResult, copyGenResult,
+            configList, configLoading, saveConfig,
+            logs, logPage, logsLoading, loadLogs,
+            switchPage
+        };
+    }
+}).use(ElementPlus).mount('#app');
+</script>
+</body>
+</html>
