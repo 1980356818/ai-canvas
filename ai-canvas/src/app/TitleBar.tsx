@@ -183,9 +183,12 @@ export default function TitleBar() {
           : "border-b border-border bg-muted/40",
       )}
     >
+      <span className="shrink-0 pl-8 pr-3 text-base font-semibold tracking-wide text-foreground/80">AI猫</span>
+
       {isCanvas ? (
         <>
-          <div className="flex shrink-0 items-center pl-1.5">
+          <div className="flex shrink-0 items-center">
+            <div className="mr-1.5 h-4 w-px bg-border" />
             <button
               onClick={toggleSidebar}
               title={sidebarVisible ? "收起侧边栏" : "展开侧边栏"}
@@ -299,12 +302,7 @@ export default function TitleBar() {
           </div>
         </>
       ) : (
-        <>
-          {!isHome && (
-            <span className="px-3 text-sm font-medium">AI猫</span>
-          )}
-          <div data-tauri-drag-region className="flex-1" />
-        </>
+        <div data-tauri-drag-region className="flex-1" />
       )}
 
       {isTauri && (

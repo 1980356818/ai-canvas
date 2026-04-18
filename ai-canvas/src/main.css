@@ -108,34 +108,40 @@
 }
 
 .text-shimmer {
-  --shimmer-fg: oklch(0.25 0 0);
-  --shimmer-hi: oklch(0.48 0 0);
-  --shimmer-peak: oklch(0.72 0 0 / 0.9);
+  --shimmer-fg: oklch(0.22 0.01 260);
+  --shimmer-mid: oklch(0.38 0.04 260);
+  --shimmer-hi: oklch(0.58 0.08 260);
+  --shimmer-peak: oklch(0.82 0.12 260);
   display: inline-block;
   background: linear-gradient(
-    120deg,
+    90deg,
     var(--shimmer-fg) 0%,
-    var(--shimmer-fg) 40%,
-    var(--shimmer-hi) 47%,
+    var(--shimmer-fg) 32%,
+    var(--shimmer-mid) 39%,
+    var(--shimmer-hi) 44%,
     var(--shimmer-peak) 50%,
-    var(--shimmer-hi) 53%,
-    var(--shimmer-fg) 60%,
+    var(--shimmer-hi) 55%,
+    var(--shimmer-mid) 59%,
+    var(--shimmer-fg) 64%,
     var(--shimmer-fg) 100%
   );
-  background-size: 250% 100%;
+  background-size: 400% 100%;
+  background-repeat: no-repeat;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: text-shimmer-sweep 6s linear infinite;
+  animation: text-shimmer-sweep 9s linear infinite;
 }
 .dark .text-shimmer {
-  --shimmer-fg: oklch(0.75 0 0);
-  --shimmer-hi: oklch(0.88 0 0);
-  --shimmer-peak: oklch(0.97 0 0 / 0.9);
+  --shimmer-fg: oklch(0.68 0.01 260);
+  --shimmer-mid: oklch(0.78 0.05 270);
+  --shimmer-hi: oklch(0.88 0.09 270);
+  --shimmer-peak: oklch(0.97 0.04 280);
 }
 @keyframes text-shimmer-sweep {
-  0%   { background-position: 120% 50%; }
-  100% { background-position: -120% 50%; }
+  0%   { background-position: 90% 50%; }
+  55%  { background-position: 5% 50%; }
+  100% { background-position: 5% 50%; }
 }
 
 .hero-glow {
