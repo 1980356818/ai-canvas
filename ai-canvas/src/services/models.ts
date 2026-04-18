@@ -6,7 +6,8 @@ const CHAT_MODELS: ModelInfo[] = [
 ];
 
 const IMAGE_MODELS: ModelInfo[] = [
-  { id: "gemini-3.1-flash-image-preview", display_name: "Gemini 3.1 Image", capability: "IMAGE" },
+  { id: "gemini-3.1-flash-image-preview", display_name: "Nanobanana 2", capability: "IMAGE" },
+  { id: "nano-banana-pro", display_name: "Nanobanana Pro", capability: "IMAGE" },
 ];
 
 const VIDEO_MODELS: ModelInfo[] = [
@@ -73,6 +74,11 @@ export const modelService = {
       return resolution === "4K"
         ? "gemini-3.1-flash-image-preview-4k"
         : "gemini-3.1-flash-image-preview-2k";
+    }
+    if (baseId === "nano-banana-pro") {
+      return resolution === "4K"
+        ? "nano-banana-pro-4k"
+        : "nano-banana-pro-2k";
     }
     return baseId;
   },

@@ -346,10 +346,7 @@ export default function TitleBar() {
       <NewProjectDialog
         open={newProjectOpen}
         onClose={() => setNewProjectOpen(false)}
-        onCreated={(project) => {
-          useProjectStore.getState().addProject(project);
-          useProjectStore.getState().openProject(project.id);
-          setAppView("canvas");
+        onCreated={() => {
           addToast({ type: "success", title: "项目创建成功", duration: 3000 });
         }}
       />

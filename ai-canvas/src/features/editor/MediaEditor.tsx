@@ -21,7 +21,7 @@ import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize } from "@/shared/constants";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
-import { type InlineImageRef, toDisplayText, remapInlineRefs } from "@/lib/promptSerializer";
+import { type InlineImageRef, toDisplayText, remapInlineRefs, reorderInlineRefs } from "@/lib/promptSerializer";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
 import SizeCombo from "./SizeCombo";
@@ -246,6 +246,42 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
       updateCard(card.id, {
         data: { ...data, refImages: compacted, content: newContent, inlineRefs: newInlineRefs },
+      });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard, refSlots],
+  );
+
+  const handleReorder = useCallback(
+    (fromSlotKey: string, toSlotKey: string) => {
+      if (!data.refImages?.[fromSlotKey] || !data.refImages?.[toSlotKey]) return;
+      if (fromSlotKey === toSlotKey) return;
+
+      const occupiedKeys = refSlots
+        .map((s) => s.key)
+        .filter((key) => data.refImages![key]);
+      const fromIdx = occupiedKeys.indexOf(fromSlotKey);
+      const toIdx = occupiedKeys.indexOf(toSlotKey);
+      if (fromIdx === -1 || toIdx === -1) return;
+
+      const entries = occupiedKeys.map((k) => data.refImages![k]!);
+      const [moved] = entries.splice(fromIdx, 1);
+      entries.splice(toIdx, 0, moved!);
+
+      const refImages: Record<string, RefImageEntry> = {};
+      entries.forEach((entry, i) => {
+        refImages[occupiedKeys[i]!] = entry;
+      });
+
+      const { content: newContent, inlineRefs: newInlineRefs } = reorderInlineRefs(
+        data.content ?? "",
+        data.inlineRefs ?? [],
+        occupiedKeys,
+        fromIdx,
+        toIdx,
+      );
+      updateCard(card.id, {
+        data: { ...data, refImages, content: newContent, inlineRefs: newInlineRefs },
       });
       autoSave.markDirty(card.id);
     },
@@ -502,6 +538,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
                   const opt = imageOptions.find((o) => o.id === `slot:${slot.key}`);
                   if (opt) promptRef.current?.insertRef(opt);
                 }}
+                onReorder={(fromKey) => handleReorder(fromKey, slot.key)}
                 disabled={generating}
                 targetCardId={card.id}
                 slotKey={slot.key}

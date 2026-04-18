@@ -95,6 +95,7 @@ export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
         placeholder="点击输入文本..."
         onPointerDown={stopDrag}
         onMouseDown={stopDrag}
+        onWheel={(e) => e.stopPropagation()}
       />
     </div>
   );

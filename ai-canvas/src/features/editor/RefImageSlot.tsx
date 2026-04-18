@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { persistImage, getDisplayUrl } from "@/lib/media";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
 
+const REF_REORDER_MIME = "application/x-ref-slot-reorder";
+
 interface RefImageSlotProps {
   label: string;
   description: string;
@@ -18,6 +20,7 @@ interface RefImageSlotProps {
   onImage: (entry: RefImageEntry) => void;
   onClear: () => void;
   onRefClick?: () => void;
+  onReorder?: (fromSlotKey: string) => void;
   disabled?: boolean;
   targetCardId: string;
   slotKey: string;
@@ -32,6 +35,7 @@ export default function RefImageSlot({
   onImage,
   onClear,
   onRefClick,
+  onReorder,
   disabled,
   targetCardId,
   slotKey,
@@ -143,21 +147,69 @@ export default function RefImageSlot({
 
   const isHighlighted = dragOver || cardDragOver;
 
+  const [reorderOver, setReorderOver] = useState(false);
+  const isDraggable = !disabled && !!onReorder;
+
+  const handleReorderDragStart = useCallback(
+    (e: React.DragEvent) => {
+      e.dataTransfer.setData(REF_REORDER_MIME, slotKey);
+      e.dataTransfer.effectAllowed = "move";
+    },
+    [slotKey],
+  );
+
+  const handleReorderDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (disabled || !onReorder) return;
+      if (e.dataTransfer.types.includes(REF_REORDER_MIME)) {
+        e.preventDefault();
+        e.stopPropagation();
+        setReorderOver(true);
+      }
+    },
+    [disabled, onReorder],
+  );
+
+  const handleReorderDragLeave = useCallback(() => {
+    setReorderOver(false);
+  }, []);
+
+  const handleReorderDrop = useCallback(
+    (e: React.DragEvent) => {
+      setReorderOver(false);
+      const fromKey = e.dataTransfer.getData(REF_REORDER_MIME);
+      if (fromKey && fromKey !== slotKey && onReorder) {
+        e.preventDefault();
+        e.stopPropagation();
+        onReorder(fromKey);
+      }
+    },
+    [slotKey, onReorder],
+  );
+
   if (displayUrl) {
     return (
       <div
         ref={slotRef}
         data-ref-slot
+        draggable={isDraggable}
+        onDragStart={isDraggable ? handleReorderDragStart : undefined}
+        onDragOver={handleReorderDragOver}
+        onDragLeave={handleReorderDragLeave}
+        onDrop={handleReorderDrop}
         className={cn(
           "relative aspect-square w-[96px] shrink-0 transition-all duration-200",
           highlighted && "scale-105 drop-shadow-md",
-          onRefClick && "cursor-pointer",
+          isDraggable && "cursor-grab active:cursor-grabbing",
+          !isDraggable && onRefClick && "cursor-pointer",
+          reorderOver && "scale-105 ring-2 ring-primary ring-offset-1",
         )}
       >
         <div
           className={cn(
             "h-full w-full overflow-hidden rounded-lg border bg-muted/30 transition-colors",
             highlighted ? "border-primary ring-2 ring-primary/30" : "border-input",
+            reorderOver && "border-primary",
             onRefClick && "hover:border-primary/60 hover:shadow-sm",
           )}
           onClick={onRefClick}

@@ -173,6 +173,70 @@ export function pruneOrphanedRefs(
 }
 
 /**
+ * Reorder ref-image slots: move the entry at fromIdx to toIdx,
+ * shifting items in between. Prompt text tokens and inlineRefs are
+ * updated so references follow their images.
+ *
+ * @param occupiedKeys  Slot keys that currently have images, in order
+ *                      (e.g. ["refImage0", "refImage1", "refImage2"])
+ * @param fromIdx       Source index within occupiedKeys
+ * @param toIdx         Target index within occupiedKeys
+ */
+export function reorderInlineRefs(
+  content: string,
+  inlineRefs: InlineImageRef[],
+  occupiedKeys: string[],
+  fromIdx: number,
+  toIdx: number,
+): { content: string; inlineRefs: InlineImageRef[] } {
+  if (fromIdx === toIdx || occupiedKeys.length <= 1) {
+    return { content, inlineRefs };
+  }
+
+  const entryOrder = Array.from({ length: occupiedKeys.length }, (_, i) => i);
+  const [movedPos] = entryOrder.splice(fromIdx, 1);
+  entryOrder.splice(toIdx, 0, movedPos!);
+
+  const keyMap = new Map<string, string>();
+  for (let newPos = 0; newPos < entryOrder.length; newPos++) {
+    const origPos = entryOrder[newPos]!;
+    if (origPos !== newPos) {
+      keyMap.set(occupiedKeys[origPos]!, occupiedKeys[newPos]!);
+    }
+  }
+  if (keyMap.size === 0) return { content, inlineRefs };
+
+  let newContent = content;
+  for (const [oldKey] of keyMap) {
+    newContent = newContent.replaceAll(
+      `{{ref:slot:${oldKey}}}`,
+      `{{ref:__REORDER_${oldKey}__}}`,
+    );
+  }
+  for (const [oldKey, newKey] of keyMap) {
+    newContent = newContent.replaceAll(
+      `{{ref:__REORDER_${oldKey}__}}`,
+      `{{ref:slot:${newKey}}}`,
+    );
+  }
+
+  const newRefs = inlineRefs.map((ref) => {
+    if (ref.source.type !== "refSlot") return ref;
+    const newKey = keyMap.get(ref.source.slotKey);
+    if (!newKey) return ref;
+    const newIdx = parseInt(newKey.replace("refImage", ""), 10);
+    return {
+      ...ref,
+      id: `slot:${newKey}`,
+      displayLabel: `图${newIdx + 1}`,
+      source: { type: "refSlot" as const, slotKey: newKey },
+    };
+  });
+
+  return { content: newContent, inlineRefs: newRefs };
+}
+
+/**
  * After compactRefImages reindexes slots, update inline refs and prompt text
  * so tokens like {{ref:slot:refImage2}} become {{ref:slot:refImage1}}.
  */

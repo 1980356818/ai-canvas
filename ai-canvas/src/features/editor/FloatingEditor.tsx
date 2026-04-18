@@ -118,6 +118,7 @@ export default function FloatingEditor() {
         transform: `scale(${zoom})`,
         transformOrigin: "top left",
       }}
+      onWheel={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.stopPropagation()}

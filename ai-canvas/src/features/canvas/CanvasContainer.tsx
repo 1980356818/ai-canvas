@@ -21,7 +21,7 @@ import {
   onTauriFileDrop,
   isTauri,
 } from "@/lib/tauri";
-import { persistImage, type PersistImageResult } from "@/lib/media";
+import { persistImage, getDisplayUrl, type PersistImageResult } from "@/lib/media";
 import { ensureDisplayableImage, isHeicFile, convertHeicPath } from "@/lib/heicConverter";
 
 function cardSizeFromPersist(
@@ -41,6 +41,35 @@ function isVideoFile(file: File): boolean {
 
 function isVideoPath(path: string): boolean {
   return VIDEO_EXTENSIONS.test(path);
+}
+
+function getVideoDimensions(src: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    const cleanup = () => { video.onloadedmetadata = null; video.onerror = null; video.src = ""; };
+    const timer = setTimeout(() => { cleanup(); resolve({ width: 0, height: 0 }); }, 5000);
+    video.onloadedmetadata = () => {
+      clearTimeout(timer);
+      const { videoWidth: w, videoHeight: h } = video;
+      cleanup();
+      resolve({ width: w, height: h });
+    };
+    video.onerror = () => {
+      clearTimeout(timer);
+      cleanup();
+      resolve({ width: 0, height: 0 });
+    };
+    video.src = src;
+  });
+}
+
+async function videoCardSize(src: string): Promise<{ width: number; height: number }> {
+  const dims = await getVideoDimensions(src);
+  if (dims.width > 0 && dims.height > 0) {
+    return sizeFromRatio(dims.width / dims.height);
+  }
+  return { width: CARD_DEFAULTS.ai_video.width, height: CARD_DEFAULTS.ai_video.height };
 }
 
 function canCardAcceptFileDrop(cardId: string): boolean {
@@ -178,7 +207,7 @@ export default function CanvasContainer() {
   );
 
   const handleFileDrop = useCallback(
-    (e: React.DragEvent) => {
+    async (e: React.DragEvent) => {
       e.preventDefault();
       if (!currentProjectId) return;
 
@@ -192,9 +221,12 @@ export default function CanvasContainer() {
           };
           const dropPos = screenToCanvas(e.clientX, e.clientY);
           const isVideo = media.type === "video";
-          const { width: cardW, height: cardH } = isVideo
-            ? { width: CARD_DEFAULTS.ai_video.width, height: CARD_DEFAULTS.ai_video.height }
-            : { width: CARD_DEFAULTS.ai_image.width, height: CARD_DEFAULTS.ai_image.height };
+          let cardW: number, cardH: number;
+          if (isVideo) {
+            ({ width: cardW, height: cardH } = await videoCardSize(getDisplayUrl(media.url)));
+          } else {
+            ({ width: cardW, height: cardH } = { width: CARD_DEFAULTS.ai_image.width, height: CARD_DEFAULTS.ai_image.height });
+          }
 
           const now = new Date().toISOString();
           const { maxZIndex } = useCardStore.getState();
@@ -297,9 +329,14 @@ export default function CanvasContainer() {
           const dataUrl = await readFileAsDataUrl(file);
           const saved = await persistImage(dataUrl, undefined, currentProjectId);
 
-          const { width: cardW, height: cardH } = video
-            ? { width: CARD_DEFAULTS.ai_video.width, height: CARD_DEFAULTS.ai_video.height }
-            : cardSizeFromPersist(saved);
+          let cardW: number, cardH: number;
+          if (video) {
+            const blobUrl = URL.createObjectURL(file);
+            ({ width: cardW, height: cardH } = await videoCardSize(blobUrl));
+            URL.revokeObjectURL(blobUrl);
+          } else {
+            ({ width: cardW, height: cardH } = cardSizeFromPersist(saved));
+          }
 
           const now = new Date().toISOString();
           const { maxZIndex } = useCardStore.getState();
@@ -408,9 +445,12 @@ export default function CanvasContainer() {
           const filePath = video ? rawPath : await convertHeicPath(rawPath);
           const saved = await persistImage(filePath, undefined, pid);
 
-          const { width: cardW, height: cardH } = video
-            ? { width: CARD_DEFAULTS.ai_video.width, height: CARD_DEFAULTS.ai_video.height }
-            : cardSizeFromPersist(saved);
+          let cardW: number, cardH: number;
+          if (video) {
+            ({ width: cardW, height: cardH } = await videoCardSize(getDisplayUrl(saved.localPath)));
+          } else {
+            ({ width: cardW, height: cardH } = cardSizeFromPersist(saved));
+          }
 
           const now = new Date().toISOString();
           const { maxZIndex } = useCardStore.getState();

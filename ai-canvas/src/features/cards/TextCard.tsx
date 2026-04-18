@@ -60,6 +60,7 @@ export default memo(function TextCard({ card }: { card: CanvasCard }) {
         placeholder="点击编辑文本..."
         onPointerDown={stopDrag}
         onMouseDown={stopDrag}
+        onWheel={(e) => e.stopPropagation()}
       />
     </div>
   );

@@ -1,18 +1,23 @@
-import { useEffect, useState } from "react";
-import { FileText, ImageIcon, ScanFace, FolderOpen, Layers } from "lucide-react";
-import { createProject, updateProjectMeta } from "@/lib/tauri";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  FileText,
+  ImageIcon,
+  ScanFace,
+  Plus,
+  Layers,
+  ArrowRight,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
+import { createProject, updateProjectMeta, loadCards } from "@/lib/tauri";
+import { getDisplayUrl } from "@/lib/media";
 import { useProjectStore, type ProjectInfo } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useChatStore } from "@/stores/chatStore";
 import { WORKFLOW_TEMPLATES } from "@/shared/constants";
 import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { autoSave } from "@/lib/autoSave";
 import { cn } from "@/lib/utils";
-
-const TEMPLATE_OPTIONS = [
-  { id: "blank", name: "空白项目", desc: "从空白画布开始创作", icon: FileText, accent: "text-emerald-500", gradient: "from-emerald-500/10 via-emerald-500/5 to-teal-500/10" },
-  { id: "wf-white-bg", name: "一键白底图", desc: "上传商品图，AI 生成白底精修图", icon: ImageIcon, accent: "text-violet-500", gradient: "from-violet-500/10 via-purple-500/5 to-fuchsia-500/10" },
-  { id: "wf-face-gen", name: "AI 捏脸", desc: "上传照片，AI 生成多种风格人像", icon: ScanFace, accent: "text-sky-500", gradient: "from-sky-500/10 via-blue-500/5 to-indigo-500/10" },
-] as const;
 
 function formatRelativeTime(iso: string): string {
   const d = new Date(iso);
@@ -34,6 +39,173 @@ function formatRelativeTime(iso: string): string {
   return `${dayDiff}天前`;
 }
 
+function ImageCollage({ images }: { images: string[] }) {
+  const count = images.length;
+
+  if (count === 0) {
+    return (
+      <div className="flex h-full items-center justify-center bg-gradient-to-br from-muted to-muted/60">
+        <Layers className="h-7 w-7 text-muted-foreground/25" />
+      </div>
+    );
+  }
+
+  if (count === 1) {
+    return (
+      <img src={images[0]} alt="" className="h-full w-full object-cover" />
+    );
+  }
+
+  if (count === 2) {
+    return (
+      <div className="grid h-full grid-cols-2 gap-px bg-border/40">
+        {images.slice(0, 2).map((src, i) => (
+          <img key={i} src={src} alt="" className="h-full w-full object-cover" />
+        ))}
+      </div>
+    );
+  }
+
+  if (count === 3) {
+    return (
+      <div className="grid h-full grid-cols-2 gap-px bg-border/40">
+        <img src={images[0]} alt="" className="row-span-2 h-full w-full object-cover" />
+        <div className="grid grid-rows-2 gap-px bg-border/40">
+          <img src={images[1]} alt="" className="h-full w-full object-cover" />
+          <img src={images[2]} alt="" className="h-full w-full object-cover" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid h-full grid-cols-2 grid-rows-2 gap-px bg-border/40">
+      {images.slice(0, 4).map((src, i) => (
+        <img key={i} src={src} alt="" className="h-full w-full object-cover" />
+      ))}
+    </div>
+  );
+}
+
+const TEMPLATE_OPTIONS: {
+  id: string;
+  name: string;
+  desc: string;
+  icon: LucideIcon;
+  accent: string;
+  gradient: string;
+}[] = [
+  {
+    id: "blank",
+    name: "空白项目",
+    desc: "从空白画布开始创作",
+    icon: FileText,
+    accent: "text-emerald-500",
+    gradient: "from-emerald-500/10 via-emerald-500/5 to-teal-500/10",
+  },
+  {
+    id: "wf-white-bg",
+    name: "一键白底图",
+    desc: "上传商品图，AI 生成白底精修图",
+    icon: ImageIcon,
+    accent: "text-violet-500",
+    gradient: "from-violet-500/10 via-purple-500/5 to-fuchsia-500/10",
+  },
+  {
+    id: "wf-face-gen",
+    name: "AI 捏脸",
+    desc: "上传照片，AI 生成多种风格人像",
+    icon: ScanFace,
+    accent: "text-sky-500",
+    gradient: "from-sky-500/10 via-blue-500/5 to-indigo-500/10",
+  },
+];
+
+const FEATURE_ICONS: Record<string, { icon2: LucideIcon }> = {
+  "wf-white-bg": { icon2: ImageIcon },
+  "wf-face-gen": { icon2: ScanFace },
+};
+
+function NameProjectDialog({
+  open,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  onConfirm: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      setName("");
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onCancel();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onCancel]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
+      <div
+        className="w-full max-w-sm rounded-xl border border-border bg-background p-5 shadow-2xl"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <h3 className="mb-4 text-base font-semibold">新建项目</h3>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onConfirm(name.trim() || "未命名项目");
+          }}
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="输入项目名称..."
+            className="mb-4 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-lg px-4 py-2 text-sm text-muted-foreground hover:bg-accent"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              创建
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export interface NewProjectDialogProps {
   open: boolean;
   onClose: () => void;
@@ -50,6 +222,9 @@ export function NewProjectDialog({
   const setAppView = useUIStore((s) => s.setAppView);
   const addToast = useUIStore((s) => s.addToast);
   const [loading, setLoading] = useState(false);
+  const [showNameDialog, setShowNameDialog] = useState(false);
+  const [projectImages, setProjectImages] = useState<Record<string, string[]>>({});
+  const imagesCacheRef = useRef<Record<string, string[]>>({});
 
   useEffect(() => {
     if (open) setLoading(false);
@@ -57,17 +232,59 @@ export function NewProjectDialog({
 
   useEffect(() => {
     if (!open) return;
+
+    const topN = projects.slice(0, 5);
+    if (topN.length === 0) return;
+
+    const toLoad = topN.filter((p) => !(p.id in imagesCacheRef.current));
+    if (toLoad.length === 0) {
+      const map: Record<string, string[]> = {};
+      for (const p of topN) map[p.id] = imagesCacheRef.current[p.id] ?? [];
+      setProjectImages(map);
+      return;
+    }
+
+    let cancelled = false;
+    Promise.all(
+      toLoad.map(async (p) => {
+        try {
+          const cards = await loadCards(p.id);
+          const urls: string[] = [];
+          for (const c of cards) {
+            if (c.type !== "ai_image") continue;
+            try {
+              const d = JSON.parse(c.data);
+              if (d.imageUrl) urls.push(getDisplayUrl(d.imageUrl));
+            } catch { /* skip */ }
+          }
+          return { id: p.id, urls };
+        } catch {
+          return { id: p.id, urls: [] as string[] };
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      for (const r of results) imagesCacheRef.current[r.id] = r.urls;
+      const map: Record<string, string[]> = {};
+      for (const p of topN) map[p.id] = imagesCacheRef.current[p.id] ?? [];
+      setProjectImages(map);
+    });
+
+    return () => { cancelled = true; };
+  }, [open, projects]);
+
+  useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        if (showNameDialog) setShowNameDialog(false);
+        else onClose();
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
+  }, [open, onClose, showNameDialog]);
 
   const handleOpenProject = (id: string) => {
     openProject(id);
@@ -75,28 +292,48 @@ export function NewProjectDialog({
     onClose();
   };
 
+  const handleCreateBlank = useCallback(
+    async (name: string) => {
+      setShowNameDialog(false);
+      if (loading) return;
+      setLoading(true);
+      try {
+        const project = await createProject(name);
+        useProjectStore.getState().addProject(project);
+        useProjectStore.getState().openProject(project.id);
+        setAppView("canvas");
+        const ui = useUIStore.getState();
+        if (!ui.chatPanelVisible) ui.toggleChatPanel();
+        void useChatStore.getState().createSession();
+        onCreated(project);
+        onClose();
+      } catch {
+        setLoading(false);
+        addToast({ type: "error", title: "创建项目失败", duration: 4000 });
+      }
+    },
+    [loading, setAppView, addToast, onCreated, onClose],
+  );
+
   const handleCreateFromTemplate = async (templateId: string) => {
     if (loading) return;
     setLoading(true);
     const tpl = TEMPLATE_OPTIONS.find((t) => t.id === templateId);
-    const title = tpl?.id === "blank" ? "未命名画布" : (tpl?.name ?? "未命名画布");
+    const title = tpl?.name ?? "未命名画布";
     try {
       const project = await createProject(title);
-
-      if (templateId !== "blank") {
-        const workflow = WORKFLOW_TEMPLATES.find((w) => w.id === templateId);
-        if (workflow) {
-          useProjectStore.getState().addProject(project);
-          useProjectStore.getState().openProject(project.id);
-          instantiateWorkflowTemplate(workflow, project.id, 320, 80);
-          await autoSave.forceSave();
-          const meta = { nodeCount: workflow.cards.length };
-          useProjectStore.getState().updateProject(project.id, meta);
-          await updateProjectMeta(project.id, meta);
-          setAppView("canvas");
-          onClose();
-          return;
-        }
+      const workflow = WORKFLOW_TEMPLATES.find((w) => w.id === templateId);
+      if (workflow) {
+        useProjectStore.getState().addProject(project);
+        useProjectStore.getState().openProject(project.id);
+        instantiateWorkflowTemplate(workflow, project.id, 320, 80);
+        await autoSave.forceSave();
+        const meta = { nodeCount: workflow.cards.length };
+        useProjectStore.getState().updateProject(project.id, meta);
+        await updateProjectMeta(project.id, meta);
+        setAppView("canvas");
+        onClose();
+        return;
       }
 
       onCreated(project);
@@ -107,6 +344,8 @@ export function NewProjectDialog({
     }
   };
 
+  if (!open) return null;
+
   const recentProjects = projects.slice(0, 5);
 
   return (
@@ -114,74 +353,109 @@ export function NewProjectDialog({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       role="presentation"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget && !showNameDialog) onClose();
       }}
     >
       <div
         role="dialog"
         aria-modal="true"
-        className="w-full max-w-md overflow-hidden rounded-xl border border-border/60 bg-card shadow-lg"
+        className="flex w-full max-w-[680px] flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-lg"
+        style={{ maxHeight: "min(85vh, 640px)" }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {/* Recent projects */}
+        {/* Recent projects — card grid matching homepage style */}
         {recentProjects.length > 0 && (
-          <div className="border-b border-border/60 px-4 pt-4 pb-3">
-            <h3 className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-              <Layers className="h-3 w-3" />
+          <div className="shrink-0 border-b border-border/60 px-5 pt-5 pb-4">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">
               最近项目
             </h3>
-            <div className="space-y-px">
-              {recentProjects.map((p) => (
+            <div className="grid grid-cols-5 gap-2">
+              {recentProjects.map((p, i) => (
                 <button
                   key={p.id}
                   type="button"
                   onClick={() => handleOpenProject(p.id)}
-                  className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all hover:bg-accent"
+                  className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-md border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
+                  style={{ animationDelay: `${i * 60}ms` }}
                 >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                    <FolderOpen className="h-3.5 w-3.5" />
+                  <div className="image-collage aspect-[3/2] w-full">
+                    <ImageCollage images={projectImages[p.id] ?? []} />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {p.title}
-                    </p>
+                  <div className="flex items-start gap-1 px-2 py-1.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[10px] font-semibold text-foreground">
+                        {p.title}
+                      </p>
+                      <p className="mt-0.5 truncate text-[9px] text-muted-foreground">
+                        {p.nodeCount} 张卡片 · {formatRelativeTime(p.updatedAt)}
+                      </p>
+                    </div>
                   </div>
-                  <span className="shrink-0 text-[11px] text-muted-foreground">
-                    {p.nodeCount} 张卡片 · {formatRelativeTime(p.updatedAt)}
-                  </span>
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        {/* Templates */}
-        <div className="px-4 pt-4 pb-4">
-          <h3 className="mb-3 text-xs font-semibold text-muted-foreground">
-            新建项目
+        {/* Quick start — matching homepage WorkflowGrid style */}
+        <div className="shrink-0 px-5 pt-4 pb-5">
+          <h3 className="mb-3 text-sm font-semibold text-foreground">
+            快速开始
           </h3>
           <div className="grid grid-cols-3 gap-2.5">
             {TEMPLATE_OPTIONS.map((tpl) => {
               const Icon = tpl.icon;
+              const isBlank = tpl.id === "blank";
+              const feat = FEATURE_ICONS[tpl.id];
+
               return (
                 <button
                   key={tpl.id}
                   type="button"
                   disabled={loading}
-                  onClick={() => void handleCreateFromTemplate(tpl.id)}
+                  onClick={() => {
+                    if (isBlank) {
+                      setShowNameDialog(true);
+                    } else {
+                      void handleCreateFromTemplate(tpl.id);
+                    }
+                  }}
                   className={cn(
-                    "group flex flex-col overflow-hidden rounded-xl border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50",
+                    "group flex flex-col overflow-hidden rounded-md text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50",
+                    isBlank
+                      ? "border border-dashed border-border/80 bg-card hover:border-primary/40"
+                      : "border border-border/60 bg-card",
                   )}
                 >
-                  <div className={cn(
-                    "flex aspect-[4/3] w-full items-center justify-center bg-gradient-to-br",
-                    tpl.gradient,
-                  )}>
-                    <Icon className={cn("h-8 w-8 opacity-60", tpl.accent)} />
+                  <div
+                    className={cn(
+                      "flex aspect-[3/2] w-full items-center justify-center gap-2",
+                      isBlank
+                        ? "bg-gradient-to-br from-muted/60 to-muted/30"
+                        : `bg-gradient-to-br ${tpl.gradient}`,
+                    )}
+                  >
+                    {isBlank ? (
+                      <Plus className="h-6 w-6 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
+                    ) : (
+                      <>
+                        <Icon className={cn("h-5 w-5 opacity-60", tpl.accent)} />
+                        <ArrowRight className="h-3 w-3 text-muted-foreground/40" />
+                        <Sparkles className={cn("h-4.5 w-4.5 opacity-40", tpl.accent)} />
+                        <ArrowRight className="h-3 w-3 text-muted-foreground/40" />
+                        {feat ? (
+                          <feat.icon2 className={cn("h-5 w-5 opacity-60", tpl.accent)} />
+                        ) : (
+                          <ImageIcon className={cn("h-5 w-5 opacity-60", tpl.accent)} />
+                        )}
+                      </>
+                    )}
                   </div>
-                  <div className="px-2.5 py-2">
-                    <p className="text-xs font-semibold text-foreground">{tpl.name}</p>
-                    <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                  <div className="flex flex-1 flex-col gap-0.5 px-2 py-1.5">
+                    <p className="text-[10px] font-semibold text-foreground">
+                      {isBlank ? "新建空白项目" : tpl.name}
+                    </p>
+                    <p className="line-clamp-2 text-[9px] leading-relaxed text-muted-foreground">
                       {tpl.desc}
                     </p>
                   </div>
@@ -191,6 +465,12 @@ export function NewProjectDialog({
           </div>
         </div>
       </div>
+
+      <NameProjectDialog
+        open={showNameDialog}
+        onConfirm={handleCreateBlank}
+        onCancel={() => setShowNameDialog(false)}
+      />
     </div>
   );
 }
