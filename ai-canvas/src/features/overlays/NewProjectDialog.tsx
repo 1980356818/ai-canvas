@@ -402,7 +402,7 @@ export function NewProjectDialog({
           <h3 className="mb-3 text-sm font-semibold text-foreground">
             快速开始
           </h3>
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-5 gap-2">
             {TEMPLATE_OPTIONS.map((tpl) => {
               const Icon = tpl.icon;
               const isBlank = tpl.id === "blank";

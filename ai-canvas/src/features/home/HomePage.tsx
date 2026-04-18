@@ -372,25 +372,27 @@ export default function HomePage() {
   return (
     <div className="flex flex-1 flex-col overflow-y-auto bg-background">
       {/* Hero */}
-      <div className="hero-glow flex flex-1 flex-col items-center justify-center px-6 pt-20 pb-16">
-        <h1 className="mb-4 flex items-center gap-4 text-5xl font-bold tracking-tight">
-          <img src={catPawImg} alt="" className="h-28 w-28 object-contain dark:invert" />
-          <span className="text-shimmer">：致力于解决电商行业的所有需求</span>
+      <div className="hero-glow flex flex-[8] flex-col items-center justify-center px-6 pt-20 pb-4">
+        <h1 className="-mt-20 mb-4 flex items-end gap-3 text-5xl font-bold tracking-tight">
+          <img src={catPawImg} alt="" className="h-16 w-16 object-contain dark:invert" />
+          <span className="text-shimmer tracking-[0.15em]">致力于解决电商行业的所有需求</span>
         </h1>
-        <p className="mb-12 max-w-md text-center text-base tracking-wide text-muted-foreground/80">
+        <p className="mt-4 mb-12 max-w-md text-center text-base tracking-wide text-muted-foreground/80">
           效率，从这里起飞
         </p>
 
-        <div className="w-full max-w-3xl">
+        <div className="w-full max-w-4xl">
           <AIPromptInput />
         </div>
       </div>
 
       {/* Recent Projects + Quick Start */}
-      <div className="shrink-0 space-y-6 px-8 pt-2 pb-6">
+      <div className="shrink-0 space-y-6 px-8 pt-0 pb-6">
         <RecentProjects />
         <WorkflowGrid />
       </div>
+
+      <div className="flex-1" />
     </div>
   );
 }
