@@ -61,27 +61,27 @@ function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
   return (
     <button
       onClick={handleClick}
-      className="group flex flex-col overflow-hidden rounded-lg border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
+      className="group flex flex-col overflow-hidden rounded-md border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
     >
       <div
-        className={`flex aspect-[16/9] items-center justify-center gap-2.5 bg-gradient-to-br ${style.gradient}`}
+        className={`flex aspect-[3/2] items-center justify-center gap-2 bg-gradient-to-br ${style.gradient}`}
       >
-        <Icon className={`h-6 w-6 ${style.accent} opacity-60`} />
-        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40" />
-        <Sparkles className={`h-5.5 w-5.5 ${style.accent} opacity-40`} />
-        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40" />
+        <Icon className={`h-5 w-5 ${style.accent} opacity-60`} />
+        <ArrowRight className="h-3 w-3 text-muted-foreground/40" />
+        <Sparkles className={`h-4.5 w-4.5 ${style.accent} opacity-40`} />
+        <ArrowRight className="h-3 w-3 text-muted-foreground/40" />
         {workflow.id === "wf-face-gen" ? (
-          <ScanFace className={`h-6 w-6 ${style.accent} opacity-60`} />
+          <ScanFace className={`h-5 w-5 ${style.accent} opacity-60`} />
         ) : (
-          <ImageIcon className={`h-6 w-6 ${style.accent} opacity-60`} />
+          <ImageIcon className={`h-5 w-5 ${style.accent} opacity-60`} />
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-0.5 px-2.5 py-2">
-        <p className="text-[11px] font-semibold text-foreground">
+      <div className="flex flex-1 flex-col gap-0.5 px-2 py-1.5">
+        <p className="text-[10px] font-semibold text-foreground">
           {workflow.name}
         </p>
-        <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+        <p className="line-clamp-2 text-[9px] leading-relaxed text-muted-foreground">
           {workflow.description}
         </p>
       </div>
@@ -100,7 +100,7 @@ export default function WorkflowGrid() {
         快速开始
       </h2>
 
-      <div className="grid grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-6 gap-2">
         {featured.map((wf) => (
           <FeatureCard key={wf.id} workflow={wf} />
         ))}

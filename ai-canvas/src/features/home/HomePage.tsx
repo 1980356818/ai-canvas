@@ -101,19 +101,19 @@ function ProjectCard({
   return (
     <button
       onClick={handleOpen}
-      className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-lg border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
+      className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-md border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
       style={{ animationDelay: `${index * 60}ms` }}
     >
       <div className="image-collage aspect-[3/2] w-full">
         <ImageCollage images={images} />
       </div>
 
-      <div className="flex items-start gap-1.5 px-2.5 py-2">
+      <div className="flex items-start gap-1 px-2 py-1.5">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[11px] font-semibold text-foreground">
+          <p className="truncate text-[10px] font-semibold text-foreground">
             {project.title}
           </p>
-          <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+          <p className="mt-0.5 truncate text-[9px] text-muted-foreground">
             {project.nodeCount} 张卡片 · {formatRelativeTime(project.updatedAt)}
           </p>
         </div>
@@ -226,13 +226,13 @@ function RecentProjects() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const top4 = projects.slice(0, 4);
-    if (top4.length === 0) return;
+    const topN = projects.slice(0, 5);
+    if (topN.length === 0) return;
 
-    const toLoad = top4.filter((p) => !(p.id in imagesCacheRef.current));
+    const toLoad = topN.filter((p) => !(p.id in imagesCacheRef.current));
     if (toLoad.length === 0) {
       const map: Record<string, string[]> = {};
-      for (const p of top4) map[p.id] = imagesCacheRef.current[p.id] ?? [];
+      for (const p of topN) map[p.id] = imagesCacheRef.current[p.id] ?? [];
       setProjectImages(map);
       return;
     }
@@ -259,7 +259,7 @@ function RecentProjects() {
       if (cancelled) return;
       for (const r of results) imagesCacheRef.current[r.id] = r.urls;
       const map: Record<string, string[]> = {};
-      for (const p of top4) map[p.id] = imagesCacheRef.current[p.id] ?? [];
+      for (const p of topN) map[p.id] = imagesCacheRef.current[p.id] ?? [];
       setProjectImages(map);
     });
 
@@ -303,13 +303,13 @@ function RecentProjects() {
     [setAppView, addToast],
   );
 
-  const top3 = projects.slice(0, 3);
+  const top5 = projects.slice(0, 5);
 
   return (
     <div className="mx-auto w-full max-w-5xl">
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-sm font-semibold text-foreground">最近项目</h2>
-        {projects.length > 3 && (
+        {projects.length > 5 && (
           <button
             onClick={() => setAppView("projects")}
             className="flex items-center gap-0.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -319,28 +319,28 @@ function RecentProjects() {
           </button>
         )}
       </div>
-      <div className="grid grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-6 gap-2">
         {/* 空白项目入口 */}
         <button
           onClick={() => setShowNameDialog(true)}
-          className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-lg border border-dashed border-border/80 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+          className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-md border border-dashed border-border/80 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
         >
           <div className="image-collage flex aspect-[3/2] w-full items-center justify-center bg-gradient-to-br from-muted/60 to-muted/30">
-            <Plus className="h-8 w-8 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
+            <Plus className="h-6 w-6 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
           </div>
-          <div className="flex items-start gap-1.5 px-2.5 py-2">
+          <div className="flex items-start gap-1 px-2 py-1.5">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[11px] font-semibold text-foreground">
+              <p className="truncate text-[10px] font-semibold text-foreground">
                 新建空白项目
               </p>
-              <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+              <p className="mt-0.5 truncate text-[9px] text-muted-foreground">
                 从空白画布开始创作
               </p>
             </div>
           </div>
         </button>
 
-        {top3.map((p, i) => (
+        {top5.map((p, i) => (
           <ProjectCard
             key={p.id}
             project={p}
