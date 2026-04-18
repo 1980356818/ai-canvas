@@ -33,16 +33,17 @@ public class AdminService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
 
+    private static final String DEFAULT_ADMIN_PASSWORD = "admin123";
+
     @PostConstruct
     public void initDefaultAdmin() {
         Admin existing = adminMapper.selectOne(
                 new LambdaQueryWrapper<Admin>().eq(Admin::getUsername, "admin"));
         if (existing != null) return;
 
-        String randomPwd = generateRandomPassword(16);
         Admin admin = new Admin();
         admin.setUsername("admin");
-        admin.setPassword(passwordEncoder.encode(randomPwd));
+        admin.setPassword(passwordEncoder.encode(DEFAULT_ADMIN_PASSWORD));
         admin.setRole("super_admin");
         admin.setForcePwdChange(1);
         adminMapper.insert(admin);
@@ -50,7 +51,7 @@ public class AdminService {
         log.warn("══════════════════════════════════════════════════");
         log.warn("  默认管理员账号已创建");
         log.warn("  用户名: admin");
-        log.warn("  密码: {}", randomPwd);
+        log.warn("  密码: {}", DEFAULT_ADMIN_PASSWORD);
         log.warn("  ⚠ 首次登录后必须修改密码");
         log.warn("══════════════════════════════════════════════════");
     }
