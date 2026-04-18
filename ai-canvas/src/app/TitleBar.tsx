@@ -301,7 +301,7 @@ export default function TitleBar() {
       ) : (
         <>
           {!isHome && (
-            <span className="px-3 text-sm font-medium">AI 无限画布</span>
+            <span className="px-3 text-sm font-medium">AI猫</span>
           )}
           <div data-tauri-drag-region className="flex-1" />
         </>

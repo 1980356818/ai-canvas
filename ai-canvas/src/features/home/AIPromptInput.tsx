@@ -253,7 +253,7 @@ export default function AIPromptInput() {
   };
 
   return (
-    <div className="relative z-10 mx-auto w-full max-w-2xl">
+    <div className="relative z-10 mx-auto w-full max-w-3xl">
       <div
         className={cn(
           "rounded-2xl border bg-card/60 shadow-lg shadow-black/5 backdrop-blur-xl transition-all focus-within:shadow-xl focus-within:shadow-primary/10",
@@ -286,7 +286,7 @@ export default function AIPromptInput() {
           placeholder={config.placeholder}
           rows={3}
           className="w-full resize-none rounded-t-2xl bg-transparent px-5 pb-2 pt-5 text-base text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
-          style={{ minHeight: "100px", maxHeight: "200px" }}
+          style={{ minHeight: "120px", maxHeight: "240px" }}
         />
 
         {/* Image previews */}

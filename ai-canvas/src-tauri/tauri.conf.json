@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
-  "productName": "AI Canvas",
+  "productName": "AI猫",
   "version": "0.1.0",
   "identifier": "com.ai-canvas.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "AI 无限画布",
+        "title": "AI猫",
         "width": 1280,
         "height": 800,
         "minWidth": 900,
@@ -32,5 +32,11 @@
         }
       }
     }
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/icon.png"
+    ]
   }
 }

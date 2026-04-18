@@ -107,41 +107,39 @@
   background-clip: text;
 }
 
-.hero-glow {
-  position: relative;
-}
-.hero-glow::before {
-  content: "";
-  position: absolute;
-  top: 20%;
-  left: 50%;
-  width: 600px;
-  height: 400px;
-  transform: translateX(-50%);
-  border-radius: 9999px;
-  background: radial-gradient(
-    ellipse at center,
-    oklch(0.75 0.06 280 / 0.12) 0%,
-    oklch(0.8 0.04 260 / 0.06) 40%,
-    transparent 70%
+.text-shimmer {
+  --shimmer-fg: oklch(0.25 0 0);
+  --shimmer-hi: oklch(0.55 0 0);
+  --shimmer-peak: oklch(0.78 0 0 / 0.95);
+  display: inline-block;
+  background: linear-gradient(
+    100deg,
+    var(--shimmer-fg) 0%,
+    var(--shimmer-fg) 34%,
+    var(--shimmer-hi) 44%,
+    var(--shimmer-peak) 50%,
+    var(--shimmer-hi) 56%,
+    var(--shimmer-fg) 66%,
+    var(--shimmer-fg) 100%
   );
-  filter: blur(60px);
-  pointer-events: none;
-  z-index: 0;
-  animation: hero-glow-pulse 6s ease-in-out infinite;
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: text-shimmer-sweep 8s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
 }
-.dark .hero-glow::before {
-  background: radial-gradient(
-    ellipse at center,
-    oklch(0.45 0.08 280 / 0.15) 0%,
-    oklch(0.4 0.05 260 / 0.08) 40%,
-    transparent 70%
-  );
+.dark .text-shimmer {
+  --shimmer-fg: oklch(0.75 0 0);
+  --shimmer-hi: oklch(0.90 0 0);
+  --shimmer-peak: oklch(0.98 0 0 / 0.95);
+}
+@keyframes text-shimmer-sweep {
+  0%, 12%  { background-position: 110% 50%; }
+  88%, 100% { background-position: -110% 50%; }
 }
 
-@keyframes hero-glow-pulse {
-  0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
-  50% { opacity: 0.7; transform: translateX(-50%) scale(1.05); }
+.hero-glow {
+  position: relative;
 }
 
 .image-collage {

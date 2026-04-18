@@ -8,6 +8,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { useChatStore } from "@/stores/chatStore";
 import { listProjects, deleteProject, loadCards, createProject } from "@/lib/tauri";
 import { getDisplayUrl } from "@/lib/media";
+import catPawImg from "@/assets/cat-paw.png";
 
 
 function formatRelativeTime(iso: string): string {
@@ -100,19 +101,19 @@ function ProjectCard({
   return (
     <button
       onClick={handleOpen}
-      className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-xl border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
+      className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-lg border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
       style={{ animationDelay: `${index * 60}ms` }}
     >
       <div className="image-collage aspect-[3/2] w-full">
         <ImageCollage images={images} />
       </div>
 
-      <div className="flex items-start gap-2 px-3 py-2.5">
+      <div className="flex items-start gap-1.5 px-2.5 py-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-semibold text-foreground">
+          <p className="truncate text-[11px] font-semibold text-foreground">
             {project.title}
           </p>
-          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+          <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
             {project.nodeCount} 张卡片 · {formatRelativeTime(project.updatedAt)}
           </p>
         </div>
@@ -125,7 +126,7 @@ function ProjectCard({
           }}
           className="shrink-0 rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
         >
-          <Trash2 className="h-3 w-3" />
+          <Trash2 className="h-2.5 w-2.5" />
         </div>
       </div>
     </button>
@@ -305,9 +306,9 @@ function RecentProjects() {
   const top3 = projects.slice(0, 3);
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <div className="mb-5 flex items-baseline justify-between">
-        <h2 className="text-base font-semibold text-foreground">最近项目</h2>
+    <div className="mx-auto w-full max-w-5xl">
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold text-foreground">最近项目</h2>
         {projects.length > 3 && (
           <button
             onClick={() => setAppView("projects")}
@@ -318,21 +319,21 @@ function RecentProjects() {
           </button>
         )}
       </div>
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-4 gap-2.5">
         {/* 空白项目入口 */}
         <button
           onClick={() => setShowNameDialog(true)}
-          className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-xl border border-dashed border-border/80 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+          className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-lg border border-dashed border-border/80 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
         >
           <div className="image-collage flex aspect-[3/2] w-full items-center justify-center bg-gradient-to-br from-muted/60 to-muted/30">
-            <Plus className="h-10 w-10 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
+            <Plus className="h-8 w-8 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
           </div>
-          <div className="flex items-start gap-2 px-3 py-2.5">
+          <div className="flex items-start gap-1.5 px-2.5 py-2">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-foreground">
+              <p className="truncate text-[11px] font-semibold text-foreground">
                 新建空白项目
               </p>
-              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+              <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
                 从空白画布开始创作
               </p>
             </div>
@@ -371,19 +372,22 @@ export default function HomePage() {
   return (
     <div className="flex flex-1 flex-col overflow-y-auto bg-background">
       {/* Hero */}
-      <div className="hero-glow flex flex-col items-center justify-center px-6 pt-16 pb-12">
-        <h1 className="text-gradient mb-3 text-5xl font-bold tracking-tight">
-          AI 无限画布
+      <div className="hero-glow flex flex-1 flex-col items-center justify-center px-6 pt-20 pb-16">
+        <h1 className="mb-4 flex items-center gap-4 text-5xl font-bold tracking-tight">
+          <img src={catPawImg} alt="" className="h-28 w-28 object-contain dark:invert" />
+          <span className="text-shimmer">：致力于解决电商行业的所有需求</span>
         </h1>
-        <p className="mb-10 max-w-md text-center text-base tracking-wide text-muted-foreground/80">
-          创意，从这里开始
+        <p className="mb-12 max-w-md text-center text-base tracking-wide text-muted-foreground/80">
+          效率，从这里起飞
         </p>
 
-        <AIPromptInput />
+        <div className="w-full max-w-3xl">
+          <AIPromptInput />
+        </div>
       </div>
 
       {/* Recent Projects + Quick Start */}
-      <div className="space-y-10 px-8 pt-4 pb-10">
+      <div className="shrink-0 space-y-6 px-8 pt-2 pb-6">
         <RecentProjects />
         <WorkflowGrid />
       </div>
