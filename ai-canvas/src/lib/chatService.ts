@@ -1,34 +1,9 @@
 import { aiProxy, aiProxyStream, saveMedia } from "@/lib/tauri";
 import { getBase64ForApi } from "@/lib/media";
 import { waitForTask } from "@/services/tasks";
+import type { ChatContentPart, Intent, IntentResult, ChatServiceCallbacks, ChatHistoryMessage } from "@/types";
 
-// ── Types ───────────────────────────────────────────────────
-
-export type ChatContentPart =
-  | { type: "text"; text: string }
-  | { type: "image"; url: string; prompt?: string }
-  | { type: "video"; url: string; prompt?: string; coverUrl?: string }
-  | { type: "loading"; mediaType: "image" | "video" };
-
-export type Intent = "chat" | "image" | "video";
-
-export interface IntentResult {
-  intent: Intent;
-  prompt: string;
-}
-
-export interface ChatServiceCallbacks {
-  onStreamChunk?: (text: string) => void;
-  onStreamDone?: () => void;
-  onIntentDetected?: (intent: Intent) => void;
-  onMediaGenerating?: (mediaType: "image" | "video") => void;
-  onMediaProgress?: (progress: number, status: string) => void;
-}
-
-export interface ChatHistoryMessage {
-  role: "user" | "assistant" | "system";
-  content: ChatContentPart[];
-}
+export type { ChatContentPart, Intent, IntentResult, ChatServiceCallbacks, ChatHistoryMessage } from "@/types";
 
 // ── Intent parsing ──────────────────────────────────────────
 

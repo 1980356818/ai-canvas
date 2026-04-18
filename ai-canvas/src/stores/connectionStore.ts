@@ -1,30 +1,7 @@
 import { create } from "zustand";
 
-export type PortSide = "input" | "output";
-
-export interface Connection {
-  id: string;
-  projectId: string;
-  sourceCardId: string;
-  targetCardId: string;
-  createdAt: string;
-}
-
-export interface DraftWire {
-  sourceCardId: string;
-  startX: number;
-  startY: number;
-  endX: number;
-  endY: number;
-}
-
-export interface PendingDrop {
-  sourceCardId: string;
-  screenX: number;
-  screenY: number;
-  canvasX: number;
-  canvasY: number;
-}
+export type { PortSide, Connection, DraftWire, PendingDrop } from "@/types";
+import type { Connection, DraftWire, PendingDrop } from "@/types";
 
 interface ConnectionState {
   connections: Map<string, Connection>;

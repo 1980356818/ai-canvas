@@ -1,28 +1,9 @@
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { saveCardsBatch } from "@/lib/tauri";
-import type { CardRow } from "@/lib/tauri";
-
-function cardToRow(card: CanvasCard): CardRow {
-  return {
-    id: card.id,
-    project_id: card.projectId,
-    type: card.type,
-    x: card.x,
-    y: card.y,
-    width: card.width,
-    height: card.height,
-    z_index: card.zIndex,
-    locked: card.locked,
-    collapsed: card.collapsed,
-    color: card.color ?? null,
-    title: card.title ?? null,
-    data: JSON.stringify(card.data),
-    created_at: card.createdAt,
-    updated_at: card.updatedAt,
-  };
-}
+import { cardToRow } from "@/lib/mappers";
 
 class AutoSaveManager {
   private dirty = false;

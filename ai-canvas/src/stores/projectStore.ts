@@ -1,13 +1,7 @@
 import { create } from "zustand";
 
-export interface ProjectInfo {
-  id: string;
-  title: string;
-  thumbnail?: string;
-  nodeCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
+export type { ProjectInfo } from "@/types";
+import type { ProjectInfo } from "@/types";
 
 function sortByUpdatedDesc(projects: ProjectInfo[]): ProjectInfo[] {
   return [...projects].sort(

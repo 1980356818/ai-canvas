@@ -1,12 +1,6 @@
-import type { CardType } from "./types";
-import type { LucideIcon } from "lucide-react";
+import type { CardType, CardDefaults } from "@/types";
 
-export interface CardDefaults {
-  width: number;
-  height: number;
-  label: string;
-  data: Record<string, unknown>;
-}
+export type { CardDefaults } from "@/types";
 
 export const CARD_MAX_EDGE = 340;
 
@@ -23,11 +17,8 @@ export function sizeFromRatio(ratio: number): { width: number; height: number } 
   return { width: Math.round(CARD_MAX_EDGE * ratio), height: CARD_MAX_EDGE };
 }
 
-export interface ImageSizeOption {
-  value: string;
-  label: string;
-  ratio: number;
-}
+export type { ImageSizeOption, QuickCreateItem, WorkflowCardPreset, WorkflowConnectionPreset, WorkflowTemplate } from "@/types";
+import type { ImageSizeOption } from "@/types";
 
 export const IMAGE_SIZE_OPTIONS: ImageSizeOption[] = [
   { value: "auto",  label: "自适应", ratio: 1 },
@@ -86,36 +77,7 @@ export const CARD_COLOR_PRESETS = [
   { name: "粉色", value: "#EC4899" },
 ];
 
-export interface QuickCreateItem {
-  type: CardType;
-  icon: LucideIcon;
-  label: string;
-}
-
-export interface WorkflowCardPreset {
-  type: CardType;
-  title: string;
-  relativeX: number;
-  relativeY: number;
-  width: number;
-  height: number;
-  data: Record<string, unknown>;
-}
-
-export interface WorkflowConnectionPreset {
-  sourceIndex: number;
-  targetIndex: number;
-}
-
-export interface WorkflowTemplate {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  category: "chat" | "image" | "composite";
-  cards: WorkflowCardPreset[];
-  connections?: WorkflowConnectionPreset[];
-}
+import type { WorkflowTemplate } from "@/types";
 
 export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {

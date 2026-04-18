@@ -4,13 +4,15 @@ import { useCardStore } from "@/stores/cardStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { useConnectionStore, type Connection } from "@/stores/connectionStore";
+import { useConnectionStore } from "@/stores/connectionStore";
+import type { Connection } from "@/types";
 import { isTauri, loadCards, loadConnections, saveConnections, saveProjectViewport, loadProjectViewport, migrateApiConfig } from "@/lib/tauri";
 import { rebuildMissingConnections } from "@/lib/connectionRecovery";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
 import { startDataFlowWatcher, removeRefImageForSource, removeUpstreamTextForSource, removeVideoFrameForSource } from "@/lib/dataFlow";
 import { initMediaService } from "@/lib/media";
+import { rowToCard, connectionToRow, rowToConnection } from "@/lib/mappers";
 
 import { useKeyboardShortcuts } from "@/features/canvas/hooks/useKeyboardShortcuts";
 import TitleBar from "@/app/TitleBar";
@@ -25,7 +27,6 @@ import { Toast } from "@/features/overlays/Toast";
 import { ContextMenu } from "@/features/overlays/ContextMenu";
 import SettingsDialog from "@/features/overlays/SettingsDialog";
 import SideCapsule from "@/features/overlays/SideCapsule";
-import type { CardType } from "@/shared/types";
 
 export default function App() {
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
@@ -60,16 +61,7 @@ export default function App() {
         saveProjectViewport(prevId, { x: vp.x, y: vp.y, zoom: vp.zoom });
 
         const conns = useConnectionStore.getState().getConnectionsByProject(prevId);
-        void saveConnections(
-          prevId,
-          conns.map((c) => ({
-            id: c.id,
-            project_id: c.projectId,
-            source_card_id: c.sourceCardId,
-            target_card_id: c.targetCardId,
-            created_at: c.createdAt,
-          })),
-        );
+        void saveConnections(prevId, conns.map(connectionToRow));
       }
     }
     prevProjectIdRef.current = currentProjectId;
@@ -91,33 +83,11 @@ export default function App() {
 
     (async () => {
       const rows = await loadCards(currentProjectId);
-      const cards = rows.map((r) => ({
-        id: r.id,
-        projectId: r.project_id,
-        type: r.type as CardType,
-        x: r.x,
-        y: r.y,
-        width: r.width,
-        height: r.height,
-        zIndex: r.z_index,
-        locked: r.locked,
-        collapsed: r.collapsed,
-        color: r.color ?? undefined,
-        title: r.title ?? undefined,
-        data: JSON.parse(r.data),
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-      }));
+      const cards = rows.map(rowToCard);
       useCardStore.getState().setCards(cards);
 
       const connRows = await loadConnections(currentProjectId);
-      const conns: Connection[] = connRows.map((r) => ({
-        id: r.id,
-        projectId: r.project_id,
-        sourceCardId: r.source_card_id,
-        targetCardId: r.target_card_id,
-        createdAt: r.created_at,
-      }));
+      const conns: Connection[] = connRows.map(rowToConnection);
 
       const rebuilt = rebuildMissingConnections(currentProjectId, cards, conns);
       useConnectionStore.getState().setConnections(rebuilt);
@@ -154,13 +124,7 @@ export default function App() {
       if (!pid) return;
       const rows = Array.from(state.connections.values())
         .filter((c) => c.projectId === pid)
-        .map((c) => ({
-          id: c.id,
-          project_id: c.projectId,
-          source_card_id: c.sourceCardId,
-          target_card_id: c.targetCardId,
-          created_at: c.createdAt,
-        }));
+        .map(connectionToRow);
       void saveConnections(pid, rows);
     });
     return unsub;
@@ -196,16 +160,7 @@ export default function App() {
       saveProjectViewport(pid, { x: vp.x, y: vp.y, zoom: vp.zoom });
 
       const conns = useConnectionStore.getState().getConnectionsByProject(pid);
-      await saveConnections(
-        pid,
-        conns.map((c) => ({
-          id: c.id,
-          project_id: c.projectId,
-          source_card_id: c.sourceCardId,
-          target_card_id: c.targetCardId,
-          created_at: c.createdAt,
-        })),
-      );
+      await saveConnections(pid, conns.map(connectionToRow));
 
       await autoSave.forceSave();
     };

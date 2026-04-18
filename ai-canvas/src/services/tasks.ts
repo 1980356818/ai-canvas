@@ -1,4 +1,7 @@
-import { pollTask, type TaskInfo } from "@/lib/tauri";
+import { pollTask } from "@/lib/tauri";
+import type { TaskInfo } from "@/types";
+
+export type { TaskResult } from "@/types";
 
 const TERMINAL_STATUSES = new Set([
   "completed",
@@ -8,25 +11,15 @@ const TERMINAL_STATUSES = new Set([
   "success",
   "succeeded",
   "expired",
-  "COMPLETED",
-  "FAILED",
-  "CANCELLED",
-  "ERROR",
-  "SUCCESS",
-  "SUCCEEDED",
-  "EXPIRED",
 ]);
+
+function isTerminal(status: string): boolean {
+  return TERMINAL_STATUSES.has(status.toLowerCase());
+}
 
 const INITIAL_DELAY = 1000;
 const MAX_DELAY = 10000;
 const BACKOFF_FACTOR = 2;
-
-export interface TaskResult {
-  status: string;
-  resultUrl?: string;
-  thumbnailUrl?: string;
-  errorMessage?: string;
-}
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -63,7 +56,7 @@ export async function waitForTask(
 
     onProgress?.(info.progress ?? 0, info.status);
 
-    if (TERMINAL_STATUSES.has(info.status)) {
+    if (isTerminal(info.status)) {
       return {
         status: info.status,
         resultUrl: info.resultUrl,

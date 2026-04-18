@@ -1,25 +1,7 @@
 import { create } from "zustand";
 
-export type { CardType } from "@/shared/types";
-import type { CardType } from "@/shared/types";
-
-export interface CanvasCard {
-  id: string;
-  projectId: string;
-  type: CardType;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  zIndex: number;
-  locked: boolean;
-  collapsed: boolean;
-  color?: string;
-  title?: string;
-  data: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-}
+export type { CardType, CanvasCard } from "@/types";
+import type { CardType, CanvasCard } from "@/types";
 
 interface CardState {
   cards: Map<string, CanvasCard>;

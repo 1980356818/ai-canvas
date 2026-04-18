@@ -22,27 +22,8 @@ import {
 } from "@/lib/chatService";
 import { modelService } from "@/services/models";
 
-// ── Public types ────────────────────────────────────────────
-
-export interface ChatSession {
-  id: string;
-  projectId?: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ChatMessage {
-  id: string;
-  sessionId: string;
-  role: "user" | "assistant" | "system";
-  content: ChatContentPart[];
-  metadata?: {
-    model?: string;
-    intent?: Intent;
-  };
-  createdAt: string;
-}
+export type { ChatSession, ChatMessage } from "@/types";
+import type { ChatSession, ChatMessage } from "@/types";
 
 // ── Store ───────────────────────────────────────────────────
 

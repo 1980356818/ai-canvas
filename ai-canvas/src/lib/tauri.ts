@@ -1,4 +1,31 @@
-import type { ProjectInfo } from "@/stores/projectStore";
+import type { ProjectInfo } from "@/types";
+import type {
+  CardRow,
+  AiProxyResponse,
+  SaveMediaResult,
+  StreamCallbacks,
+  ModelInfo,
+  TaskInfo,
+  ConnectionRow,
+  ChatSessionRow,
+  ChatMessageRow,
+  SavedViewport,
+  FileDropCallback,
+} from "@/types";
+
+export type {
+  CardRow,
+  AiProxyResponse,
+  SaveMediaResult,
+  StreamCallbacks,
+  ModelInfo,
+  TaskInfo,
+  ConnectionRow,
+  ChatSessionRow,
+  ChatMessageRow,
+  SavedViewport,
+  FileDropCallback,
+} from "@/types";
 
 const isTauri =
   typeof window !== "undefined" &&
@@ -50,63 +77,6 @@ function getAuthHeaders(): Record<string, string> {
   const { apiKey } = getBrowserApiConfig();
   if (!apiKey) return {};
   return { Authorization: `Bearer ${apiKey}` };
-}
-
-// ── Types ────────────────────────────────────────────────────
-
-export interface CardRow {
-  id: string;
-  project_id: string;
-  type: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  z_index: number;
-  locked: boolean;
-  collapsed: boolean;
-  color: string | null;
-  title: string | null;
-  data: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AiProxyResponse {
-  body: string;
-  status: number;
-}
-
-export interface SaveMediaResult {
-  local_path: string;
-  width: number | null;
-  height: number | null;
-}
-
-export interface StreamCallbacks {
-  onChunk: (data: string) => void;
-  onDone: () => void;
-  onError: (error: string) => void;
-}
-
-export interface ModelInfo {
-  id: string;
-  display_name?: string;
-  model_family?: string;
-  capability?: string;
-  lines?: Array<{ tag: string; name: string; type: string }>;
-  spec?: Record<string, unknown>;
-}
-
-export interface TaskInfo {
-  id: string;
-  status: string;
-  progress: number;
-  resultUrl?: string;
-  thumbnailUrl?: string;
-  errorMessage?: string;
-  createdAt?: string;
-  finishedAt?: string;
 }
 
 // ── Project Commands ─────────────────────────────────────────
@@ -662,8 +632,8 @@ export function invalidateApiKeyCache() {
   _apiKeyCache = undefined;
 }
 
-const COMFLY_API_KEY = "sk-V3CT1nzrBVT39hZezULUjczUEy9e3jiCZCK8qBTRbbbfOZB6";
-const COMFLY_BASE_URL = "https://ai.comfly.chat";
+const COMFLY_API_KEY = import.meta.env.VITE_COMFLY_API_KEY ?? "";
+const COMFLY_BASE_URL = import.meta.env.VITE_COMFLY_BASE_URL ?? "https://ai.comfly.chat";
 
 export async function migrateApiConfig(): Promise<void> {
   const currentUrl = await getSetting("openai_base_url");
@@ -688,12 +658,6 @@ export async function pickDirectory(): Promise<string | null> {
 
 // ── File drop (Tauri-native fallback) ────────────────────────
 
-export type FileDropCallback = (paths: string[], x: number, y: number) => void;
-
-/**
- * Listen for Tauri-native file-drop events (fallback when browser
- * drag/drop is intercepted by the webview). Returns an unlisten function.
- */
 export async function onTauriFileDrop(
   cb: FileDropCallback,
 ): Promise<() => void> {
@@ -723,12 +687,6 @@ export async function onTauriFileDrop(
 
 // ── Per-project viewport persistence ─────────────────────────
 
-export interface SavedViewport {
-  x: number;
-  y: number;
-  zoom: number;
-}
-
 export function saveProjectViewport(
   projectId: string,
   viewport: SavedViewport,
@@ -747,14 +705,6 @@ export function removeProjectViewport(projectId: string): void {
 }
 
 // ── Connection persistence ───────────────────────────────────
-
-export interface ConnectionRow {
-  id: string;
-  project_id: string;
-  source_card_id: string;
-  target_card_id: string;
-  created_at: string;
-}
 
 export async function loadConnections(projectId: string): Promise<ConnectionRow[]> {
   if (isTauri) {
@@ -786,23 +736,6 @@ export async function clearProjectConnections(projectId: string): Promise<void> 
 }
 
 // ── Chat Session / Message persistence ───────────────────────
-
-export interface ChatSessionRow {
-  id: string;
-  project_id: string | null;
-  title: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ChatMessageRow {
-  id: string;
-  session_id: string;
-  role: string;
-  content: string;
-  metadata: string | null;
-  created_at: string;
-}
 
 export async function listChatSessions(): Promise<ChatSessionRow[]> {
   if (isTauri) {
