@@ -7,6 +7,9 @@ export const JIJING_CHAT_MODELS: ModelInfo[] = [
 export const JIJING_IMAGE_MODELS: ModelInfo[] = [
   { id: "nano-banana-2", display_name: "Nanobanana 2", capability: "IMAGE" },
   { id: "nano-banana-pro", display_name: "Nanobanana Pro", capability: "IMAGE" },
+  { id: "qwen-image-edit-2511-multipie", display_name: "Qwen 多角度", capability: "IMAGE" },
+  { id: "Real-ESRGAN", display_name: "Real-ESRGAN 超分", capability: "IMAGE" },
+  { id: "SeedVR2-Upscaler", display_name: "SeedVR2 高清放大", capability: "IMAGE" },
 ];
 
 export const ALL_JIJING_MODELS: ModelInfo[] = [

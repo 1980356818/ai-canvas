@@ -1,6 +1,7 @@
 import { useRef, useCallback, useEffect, useState } from "react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
+import { isEnhancerModel } from "@/config/model-ref-images";
 import EditorSwitch from "./EditorSwitch";
 
 const GAP = 12;
@@ -94,15 +95,18 @@ export default function FloatingEditor() {
   const zoom = viewport.zoom;
 
   const data = card.data as Record<string, unknown> | undefined;
+  const modelId = (data?.model as string) || "";
+  const isEnhancer = isEnhancerModel(modelId);
   const refImages = data?.refImages as Record<string, unknown> | undefined;
   const hasRefImages = refImages && Object.keys(refImages).length > 0;
   const upstreamTexts = data?.upstreamTexts as Record<string, unknown> | undefined;
   const hasUpstream = upstreamTexts && Object.keys(upstreamTexts).length > 0;
   const refFrames = data?.refFrames as unknown[] | undefined;
   const hasRefFrames = refFrames && refFrames.length > 0;
-  let autoHeight = baseHeight;
-  if (hasRefImages) autoHeight += 112;
-  if (hasUpstream) autoHeight += 64;
+  let autoHeight = isEnhancer ? 140 : baseHeight;
+  if (hasRefImages) autoHeight += isEnhancer ? 80 : 112;
+  else if (isEnhancer) autoHeight += 60;
+  if (!isEnhancer && hasUpstream) autoHeight += 64;
   if (hasRefFrames) autoHeight += 90;
 
   const width = userSize ? userSize.w : Math.max(minWidth, card.width);

@@ -157,16 +157,17 @@ export abstract class OpenAICompatProvider implements AIProvider {
     const emit = req.onProgress;
     emit?.({ percent: 0, phase: "submitting", label: "正在提交请求…" });
 
-    const rawSize = req.size || "1024x1024";
-    const size = toAspectRatio(rawSize);
     const body: Record<string, unknown> = {
       model: req.model ?? this.defaultImageModel(),
-      prompt: req.prompt,
-      size,
-      quality: req.quality || "standard",
       n: 1,
       response_format: "url",
     };
+
+    if (req.prompt) {
+      body.prompt = req.prompt;
+      body.size = toAspectRatio(req.size || "1024x1024");
+      body.quality = req.quality || "standard";
+    }
 
     if (req.referenceImages?.length) {
       body[this.imageRefField()] = req.referenceImages.map((ref) => ref.url);

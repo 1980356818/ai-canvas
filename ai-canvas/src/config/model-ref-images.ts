@@ -10,9 +10,18 @@ export interface RefImageSlot {
 interface ModelRefConfig {
   match: RegExp;
   slots: RefImageSlot[];
+  /** True for image-enhancer models that need no prompt (e.g. super-resolution). */
+  enhancer?: boolean;
 }
 
 const MODEL_REF_CONFIGS: ModelRefConfig[] = [
+  {
+    match: /^Real-ESRGAN$|^SeedVR2-Upscaler$/,
+    enhancer: true,
+    slots: [
+      { key: "refImage0", label: "待放大图片", description: "上传需要高清放大的图片（必填）", required: true },
+    ],
+  },
   {
     match: /^gpt-image/,
     slots: [
@@ -78,6 +87,12 @@ export function getRefSlotsForModel(modelId: string): RefImageSlot[] {
   if (!modelId) return FALLBACK_SLOTS;
   const cfg = MODEL_REF_CONFIGS.find((c) => c.match.test(modelId));
   return cfg?.slots ?? FALLBACK_SLOTS;
+}
+
+export function isEnhancerModel(modelId: string): boolean {
+  if (!modelId) return false;
+  const cfg = MODEL_REF_CONFIGS.find((c) => c.match.test(modelId));
+  return cfg?.enhancer === true;
 }
 
 export interface RefImageEntry {

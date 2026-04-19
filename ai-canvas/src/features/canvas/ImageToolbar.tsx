@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useRef, memo } from "react";
-import { Scissors, Download, ChevronDown, HardDriveDownload, Loader2 } from "lucide-react";
+import { Scissors, Download, ChevronDown, HardDriveDownload, Loader2, ZoomIn } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
-import type { CanvasCard } from "@/types";
+import type { CanvasCard, Connection } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useConnectionStore } from "@/stores/connectionStore";
 import { persistImage, getBase64ForApi, exportFile } from "@/lib/media";
 import { autoSave } from "@/lib/autoSave";
+import { injectOnConnect } from "@/lib/dataFlow";
 import { sizeFromRatio } from "@/shared/constants";
 import { updateProjectMeta } from "@/platform";
 import { cn } from "@/lib/utils";
@@ -396,6 +398,59 @@ export default function ImageToolbar() {
     }
   }, [card, saving, isRemoteUrl]);
 
+  const handleUpscale = useCallback(() => {
+    if (!card) return;
+    const imgData = card.data as { imageUrl?: string };
+    if (!imgData.imageUrl) return;
+
+    const projectId = useProjectStore.getState().currentProjectId;
+    if (!projectId) return;
+
+    const { maxZIndex } = useCardStore.getState();
+    const now = new Date().toISOString();
+    const GAP = 80;
+
+    const newCard: CanvasCard = {
+      id: crypto.randomUUID(),
+      projectId,
+      type: "ai_image",
+      x: card.x + card.width + GAP,
+      y: card.y,
+      width: card.width,
+      height: card.height,
+      zIndex: maxZIndex + 1,
+      locked: false,
+      collapsed: false,
+      data: {
+        content: "",
+        model: "SeedVR2-Upscaler",
+        provider: "jijing",
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+    useCardStore.getState().addCard(newCard);
+
+    const conn: Connection = {
+      id: crypto.randomUUID(),
+      projectId,
+      sourceCardId: card.id,
+      targetCardId: newCard.id,
+      createdAt: now,
+    };
+    useConnectionStore.getState().addConnection(conn);
+
+    injectOnConnect(card.id, newCard.id);
+
+    useCanvasStore.getState().setSelectedCardIds([newCard.id]);
+    useCanvasStore.getState().setEditingCardId(newCard.id);
+
+    autoSave.markDirty(newCard.id);
+    const count = useCardStore.getState().getCardsByProject(projectId).length;
+    useProjectStore.getState().updateProject(projectId, { nodeCount: count });
+    void updateProjectMeta(projectId, { nodeCount: count });
+  }, [card]);
+
   if (!card || (card.type !== "ai_image" && card.type !== "ai_multiangle")) return null;
   const imgData = card.data as { imageUrl?: string };
   if (!imgData.imageUrl) return null;
@@ -471,6 +526,17 @@ export default function ImageToolbar() {
             </div>
           )}
         </div>
+
+        <div className="mx-0.5 h-4 w-px bg-border" />
+
+        <button
+          title="高清放大"
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          onClick={handleUpscale}
+        >
+          <ZoomIn className="h-3.5 w-3.5" />
+          <span>高清放大</span>
+        </button>
 
         <div className="mx-0.5 h-4 w-px bg-border" />
 

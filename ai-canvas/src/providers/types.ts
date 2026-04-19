@@ -109,7 +109,7 @@ export interface GenerationProgress {
 }
 
 export interface ImageGenRequest {
-  prompt: string;
+  prompt?: string;
   model?: string;
   size?: string;
   quality?: string;

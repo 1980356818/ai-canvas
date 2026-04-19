@@ -10,6 +10,7 @@ interface ModelSelectorProps {
   providerId?: string;
   onChange: (modelId: string, providerId: string) => void;
   className?: string;
+  filter?: (model: ModelOption) => boolean;
 }
 
 function toCompositeKey(m: ModelOption): string {
@@ -31,6 +32,7 @@ export default function ModelSelector({
   providerId: propProviderId,
   onChange,
   className,
+  filter,
 }: ModelSelectorProps) {
   const [models, setModels] = useState<ModelOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +43,7 @@ export default function ModelSelector({
     modelService
       .getByCapability(capability)
       .then((list) => {
-        if (!cancelled) setModels(list);
+        if (!cancelled) setModels(filter ? list.filter(filter) : list);
       })
       .catch(() => {
         if (!cancelled) setModels([]);
@@ -52,7 +54,7 @@ export default function ModelSelector({
     return () => {
       cancelled = true;
     };
-  }, [capability]);
+  }, [capability, filter]);
 
   const multiProvider = useMemo(() => {
     const ids = new Set(models.map((m) => m.providerId));

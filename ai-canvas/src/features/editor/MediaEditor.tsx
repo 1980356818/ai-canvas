@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { Sparkles, Loader2, RefreshCw, X, Eye, EyeOff, ArrowDownLeft, Lock, AlertCircle } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, X, Eye, EyeOff, ArrowDownLeft, Lock, AlertCircle, ZoomIn } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import {
   getRefSlotsForModel,
+  isEnhancerModel,
   compactRefImages,
   buildCompactKeyMap,
   type RefImageEntry,
@@ -105,7 +106,6 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   const hasUpstream = upstreamEntries.length > 0;
 
   const finalPrompt = useMemo(() => buildFinalPrompt(data), [data]);
-  const canGenerate = finalPrompt.length > 0;
 
   useEffect(() => {
     if (data.model && (data as MediaData).provider) {
@@ -127,9 +127,19 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     [currentModel],
   );
 
+  const enhancer = isEnhancerModel(currentModel);
+  const hasRequiredRef = enhancer
+    && refSlots.some((s) => s.required && data.refImages?.[s.key]);
+  const canGenerate = finalPrompt.length > 0 || !!hasRequiredRef;
+
   const [hoveredRefId, setHoveredRefId] = useState<string | null>(null);
 
   const imageOptions = useImageRefSources(card.id, refSlots, data.refImages);
+
+  const enhancerFilter = useMemo(
+    () => enhancer ? (m: { id: string }) => isEnhancerModel(m.id) : undefined,
+    [enhancer],
+  );
 
   const handleModelChange = useCallback(
     (modelId: string, providerId: string) => {
@@ -297,7 +307,9 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
   const handleGenerate = useCallback(async () => {
     const prompt = buildFinalPrompt(data);
-    if (!prompt || generating) return;
+    if (generating) return;
+    const isEnhancer = isEnhancerModel(currentModel);
+    if (!prompt && !isEnhancer) return;
 
     console.group("[MediaEditor] handleGenerate 开始");
     console.log("[MediaEditor] 卡片数据:", {
@@ -387,10 +399,10 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
       if (count === 1) {
         const r = await provider.generateImage!({
-          prompt,
-          size: currentSize,
+          prompt: prompt || undefined,
+          size: isEnhancer ? undefined : currentSize,
           model: resolvedModel,
-          quality: "standard",
+          quality: isEnhancer ? undefined : "standard",
           referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
           onProgress: (p) => setCardProgress(card.id, { percent: p.percent, label: p.label }),
         });
@@ -418,10 +430,10 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           Array.from({ length: count }, (_, i) => {
             perStatus[i] = "running";
             return provider.generateImage!({
-              prompt,
-              size: currentSize,
+              prompt: prompt || undefined,
+              size: isEnhancer ? undefined : currentSize,
               model: resolvedModel,
-              quality: "standard",
+              quality: isEnhancer ? undefined : "standard",
               referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
               onProgress: (p) => {
                 perProgress[i] = p.percent;
@@ -528,11 +540,11 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
   return (
     <div className="flex h-full flex-col gap-2 p-3">
-      {refSlots.some((s) => data.refImages?.[s.key]) && (
+      {(enhancer || refSlots.some((s) => data.refImages?.[s.key])) && (
         <div className="flex shrink-0 flex-wrap gap-2">
           {refSlots.map((slot, idx) => {
             const entry = data.refImages?.[slot.key];
-            if (!entry) return null;
+            if (!entry && !enhancer) return null;
             return (
               <RefImageSlot
                 key={slot.key}
@@ -593,6 +605,18 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             </div>
           )}
         </>
+      ) : enhancer ? (
+        <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] px-3 py-2">
+          <ZoomIn className="h-4 w-4 shrink-0 text-primary" />
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-foreground">
+              {modelService.getDisplayName(currentModel, (data as MediaData).provider)}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              上传图片后点击放大，无需输入提示词
+            </p>
+          </div>
+        </div>
       ) : (
         <>
           {hasUpstream && (
@@ -665,8 +689,9 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           value={currentModel}
           providerId={(data as MediaData).provider}
           onChange={handleModelChange}
+          filter={enhancerFilter}
         />
-        {!isLocked && (
+        {!enhancer && !isLocked && (
           <SizeCombo
             value={currentSize}
             resolution={currentResolution}
@@ -675,7 +700,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             disabled={generating}
           />
         )}
-        {!isLocked && (
+        {!enhancer && !isLocked && (
           <div className="flex items-center rounded-md border border-input">
             {[1, 2, 4].map((n) => (
               <button
@@ -696,7 +721,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             ))}
           </div>
         )}
-        {!isLocked && hasUpstream && (
+        {!enhancer && !isLocked && hasUpstream && (
           <button
             onClick={() => setShowPreview((v) => !v)}
             className="flex items-center gap-1 rounded bg-muted px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
@@ -721,17 +746,17 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           {generating ? (
             <>
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              生成中
+              {enhancer ? "放大中" : "生成中"}
             </>
           ) : data.imageUrl ? (
             <>
               <RefreshCw className="h-3.5 w-3.5" />
-              重新生成
+              {enhancer ? "重新放大" : "重新生成"}
             </>
           ) : (
             <>
-              <Sparkles className="h-3.5 w-3.5" />
-              生成
+              {enhancer ? <ZoomIn className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+              {enhancer ? "开始放大" : "生成"}
             </>
           )}
         </button>
