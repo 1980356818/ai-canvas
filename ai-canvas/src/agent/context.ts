@@ -4,11 +4,11 @@ import type {
   CardSnapshot,
   ProviderCapability,
 } from "./types";
-import type { AIProvider } from "@/providers/types";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, CardType } from "@/types";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { autoSave } from "@/lib/autoSave";
+import { modelService } from "@/services/models";
 
 function findOpenPosition(
   cards: CanvasCard[],
@@ -43,21 +43,10 @@ function findOpenPosition(
   return { x: Math.round(x), y: Math.round(y) };
 }
 
-/** Registry shim from `agentStore` / global provider registry */
-export type AgentProviderManager = {
-  get(id: string): AIProvider | undefined;
-  getDefault(): AIProvider;
-  setDefault(id: string): void;
-  resolve(required: ProviderCapability[]): AIProvider;
-  listProviders(): unknown[];
-  register(_p: unknown): void;
-};
-
 export function createAgentContext(
   projectId: string,
   sessionId: string,
   model: string,
-  providerManager: AgentProviderManager,
 ): AgentContext {
   return {
     projectId,
@@ -143,7 +132,7 @@ export function createAgentContext(
       capability: ProviderCapability,
       request: unknown,
     ): Promise<unknown> {
-      const provider = providerManager.resolve([capability]);
+      const provider = modelService.resolveProvider(model);
       if (capability === "chat") {
         return provider.chat(request as Parameters<typeof provider.chat>[0]);
       }

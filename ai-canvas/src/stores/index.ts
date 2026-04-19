@@ -5,5 +5,5 @@ export { useConnectionStore } from "./connectionStore";
 export { useUIStore } from "./uiStore";
 export { useSettingsStore } from "./settingsStore";
 export { useChatStore } from "./chatStore";
-export { useAgentStore, providerManager, toolRegistry } from "./agentStore";
+export { useAgentStore, toolRegistry } from "./agentStore";
 export { useProviderStore, parseModelRef } from "./providerStore";

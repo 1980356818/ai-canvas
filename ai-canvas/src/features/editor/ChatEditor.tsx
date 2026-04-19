@@ -7,7 +7,6 @@ import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/platform";
-import { providerService } from "@/services/provider.service";
 import type { UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 import "@/providers";
 import { persistImage, getDisplayUrl, getBase64ForApi } from "@/lib/media";
@@ -51,6 +50,7 @@ interface ChatData {
   content?: string;
   result?: string;
   model?: string;
+  provider?: string;
   refImages?: Record<string, RefImageEntry>;
   inlineRefs?: InlineImageRef[];
   directMedia?: MediaAttachment[];
@@ -74,10 +74,17 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
   const directMedia = data.directMedia ?? [];
 
   useEffect(() => {
-    if (data.model) {
+    if (data.model && data.provider) {
       setCurrentModel(data.model);
+    } else if (data.model) {
+      setCurrentModel(data.model);
+      const p = modelService.tryResolveProvider(data.model);
+      if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
     } else {
-      modelService.getDefaultChatModel().then(setCurrentModel);
+      modelService.getDefaultChatModel().then(({ modelId, providerId }) => {
+        setCurrentModel(modelId);
+        updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+      });
     }
   }, [data.model]);
 
@@ -413,7 +420,8 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     ];
 
     try {
-      const resp = await providerService.chat("comfly", {
+      const provider = modelService.resolveProvider(model, data.provider);
+      const resp = await provider.chat({
         model,
         systemPrompt: systemPrompt || "You are a helpful AI assistant.",
         messages: unifiedMessages,
@@ -553,6 +561,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         <ModelSelector
           capability="CHAT"
           value={currentModel}
+          providerId={data.provider}
           onChange={handleModelChange}
         />
         <button

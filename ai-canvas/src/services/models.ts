@@ -1,6 +1,15 @@
 import type { ModelInfo } from "@/types";
 import { registry } from "@/providers/registry";
-import type { ModelOption, ProviderCapability } from "@/providers/types";
+import type { AIProvider, ModelOption, ProviderCapability } from "@/providers/types";
+
+// ── Types ────────────────────────────────────────────────────
+
+export interface ModelRef {
+  modelId: string;
+  providerId: string;
+}
+
+// ── Helpers ──────────────────────────────────────────────────
 
 function matchCapability(m: ModelInfo, cap: string): boolean {
   const mc = (m.capability ?? "").toUpperCase();
@@ -33,7 +42,49 @@ async function aggregateModels(capability: string): Promise<ModelOption[]> {
   return result;
 }
 
+function toRef(m: ModelOption | undefined, fallbackModel: string, fallbackProvider: string): ModelRef {
+  return m
+    ? { modelId: m.id, providerId: m.providerId }
+    : { modelId: fallbackModel, providerId: fallbackProvider };
+}
+
+// ── Service ──────────────────────────────────────────────────
+
 export const modelService = {
+
+  /**
+   * Resolve a provider instance for the given model.
+   *
+   * 1. If `providerId` is supplied and registered → return it.
+   * 2. Otherwise scan all providers' static models for a match.
+   * 3. If nothing found → throw (never silently fall back).
+   */
+  resolveProvider(modelId: string, providerId?: string): AIProvider {
+    if (providerId) {
+      const p = registry.tryGet(providerId);
+      if (p) return p;
+      console.warn(`[resolveProvider] "${providerId}" 未注册，按 modelId 反查`);
+    }
+    for (const p of registry.getAll()) {
+      const hit = p.listModelsSync?.() ?? [];
+      if (hit.some((m) => m.id === modelId)) return p;
+    }
+    throw new Error(`无法找到模型 "${modelId}" 对应的平台，请在设置中检查平台配置`);
+  },
+
+  /**
+   * Resolve provider, returning `undefined` instead of throwing when not found.
+   */
+  tryResolveProvider(modelId: string, providerId?: string): AIProvider | undefined {
+    try {
+      return modelService.resolveProvider(modelId, providerId);
+    } catch {
+      return undefined;
+    }
+  },
+
+  // ── Aggregation ──────────────────────────────────────────
+
   async getAll(): Promise<ModelOption[]> {
     const providers = registry.getAll();
     const result: ModelOption[] = [];
@@ -64,20 +115,24 @@ export const modelService = {
     return aggregateModels("VIDEO");
   },
 
-  async getDefaultChatModel(): Promise<string> {
+  // ── Defaults (return full ModelRef) ──────────────────────
+
+  async getDefaultChatModel(): Promise<ModelRef> {
     const models = await aggregateModels("CHAT");
-    return models[0]?.id ?? "gemini-3.1-pro-preview-thinking-high";
+    return toRef(models[0], "gemini-3.1-pro-preview-thinking-high", "comfly");
   },
 
-  async getDefaultImageModel(): Promise<string> {
+  async getDefaultImageModel(): Promise<ModelRef> {
     const models = await aggregateModels("IMAGE");
-    return models[0]?.id ?? "gemini-3.1-flash-image-preview";
+    return toRef(models[0], "gemini-3.1-flash-image-preview", "comfly");
   },
 
-  async getDefaultVideoModel(): Promise<string> {
+  async getDefaultVideoModel(): Promise<ModelRef> {
     const models = await aggregateModels("VIDEO");
-    return models[0]?.id ?? "veo3.1-fast";
+    return toRef(models[0], "veo3.1-fast", "comfly");
   },
+
+  // ── Resolution helpers ───────────────────────────────────
 
   resolveImageModelId(baseId: string, resolution: string, providerId?: string): string {
     const provider = providerId ? registry.tryGet(providerId) : undefined;

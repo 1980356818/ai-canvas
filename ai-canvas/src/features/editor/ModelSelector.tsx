@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 interface ModelSelectorProps {
   capability: "CHAT" | "IMAGE" | "VIDEO";
   value: string;
+  providerId?: string;
   onChange: (modelId: string, providerId: string) => void;
   className?: string;
 }
@@ -17,13 +18,17 @@ function toCompositeKey(m: ModelOption): string {
 
 function parseCompositeKey(key: string): { providerId: string; modelId: string } {
   const sep = key.indexOf(":");
-  if (sep < 0) return { providerId: "comfly", modelId: key };
+  if (sep < 0) {
+    const p = modelService.tryResolveProvider(key);
+    return { providerId: p?.descriptor.id ?? "", modelId: key };
+  }
   return { providerId: key.slice(0, sep), modelId: key.slice(sep + 1) };
 }
 
 export default function ModelSelector({
   capability,
   value,
+  providerId: propProviderId,
   onChange,
   className,
 }: ModelSelectorProps) {
@@ -56,10 +61,14 @@ export default function ModelSelector({
 
   const selectedKey = useMemo(() => {
     if (!value) return "";
-    const exact = models.find((m) => m.id === value);
-    if (exact) return toCompositeKey(exact);
+    if (propProviderId) {
+      const exact = models.find((m) => m.id === value && m.providerId === propProviderId);
+      if (exact) return toCompositeKey(exact);
+    }
+    const fallback = models.find((m) => m.id === value);
+    if (fallback) return toCompositeKey(fallback);
     return value;
-  }, [value, models]);
+  }, [value, propProviderId, models]);
 
   const handleChange = (compositeKey: string) => {
     const { providerId, modelId } = parseCompositeKey(compositeKey);

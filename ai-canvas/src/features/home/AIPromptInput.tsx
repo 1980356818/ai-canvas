@@ -61,7 +61,7 @@ export default function AIPromptInput() {
     const loadDefault = mode === "chat"
       ? modelService.getDefaultChatModel()
       : modelService.getDefaultImageModel();
-    loadDefault.then(setSelectedModel);
+    loadDefault.then((ref) => setSelectedModel(ref.modelId));
   }, [mode]);
 
   const addImages = useCallback(async (sources: string[]) => {

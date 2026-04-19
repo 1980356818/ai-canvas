@@ -60,6 +60,10 @@ export abstract class OpenAICompatProvider implements AIProvider {
     return "veo3.1";
   }
 
+  protected imageRefField(): string {
+    return "image";
+  }
+
   protected videoEndpoint(): string {
     return "/v2/videos/generations";
   }
@@ -71,6 +75,10 @@ export abstract class OpenAICompatProvider implements AIProvider {
   getDisplayName(modelId: string): string | undefined {
     const m = this.staticModels().find((m) => m.id === modelId);
     return m ? (m.display_name ?? m.id) : undefined;
+  }
+
+  listModelsSync(): ModelInfo[] {
+    return this.staticModels();
   }
 
   async listModels(): Promise<ModelInfo[]> {
@@ -161,7 +169,7 @@ export abstract class OpenAICompatProvider implements AIProvider {
     };
 
     if (req.referenceImages?.length) {
-      body.image = req.referenceImages.map((ref) => ref.url);
+      body[this.imageRefField()] = req.referenceImages.map((ref) => ref.url);
     }
 
     const raw = await aiProxy(this.providerId, "/v1/images/generations", body);
@@ -174,14 +182,20 @@ export abstract class OpenAICompatProvider implements AIProvider {
       const taskId = taskIdMatch ? taskIdMatch[1]! : String(data.task_id);
       emit?.({ percent: 5, phase: "queued", label: "已提交，排队中…" });
 
-      const result = await waitForTask(taskId, (progress, status) => {
-        const st = status.toLowerCase();
-        if (st === "queued" || st === "pending") {
-          emit?.({ percent: Math.max(5, progress), phase: "queued", label: "排队中…" });
-        } else {
-          emit?.({ percent: Math.min(progress, 90) || 10, phase: "generating", label: "生成中…" });
-        }
-      });
+      const result = await waitForTask(
+        taskId,
+        (progress, status) => {
+          const st = status.toLowerCase();
+          if (st === "queued" || st === "pending") {
+            emit?.({ percent: Math.max(5, progress), phase: "queued", label: "排队中…" });
+          } else {
+            emit?.({ percent: Math.min(progress, 90) || 10, phase: "generating", label: "生成中…" });
+          }
+        },
+        undefined,
+        undefined,
+        this.providerId,
+      );
 
       const failed = result.status.toLowerCase();
       if (failed === "failed" || failed === "error" || failed === "cancelled") {
@@ -240,14 +254,20 @@ export abstract class OpenAICompatProvider implements AIProvider {
       const taskId = taskIdMatch ? taskIdMatch[1]! : String(data.task_id);
       emit?.({ percent: 5, phase: "queued", label: "已提交，排队中…" });
 
-      const result = await waitForTask(taskId, (progress, status) => {
-        const st = status.toLowerCase();
-        if (st === "queued" || st === "pending") {
-          emit?.({ percent: Math.max(5, progress), phase: "queued", label: "排队中…" });
-        } else {
-          emit?.({ percent: Math.min(progress, 90) || 10, phase: "generating", label: "视频生成中…" });
-        }
-      });
+      const result = await waitForTask(
+        taskId,
+        (progress, status) => {
+          const st = status.toLowerCase();
+          if (st === "queued" || st === "pending") {
+            emit?.({ percent: Math.max(5, progress), phase: "queued", label: "排队中…" });
+          } else {
+            emit?.({ percent: Math.min(progress, 90) || 10, phase: "generating", label: "视频生成中…" });
+          }
+        },
+        undefined,
+        undefined,
+        this.providerId,
+      );
 
       const failed = result.status.toLowerCase();
       if (failed === "failed" || failed === "error" || failed === "cancelled") {

@@ -8,7 +8,6 @@ import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
 import { scheduleBackgroundSave, getBase64ForApi, getDisplayUrl } from "@/lib/media";
 import { useProjectStore } from "@/stores/projectStore";
-import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import { useConnectionStore } from "@/stores/connectionStore";
@@ -89,10 +88,17 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const canGenerate = finalPrompt.length > 0;
 
   useEffect(() => {
-    if (data.model) {
+    if (data.model && data.provider) {
       setCurrentModel(data.model);
+    } else if (data.model) {
+      setCurrentModel(data.model);
+      const p = modelService.tryResolveProvider(data.model);
+      if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
     } else {
-      modelService.getDefaultVideoModel().then(setCurrentModel);
+      modelService.getDefaultVideoModel().then(({ modelId, providerId }) => {
+        setCurrentModel(modelId);
+        updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+      });
     }
   }, [data.model]);
 
@@ -198,8 +204,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     useUIStore.getState().setCardError(card.id, null);
 
     try {
-      const pid = data.provider || "comfly";
-      const provider = providerManager.get(pid) ?? providerManager.getDefault();
+      const provider = modelService.resolveProvider(currentModel, data.provider);
       if (!provider.generateVideo) {
         throw new Error("当前 Provider 不支持视频生成");
       }
@@ -352,6 +357,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         <ModelSelector
           capability="VIDEO"
           value={currentModel}
+          providerId={data.provider}
           onChange={handleModelChange}
         />
         {!isLocked && (

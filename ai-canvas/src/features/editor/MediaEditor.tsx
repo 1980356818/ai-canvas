@@ -9,7 +9,6 @@ import { hasApiKey } from "@/platform";
 import { getBase64ForApi } from "@/lib/media";
 import { modelService } from "@/services/models";
 import { scheduleBackgroundSave } from "@/lib/media";
-import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import {
@@ -109,10 +108,17 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   const canGenerate = finalPrompt.length > 0;
 
   useEffect(() => {
-    if (data.model) {
+    if (data.model && (data as MediaData).provider) {
       setCurrentModel(data.model);
+    } else if (data.model) {
+      setCurrentModel(data.model);
+      const p = modelService.tryResolveProvider(data.model);
+      if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
     } else {
-      modelService.getDefaultImageModel().then(setCurrentModel);
+      modelService.getDefaultImageModel().then(({ modelId, providerId }) => {
+        setCurrentModel(modelId);
+        updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+      });
     }
   }, [data.model]);
 
@@ -336,8 +342,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     useUIStore.getState().setCardError(card.id, null);
 
     try {
-      const pid = (data as MediaData).provider || "comfly";
-      const provider = providerManager.get(pid) ?? providerManager.getDefault();
+      const provider = modelService.resolveProvider(currentModel, (data as MediaData).provider);
       if (!provider.generateImage) {
         throw new Error("当前 Provider 不支持图片生成");
       }
@@ -374,7 +379,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       });
 
       const resolvedModel = currentModel
-        ? modelService.resolveImageModelId(currentModel, currentResolution, pid)
+        ? modelService.resolveImageModelId(currentModel, currentResolution, (data as MediaData).provider)
         : undefined;
 
       const count = data.batchSize ?? 1;
@@ -658,6 +663,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         <ModelSelector
           capability="IMAGE"
           value={currentModel}
+          providerId={(data as MediaData).provider}
           onChange={handleModelChange}
         />
         {!isLocked && (

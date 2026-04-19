@@ -7,21 +7,7 @@ import type {
   ImageGenResponse,
   VideoGenRequest,
   VideoGenResponse,
-  ModelOption,
-  ProviderCapability,
 } from "@/providers/types";
-import type { ModelInfo } from "@/types";
-
-function matchCapability(m: ModelInfo, cap: ProviderCapability): boolean {
-  const mc = (m.capability ?? "").toUpperCase();
-  switch (cap) {
-    case "chat": return mc === "CHAT" || mc === "";
-    case "image_gen": return mc === "IMAGE";
-    case "video_gen": return mc === "VIDEO";
-    case "streaming": return mc === "CHAT" || mc === "";
-    default: return true;
-  }
-}
 
 export const providerService = {
   async streamChat(
@@ -58,24 +44,6 @@ export const providerService = {
       throw new Error(`${provider.descriptor.name} 不支持视频生成`);
     }
     return provider.generateVideo(req);
-  },
-
-  async getModels(capability: ProviderCapability): Promise<ModelOption[]> {
-    const providers = registry.getEnabledByCapability(capability);
-    const result: ModelOption[] = [];
-    for (const p of providers) {
-      const models = await p.listModels();
-      for (const m of models) {
-        if (matchCapability(m, capability)) {
-          result.push({
-            ...m,
-            providerId: p.descriptor.id,
-            providerName: p.descriptor.name,
-          });
-        }
-      }
-    }
-    return result;
   },
 
   getProvider(id: string) {

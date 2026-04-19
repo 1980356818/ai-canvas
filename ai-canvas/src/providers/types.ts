@@ -151,6 +151,9 @@ export interface AIProvider {
 
   listModels(): Promise<ModelInfo[]>;
 
+  /** Synchronous model list for provider resolution (returns static models). */
+  listModelsSync?(): ModelInfo[];
+
   chat(req: ChatRequest): Promise<ChatResponse>;
 
   streamChat(

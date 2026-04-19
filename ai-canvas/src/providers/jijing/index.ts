@@ -27,6 +27,10 @@ export class JiJingProvider extends OpenAICompatProvider {
     return "nano-banana-2";
   }
 
+  protected imageRefField(): string {
+    return "images";
+  }
+
   resolveImageModelId(baseId: string, resolution: string): string {
     return resolveJiJingImageModelId(baseId, resolution);
   }

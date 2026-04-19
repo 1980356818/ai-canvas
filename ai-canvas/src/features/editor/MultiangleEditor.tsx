@@ -7,7 +7,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/platform";
 import { getBase64ForApi, getDisplayUrl } from "@/lib/media";
-import { providerManager } from "@/stores/agentStore";
+import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
 import {
   compactRefImages,
@@ -191,7 +191,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
     setError(null);
 
     try {
-      const provider = providerManager.getDefault();
+      const provider = modelService.resolveProvider(MODEL_ID);
       if (!provider.generateImage) {
         throw new Error("当前 Provider 不支持图片生成");
       }

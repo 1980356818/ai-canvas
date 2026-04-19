@@ -180,10 +180,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     if (!get().chatModel) {
-      const chat = await modelService.getDefaultChatModel();
-      const image = await modelService.getDefaultImageModel();
-      const video = await modelService.getDefaultVideoModel();
-      set({ chatModel: chat, imageModel: image, videoModel: video });
+      const [chat, image, video] = await Promise.all([
+        modelService.getDefaultChatModel(),
+        modelService.getDefaultImageModel(),
+        modelService.getDefaultVideoModel(),
+      ]);
+      set({ chatModel: chat.modelId, imageModel: image.modelId, videoModel: video.modelId });
     }
   },
 
@@ -255,12 +257,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!prompt && !hasMedia) return;
 
     if (!state.chatModel || !state.imageModel || !state.videoModel) {
-      const [chat, image, video] = await Promise.all([
-        state.chatModel ? Promise.resolve(state.chatModel) : modelService.getDefaultChatModel(),
-        state.imageModel ? Promise.resolve(state.imageModel) : modelService.getDefaultImageModel(),
-        state.videoModel ? Promise.resolve(state.videoModel) : modelService.getDefaultVideoModel(),
+      const [chatRef, imageRef, videoRef] = await Promise.all([
+        state.chatModel ? null : modelService.getDefaultChatModel(),
+        state.imageModel ? null : modelService.getDefaultImageModel(),
+        state.videoModel ? null : modelService.getDefaultVideoModel(),
       ]);
-      set({ chatModel: chat, imageModel: image, videoModel: video });
+      set({
+        chatModel: chatRef?.modelId ?? state.chatModel,
+        imageModel: imageRef?.modelId ?? state.imageModel,
+        videoModel: videoRef?.modelId ?? state.videoModel,
+      });
     }
 
     set({

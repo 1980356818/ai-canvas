@@ -6,7 +6,6 @@ import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
-import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import type { RefImageEntry } from "@/config/model-ref-images";
@@ -19,6 +18,7 @@ interface TryOnData {
   garmentImageUrl?: string;
   resultImageUrl?: string;
   model?: string;
+  provider?: string;
   refImages?: Record<string, RefImageEntry>;
 }
 
@@ -36,10 +36,17 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
   const data = card.data as TryOnData;
 
   useEffect(() => {
-    if (data.model) {
+    if (data.model && data.provider) {
       setCurrentModel(data.model);
+    } else if (data.model) {
+      setCurrentModel(data.model);
+      const p = modelService.tryResolveProvider(data.model);
+      if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
     } else {
-      modelService.getDefaultImageModel().then(setCurrentModel);
+      modelService.getDefaultImageModel().then(({ modelId, providerId }) => {
+        setCurrentModel(modelId);
+        updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+      });
     }
   }, [data.model]);
 
@@ -125,8 +132,7 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
     useUIStore.getState().setCardError(card.id, null);
 
     try {
-      const pid = data.provider || "comfly";
-      const provider = providerManager.get(pid) ?? providerManager.getDefault();
+      const provider = modelService.resolveProvider(currentModel, data.provider);
       if (!provider.generateImage) {
         throw new Error("当前 Provider 不支持图片生成");
       }
@@ -226,6 +232,7 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
         <ModelSelector
           capability="IMAGE"
           value={currentModel}
+          providerId={data.provider}
           onChange={handleModelChange}
         />
         <div className="flex-1" />
