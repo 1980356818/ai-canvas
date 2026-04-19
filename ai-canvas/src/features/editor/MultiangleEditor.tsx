@@ -1,10 +1,11 @@
 import { useCallback, useRef, useState } from "react";
 import { Sparkles, Loader2, RefreshCw, ImageIcon, X } from "lucide-react";
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard, Connection } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
-import { hasApiKey } from "@/lib/tauri";
+import { hasApiKey } from "@/platform";
 import { getBase64ForApi, getDisplayUrl } from "@/lib/media";
 import { providerManager } from "@/stores/agentStore";
 import { cn } from "@/lib/utils";
@@ -12,7 +13,7 @@ import {
   compactRefImages,
   type RefImageEntry,
 } from "@/config/model-ref-images";
-import { useConnectionStore, type Connection } from "@/stores/connectionStore";
+import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize } from "@/shared/constants";
 import SizeCombo from "./SizeCombo";

@@ -1,10 +1,11 @@
 import { useEffect } from "react";
 import { useCanvasStore, lastPointerWorld } from "@/stores/canvasStore";
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useConnectionStore } from "@/stores/connectionStore";
-import { deleteCard, updateProjectMeta } from "@/lib/tauri";
+import { deleteCard, updateProjectMeta } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
 import { history, recordBatchDelete } from "@/lib/history";
 import { copyCards, pasteCards } from "@/lib/clipboard";

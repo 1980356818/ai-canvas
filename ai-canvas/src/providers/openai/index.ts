@@ -1,18 +1,26 @@
-import type { ContentPart } from "../types";
 import type {
   AIProvider,
   ChatRequest,
   ChatResponse,
-  ChatResponseToolCall,
+  StreamEvent,
   ImageGenRequest,
   ImageGenResponse,
   VideoGenRequest,
   VideoGenResponse,
-} from "./base";
-import { throwIfError } from "./errors";
+} from "../types";
+import { throwIfError } from "../errors";
+import {
+  formatMessagesForOpenAI,
+  parseOpenAIChatResponse,
+  parseOpenAIStreamChunk,
+  resetStreamState,
+  getAccumulatedToolCalls,
+} from "./formatter";
+import { ALL_OPENAI_MODELS } from "./models";
+import { aiProxy, aiProxyStream, saveMedia } from "@/platform";
 import { waitForTask } from "@/services/tasks";
-import { aiProxy, saveMedia } from "@/lib/tauri";
 import { useProjectStore } from "@/stores/projectStore";
+import type { ModelInfo } from "@/types";
 
 function gcd(a: number, b: number): number {
   return b === 0 ? a : gcd(b, a % b);
@@ -28,107 +36,83 @@ function toAspectRatio(size: string): string {
   return `${w / d}:${h / d}`;
 }
 
-function contentToOpenAI(
-  content: string | ContentPart[],
-): string | Array<Record<string, unknown>> {
-  if (typeof content === "string") return content;
-  return content.map((p) => {
-    switch (p.type) {
-      case "text":
-        return { type: "text", text: p.text };
-      case "image":
-        return { type: "image_url", image_url: { url: p.url } };
-      default:
-        return { type: "text", text: `[file: ${(p as ContentPart & { type: "file" }).name}]` };
-    }
-  });
-}
-
 export class OpenAIProvider implements AIProvider {
   readonly descriptor = {
-    id: "openai",
-    name: "OpenAI",
-    capabilities: ["chat", "vision", "tool_calling", "image_gen", "video_gen"] as const,
+    id: "openai" as const,
+    name: "OpenAI / 兼容网关",
+    capabilities: ["chat", "vision", "tool_calling", "image_gen", "video_gen", "streaming"] as const,
+    configSchema: [
+      { key: "apiKey", label: "API Key", type: "password" as const, required: true },
+      { key: "baseUrl", label: "Base URL", type: "url" as const, required: false, default: "https://api.openai.com" },
+    ],
   };
 
+  async listModels(): Promise<ModelInfo[]> {
+    return ALL_OPENAI_MODELS;
+  }
+
   async chat(req: ChatRequest): Promise<ChatResponse> {
-    const messages: Array<Record<string, unknown>> = [
-      { role: "system", content: req.systemPrompt },
-    ];
-
-    for (const msg of req.messages) {
-      if (msg.role === "assistant" && msg.toolCalls?.length) {
-        messages.push({
-          role: "assistant",
-          content: msg.content ? contentToOpenAI(msg.content) : null,
-          tool_calls: msg.toolCalls.map((tc) => ({
-            id: tc.id,
-            type: "function",
-            function: { name: tc.name, arguments: tc.arguments },
-          })),
-        });
-      } else if (msg.role === "tool" && msg.toolCallId) {
-        messages.push({
-          role: "tool",
-          tool_call_id: msg.toolCallId,
-          content:
-            typeof msg.content === "string"
-              ? msg.content
-              : JSON.stringify(msg.content),
-        });
-      } else {
-        messages.push({
-          role: msg.role,
-          content: contentToOpenAI(msg.content),
-        });
-      }
-    }
-
-    const body: Record<string, unknown> = {
-      model: req.model,
-      messages,
-    };
+    const messages = formatMessagesForOpenAI(req);
+    const body: Record<string, unknown> = { model: req.model, messages };
     if (req.tools?.length) body.tools = req.tools;
     if (req.maxTokens) body.max_tokens = req.maxTokens;
+    if (req.temperature != null) body.temperature = req.temperature;
 
     const raw = await aiProxy("openai", "/v1/chat/completions", body);
     throwIfError(raw.status, raw.body);
+    return parseOpenAIChatResponse(raw);
+  }
 
-    const data = JSON.parse(raw.body);
-    const choice = data.choices?.[0];
-    if (!choice) throw new Error("No response from model");
+  async streamChat(
+    req: ChatRequest,
+    onEvent: (event: StreamEvent) => void,
+  ): Promise<{ abort: () => void }> {
+    resetStreamState();
 
-    const toolCalls: ChatResponseToolCall[] = (
-      choice.message.tool_calls ?? []
-    ).map(
-      (tc: {
-        id: string;
-        function: { name: string; arguments: string };
-      }) => ({
-        id: tc.id,
-        name: tc.function.name,
-        arguments: JSON.parse(tc.function.arguments),
-      }),
+    const messages = formatMessagesForOpenAI(req);
+    const body: Record<string, unknown> = {
+      model: req.model,
+      messages,
+      stream: true,
+    };
+    if (req.tools?.length) body.tools = req.tools;
+    if (req.maxTokens) body.max_tokens = req.maxTokens;
+    if (req.temperature != null) body.temperature = req.temperature;
+
+    const { abort } = await aiProxyStream(
+      "openai",
+      "/v1/chat/completions",
+      body,
+      {
+        onChunk: (raw) => parseOpenAIStreamChunk(raw, onEvent),
+        onDone: () => {
+          const tcs = getAccumulatedToolCalls();
+          for (const tc of tcs) {
+            onEvent({ type: "tool_call_end", id: tc.id });
+          }
+          onEvent({ type: "done" });
+        },
+        onError: (e) => onEvent({ type: "error", message: e }),
+      },
     );
 
-    return {
-      content: choice.message.content ?? null,
-      toolCalls,
-      usage: {
-        promptTokens: data.usage?.prompt_tokens ?? 0,
-        completionTokens: data.usage?.completion_tokens ?? 0,
-      },
-      finishReason: choice.finish_reason === "tool_calls" ? "tool_calls" : "stop",
-    };
+    if (req.signal) {
+      const forwardAbort = () => {
+        void abort();
+      };
+      if (req.signal.aborted) forwardAbort();
+      else req.signal.addEventListener("abort", forwardAbort, { once: true });
+    }
+
+    return { abort };
   }
 
   async generateImage(req: ImageGenRequest): Promise<ImageGenResponse> {
-    const rawSize = req.size || "1024x1024";
-    const size = toAspectRatio(rawSize);
     const emit = req.onProgress;
-
     emit?.({ percent: 0, phase: "submitting", label: "正在提交请求…" });
 
+    const rawSize = req.size || "1024x1024";
+    const size = toAspectRatio(rawSize);
     const body: Record<string, unknown> = {
       model: req.model ?? "gpt-image-1.5",
       prompt: req.prompt,
@@ -138,36 +122,18 @@ export class OpenAIProvider implements AIProvider {
       response_format: "url",
     };
 
-    if (req.referenceImages && req.referenceImages.length > 0) {
+    if (req.referenceImages?.length) {
       body.image = req.referenceImages.map((ref) => ref.url);
     }
 
-    const imagesCount = Array.isArray(body.image) ? (body.image as unknown[]).length : 0;
-    console.group("[OpenAI] generateImage 请求");
-    console.log(
-      `[OpenAI] 参考图: ${imagesCount > 0 ? `✅ ${imagesCount} 张` : "❌ 无"}`,
-      `| 模型: ${body.model}`,
-      `| prompt: ${req.prompt.slice(0, 100)}`,
-    );
-    if (imagesCount > 0) {
-      console.log("[OpenAI] 参考图URL前缀:", (body.image as string[]).map((u) => u.slice(0, 80)));
-    }
-
     const raw = await aiProxy("openai", "/v1/images/generations", body);
-
-    console.log("[OpenAI] 响应状态:", raw.status);
-    console.log("[OpenAI] 响应体预览:", raw.body.slice(0, 500));
-    console.groupEnd();
-
     throwIfError(raw.status, raw.body);
 
-    const taskIdMatch = raw.body.match(/"task_id"\s*:\s*(\d+)/);
     const data = JSON.parse(raw.body);
+    const taskIdMatch = raw.body.match(/"task_id"\s*:\s*(\d+)/);
 
     if (data.task_id || taskIdMatch) {
       const taskId = taskIdMatch ? taskIdMatch[1]! : String(data.task_id);
-      console.log("[OpenAI] 异步任务模式, taskId:", taskId);
-
       emit?.({ percent: 5, phase: "queued", label: "已提交，排队中…" });
 
       const result = await waitForTask(taskId, (progress, status) => {
@@ -175,34 +141,23 @@ export class OpenAIProvider implements AIProvider {
         if (st === "queued" || st === "pending") {
           emit?.({ percent: Math.max(5, progress), phase: "queued", label: "排队中…" });
         } else {
-          const pct = progress > 0 ? Math.min(progress, 90) : 10;
-          emit?.({ percent: pct, phase: "generating", label: "生成中…" });
+          emit?.({ percent: Math.min(progress, 90) || 10, phase: "generating", label: "生成中…" });
         }
-      });
-
-      console.log("[OpenAI] 任务完成:", {
-        status: result.status,
-        resultUrl: result.resultUrl?.slice(0, 150),
-        errorMessage: result.errorMessage,
       });
 
       const failed = result.status.toLowerCase();
       if (failed === "failed" || failed === "error" || failed === "cancelled") {
         throw new Error(result.errorMessage || "图片生成失败");
       }
-      if (!result.resultUrl) {
-        throw new Error("图片生成完成但未返回结果地址");
-      }
+      if (!result.resultUrl) throw new Error("图片生成完成但未返回结果地址");
 
       emit?.({ percent: 92, phase: "saving", label: "正在保存图片…" });
       const pid = useProjectStore.getState().currentProjectId ?? undefined;
       try {
         const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
-        console.log("[OpenAI] 图片已保存:", saved.localPath);
         emit?.({ percent: 100, phase: "saving", label: "完成" });
         return { url: saved.localPath };
-      } catch (e) {
-        console.warn("[OpenAI] 本地保存失败，降级使用远程地址:", e);
+      } catch {
         emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
         return { url: result.resultUrl };
       }
@@ -216,8 +171,7 @@ export class OpenAIProvider implements AIProvider {
       const saved = await saveMedia(img.url, undefined, undefined, pid);
       emit?.({ percent: 100, phase: "saving", label: "完成" });
       return { url: saved.localPath, revisedPrompt: img.revised_prompt };
-    } catch (e) {
-      console.warn("[OpenAI] 本地保存失败，降级使用远程地址:", e);
+    } catch {
       emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
       return { url: img.url, revisedPrompt: img.revised_prompt };
     }
@@ -231,30 +185,19 @@ export class OpenAIProvider implements AIProvider {
       prompt: req.prompt,
       model: req.model ?? "veo3.1",
     };
-
-    if (req.referenceImages && req.referenceImages.length > 0) {
+    if (req.referenceImages?.length) {
       body.images = req.referenceImages.map((ref) => ref.url);
     }
-
     if (req.size && req.size !== "auto") {
       body.aspect_ratio = toAspectRatio(req.size);
     }
-
-    console.log("[OpenAI] generateVideo 请求:", {
-      model: body.model,
-      promptLength: req.prompt.length,
-      promptPreview: req.prompt.slice(0, 200),
-      hasImages: !!body.images,
-      imagesCount: Array.isArray(body.images) ? (body.images as unknown[]).length : 0,
-      aspect_ratio: body.aspect_ratio,
-    });
 
     const raw = await aiProxy("openai", "/v2/videos/generations", body);
     throwIfError(raw.status, raw.body);
 
     const data = JSON.parse(raw.body);
-
     const taskIdMatch = raw.body.match(/"task_id"\s*:\s*(\d+)/);
+
     if (data.task_id || taskIdMatch) {
       const taskId = taskIdMatch ? taskIdMatch[1]! : String(data.task_id);
       emit?.({ percent: 5, phase: "queued", label: "已提交，排队中…" });
@@ -264,8 +207,7 @@ export class OpenAIProvider implements AIProvider {
         if (st === "queued" || st === "pending") {
           emit?.({ percent: Math.max(5, progress), phase: "queued", label: "排队中…" });
         } else {
-          const pct = progress > 0 ? Math.min(progress, 90) : 10;
-          emit?.({ percent: pct, phase: "generating", label: "视频生成中…" });
+          emit?.({ percent: Math.min(progress, 90) || 10, phase: "generating", label: "视频生成中…" });
         }
       });
 
@@ -273,9 +215,7 @@ export class OpenAIProvider implements AIProvider {
       if (failed === "failed" || failed === "error" || failed === "cancelled") {
         throw new Error(result.errorMessage || "视频生成失败");
       }
-      if (!result.resultUrl) {
-        throw new Error("视频生成完成但未返回结果地址");
-      }
+      if (!result.resultUrl) throw new Error("视频生成完成但未返回结果地址");
 
       emit?.({ percent: 92, phase: "saving", label: "正在保存视频…" });
       const pid = useProjectStore.getState().currentProjectId ?? undefined;
@@ -283,8 +223,7 @@ export class OpenAIProvider implements AIProvider {
         const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
         emit?.({ percent: 100, phase: "saving", label: "完成" });
         return { url: saved.localPath };
-      } catch (e) {
-        console.warn("[OpenAI] 视频本地保存失败，降级使用远程地址:", e);
+      } catch {
         emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
         return { url: result.resultUrl };
       }

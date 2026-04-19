@@ -3,10 +3,11 @@ import { Trash2, Layers, ChevronRight, Plus } from "lucide-react";
 import AIPromptInput from "@/features/home/AIPromptInput";
 import WorkflowGrid from "@/features/home/WorkflowGrid";
 import { ConfirmDialog } from "@/features/overlays/ConfirmDialog";
-import { useProjectStore, type ProjectInfo } from "@/stores/projectStore";
+import { useProjectStore } from "@/stores/projectStore";
+import type { ProjectInfo } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { useChatStore } from "@/stores/chatStore";
-import { listProjects, deleteProject, loadCards, createProject } from "@/lib/tauri";
+import { listProjects, deleteProject, loadCards, createProject } from "@/platform";
 import { getDisplayUrl } from "@/lib/media";
 import catPawImg from "@/assets/cat-paw.png";
 

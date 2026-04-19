@@ -1,19 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useUIStore } from "@/stores/uiStore";
 import { useCanvasStore } from "@/stores/canvasStore";
-import {
-  useCardStore,
-  type CanvasCard,
-} from "@/stores/cardStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard, CardType } from "@/types";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
-import { deleteCard, updateProjectMeta } from "@/lib/tauri";
+import { deleteCard, updateProjectMeta } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
 import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { recordBatchDelete } from "@/lib/history";
 import { cn } from "@/lib/utils";
 import { CARD_DEFAULTS, WORKFLOW_TEMPLATES } from "@/shared/constants";
-import type { CardType } from "@/shared/types";
 import { extractCardMedia } from "@/config/model-ref-images";
 import { exportFile, revealInExplorer, batchExportFiles } from "@/lib/media";
 import { copyCards, pasteCards } from "@/lib/clipboard";

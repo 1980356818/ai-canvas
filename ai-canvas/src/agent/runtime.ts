@@ -1,5 +1,5 @@
 import type { AgentContext, AgentMessage, AgentStatus, ContentPart } from "./types";
-import type { AIProvider, ChatRequestMessage } from "./providers/base";
+import type { AIProvider, UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 import type { ToolRegistry } from "./tools/registry";
 
 const MAX_TOOL_ROUNDS = 8;
@@ -13,17 +13,26 @@ function makeId(): string {
   return crypto.randomUUID();
 }
 
-function agentMessageToLLM(messages: AgentMessage[]): ChatRequestMessage[] {
-  const out: ChatRequestMessage[] = [];
+function contentPartsToUnified(parts: ContentPart[]): UnifiedContentPart[] {
+  return parts.map((p) => {
+    if (p.type === "text") return { type: "text", text: p.text };
+    if (p.type === "image") return { type: "image", url: p.url };
+    if (p.type === "file") return { type: "file", name: p.name, url: p.path };
+    return { type: "text", text: "" };
+  });
+}
+
+function agentMessageToLLM(messages: AgentMessage[]): UnifiedMessage[] {
+  const out: UnifiedMessage[] = [];
 
   for (const msg of messages) {
     if (msg.role === "user") {
-      out.push({ role: "user", content: msg.content });
+      out.push({ role: "user", content: contentPartsToUnified(msg.content) });
     } else if (msg.role === "assistant") {
       if (msg.toolCalls?.length) {
         out.push({
           role: "assistant",
-          content: msg.content,
+          content: contentPartsToUnified(msg.content),
           toolCalls: msg.toolCalls.map((tc) => ({
             id: tc.id,
             name: tc.name,
@@ -35,12 +44,12 @@ function agentMessageToLLM(messages: AgentMessage[]): ChatRequestMessage[] {
           .filter((p): p is ContentPart & { type: "text" } => p.type === "text")
           .map((p) => p.text)
           .join("\n");
-        out.push({ role: "assistant", content: text });
+        out.push({ role: "assistant", content: [{ type: "text", text }] });
       }
     } else if (msg.role === "tool" && msg.toolResult) {
       out.push({
         role: "tool",
-        content: JSON.stringify(msg.toolResult.output),
+        content: [{ type: "text", text: JSON.stringify(msg.toolResult.output) }],
         toolCallId: msg.toolResult.callId,
       });
     }
@@ -97,7 +106,9 @@ export async function runAgent(
 
     llmMessages.push({
       role: "assistant",
-      content: response.content ?? "",
+      content: response.content
+        ? [{ type: "text", text: response.content }]
+        : [],
       toolCalls: response.toolCalls.map((tc) => ({
         id: tc.id,
         name: tc.name,
@@ -132,7 +143,7 @@ export async function runAgent(
 
       llmMessages.push({
         role: "tool",
-        content: JSON.stringify(result.data),
+        content: [{ type: "text", text: JSON.stringify(result.data) }],
         toolCallId: call.id,
       });
     }

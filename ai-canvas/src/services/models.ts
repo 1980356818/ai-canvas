@@ -1,92 +1,97 @@
-import { type ModelInfo } from "@/lib/tauri";
+import type { ModelInfo } from "@/types";
+import { registry } from "@/providers/registry";
+import type { ModelOption, ProviderCapability } from "@/providers/types";
+import { resolveImageModelId, getOpenAIDisplayName } from "@/providers/openai/models";
 
-const CHAT_MODELS: ModelInfo[] = [
-  { id: "gemini-3.1-pro-preview-thinking-high", display_name: "Gemini 3.1 Pro (Thinking)", capability: "CHAT" },
-  { id: "gemini-3.1-pro-preview", display_name: "Gemini 3.1 Pro", capability: "CHAT" },
-];
+function matchCapability(m: ModelInfo, cap: string): boolean {
+  const mc = (m.capability ?? "").toUpperCase();
+  switch (cap.toUpperCase()) {
+    case "CHAT": return mc === "CHAT" || mc === "";
+    case "IMAGE": return mc === "IMAGE";
+    case "VIDEO": return mc === "VIDEO";
+    default: return true;
+  }
+}
 
-const IMAGE_MODELS: ModelInfo[] = [
-  { id: "gemini-3.1-flash-image-preview", display_name: "Nanobanana 2", capability: "IMAGE" },
-  { id: "nano-banana-pro", display_name: "Nanobanana Pro", capability: "IMAGE" },
-];
-
-const VIDEO_MODELS: ModelInfo[] = [
-  { id: "veo3.1-fast", display_name: "Veo 3.1 Fast", capability: "VIDEO" },
-  { id: "veo3.1-4k", display_name: "Veo 3.1 (4K)", capability: "VIDEO" },
-  { id: "veo3.1-pro-4k", display_name: "Veo 3.1 Pro (4K)", capability: "VIDEO" },
-  { id: "doubao-seedance-2-0-260128", display_name: "Seedance 2.0", capability: "VIDEO" },
-  { id: "doubao-seedance-2-0-fast-260128", display_name: "Seedance 2.0 Fast", capability: "VIDEO" },
-];
-
-const CAPABILITY_MAP: Record<string, ModelInfo[]> = {
-  CHAT: CHAT_MODELS,
-  IMAGE: IMAGE_MODELS,
-  VIDEO: VIDEO_MODELS,
-};
-
-const ALL_MODELS: ModelInfo[] = [
-  ...CHAT_MODELS,
-  ...IMAGE_MODELS,
-  ...VIDEO_MODELS,
-];
-
-const LEGACY_DISPLAY: Record<string, string> = {
-  "doubao-seedance-2-0-v2-250528": "Seedance 2.0 (旧)",
-  "doubao-seedance-2-0-v2-250528-fast": "Seedance 2.0 Fast (旧)",
-  "doubao-seedance-2-0-fast-v2-250528": "Seedance 2.0 Fast (旧)",
-};
+async function aggregateModels(capability: string): Promise<ModelOption[]> {
+  const cap = capability.toUpperCase();
+  const provCap: ProviderCapability =
+    cap === "IMAGE" ? "image_gen" : cap === "VIDEO" ? "video_gen" : "chat";
+  const providers = registry.getEnabledByCapability(provCap);
+  const result: ModelOption[] = [];
+  for (const p of providers) {
+    const models = await p.listModels();
+    for (const m of models) {
+      if (matchCapability(m, capability)) {
+        result.push({
+          ...m,
+          providerId: p.descriptor.id,
+          providerName: p.descriptor.name,
+        });
+      }
+    }
+  }
+  return result;
+}
 
 export const modelService = {
-  async getAll(): Promise<ModelInfo[]> {
-    return ALL_MODELS;
+  async getAll(): Promise<ModelOption[]> {
+    const providers = registry.getAll();
+    const result: ModelOption[] = [];
+    for (const p of providers) {
+      const models = await p.listModels();
+      result.push(...models.map(m => ({
+        ...m,
+        providerId: p.descriptor.id,
+        providerName: p.descriptor.name,
+      })));
+    }
+    return result;
   },
 
-  async getByCapability(capability: string): Promise<ModelInfo[]> {
-    return CAPABILITY_MAP[capability.toUpperCase()] ?? CHAT_MODELS;
+  async getByCapability(capability: string): Promise<ModelOption[]> {
+    return aggregateModels(capability);
   },
 
-  async getChatModels(): Promise<ModelInfo[]> {
-    return CHAT_MODELS;
+  async getChatModels(): Promise<ModelOption[]> {
+    return aggregateModels("CHAT");
   },
 
-  async getImageModels(): Promise<ModelInfo[]> {
-    return IMAGE_MODELS;
+  async getImageModels(): Promise<ModelOption[]> {
+    return aggregateModels("IMAGE");
   },
 
-  async getVideoModels(): Promise<ModelInfo[]> {
-    return VIDEO_MODELS;
+  async getVideoModels(): Promise<ModelOption[]> {
+    return aggregateModels("VIDEO");
   },
 
   async getDefaultChatModel(): Promise<string> {
-    return CHAT_MODELS[0]!.id;
+    const models = await aggregateModels("CHAT");
+    return models[0]?.id ?? "gemini-3.1-pro-preview-thinking-high";
   },
 
   async getDefaultImageModel(): Promise<string> {
-    return IMAGE_MODELS[0]!.id;
+    const models = await aggregateModels("IMAGE");
+    return models[0]?.id ?? "gemini-3.1-flash-image-preview";
   },
 
   async getDefaultVideoModel(): Promise<string> {
-    return VIDEO_MODELS[0]!.id;
+    const models = await aggregateModels("VIDEO");
+    return models[0]?.id ?? "veo3.1-fast";
   },
 
-  resolveImageModelId(baseId: string, resolution: string): string {
-    if (baseId.startsWith("gemini-3.1-flash-image-preview")) {
-      return resolution === "4K"
-        ? "gemini-3.1-flash-image-preview-4k"
-        : "gemini-3.1-flash-image-preview-2k";
-    }
-    if (baseId === "nano-banana-pro") {
-      return resolution === "4K"
-        ? "nano-banana-pro-4k"
-        : "nano-banana-pro-2k";
-    }
-    return baseId;
-  },
+  resolveImageModelId,
 
   getDisplayName(modelId: string): string {
-    const model = ALL_MODELS.find((m) => m.id === modelId);
-    if (model) return model.display_name ?? model.id;
-    return LEGACY_DISPLAY[modelId] ?? modelId;
+    const openaiName = getOpenAIDisplayName(modelId);
+    if (openaiName) return openaiName;
+    for (const p of registry.getAll()) {
+      p.listModels().then(models => {
+        const found = models.find(m => m.id === modelId);
+        if (found) return found.display_name ?? found.id;
+      });
+    }
+    return modelId;
   },
 
   invalidateCache() {},

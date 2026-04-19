@@ -11,12 +11,16 @@ import {
   FolderOpen,
   Plus,
   Trash2,
+  Zap,
+  Wrench,
 } from "lucide-react";
-import { getSetting, setSetting, validateConnection, invalidateApiKeyCache, pickDirectory } from "@/lib/tauri";
+import { getSetting, setSetting, validateConnection, invalidateApiKeyCache, pickDirectory } from "@/platform";
 import { modelService } from "@/services/models";
 import { useUIStore } from "@/stores/uiStore";
 import { cn } from "@/lib/utils";
+import ProviderConfigPanel from "./ProviderConfigPanel";
 
+type SettingsTab = "general" | "providers";
 type ConnectionStatus = "idle" | "testing" | "ok" | "error";
 
 interface ApiKeyEntry {
@@ -38,6 +42,7 @@ export default function SettingsDialog() {
   const visible = useUIStore((s) => s.settingsVisible);
   const toggleSettings = useUIStore((s) => s.toggleSettings);
 
+  const [tab, setTab] = useState<SettingsTab>("general");
   const [apiKeys, setApiKeys] = useState<ApiKeyEntry[]>([]);
   const [activeKeyId, setActiveKeyId] = useState<string>("");
   const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
@@ -172,6 +177,10 @@ export default function SettingsDialog() {
 
       setApiKeys(cleanKeys);
 
+      // Save provider configs
+      const provSave = (window as unknown as Record<string, unknown>).__providerConfigSave;
+      if (typeof provSave === "function") await (provSave as () => Promise<void>)();
+
       invalidateApiKeyCache();
       modelService.invalidateCache();
       toggleSettings();
@@ -190,10 +199,10 @@ export default function SettingsDialog() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-xl border border-border bg-background p-6 shadow-2xl">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Settings className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">API 设置</h2>
+            <h2 className="text-lg font-semibold">设置</h2>
           </div>
           <button
             onClick={toggleSettings}
@@ -203,7 +212,40 @@ export default function SettingsDialog() {
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="mb-4 flex gap-1 rounded-lg bg-muted/50 p-1">
+          <button
+            type="button"
+            onClick={() => setTab("general")}
+            className={cn(
+              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              tab === "general"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Wrench className="h-3.5 w-3.5" />
+            通用
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("providers")}
+            className={cn(
+              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              tab === "providers"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Zap className="h-3.5 w-3.5" />
+            AI 平台
+          </button>
+        </div>
+
         <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void handleSave(); }} autoComplete="off">
+          {tab === "providers" && <ProviderConfigPanel />}
+
+          {tab === "general" && <>
           {/* API Keys list */}
           <div>
             <div className="mb-2 flex items-center justify-between">
@@ -460,16 +502,21 @@ export default function SettingsDialog() {
               )}
             </div>
           )}
+          </>}
 
           <div className="mt-6 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={handleTestConnection}
-              disabled={connStatus === "testing" || !activeEntry?.key}
-              className="rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent disabled:opacity-40"
-            >
-              测试连接
-            </button>
+            {tab === "general" ? (
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={connStatus === "testing" || !activeEntry?.key}
+                className="rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent disabled:opacity-40"
+              >
+                测试连接
+              </button>
+            ) : (
+              <div />
+            )}
 
             <div className="flex items-center gap-2">
               <button

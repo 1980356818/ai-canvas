@@ -1,5 +1,4 @@
-import type { Connection } from "@/stores/connectionStore";
-import type { CanvasCard } from "@/stores/cardStore";
+import type { CanvasCard, Connection } from "@/types";
 import type { RefImageEntry } from "@/config/model-ref-images";
 
 /**

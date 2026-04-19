@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 import { modelService } from "@/services/models";
-import type { ModelInfo } from "@/lib/tauri";
+import type { ModelInfo } from "@/types";
 import { cn } from "@/lib/utils";
 
 interface ModelSelectorProps {

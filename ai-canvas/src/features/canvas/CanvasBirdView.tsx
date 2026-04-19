@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from "react";
-import { useCanvasStore, type Viewport } from "@/stores/canvasStore";
+import { useCanvasStore } from "@/stores/canvasStore";
+import type { Viewport } from "@/types";
 import { useCardStore } from "@/stores/cardStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";

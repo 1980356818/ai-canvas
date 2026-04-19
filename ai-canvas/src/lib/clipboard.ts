@@ -6,7 +6,7 @@ import {
 } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
-import { clipboardWriteText, clipboardReadText, updateProjectMeta } from "@/lib/tauri";
+import { clipboardWriteText, clipboardReadText, updateProjectMeta } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
 import { injectOnConnect } from "@/lib/dataFlow";
 import { recordBatchCreate } from "@/lib/history";

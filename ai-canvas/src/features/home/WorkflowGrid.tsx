@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
-import { createProject, updateProjectMeta } from "@/lib/tauri";
+import { createProject, updateProjectMeta } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
 import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "@/shared/constants";

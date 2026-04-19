@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useRef, memo } from "react";
 import { Scissors, Download, ChevronDown, HardDriveDownload, Loader2 } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { persistImage, getBase64ForApi, exportFile } from "@/lib/media";
 import { autoSave } from "@/lib/autoSave";
 import { sizeFromRatio } from "@/shared/constants";
-import { updateProjectMeta } from "@/lib/tauri";
+import { updateProjectMeta } from "@/platform";
 import { cn } from "@/lib/utils";
 
 const GRID_OPTIONS = [

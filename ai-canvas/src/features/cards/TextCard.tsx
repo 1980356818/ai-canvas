@@ -1,7 +1,8 @@
 import { memo, useRef, useCallback, useEffect } from "react";
 import { Type } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard } from "@/types";
 import { autoSave } from "@/lib/autoSave";
 
 export default memo(function TextCard({ card }: { card: CanvasCard }) {

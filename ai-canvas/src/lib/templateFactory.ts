@@ -1,5 +1,6 @@
 import { useCardStore } from "@/stores/cardStore";
-import { useConnectionStore, type Connection } from "@/stores/connectionStore";
+import { useConnectionStore } from "@/stores/connectionStore";
+import type { Connection } from "@/types";
 import { autoSave } from "@/lib/autoSave";
 import { CARD_DEFAULTS, type WorkflowTemplate } from "@/shared/constants";
 

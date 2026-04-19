@@ -1,11 +1,15 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { Sparkles, RefreshCw, Loader2, Lock, X, AlertCircle, Paperclip, Video } from "lucide-react";
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard, Connection } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
-import { useConnectionStore, type Connection } from "@/stores/connectionStore";
+import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { autoSave } from "@/lib/autoSave";
-import { hasApiKey, aiProxy } from "@/lib/tauri";
+import { hasApiKey } from "@/platform";
+import { providerService } from "@/services/provider.service";
+import type { UnifiedMessage, UnifiedContentPart } from "@/providers/types";
+import "@/providers";
 import { persistImage, getDisplayUrl, getBase64ForApi } from "@/lib/media";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { modelService } from "@/services/models";
@@ -394,34 +398,29 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
 
     const systemPrompt = data._systemPrompt || "你是一个有帮助的 AI 助手，请用中文回复。请直接回答用户的问题。";
     const hasMedia = userContent.some((p) => p.type === "image_url" || p.type === "video_url");
-    const apiMessages = [
-      { role: "system", content: systemPrompt },
-      {
-        role: "user",
-        content: hasMedia ? userContent : displayPrompt,
-      },
+
+    const unifiedUserContent: UnifiedContentPart[] = hasMedia
+      ? userContent.map((p): UnifiedContentPart => {
+          if (p.type === "text") return { type: "text", text: p.text };
+          if (p.type === "image_url") return { type: "image", url: p.image_url.url };
+          if (p.type === "video_url") return { type: "video", url: p.video_url.url };
+          return { type: "text", text: "" };
+        })
+      : [{ type: "text", text: displayPrompt }];
+
+    const unifiedMessages: UnifiedMessage[] = [
+      { role: "user", content: unifiedUserContent },
     ];
 
     try {
-      const resp = await aiProxy("openai", "/v1/chat/completions", {
+      const resp = await providerService.chat("openai", {
         model,
-        messages: apiMessages,
-        max_tokens: 4096,
+        systemPrompt: systemPrompt || "You are a helpful AI assistant.",
+        messages: unifiedMessages,
+        maxTokens: 4096,
       });
 
-      if (resp.status >= 400) {
-        console.error(`[ChatEditor] AI 请求失败 (模型: ${model}, HTTP ${resp.status}):`, resp.body.slice(0, 1000));
-        const errMsg = friendlyError(resp.body);
-        setError(errMsg);
-        useUIStore.getState().setCardError(card.id, errMsg);
-        setCardProgress(card.id, null);
-        return;
-      }
-
-      const json = JSON.parse(resp.body);
-      const result =
-        json?.choices?.[0]?.message?.content ??
-        "（无回复 — 模型未返回任何内容）";
+      const result = resp.content ?? "（无回复 — 模型未返回任何内容）";
 
       useCardStore.getState().updateCard(card.id, {
         data: { ...data, result, _resultStale: false },

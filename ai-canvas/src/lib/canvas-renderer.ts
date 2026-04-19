@@ -1,6 +1,4 @@
-import type { CanvasCard } from "@/stores/cardStore";
-import type { Connection } from "@/stores/connectionStore";
-import type { Viewport } from "@/stores/canvasStore";
+import type { CanvasCard, Connection, Viewport } from "@/types";
 import { TYPE_COLORS } from "@/shared/constants";
 import { getDisplayUrl } from "@/lib/media";
 

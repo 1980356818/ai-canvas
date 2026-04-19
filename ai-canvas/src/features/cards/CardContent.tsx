@@ -1,6 +1,7 @@
 import { memo, useState, useEffect, useCallback } from "react";
 import { ImageIcon, Loader2, Shirt, Video, RotateCw, AlertCircle, Cloud } from "lucide-react";
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { getDisplayUrl } from "@/lib/media";
 import { isPreloaded } from "@/lib/imagePreloader";

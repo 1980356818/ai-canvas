@@ -42,7 +42,7 @@ export async function ensureDisplayableImage(file: File): Promise<File> {
 export async function convertHeicPath(filePath: string): Promise<string> {
   if (!isHeicPath(filePath)) return filePath;
 
-  const { readMediaBase64 } = await import("@/lib/tauri");
+  const { readMediaBase64 } = await import("@/platform");
   const dataUrl = await readMediaBase64(filePath);
 
   const resp = await fetch(dataUrl);

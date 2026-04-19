@@ -7,23 +7,81 @@ import {
   loadChatMessages,
   saveChatMessage,
   clearChatMessages,
-  type ChatSessionRow,
-  type ChatMessageRow,
-} from "@/lib/tauri";
+} from "@/platform";
+import type { ChatSessionRow, ChatMessageRow, ChatHistoryMessage } from "@/types";
 import {
   type ChatContentPart,
   type Intent,
   parseIntent,
-  chatCompletion,
-  generateImage,
-  generateVideo,
   generateTitle,
   extractSizeFromPrompt,
 } from "@/lib/chatService";
 import { modelService } from "@/services/models";
+import { providerService } from "@/services/provider.service";
+import { useProviderStore, parseModelRef } from "@/stores/providerStore";
+import { getAccumulatedToolCalls } from "@/providers/openai/formatter";
+import type { StreamEvent, UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 
 export type { ChatSession, ChatMessage } from "@/types";
 import type { ChatSession, ChatMessage } from "@/types";
+
+const CHAT_TOOLS = [
+  {
+    type: "function" as const,
+    function: {
+      name: "generate_image",
+      description:
+        "When the user asks to generate, draw, create, or design an image/picture/illustration, call this function.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: {
+            type: "string",
+            description: "Detailed English prompt for image generation",
+          },
+          size: {
+            type: "string",
+            description: "Image aspect ratio",
+            enum: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"],
+          },
+        },
+        required: ["prompt"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "generate_video",
+      description:
+        "When the user asks to generate, create, or make a video/animation/clip, call this function.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: {
+            type: "string",
+            description: "Detailed English prompt for video generation",
+          },
+        },
+        required: ["prompt"],
+      },
+    },
+  },
+];
+
+function historyToUnified(history: ChatHistoryMessage[]): UnifiedMessage[] {
+  return history.map((msg) => ({
+    role: msg.role as UnifiedMessage["role"],
+    content: msg.content
+      .filter((p) => p.type !== "loading")
+      .map((p): UnifiedContentPart => {
+        if (p.type === "text") return { type: "text", text: p.text };
+        if (p.type === "image") return { type: "image", url: p.url };
+        if (p.type === "video") return { type: "video", url: p.url ?? "" };
+        return { type: "text", text: "" };
+      }),
+  }));
+}
 
 // ── Store ───────────────────────────────────────────────────
 
@@ -254,40 +312,170 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       let resultParts: ChatContentPart[];
 
-      const handleProgress = (progress: number, status: string) => {
-        set({ generatingProgress: progress, generatingStatus: status });
-      };
-
-      const currentState = get();
-
       if (intent === "image") {
         const { cleanPrompt, size } = extractSizeFromPrompt(prompt);
-        const result = await generateImage(cleanPrompt, currentState.imageModel || undefined, handleProgress, size);
+        const { providerId, modelId } = parseModelRef(
+          useProviderStore.getState().activeImageRef,
+        );
+        const result = await providerService.generateImage(providerId, {
+          prompt: cleanPrompt,
+          model: modelId,
+          size,
+          onProgress: (p) =>
+            set({ generatingProgress: p.percent, generatingStatus: p.label }),
+          signal: _abortController!.signal,
+        });
         resultParts = [{ type: "image", url: result.url, prompt: cleanPrompt }];
       } else if (intent === "video") {
-        const result = await generateVideo(prompt, currentState.videoModel || undefined, handleProgress);
+        const { providerId, modelId } = parseModelRef(
+          useProviderStore.getState().activeVideoRef,
+        );
+        const result = await providerService.generateVideo(providerId, {
+          prompt,
+          model: modelId,
+          onProgress: (p) =>
+            set({ generatingProgress: p.percent, generatingStatus: p.label }),
+          signal: _abortController!.signal,
+        });
         resultParts = [{ type: "video", url: result.url, prompt }];
       } else {
-        const history = get().messages.map((m) => ({
+        const history: ChatHistoryMessage[] = get().messages.map((m) => ({
           role: m.role,
           content: m.content,
         }));
-        resultParts = await chatCompletion(
-          history,
-          currentState.chatModel,
-          {
-            onStreamChunk(chunk) {
-              set((s) => ({ streamingText: s.streamingText + chunk }));
-            },
-            onStreamDone() {
-              set({ streamingText: "" });
-            },
-            onMediaGenerating(mediaType) {
-              set({ generatingType: mediaType, generatingProgress: 0, generatingStatus: "" });
-            },
-            onMediaProgress: handleProgress,
-          },
+        const { providerId, modelId } = parseModelRef(
+          useProviderStore.getState().activeChatRef,
         );
+
+        let fullText = "";
+        resultParts = await new Promise<ChatContentPart[]>((resolve, reject) => {
+          const ac = _abortController!;
+          let settled = false;
+          const settle = (fn: () => void) => {
+            if (settled) return;
+            settled = true;
+            ac.signal.removeEventListener("abort", onAbort);
+            fn();
+          };
+          const onAbort = () => {
+            settle(() => reject(new Error("Generation stopped")));
+          };
+          ac.signal.addEventListener("abort", onAbort, { once: true });
+
+          void providerService
+            .streamChat(
+              providerId,
+              {
+                model: modelId,
+                systemPrompt:
+                  "You are a helpful AI assistant. You can have conversations, and when the user asks you to generate images or videos, use the provided tools. Always respond in the user's language.",
+                messages: historyToUnified(history),
+                tools: CHAT_TOOLS,
+                signal: ac.signal,
+              },
+              (event: StreamEvent) => {
+                switch (event.type) {
+                  case "text":
+                    fullText += event.text;
+                    set((s) => ({
+                      streamingText: s.streamingText + event.text,
+                    }));
+                    break;
+                  case "error":
+                    settle(() => reject(new Error(event.message)));
+                    break;
+                  case "done":
+                    void (async () => {
+                      try {
+                        const parts: ChatContentPart[] = [];
+                        if (fullText) {
+                          parts.push({ type: "text", text: fullText });
+                        }
+                        const toolCalls = getAccumulatedToolCalls();
+                        for (const tc of toolCalls) {
+                          try {
+                            const args = JSON.parse(tc.arguments || "{}");
+                            if (tc.name === "generate_image") {
+                              set({
+                                generatingType: "image",
+                                generatingProgress: 0,
+                                generatingStatus: "",
+                              });
+                              const imgRef = parseModelRef(
+                                useProviderStore.getState().activeImageRef,
+                              );
+                              const imgResult = await providerService.generateImage(
+                                imgRef.providerId,
+                                {
+                                  prompt: String(args.prompt ?? ""),
+                                  model: imgRef.modelId,
+                                  size: args.size as string | undefined,
+                                  onProgress: (p) =>
+                                    set({
+                                      generatingProgress: p.percent,
+                                      generatingStatus: p.label,
+                                    }),
+                                  signal: ac.signal,
+                                },
+                              );
+                              parts.push({
+                                type: "image",
+                                url: imgResult.url,
+                                prompt: String(args.prompt ?? ""),
+                              });
+                            } else if (tc.name === "generate_video") {
+                              set({
+                                generatingType: "video",
+                                generatingProgress: 0,
+                                generatingStatus: "",
+                              });
+                              const vidRef = parseModelRef(
+                                useProviderStore.getState().activeVideoRef,
+                              );
+                              const vidResult = await providerService.generateVideo(
+                                vidRef.providerId,
+                                {
+                                  prompt: String(args.prompt ?? ""),
+                                  model: vidRef.modelId,
+                                  onProgress: (p) =>
+                                    set({
+                                      generatingProgress: p.percent,
+                                      generatingStatus: p.label,
+                                    }),
+                                  signal: ac.signal,
+                                },
+                              );
+                              parts.push({
+                                type: "video",
+                                url: vidResult.url,
+                                prompt: String(args.prompt ?? ""),
+                              });
+                            }
+                          } catch (e) {
+                            parts.push({
+                              type: "text",
+                              text: `\n\n> Generation failed: ${e instanceof Error ? e.message : String(e)}`,
+                            });
+                          }
+                        }
+                        set({ streamingText: "" });
+                        settle(() => resolve(parts));
+                      } catch (e) {
+                        settle(() =>
+                          reject(
+                            e instanceof Error ? e : new Error(String(e)),
+                          ),
+                        );
+                      }
+                    })();
+                    break;
+                  default:
+                    break;
+                }
+              },
+            )
+            .catch((e) => settle(() => reject(e instanceof Error ? e : new Error(String(e)))));
+        });
       }
 
       const assistantMsg: ChatMessage = {
@@ -298,10 +486,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         metadata: {
           model:
             intent === "image"
-              ? get().imageModel
+              ? parseModelRef(useProviderStore.getState().activeImageRef).modelId
               : intent === "video"
-                ? get().videoModel
-                : get().chatModel,
+                ? parseModelRef(useProviderStore.getState().activeVideoRef).modelId
+                : parseModelRef(useProviderStore.getState().activeChatRef).modelId,
           intent,
         },
         createdAt: new Date().toISOString(),
@@ -321,7 +509,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (isFirstMessage && sessionId) {
         const firstText = text.slice(0, 200);
-        const titleModel = get().chatModel;
+        const titleModel =
+          get().chatModel ||
+          parseModelRef(useProviderStore.getState().activeChatRef).modelId;
         if (titleModel) {
           generateTitle(firstText, titleModel).then((title) => {
             if (title && title !== "新对话") {

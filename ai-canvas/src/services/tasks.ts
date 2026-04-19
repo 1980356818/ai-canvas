@@ -1,4 +1,4 @@
-import { pollTask } from "@/lib/tauri";
+import { pollTask } from "@/platform";
 import type { TaskInfo } from "@/types";
 
 export type { TaskResult } from "@/types";

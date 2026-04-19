@@ -1,12 +1,13 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 import { useCanvasStore, lastPointerWorld } from "@/stores/canvasStore";
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useViewport } from "./hooks/useViewport";
 import { useSelection } from "./hooks/useSelection";
 import { useSpatialIndex } from "./hooks/useSpatialIndex";
+import { useBirdView } from "./hooks/useBirdView";
+import { useFileDrop } from "@/hooks/useFileDrop";
 import CardLayer from "./CardLayer";
 import FloatingEditor from "@/features/editor/FloatingEditor";
 import ConnectionLayer from "./ConnectionLayer";
@@ -14,81 +15,6 @@ import CanvasBirdView from "./CanvasBirdView";
 import ZoomControls from "./ZoomControls";
 import ImageToolbar from "./ImageToolbar";
 import WireDropMenu from "./WireDropMenu";
-import { CARD_DEFAULTS, sizeFromRatio, BIRDVIEW_ENTER_ZOOM, BIRDVIEW_EXIT_ZOOM } from "@/shared/constants";
-import { autoSave } from "@/lib/autoSave";
-import {
-  updateProjectMeta,
-  onTauriFileDrop,
-  isTauri,
-} from "@/lib/tauri";
-import { persistImage, getDisplayUrl, type PersistImageResult } from "@/lib/media";
-import { ensureDisplayableImage, isHeicFile, convertHeicPath } from "@/lib/heicConverter";
-
-function cardSizeFromPersist(
-  saved: PersistImageResult,
-): { width: number; height: number } {
-  if (saved.width && saved.height && saved.width > 0 && saved.height > 0) {
-    return sizeFromRatio(saved.width / saved.height);
-  }
-  return { width: CARD_DEFAULTS.ai_image.width, height: CARD_DEFAULTS.ai_image.height };
-}
-
-const VIDEO_EXTENSIONS = /\.(mp4|webm|mov|avi|mkv)$/i;
-
-function isVideoFile(file: File): boolean {
-  return file.type.startsWith("video/") || VIDEO_EXTENSIONS.test(file.name);
-}
-
-function isVideoPath(path: string): boolean {
-  return VIDEO_EXTENSIONS.test(path);
-}
-
-function getVideoDimensions(src: string): Promise<{ width: number; height: number }> {
-  return new Promise((resolve) => {
-    const video = document.createElement("video");
-    video.preload = "metadata";
-    const cleanup = () => { video.onloadedmetadata = null; video.onerror = null; video.src = ""; };
-    const timer = setTimeout(() => { cleanup(); resolve({ width: 0, height: 0 }); }, 5000);
-    video.onloadedmetadata = () => {
-      clearTimeout(timer);
-      const { videoWidth: w, videoHeight: h } = video;
-      cleanup();
-      resolve({ width: w, height: h });
-    };
-    video.onerror = () => {
-      clearTimeout(timer);
-      cleanup();
-      resolve({ width: 0, height: 0 });
-    };
-    video.src = src;
-  });
-}
-
-async function videoCardSize(src: string): Promise<{ width: number; height: number }> {
-  const dims = await getVideoDimensions(src);
-  if (dims.width > 0 && dims.height > 0) {
-    return sizeFromRatio(dims.width / dims.height);
-  }
-  return { width: CARD_DEFAULTS.ai_video.width, height: CARD_DEFAULTS.ai_video.height };
-}
-
-function canCardAcceptFileDrop(cardId: string): boolean {
-  const card = useCardStore.getState().getCard(cardId);
-  if (!card) return false;
-  if (useUIStore.getState().generatingCards.has(cardId)) return false;
-  if (card.type === "ai_image" || card.type === "ai_multiangle") {
-    return !(card.data as { imageUrl?: string }).imageUrl;
-  }
-  if (card.type === "ai_tryon") {
-    const d = card.data as {
-      personImageUrl?: string;
-      garmentImageUrl?: string;
-    };
-    return !d.personImageUrl || !d.garmentImageUrl;
-  }
-  return false;
-}
-
 
 export default function CanvasContainer() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -112,265 +38,12 @@ export default function CanvasContainer() {
 
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
   const showContextMenu = useUIStore((s) => s.showContextMenu);
-
   const pickMode = useCanvasStore((s) => s.pickMode);
 
   useSpatialIndex();
 
-  const [birdView, setBirdView] = useState(false);
-  const [transitioning, setTransitioning] = useState(false);
-  const transTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingTarget = useRef<boolean | null>(null);
-
-  const shouldBird = birdView
-    ? viewport.zoom < BIRDVIEW_EXIT_ZOOM
-    : viewport.zoom <= BIRDVIEW_ENTER_ZOOM;
-
-  if (shouldBird !== birdView && !transitioning) {
-    pendingTarget.current = shouldBird;
-    setTransitioning(true);
-    if (transTimer.current) clearTimeout(transTimer.current);
-    transTimer.current = setTimeout(() => {
-      transTimer.current = null;
-      setBirdView(pendingTarget.current!);
-      pendingTarget.current = null;
-      setTimeout(() => setTransitioning(false), 50);
-    }, 200);
-  } else if (shouldBird === birdView && transitioning && pendingTarget.current !== null) {
-    if (transTimer.current) clearTimeout(transTimer.current);
-    transTimer.current = null;
-    pendingTarget.current = null;
-    setTransitioning(false);
-  }
-
-  const isBirdView = birdView;
-  const showDom = !birdView || transitioning;
-  const showCanvas = birdView || transitioning;
-
-
-  const dropHandledAt = useRef(0);
-  const fileDragTargetRef = useRef<string | null>(null);
-
-  const handleFileDragOver = useCallback(
-    (e: React.DragEvent) => {
-      if (!currentProjectId) return;
-      const hasChatMedia = Array.from(e.dataTransfer.types).includes("application/x-chat-media");
-      const hasFiles = Array.from(e.dataTransfer.types).includes("Files");
-      if (!hasFiles && !hasChatMedia) return;
-      e.preventDefault();
-      if (hasChatMedia) {
-        e.dataTransfer.dropEffect = "copy";
-        return;
-      }
-
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      const cardEl = el?.closest("[data-card-id]") as HTMLElement | null;
-      const candidateId = cardEl?.dataset.cardId ?? null;
-      const newTargetId =
-        candidateId && canCardAcceptFileDrop(candidateId) ? candidateId : null;
-
-      if (newTargetId !== fileDragTargetRef.current) {
-        if (fileDragTargetRef.current) {
-          document
-            .querySelector(
-              `[data-card-id="${fileDragTargetRef.current}"]`,
-            )
-            ?.classList.remove("file-drop-target");
-        }
-        fileDragTargetRef.current = newTargetId;
-        if (newTargetId) {
-          document
-            .querySelector(`[data-card-id="${newTargetId}"]`)
-            ?.classList.add("file-drop-target");
-        }
-      }
-
-      e.dataTransfer.dropEffect = newTargetId ? "move" : "copy";
-    },
-    [currentProjectId],
-  );
-
-  const handleFileDragLeave = useCallback(
-    (e: React.DragEvent) => {
-      const related = e.relatedTarget as Node | null;
-      if (related && containerRef.current?.contains(related)) return;
-      if (fileDragTargetRef.current) {
-        document
-          .querySelector(
-            `[data-card-id="${fileDragTargetRef.current}"]`,
-          )
-          ?.classList.remove("file-drop-target");
-        fileDragTargetRef.current = null;
-      }
-    },
-    [],
-  );
-
-  const handleFileDrop = useCallback(
-    async (e: React.DragEvent) => {
-      e.preventDefault();
-      if (!currentProjectId) return;
-
-      const chatMediaRaw = e.dataTransfer.getData("application/x-chat-media");
-      if (chatMediaRaw) {
-        try {
-          const media = JSON.parse(chatMediaRaw) as {
-            type: "image" | "video";
-            url: string;
-            prompt?: string;
-          };
-          const dropPos = screenToCanvas(e.clientX, e.clientY);
-          const isVideo = media.type === "video";
-          let cardW: number, cardH: number;
-          if (isVideo) {
-            ({ width: cardW, height: cardH } = await videoCardSize(getDisplayUrl(media.url)));
-          } else {
-            ({ width: cardW, height: cardH } = { width: CARD_DEFAULTS.ai_image.width, height: CARD_DEFAULTS.ai_image.height });
-          }
-
-          const now = new Date().toISOString();
-          const { maxZIndex } = useCardStore.getState();
-          const card: CanvasCard = {
-            id: crypto.randomUUID(),
-            projectId: currentProjectId,
-            type: isVideo ? "ai_video" : "ai_image",
-            x: dropPos.x - cardW / 2,
-            y: dropPos.y - cardH / 2,
-            width: cardW,
-            height: cardH,
-            zIndex: maxZIndex + 1,
-            locked: false,
-            collapsed: false,
-            data: isVideo
-              ? { videoUrl: media.url, content: media.prompt ?? "" }
-              : { imageUrl: media.url, content: media.prompt ?? "" },
-            createdAt: now,
-            updatedAt: now,
-          };
-          useCardStore.getState().addCard(card);
-          autoSave.markDirty(card.id);
-
-          const count = useCardStore.getState().getCardsByProject(currentProjectId).length;
-          useProjectStore.getState().updateProject(currentProjectId, { nodeCount: count });
-          void updateProjectMeta(currentProjectId, { nodeCount: count });
-        } catch {
-          console.warn("[CanvasContainer] Failed to parse chat media drop data");
-        }
-        return;
-      }
-
-      const rawFiles = Array.from(e.dataTransfer.files).filter(
-        (f) => f.type.startsWith("image/") || isVideoFile(f) || isHeicFile(f),
-      );
-      if (rawFiles.length === 0) return;
-
-      dropHandledAt.current = Date.now();
-
-      const targetCardId = fileDragTargetRef.current;
-      if (fileDragTargetRef.current) {
-        document
-          .querySelector(
-            `[data-card-id="${fileDragTargetRef.current}"]`,
-          )
-          ?.classList.remove("file-drop-target");
-        fileDragTargetRef.current = null;
-      }
-
-      const readFileAsDataUrl = (file: File): Promise<string> =>
-        new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
-
-      (async () => {
-        const files = await Promise.all(rawFiles.map(ensureDisplayableImage));
-        let startIdx = 0;
-
-        if (targetCardId) {
-          const targetCard = useCardStore.getState().getCard(targetCardId);
-          if (targetCard) {
-            const dataUrl = await readFileAsDataUrl(files[0]!);
-            const saved = await persistImage(dataUrl, undefined, currentProjectId);
-            const latest = useCardStore.getState().getCard(targetCardId);
-            if (latest) {
-              const d = { ...latest.data } as Record<string, unknown>;
-              const update: Partial<CanvasCard> = { data: d };
-              if (latest.type === "ai_image" || latest.type === "ai_multiangle") {
-                d.imageUrl = saved.localPath;
-                const sized = cardSizeFromPersist(saved);
-                const cx = latest.x + latest.width / 2;
-                const cy = latest.y + latest.height / 2;
-                update.x = cx - sized.width / 2;
-                update.y = cy - sized.height / 2;
-                update.width = sized.width;
-                update.height = sized.height;
-              } else if (latest.type === "ai_tryon") {
-                if (!d.personImageUrl) d.personImageUrl = saved.localPath;
-                else if (!d.garmentImageUrl) d.garmentImageUrl = saved.localPath;
-              }
-              useCardStore.getState().updateCard(targetCardId, update);
-              autoSave.markDirty(targetCardId);
-            }
-            startIdx = 1;
-          }
-        }
-
-        const remaining = files.slice(startIdx);
-        if (remaining.length === 0) return;
-
-        const dropPos = screenToCanvas(e.clientX, e.clientY);
-        const GAP = 20;
-        let cursorX = 0;
-
-        for (let idx = 0; idx < remaining.length; idx++) {
-          const file = remaining[idx]!;
-          const video = isVideoFile(file);
-          const dataUrl = await readFileAsDataUrl(file);
-          const saved = await persistImage(dataUrl, undefined, currentProjectId);
-
-          let cardW: number, cardH: number;
-          if (video) {
-            const blobUrl = URL.createObjectURL(file);
-            ({ width: cardW, height: cardH } = await videoCardSize(blobUrl));
-            URL.revokeObjectURL(blobUrl);
-          } else {
-            ({ width: cardW, height: cardH } = cardSizeFromPersist(saved));
-          }
-
-          const now = new Date().toISOString();
-          const { maxZIndex } = useCardStore.getState();
-          const card: CanvasCard = {
-            id: crypto.randomUUID(),
-            projectId: currentProjectId,
-            type: video ? "ai_video" : "ai_image",
-            x: dropPos.x - cardW / 2 + cursorX,
-            y: dropPos.y - cardH / 2,
-            width: cardW,
-            height: cardH,
-            zIndex: maxZIndex + 1 + idx,
-            locked: false,
-            collapsed: false,
-            data: video
-              ? { videoUrl: saved.localPath, content: "" }
-              : { imageUrl: saved.localPath, content: "" },
-            createdAt: now,
-            updatedAt: now,
-          };
-          useCardStore.getState().addCard(card);
-          autoSave.markDirty(card.id);
-          cursorX += cardW + GAP;
-        }
-
-        const count = useCardStore.getState().getCardsByProject(currentProjectId).length;
-        useProjectStore
-          .getState()
-          .updateProject(currentProjectId, { nodeCount: count });
-        void updateProjectMeta(currentProjectId, { nodeCount: count });
-      })();
-    },
-    [currentProjectId, screenToCanvas],
-  );
+  const { isBirdView, showDom, showCanvas, transitioning } = useBirdView(viewport.zoom);
+  const { handleDragOver, handleDragLeave, handleDrop } = useFileDrop(containerRef, screenToCanvas);
 
   useEffect(() => {
     if (!pickMode?.active) return;
@@ -381,115 +54,7 @@ export default function CanvasContainer() {
     return () => window.removeEventListener("keydown", onKey);
   }, [pickMode?.active]);
 
-  // Tauri-native file-drop fallback (when browser drag events are intercepted)
-  useEffect(() => {
-    if (!isTauri) return;
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-
-    onTauriFileDrop(async (paths, sx, sy) => {
-      if (cancelled) return;
-      if (Date.now() - dropHandledAt.current < 1000) return;
-      const pid = useProjectStore.getState().currentProjectId;
-      if (!pid) return;
-
-      const dpr = window.devicePixelRatio || 1;
-      const cssx = sx / dpr;
-      const cssy = sy / dpr;
-      const rect = containerRef.current?.getBoundingClientRect();
-      const cx = rect ? cssx - rect.left : cssx;
-      const cy = rect ? cssy - rect.top : cssy;
-      const vp = useCanvasStore.getState().viewport;
-      const dropX = (cx - vp.x) / vp.zoom;
-      const dropY = (cy - vp.y) / vp.zoom;
-      const GAP = 20;
-
-      let startIdx = 0;
-      const el = document.elementFromPoint(cssx, cssy);
-      const cardEl = el?.closest("[data-card-id]") as HTMLElement | null;
-      const targetCardId = cardEl?.dataset.cardId ?? null;
-
-      if (targetCardId && canCardAcceptFileDrop(targetCardId)) {
-        try {
-          const src0 = await convertHeicPath(paths[0]!);
-          const saved = await persistImage(src0, undefined, pid);
-          const target = useCardStore.getState().getCard(targetCardId);
-          if (target) {
-            const d = { ...target.data } as Record<string, unknown>;
-            const update: Partial<CanvasCard> = { data: d };
-            if (target.type === "ai_image" || target.type === "ai_multiangle") {
-              d.imageUrl = saved.localPath;
-              const sized = cardSizeFromPersist(saved);
-              const cx = target.x + target.width / 2;
-              const cy = target.y + target.height / 2;
-              update.x = cx - sized.width / 2;
-              update.y = cy - sized.height / 2;
-              update.width = sized.width;
-              update.height = sized.height;
-            } else if (target.type === "ai_tryon") {
-              if (!d.personImageUrl) d.personImageUrl = saved.localPath;
-              else if (!d.garmentImageUrl) d.garmentImageUrl = saved.localPath;
-            }
-            useCardStore.getState().updateCard(targetCardId, update);
-            autoSave.markDirty(targetCardId);
-            startIdx = 1;
-          }
-        } catch { /* skip */ }
-      }
-
-      let tauriCursorX = 0;
-      for (let i = startIdx; i < paths.length; i++) {
-        try {
-          const rawPath = paths[i]!;
-          const video = isVideoPath(rawPath);
-          const filePath = video ? rawPath : await convertHeicPath(rawPath);
-          const saved = await persistImage(filePath, undefined, pid);
-
-          let cardW: number, cardH: number;
-          if (video) {
-            ({ width: cardW, height: cardH } = await videoCardSize(getDisplayUrl(saved.localPath)));
-          } else {
-            ({ width: cardW, height: cardH } = cardSizeFromPersist(saved));
-          }
-
-          const now = new Date().toISOString();
-          const { maxZIndex } = useCardStore.getState();
-          const card: CanvasCard = {
-            id: crypto.randomUUID(),
-            projectId: pid,
-            type: video ? "ai_video" : "ai_image",
-            x: dropX - cardW / 2 + tauriCursorX,
-            y: dropY - cardH / 2,
-            width: cardW,
-            height: cardH,
-            zIndex: maxZIndex + 1 + (i - startIdx),
-            locked: false,
-            collapsed: false,
-            data: video
-              ? { videoUrl: saved.localPath, content: "" }
-              : { imageUrl: saved.localPath, content: "" },
-            createdAt: now,
-            updatedAt: now,
-          };
-          useCardStore.getState().addCard(card);
-          autoSave.markDirty(card.id);
-          tauriCursorX += cardW + GAP;
-        } catch { /* skip unreadable files */ }
-      }
-
-      const count = useCardStore.getState().getCardsByProject(pid).length;
-      useProjectStore.getState().updateProject(pid, { nodeCount: count });
-      void updateProjectMeta(pid, { nodeCount: count });
-    }).then((fn) => {
-      unlisten = fn;
-    });
-
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
-
+  // Space key + box selection + panning interaction
   const spaceHeld = useRef(false);
   const bgPending = useRef(false);
   const bgMode = useRef<"none" | "selecting" | "panning">("none");
@@ -635,9 +200,9 @@ export default function CanvasContainer() {
       onContextMenu={handleContextMenu}
       onClick={handleCanvasClick}
       onDoubleClick={handleDoubleClick}
-      onDragOver={handleFileDragOver}
-      onDragLeave={handleFileDragLeave}
-      onDrop={handleFileDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       {showCanvas && (
         <div

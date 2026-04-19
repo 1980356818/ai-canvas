@@ -1,0 +1,126 @@
+import type {
+  AIProvider,
+  ChatRequest,
+  ChatResponse,
+  StreamEvent,
+  VideoGenRequest,
+  VideoGenResponse,
+} from "../types";
+import { throwIfError } from "../errors";
+import { SEEDANCE_MODELS, resolveModel } from "./models";
+import { aiProxy, saveMedia } from "@/platform";
+import { waitForTask } from "@/services/tasks";
+import { useProjectStore } from "@/stores/projectStore";
+import type { ModelInfo } from "@/types";
+
+const SEEDANCE_ENDPOINT = "/seedance/v3/contents/generations/tasks";
+const SEEDANCE_POLL_ENDPOINT = "/seedance/v3/contents/generations/tasks/{task_id}";
+
+function toSeedanceRatio(size: string): string | undefined {
+  if (!size || size === "auto") return undefined;
+  if (size.includes(":")) return size;
+  const m = size.match(/^(\d+)x(\d+)$/);
+  if (!m) return size;
+  const w = Number(m[1]);
+  const h = Number(m[2]);
+  const gcdFn = (a: number, b: number): number => (b === 0 ? a : gcdFn(b, a % b));
+  const d = gcdFn(w, h);
+  return `${w / d}:${h / d}`;
+}
+
+export class SeedanceProvider implements AIProvider {
+  readonly descriptor = {
+    id: "seedance" as const,
+    name: "Seedance (豆包)",
+    capabilities: ["video_gen"] as const,
+    configSchema: [],
+  };
+
+  async listModels(): Promise<ModelInfo[]> {
+    return SEEDANCE_MODELS;
+  }
+
+  async chat(_req: ChatRequest): Promise<ChatResponse> {
+    throw new Error("SeedanceProvider 不支持对话，请使用视频生成功能");
+  }
+
+  async streamChat(
+    _req: ChatRequest,
+    _onEvent: (event: StreamEvent) => void,
+  ): Promise<{ abort: () => void }> {
+    throw new Error("SeedanceProvider 不支持流式对话");
+  }
+
+  async generateVideo(req: VideoGenRequest): Promise<VideoGenResponse> {
+    const emit = req.onProgress;
+    emit?.({ percent: 0, phase: "submitting", label: "正在提交视频请求…" });
+
+    const content: Array<Record<string, unknown>> = [];
+    if (req.prompt) {
+      content.push({ type: "text", text: req.prompt });
+    }
+    if (req.referenceImages?.length) {
+      for (const ref of req.referenceImages) {
+        const role =
+          ref.role === "firstFrame"
+            ? "first_frame"
+            : ref.role === "lastFrame"
+              ? "last_frame"
+              : "reference_image";
+        content.push({ type: "image_url", image_url: { url: ref.url }, role });
+      }
+    }
+
+    const body: Record<string, unknown> = {
+      model: resolveModel(req.model),
+      content,
+    };
+    const ratio = toSeedanceRatio(req.size ?? "");
+    if (ratio) body.ratio = ratio;
+    if (req.duration != null) body.duration = req.duration;
+    if (req.resolution) body.resolution = req.resolution;
+    if (req.generateAudio != null) body.generate_audio = req.generateAudio;
+    if (req.seed != null && req.seed !== -1) body.seed = req.seed;
+    if (req.watermark != null) body.watermark = req.watermark;
+
+    const raw = await aiProxy("openai", SEEDANCE_ENDPOINT, body);
+    throwIfError(raw.status, raw.body);
+
+    const data = JSON.parse(raw.body);
+    const taskId = data.id ?? data.task_id;
+    if (!taskId) throw new Error("未能从响应中获取视频任务 ID");
+
+    emit?.({ percent: 5, phase: "queued", label: "已提交，排队中…" });
+
+    const result = await waitForTask(
+      String(taskId),
+      (progress, status) => {
+        const st = status.toLowerCase();
+        if (st === "queued" || st === "pending") {
+          emit?.({ percent: Math.max(5, progress), phase: "queued", label: "排队中…" });
+        } else {
+          emit?.({ percent: Math.min(progress, 90) || 10, phase: "generating", label: "视频生成中…" });
+        }
+      },
+      undefined,
+      SEEDANCE_POLL_ENDPOINT,
+    );
+
+    const failed = result.status.toLowerCase();
+    if (failed === "failed" || failed === "error" || failed === "cancelled" || failed === "expired") {
+      throw new Error(result.errorMessage || "视频生成失败");
+    }
+    if (!result.resultUrl) throw new Error("视频生成完成但未返回结果地址");
+
+    emit?.({ percent: 92, phase: "saving", label: "正在保存视频…" });
+    const pid = useProjectStore.getState().currentProjectId ?? undefined;
+    try {
+      const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
+      emit?.({ percent: 100, phase: "saving", label: "完成" });
+      return { url: saved.localPath };
+    } catch {
+      emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
+      return { url: result.resultUrl };
+    }
+  }
+}

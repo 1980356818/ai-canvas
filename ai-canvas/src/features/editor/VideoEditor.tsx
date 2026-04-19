@@ -1,9 +1,10 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { Sparkles, Loader2, RefreshCw, ArrowDownLeft, Lock, X, AlertCircle, ImageIcon, Volume2, VolumeX } from "lucide-react";
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
-import { hasApiKey } from "@/lib/tauri";
+import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
 import { scheduleBackgroundSave, getBase64ForApi, getDisplayUrl } from "@/lib/media";
 import { useProjectStore } from "@/stores/projectStore";

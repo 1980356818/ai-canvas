@@ -1,9 +1,9 @@
 import { create } from "zustand";
 import type { AgentMessage, AgentStatus } from "@/agent/types";
 import { ToolRegistry } from "@/agent/tools/registry";
-import { ProviderManager } from "@/agent/providers/manager";
-import { OpenAIProvider } from "@/agent/providers/openai";
-import { SeedanceProvider } from "@/agent/providers/seedance";
+import type { ProviderCapability } from "@/providers/types";
+import { registry } from "@/providers/registry";
+import "@/providers"; // ensure bootstrap runs
 import { registerAllTools } from "@/agent/plugins";
 import { buildSystemPrompt } from "@/agent/prompts";
 import { createAgentContext } from "@/agent/context";
@@ -12,9 +12,26 @@ import { modelService } from "@/services/models";
 
 // ── Singleton instances ─────────────────────────────────────
 
-const providerManager = new ProviderManager();
-providerManager.register(new OpenAIProvider());
-providerManager.register(new SeedanceProvider());
+export const providerManager = {
+  get(id: string) {
+    return registry.tryGet(id);
+  },
+  getDefault() {
+    return registry.get("openai");
+  },
+  setDefault(_id: string) {
+    /* no-op for compatibility */
+  },
+  resolve(caps: string[]) {
+    return registry.getByCapability(caps[0] as ProviderCapability)[0] ?? registry.get("openai");
+  },
+  listProviders() {
+    return registry.listDescriptors();
+  },
+  register(_p: unknown) {
+    /* no-op - providers register in providers/index.ts */
+  },
+};
 
 const toolRegistry = new ToolRegistry();
 registerAllTools(toolRegistry);
@@ -101,4 +118,4 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 }));
 
-export { providerManager, toolRegistry };
+export { toolRegistry };

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { MessageSquare, ImageIcon, Video, Shirt, RotateCw, Type, StickyNote } from "lucide-react";
-import { useConnectionStore, type Connection } from "@/stores/connectionStore";
+import { useConnectionStore } from "@/stores/connectionStore";
+import type { CardType, Connection } from "@/types";
 import { useCardStore } from "@/stores/cardStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useProjectStore } from "@/stores/projectStore";
@@ -8,7 +9,6 @@ import { autoSave } from "@/lib/autoSave";
 import { injectOnConnect } from "@/lib/dataFlow";
 import { cn } from "@/lib/utils";
 import { CARD_DEFAULTS } from "@/shared/constants";
-import type { CardType } from "@/shared/types";
 
 const MENU_ITEMS: Array<{ type: CardType; icon: typeof MessageSquare; label: string }> = [
   { type: "ai_chat", icon: MessageSquare, label: CARD_DEFAULTS.ai_chat.label },

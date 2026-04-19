@@ -1,4 +1,4 @@
-import type { CanvasCard } from "@/stores/cardStore";
+import type { CanvasCard } from "@/types";
 import TextEditor from "./TextEditor";
 import ChatEditor from "./ChatEditor";
 import MediaEditor from "./MediaEditor";

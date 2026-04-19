@@ -1,8 +1,11 @@
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard } from "@/types";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
 import { getRefSlotsForModel, getRefSlotsForChatModel, compactRefImages, type RefImageEntry } from "@/config/model-ref-images";
+
+const DEBUG = import.meta.env.DEV;
 
 const IMAGE_SOURCE_TYPES = new Set(["ai_image", "ai_multiangle", "ai_tryon", "ai_video"]);
 
@@ -235,7 +238,7 @@ function injectIntoCard(
           d.upstreamCardId = sourceCardId;
           changed = true;
         }
-        console.log("[DataFlow] ai_image 注入文本", {
+        if (DEBUG) console.log("[DataFlow] ai_image 注入文本", {
           sourceCardId,
           targetId: target.id,
           textLength: payload.text.length,
@@ -251,7 +254,7 @@ function injectIntoCard(
           ...((d.refImages || {}) as Record<string, RefImageEntry>),
         };
 
-        console.log("[DataFlow] ai_image 注入图片 - 开始", {
+        if (DEBUG) console.log("[DataFlow] ai_image 注入图片 - 开始", {
           sourceCardId,
           targetId: target.id,
           model,
@@ -275,7 +278,7 @@ function injectIntoCard(
               changed = true;
             }
             found = true;
-            console.log("[DataFlow] ai_image 图片更新已有槽位", { slotKey: slot.key });
+            if (DEBUG) console.log("[DataFlow] ai_image 图片更新已有槽位", { slotKey: slot.key });
             break;
           }
         }
@@ -293,7 +296,7 @@ function injectIntoCard(
               d.upstreamCardId = sourceCardId;
               changed = true;
               assigned = true;
-              console.log("[DataFlow] ai_image 图片分配到空槽位", { slotKey: slot.key });
+              if (DEBUG) console.log("[DataFlow] ai_image 图片分配到空槽位", { slotKey: slot.key });
               break;
             }
           }
@@ -437,13 +440,13 @@ export function startDataFlowWatcher(): () => void {
 
   // 启动时一次性同步：把已有输出注入到下游卡片的空槽位
   const conns = useConnectionStore.getState().connections;
-  console.log("[DataFlow] 初始同步开始, 连接数:", conns.size);
+  if (DEBUG) console.log("[DataFlow] 初始同步开始, 连接数:", conns.size);
   for (const conn of conns.values()) {
     const source = useCardStore.getState().getCard(conn.sourceCardId);
     const target = useCardStore.getState().getCard(conn.targetCardId);
     if (!source || !target) continue;
     const output = extractOutput(source);
-    console.log("[DataFlow] 初始同步检查连接:", {
+    if (DEBUG) console.log("[DataFlow] 初始同步检查连接:", {
       sourceId: conn.sourceCardId.slice(0, 8),
       sourceType: source.type,
       sourceTitle: source.title,
@@ -456,7 +459,7 @@ export function startDataFlowWatcher(): () => void {
     });
     if (output.kind !== "none") {
       const injected = injectIntoCard(target, output, conn.sourceCardId);
-      console.log("[DataFlow] 初始同步注入结果:", injected, "→", target.title);
+      if (DEBUG) console.log("[DataFlow] 初始同步注入结果:", injected, "→", target.title);
     }
   }
   // 同步后刷新快照，避免订阅器重复触发

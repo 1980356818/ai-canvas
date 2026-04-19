@@ -3,7 +3,7 @@ import { SendHorizonal, Bot, Loader2, X, Trash2, AlertCircle } from "lucide-reac
 import { useAgentStore } from "@/stores/agentStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
-import { hasApiKey } from "@/lib/tauri";
+import { hasApiKey } from "@/platform";
 import { cn } from "@/lib/utils";
 import type { ContentPart } from "@/agent/types";
 import AgentMessage from "./AgentMessage";

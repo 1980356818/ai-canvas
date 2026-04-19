@@ -3,7 +3,7 @@ import { MessageSquare, ImageIcon, SendHorizonal, X, ImagePlus } from "lucide-re
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useChatStore } from "@/stores/chatStore";
-import { createProject, hasApiKey, isTauri } from "@/lib/tauri";
+import { createProject, hasApiKey, isTauri } from "@/platform";
 import { persistImage, getDisplayUrl } from "@/lib/media";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { modelService } from "@/services/models";

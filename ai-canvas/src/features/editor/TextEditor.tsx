@@ -1,5 +1,6 @@
 import { useRef, useCallback } from "react";
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard } from "@/types";
 import { autoSave } from "@/lib/autoSave";
 
 interface TextEditorProps {

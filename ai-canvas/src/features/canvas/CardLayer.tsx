@@ -1,6 +1,7 @@
 import { useMemo, useEffect, useRef, memo } from "react";
-import { useCanvasStore, type Viewport } from "@/stores/canvasStore";
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useCanvasStore } from "@/stores/canvasStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard, Viewport } from "@/types";
 import CardShell from "@/features/cards/CardShell";
 import CardContent from "@/features/cards/CardContent";
 import { TYPE_COLORS } from "@/shared/constants";

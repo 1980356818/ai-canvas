@@ -14,3 +14,5 @@ export type {
   AgentSession,
   JsonSchema,
 } from "@/agent/types";
+
+export type { AgentErrorCode } from "@/agent/errors";

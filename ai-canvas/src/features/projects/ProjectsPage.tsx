@@ -11,10 +11,11 @@ import {
   restoreProject,
   permanentlyDeleteProject,
   loadCards,
-} from "@/lib/tauri";
+} from "@/platform";
 import { getDisplayUrl } from "@/lib/media";
 import { cn } from "@/lib/utils";
-import { useProjectStore, type ProjectInfo } from "@/stores/projectStore";
+import { useProjectStore } from "@/stores/projectStore";
+import type { ProjectInfo } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 
 function formatRelativeTime(iso: string): string {

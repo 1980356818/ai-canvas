@@ -73,4 +73,5 @@ export type {
   AgentStatus,
   AgentSession,
   JsonSchema,
+  AgentErrorCode,
 } from "./agent";

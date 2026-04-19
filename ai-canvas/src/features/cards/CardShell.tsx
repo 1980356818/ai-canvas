@@ -1,9 +1,10 @@
 import { useRef, useCallback, useState, memo } from "react";
 import { GripVertical } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard, Connection } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
-import { useConnectionStore, type Connection } from "@/stores/connectionStore";
+import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { autoSave } from "@/lib/autoSave";
 import { recordUpdate } from "@/lib/history";

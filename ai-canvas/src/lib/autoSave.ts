@@ -2,7 +2,7 @@ import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
-import { saveCardsBatch } from "@/lib/tauri";
+import { saveCardsBatch } from "@/platform";
 import { cardToRow } from "@/lib/mappers";
 
 class AutoSaveManager {

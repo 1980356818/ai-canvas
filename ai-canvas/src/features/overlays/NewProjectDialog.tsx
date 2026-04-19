@@ -9,9 +9,10 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
-import { createProject, updateProjectMeta, loadCards } from "@/lib/tauri";
+import { createProject, updateProjectMeta, loadCards } from "@/platform";
 import { getDisplayUrl } from "@/lib/media";
-import { useProjectStore, type ProjectInfo } from "@/stores/projectStore";
+import { useProjectStore } from "@/stores/projectStore";
+import type { ProjectInfo } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { useChatStore } from "@/stores/chatStore";
 import { WORKFLOW_TEMPLATES } from "@/shared/constants";

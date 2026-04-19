@@ -1,4 +1,4 @@
-import type { CanvasCard } from "@/stores/cardStore";
+import type { CanvasCard } from "@/types";
 
 export interface RefImageSlot {
   key: string;

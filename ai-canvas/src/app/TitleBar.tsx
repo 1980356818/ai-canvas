@@ -3,9 +3,10 @@ import { createPortal } from "react-dom";
 import { Minus, Square, X, PanelLeft, Plus, Pencil, MessageSquare } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { NewProjectDialog } from "@/features/overlays/NewProjectDialog";
-import { useUIStore, type SaveStatus } from "@/stores/uiStore";
+import { useUIStore } from "@/stores/uiStore";
+import type { SaveStatus } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
-import { renameProject } from "@/lib/tauri";
+import { renameProject } from "@/platform";
 import { cn } from "@/lib/utils";
 
 const isTauri =

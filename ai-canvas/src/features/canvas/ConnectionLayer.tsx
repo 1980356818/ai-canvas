@@ -1,6 +1,7 @@
 import { memo, useMemo, useCallback } from "react";
-import { useConnectionStore, type Connection } from "@/stores/connectionStore";
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useConnectionStore } from "@/stores/connectionStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard, Connection } from "@/types";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { TYPE_COLORS } from "@/shared/constants";
 

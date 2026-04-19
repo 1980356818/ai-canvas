@@ -2,7 +2,8 @@ import { memo, useCallback, useRef, useEffect } from "react";
 import { Loader2, AlertTriangle, MessageSquareText } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useUIStore } from "@/stores/uiStore";
-import { useCardStore, type CanvasCard } from "@/stores/cardStore";
+import { useCardStore } from "@/stores/cardStore";
+import type { CanvasCard } from "@/types";
 import { autoSave } from "@/lib/autoSave";
 
 export default memo(function AIChatCard({ card }: { card: CanvasCard }) {

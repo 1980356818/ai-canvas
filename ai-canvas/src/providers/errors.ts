@@ -37,25 +37,13 @@ export function parseApiError(status: number, body: string): ApiError {
 
   switch (status) {
     case 401:
-      return new ApiError(
-        message || "API Key 无效或已过期，请在设置中检查",
-        status,
-        code,
-      );
+      return new ApiError(message || "API Key 无效或已过期，请在设置中检查", status, code);
     case 402:
       return new ApiError(message || "账户余额不足", status, code);
     case 403:
-      return new ApiError(
-        message || "API Key 缺少所需权限",
-        status,
-        code,
-      );
+      return new ApiError(message || "API Key 缺少所需权限", status, code);
     case 429:
-      return new ApiError(
-        message || "请求过于频繁，请稍后再试",
-        status,
-        code,
-      );
+      return new ApiError(message || "请求过于频繁，请稍后再试", status, code);
     default:
       return new ApiError(message || `请求失败 (HTTP ${status})`, status, code);
   }

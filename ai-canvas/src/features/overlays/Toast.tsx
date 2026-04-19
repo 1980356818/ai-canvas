@@ -6,7 +6,8 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { useUIStore, type ToastItem } from "@/stores/uiStore";
+import { useUIStore } from "@/stores/uiStore";
+import type { ToastItem } from "@/types";
 import { cn } from "@/lib/utils";
 
 const typeStyles: Record<

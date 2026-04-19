@@ -1,7 +1,7 @@
 import { useCardStore, type CanvasCard } from "@/stores/cardStore";
 import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { useUIStore } from "@/stores/uiStore";
-import { deleteCard as deleteCardFromDb } from "@/lib/tauri";
+import { deleteCard as deleteCardFromDb } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
 
 export type UndoAction =
