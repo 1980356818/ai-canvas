@@ -36,7 +36,8 @@ pub fn read_api_config(db: &Connection, provider: &str) -> Result<ApiConfig, Str
 
 fn default_base_url(provider: &str) -> String {
     match provider {
-        "openai" => "https://ai.comfly.chat".to_string(),
+        "openai" | "comfly" => "https://ai.comfly.chat".to_string(),
+        "jijing" => "https://ai.snoworangekeji.cn".to_string(),
         "anthropic" => "https://api.anthropic.com".to_string(),
         _ => String::new(),
     }

@@ -17,13 +17,13 @@ export const providerManager = {
     return registry.tryGet(id);
   },
   getDefault() {
-    return registry.get("openai");
+    return registry.get("comfly");
   },
   setDefault(_id: string) {
     /* no-op for compatibility */
   },
   resolve(caps: string[]) {
-    return registry.getByCapability(caps[0] as ProviderCapability)[0] ?? registry.get("openai");
+    return registry.getByCapability(caps[0] as ProviderCapability)[0] ?? registry.get("comfly");
   },
   listProviders() {
     return registry.listDescriptors();

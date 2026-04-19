@@ -5,7 +5,23 @@ import path from "path";
 
 const host = process.env.TAURI_DEV_HOST;
 
-const JIJING_API = "https://ai.comfly.chat";
+const COMFLY_API = "https://ai.comfly.chat";
+const JIJING_API = "https://ai.snoworangekeji.cn";
+
+function proxyConfig(target: string, prefix: string) {
+  return {
+    target,
+    changeOrigin: true,
+    rewrite: (p: string) => p.replace(new RegExp(`^${prefix}`), ""),
+    secure: false,
+    configure(proxy: import("http-proxy").Server) {
+      proxy.on("proxyReq", (proxyReq) => {
+        proxyReq.removeHeader("origin");
+        proxyReq.removeHeader("referer");
+      });
+    },
+  };
+}
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -24,18 +40,8 @@ export default defineConfig({
       ignored: ["**/src-tauri/**"],
     },
     proxy: {
-      "/v1-proxy": {
-        target: JIJING_API,
-        changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/v1-proxy/, ""),
-        secure: false,
-        configure(proxy) {
-          proxy.on("proxyReq", (proxyReq) => {
-            proxyReq.removeHeader("origin");
-            proxyReq.removeHeader("referer");
-          });
-        },
-      },
+      "/v1-proxy": proxyConfig(COMFLY_API, "\\/v1-proxy"),
+      "/v1-jijing": proxyConfig(JIJING_API, "\\/v1-jijing"),
     },
   },
 });

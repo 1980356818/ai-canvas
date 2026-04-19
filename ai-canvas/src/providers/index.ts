@@ -1,7 +1,6 @@
 export { registry, ProviderRegistry } from "./registry";
-export { OpenAIProvider } from "./openai";
-export { SeedanceProvider } from "./seedance";
-export { CustomProvider } from "./custom";
+export { ComflyProvider } from "./comfly";
+export { JiJingProvider } from "./jijing";
 export { ApiError, parseApiError, throwIfError } from "./errors";
 
 export type {
@@ -29,8 +28,8 @@ export type {
 // ── Bootstrap: Register all built-in providers ──────────────
 
 import { registry } from "./registry";
-import { OpenAIProvider } from "./openai";
-import { SeedanceProvider } from "./seedance";
+import { ComflyProvider } from "./comfly";
+import { JiJingProvider } from "./jijing";
 
-registry.register(new OpenAIProvider());
-registry.register(new SeedanceProvider());
+registry.register(new ComflyProvider());
+registry.register(new JiJingProvider());

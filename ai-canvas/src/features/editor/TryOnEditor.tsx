@@ -44,9 +44,9 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
   }, [data.model]);
 
   const handleModelChange = useCallback(
-    (modelId: string) => {
+    (modelId: string, providerId: string) => {
       setCurrentModel(modelId);
-      updateCard(card.id, { data: { ...data, model: modelId } });
+      updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
@@ -125,7 +125,8 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
     useUIStore.getState().setCardError(card.id, null);
 
     try {
-      const provider = providerManager.getDefault();
+      const pid = data.provider || "comfly";
+      const provider = providerManager.get(pid) ?? providerManager.getDefault();
       if (!provider.generateImage) {
         throw new Error("当前 Provider 不支持图片生成");
       }

@@ -126,9 +126,9 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   const imageOptions = useImageRefSources(card.id, refSlots, data.refImages);
 
   const handleModelChange = useCallback(
-    (modelId: string) => {
+    (modelId: string, providerId: string) => {
       setCurrentModel(modelId);
-      updateCard(card.id, { data: { ...data, model: modelId } });
+      updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
@@ -336,7 +336,8 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     useUIStore.getState().setCardError(card.id, null);
 
     try {
-      const provider = providerManager.getDefault();
+      const pid = (data as MediaData).provider || "comfly";
+      const provider = providerManager.get(pid) ?? providerManager.getDefault();
       if (!provider.generateImage) {
         throw new Error("当前 Provider 不支持图片生成");
       }
@@ -373,7 +374,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       });
 
       const resolvedModel = currentModel
-        ? modelService.resolveImageModelId(currentModel, currentResolution)
+        ? modelService.resolveImageModelId(currentModel, currentResolution, pid)
         : undefined;
 
       const count = data.batchSize ?? 1;

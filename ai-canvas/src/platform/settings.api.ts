@@ -18,13 +18,18 @@ export async function setSetting(key: string, value: string): Promise<void> {
   lsSet("setting_" + key, value);
 }
 
-let _apiKeyCache: string | null | undefined;
+let _apiKeyCache: boolean | undefined;
 
 export async function hasApiKey(): Promise<boolean> {
   if (_apiKeyCache === undefined) {
-    _apiKeyCache = await getSetting("openai_api_key");
+    const [comfly, jijing, legacy] = await Promise.all([
+      getSetting("comfly_api_key"),
+      getSetting("jijing_api_key"),
+      getSetting("openai_api_key"),
+    ]);
+    _apiKeyCache = !!(comfly || jijing || legacy);
   }
-  return !!_apiKeyCache;
+  return _apiKeyCache;
 }
 
 export function invalidateApiKeyCache() {

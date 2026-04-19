@@ -161,6 +161,10 @@ export interface AIProvider {
   generateImage?(req: ImageGenRequest): Promise<ImageGenResponse>;
 
   generateVideo?(req: VideoGenRequest): Promise<VideoGenResponse>;
+
+  resolveImageModelId?(baseId: string, resolution: string): string;
+
+  getDisplayName?(modelId: string): string | undefined;
 }
 
 // ── 增强 ModelInfo ──────────────────────────────────────────

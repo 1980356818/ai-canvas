@@ -354,7 +354,7 @@ export default function AIPromptInput() {
           <ModelSelector
             capability={mode === "chat" ? "CHAT" : "IMAGE"}
             value={selectedModel}
-            onChange={setSelectedModel}
+            onChange={(modelId) => setSelectedModel(modelId)}
           />
 
           <div className="flex-1" />

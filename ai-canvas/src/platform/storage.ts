@@ -24,8 +24,14 @@ export function getBrowserApiConfig(): { apiKey: string; baseUrl: string } {
   };
 }
 
-export function buildProxyUrl(endpoint: string): string {
-  return "/v1-proxy" + endpoint;
+const PROXY_PREFIX: Record<string, string> = {
+  comfly: "/v1-proxy",
+  jijing: "/v1-jijing",
+};
+
+export function buildProxyUrl(endpoint: string, provider?: string): string {
+  const prefix = (provider && PROXY_PREFIX[provider]) || "/v1-proxy";
+  return prefix + endpoint;
 }
 
 export function getAuthHeaders(): Record<string, string> {

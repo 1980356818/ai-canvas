@@ -1,5 +1,6 @@
 import type {
   AIProvider,
+  ProviderDescriptor,
   ChatRequest,
   ChatResponse,
   StreamEvent,
@@ -16,8 +17,7 @@ import {
   resetStreamState,
   getAccumulatedToolCalls,
 } from "./formatter";
-import { ALL_OPENAI_MODELS } from "./models";
-import { aiProxy, aiProxyStream, saveMedia } from "@/platform";
+import { aiProxy, aiProxyStream, listModels as platformListModels, saveMedia } from "@/platform";
 import { waitForTask } from "@/services/tasks";
 import { useProjectStore } from "@/stores/projectStore";
 import type { ModelInfo } from "@/types";
@@ -36,19 +36,57 @@ function toAspectRatio(size: string): string {
   return `${w / d}:${h / d}`;
 }
 
-export class OpenAIProvider implements AIProvider {
-  readonly descriptor = {
-    id: "openai" as const,
-    name: "OpenAI / 兼容网关",
-    capabilities: ["chat", "vision", "tool_calling", "image_gen", "video_gen", "streaming"] as const,
-    configSchema: [
-      { key: "apiKey", label: "API Key", type: "password" as const, required: true },
-      { key: "baseUrl", label: "Base URL", type: "url" as const, required: false, default: "https://api.openai.com" },
-    ],
-  };
+/**
+ * Base class for providers using the OpenAI-compatible API protocol.
+ * Subclasses only need to provide `descriptor` and optionally override
+ * `staticModels()` or individual generation methods.
+ */
+export abstract class OpenAICompatProvider implements AIProvider {
+  abstract readonly descriptor: ProviderDescriptor;
+
+  protected get providerId(): string {
+    return this.descriptor.id;
+  }
+
+  protected staticModels(): ModelInfo[] {
+    return [];
+  }
+
+  protected defaultImageModel(): string {
+    return "gpt-image-1.5";
+  }
+
+  protected defaultVideoModel(): string {
+    return "veo3.1";
+  }
+
+  protected videoEndpoint(): string {
+    return "/v2/videos/generations";
+  }
+
+  resolveImageModelId(baseId: string, _resolution: string): string {
+    return baseId;
+  }
+
+  getDisplayName(modelId: string): string | undefined {
+    const m = this.staticModels().find((m) => m.id === modelId);
+    return m ? (m.display_name ?? m.id) : undefined;
+  }
 
   async listModels(): Promise<ModelInfo[]> {
-    return ALL_OPENAI_MODELS;
+    const statics = this.staticModels();
+    if (statics.length > 0) return statics;
+
+    try {
+      const raw = await platformListModels(this.providerId);
+      return raw.map((m) => ({
+        id: m.id,
+        display_name: m.display_name ?? m.id,
+        capability: m.capability ?? "CHAT",
+      }));
+    } catch {
+      return [];
+    }
   }
 
   async chat(req: ChatRequest): Promise<ChatResponse> {
@@ -58,7 +96,7 @@ export class OpenAIProvider implements AIProvider {
     if (req.maxTokens) body.max_tokens = req.maxTokens;
     if (req.temperature != null) body.temperature = req.temperature;
 
-    const raw = await aiProxy("openai", "/v1/chat/completions", body);
+    const raw = await aiProxy(this.providerId, "/v1/chat/completions", body);
     throwIfError(raw.status, raw.body);
     return parseOpenAIChatResponse(raw);
   }
@@ -80,7 +118,7 @@ export class OpenAIProvider implements AIProvider {
     if (req.temperature != null) body.temperature = req.temperature;
 
     const { abort } = await aiProxyStream(
-      "openai",
+      this.providerId,
       "/v1/chat/completions",
       body,
       {
@@ -114,7 +152,7 @@ export class OpenAIProvider implements AIProvider {
     const rawSize = req.size || "1024x1024";
     const size = toAspectRatio(rawSize);
     const body: Record<string, unknown> = {
-      model: req.model ?? "gpt-image-1.5",
+      model: req.model ?? this.defaultImageModel(),
       prompt: req.prompt,
       size,
       quality: req.quality || "standard",
@@ -126,7 +164,7 @@ export class OpenAIProvider implements AIProvider {
       body.image = req.referenceImages.map((ref) => ref.url);
     }
 
-    const raw = await aiProxy("openai", "/v1/images/generations", body);
+    const raw = await aiProxy(this.providerId, "/v1/images/generations", body);
     throwIfError(raw.status, raw.body);
 
     const data = JSON.parse(raw.body);
@@ -183,7 +221,7 @@ export class OpenAIProvider implements AIProvider {
 
     const body: Record<string, unknown> = {
       prompt: req.prompt,
-      model: req.model ?? "veo3.1",
+      model: req.model ?? this.defaultVideoModel(),
     };
     if (req.referenceImages?.length) {
       body.images = req.referenceImages.map((ref) => ref.url);
@@ -192,7 +230,7 @@ export class OpenAIProvider implements AIProvider {
       body.aspect_ratio = toAspectRatio(req.size);
     }
 
-    const raw = await aiProxy("openai", "/v2/videos/generations", body);
+    const raw = await aiProxy(this.providerId, this.videoEndpoint(), body);
     throwIfError(raw.status, raw.body);
 
     const data = JSON.parse(raw.body);

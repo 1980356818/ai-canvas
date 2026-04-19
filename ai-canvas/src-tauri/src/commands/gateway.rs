@@ -2,14 +2,20 @@ use crate::AppState;
 use super::config::read_api_config;
 use tauri::State;
 
+fn resolve_provider(provider: Option<String>) -> String {
+    provider.unwrap_or_else(|| "comfly".to_string())
+}
+
 /// Fetch available models from the gateway's /v1/models endpoint.
 #[tauri::command]
 pub async fn list_models(
     state: State<'_, AppState>,
+    provider: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    let p = resolve_provider(provider);
     let config = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        read_api_config(&db, "openai")?
+        read_api_config(&db, &p)?
     };
 
     let url = format!("{}/v1/models", config.base_url.trim_end_matches('/'));
@@ -40,10 +46,12 @@ pub async fn poll_task(
     state: State<'_, AppState>,
     task_id: String,
     endpoint: Option<String>,
+    provider: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    let p = resolve_provider(provider);
     let config = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        read_api_config(&db, "openai")?
+        read_api_config(&db, &p)?
     };
 
     let path = endpoint
@@ -79,10 +87,12 @@ pub async fn poll_task(
 #[tauri::command]
 pub async fn validate_connection(
     state: State<'_, AppState>,
+    provider: Option<String>,
 ) -> Result<bool, String> {
+    let p = resolve_provider(provider);
     let config = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        read_api_config(&db, "openai")?
+        read_api_config(&db, &p)?
     };
 
     if config.api_key.is_empty() {
@@ -97,7 +107,7 @@ pub async fn validate_connection(
         "****".to_string()
     };
     let base = config.base_url.trim_end_matches('/');
-    tracing::info!("validate_connection: base_url={}, key_len={}, key_preview={}", base, key_len, key_preview);
+    tracing::info!("validate_connection [{}]: base_url={}, key_len={}, key_preview={}", p, base, key_len, key_preview);
 
     // Try /v1/models first
     let models_url = format!("{}/v1/models", base);
@@ -110,14 +120,14 @@ pub async fn validate_connection(
     {
         Ok(resp) => {
             let st = resp.status().as_u16();
-            tracing::info!("validate_connection: /v1/models -> {}", st);
+            tracing::info!("validate_connection [{}]: /v1/models -> {}", p, st);
             if resp.status().is_success() {
                 return Ok(true);
             }
             st
         }
         Err(e) => {
-            tracing::warn!("validate_connection: /v1/models failed: {}", e);
+            tracing::warn!("validate_connection [{}]: /v1/models failed: {}", p, e);
             0
         }
     };
@@ -142,14 +152,14 @@ pub async fn validate_connection(
 
     let chat_status = chat_resp.status().as_u16();
     let chat_body_text = chat_resp.text().await.unwrap_or_default();
-    tracing::info!("validate_connection: /v1/chat/completions -> {} body={}", chat_status, &chat_body_text[..chat_body_text.len().min(200)]);
+    tracing::info!("validate_connection [{}]: /v1/chat/completions -> {} body={}", p, chat_status, &chat_body_text[..chat_body_text.len().min(200)]);
 
     // 200 = success; 400/404 likely means model not found but auth passed
     if chat_status == 200 || chat_status == 400 || chat_status == 404 {
         return Ok(true);
     }
 
-    tracing::warn!("validate_connection: both failed, models={}, chat={}", models_status, chat_status);
+    tracing::warn!("validate_connection [{}]: both failed, models={}, chat={}", p, models_status, chat_status);
     match chat_status {
         401 => Err("API Key 无效或已过期，请检查 Key 是否正确或是否已到期".to_string()),
         402 => Err("账户余额不足，请充值后重试".to_string()),

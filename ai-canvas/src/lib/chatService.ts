@@ -45,7 +45,7 @@ export async function generateTitle(
     max_tokens: 30,
   };
 
-  const raw = await aiProxy("openai", "/v1/chat/completions", body);
+  const raw = await aiProxy("comfly", "/v1/chat/completions", body);
   if (raw.status >= 400) return "新对话";
 
   try {

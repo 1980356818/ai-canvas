@@ -1,14 +1,24 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { ChevronDown } from "lucide-react";
 import { modelService } from "@/services/models";
-import type { ModelInfo } from "@/types";
+import type { ModelOption } from "@/providers/types";
 import { cn } from "@/lib/utils";
 
 interface ModelSelectorProps {
   capability: "CHAT" | "IMAGE" | "VIDEO";
   value: string;
-  onChange: (modelId: string) => void;
+  onChange: (modelId: string, providerId: string) => void;
   className?: string;
+}
+
+function toCompositeKey(m: ModelOption): string {
+  return `${m.providerId}:${m.id}`;
+}
+
+function parseCompositeKey(key: string): { providerId: string; modelId: string } {
+  const sep = key.indexOf(":");
+  if (sep < 0) return { providerId: "comfly", modelId: key };
+  return { providerId: key.slice(0, sep), modelId: key.slice(sep + 1) };
 }
 
 export default function ModelSelector({
@@ -17,7 +27,7 @@ export default function ModelSelector({
   onChange,
   className,
 }: ModelSelectorProps) {
-  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [models, setModels] = useState<ModelOption[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,6 +49,23 @@ export default function ModelSelector({
     };
   }, [capability]);
 
+  const multiProvider = useMemo(() => {
+    const ids = new Set(models.map((m) => m.providerId));
+    return ids.size > 1;
+  }, [models]);
+
+  const selectedKey = useMemo(() => {
+    if (!value) return "";
+    const exact = models.find((m) => m.id === value);
+    if (exact) return toCompositeKey(exact);
+    return value;
+  }, [value, models]);
+
+  const handleChange = (compositeKey: string) => {
+    const { providerId, modelId } = parseCompositeKey(compositeKey);
+    onChange(modelId, providerId);
+  };
+
   if (loading) {
     return (
       <div className={cn("h-8 w-32 animate-pulse rounded bg-muted", className)} />
@@ -56,8 +83,8 @@ export default function ModelSelector({
   return (
     <div className={cn("relative inline-block", className)}>
       <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        value={selectedKey}
+        onChange={(e) => handleChange(e.target.value)}
         className="h-8 appearance-none rounded border border-input bg-background pl-2.5 pr-7 text-sm outline-none ring-ring focus:ring-1"
       >
         {!models.some((m) => m.id === value) && value && (
@@ -65,11 +92,16 @@ export default function ModelSelector({
             {modelService.getDisplayName(value)}
           </option>
         )}
-        {models.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.display_name || m.id}
-          </option>
-        ))}
+        {models.map((m) => {
+          const label = multiProvider
+            ? `[${m.providerName}] ${m.display_name || m.id}`
+            : (m.display_name || m.id);
+          return (
+            <option key={toCompositeKey(m)} value={toCompositeKey(m)}>
+              {label}
+            </option>
+          );
+        })}
       </select>
       <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
     </div>

@@ -19,7 +19,7 @@ import {
 import { modelService } from "@/services/models";
 import { providerService } from "@/services/provider.service";
 import { useProviderStore, parseModelRef } from "@/stores/providerStore";
-import { getAccumulatedToolCalls } from "@/providers/openai/formatter";
+import { getAccumulatedToolCalls } from "@/providers/openai-compat/formatter";
 import type { StreamEvent, UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 
 export type { ChatSession, ChatMessage } from "@/types";

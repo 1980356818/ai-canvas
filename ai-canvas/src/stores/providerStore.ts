@@ -21,9 +21,9 @@ function loadRef(key: string, fallback: string): string {
 }
 
 export const useProviderStore = create<ProviderStoreState>((set) => ({
-  activeChatRef: "openai:gemini-3.1-pro-preview-thinking-high",
-  activeImageRef: "openai:gemini-3.1-flash-image-preview",
-  activeVideoRef: "openai:veo3.1-fast",
+  activeChatRef: "comfly:gemini-3.1-pro-preview-thinking-high",
+  activeImageRef: "comfly:gemini-3.1-flash-image-preview",
+  activeVideoRef: "comfly:veo3.1-fast",
   initialized: false,
 
   setActiveRef(scene, ref) {
@@ -37,9 +37,9 @@ export const useProviderStore = create<ProviderStoreState>((set) => ({
   async initialize() {
     await registry.loadConfigs();
     set({
-      activeChatRef: loadRef("chat", "openai:gemini-3.1-pro-preview-thinking-high"),
-      activeImageRef: loadRef("image", "openai:gemini-3.1-flash-image-preview"),
-      activeVideoRef: loadRef("video", "openai:veo3.1-fast"),
+      activeChatRef: loadRef("chat", "comfly:gemini-3.1-pro-preview-thinking-high"),
+      activeImageRef: loadRef("image", "comfly:gemini-3.1-flash-image-preview"),
+      activeVideoRef: loadRef("video", "comfly:veo3.1-fast"),
       initialized: true,
     });
   },
@@ -47,6 +47,6 @@ export const useProviderStore = create<ProviderStoreState>((set) => ({
 
 export function parseModelRef(ref: string): { providerId: string; modelId: string } {
   const sep = ref.indexOf(":");
-  if (sep < 0) return { providerId: "openai", modelId: ref };
+  if (sep < 0) return { providerId: "comfly", modelId: ref };
   return { providerId: ref.slice(0, sep), modelId: ref.slice(sep + 1) };
 }

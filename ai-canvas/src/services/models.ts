@@ -1,7 +1,6 @@
 import type { ModelInfo } from "@/types";
 import { registry } from "@/providers/registry";
 import type { ModelOption, ProviderCapability } from "@/providers/types";
-import { resolveImageModelId, getOpenAIDisplayName } from "@/providers/openai/models";
 
 function matchCapability(m: ModelInfo, cap: string): boolean {
   const mc = (m.capability ?? "").toUpperCase();
@@ -80,16 +79,19 @@ export const modelService = {
     return models[0]?.id ?? "veo3.1-fast";
   },
 
-  resolveImageModelId,
+  resolveImageModelId(baseId: string, resolution: string, providerId?: string): string {
+    const provider = providerId ? registry.tryGet(providerId) : undefined;
+    return provider?.resolveImageModelId?.(baseId, resolution) ?? baseId;
+  },
 
-  getDisplayName(modelId: string): string {
-    const openaiName = getOpenAIDisplayName(modelId);
-    if (openaiName) return openaiName;
+  getDisplayName(modelId: string, providerId?: string): string {
+    if (providerId) {
+      const name = registry.tryGet(providerId)?.getDisplayName?.(modelId);
+      if (name) return name;
+    }
     for (const p of registry.getAll()) {
-      p.listModels().then(models => {
-        const found = models.find(m => m.id === modelId);
-        if (found) return found.display_name ?? found.id;
-      });
+      const name = p.getDisplayName?.(modelId);
+      if (name) return name;
     }
     return modelId;
   },

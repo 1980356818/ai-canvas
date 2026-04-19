@@ -14,7 +14,7 @@ export async function aiProxy(
     return getInvoke()<AiProxyResponse>("ai_proxy", { provider, endpoint, body });
   }
 
-  const url = buildProxyUrl(endpoint);
+  const url = buildProxyUrl(endpoint, provider);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...getAuthHeaders(),
@@ -82,7 +82,7 @@ export async function aiProxyStream(
   }
 
   const abortController = new AbortController();
-  const url = buildProxyUrl(endpoint);
+  const url = buildProxyUrl(endpoint, provider);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...getAuthHeaders(),
@@ -153,14 +153,14 @@ export async function aiProxyStream(
 
 // ── Gateway ─────────────────────────────────────────────────
 
-export async function listModels(): Promise<ModelInfo[]> {
+export async function listModels(provider?: string): Promise<ModelInfo[]> {
   if (isTauri) {
     await ensureTauriAPIs();
-    const raw = await getInvoke()<{ data?: ModelInfo[] }>("list_models");
+    const raw = await getInvoke()<{ data?: ModelInfo[] }>("list_models", { provider });
     return raw.data ?? [];
   }
 
-  const url = buildProxyUrl("/v1/models");
+  const url = buildProxyUrl("/v1/models", provider);
   const resp = await fetch(url, { headers: getAuthHeaders() });
   if (!resp.ok) throw new Error(`Failed to list models: ${resp.status}`);
   const data = await resp.json();
@@ -196,30 +196,30 @@ export function normalizeTaskInfo(raw: Record<string, unknown>): TaskInfo {
   return info;
 }
 
-export async function pollTask(taskId: string, endpoint?: string): Promise<TaskInfo> {
+export async function pollTask(taskId: string, endpoint?: string, provider?: string): Promise<TaskInfo> {
   if (isTauri) {
     await ensureTauriAPIs();
-    const raw = await getInvoke()<Record<string, unknown>>("poll_task", { taskId, endpoint });
+    const raw = await getInvoke()<Record<string, unknown>>("poll_task", { taskId, endpoint, provider });
     return normalizeTaskInfo(raw);
   }
 
   const path = endpoint
     ? endpoint.replace("{task_id}", taskId)
     : `/v1/tasks/${taskId}`;
-  const url = buildProxyUrl(path);
+  const url = buildProxyUrl(path, provider);
   const resp = await fetch(url, { headers: getAuthHeaders() });
   if (!resp.ok) throw new Error(`Failed to poll task: ${resp.status}`);
   const raw = await resp.json();
   return normalizeTaskInfo(raw);
 }
 
-export async function validateConnection(): Promise<boolean> {
+export async function validateConnection(provider?: string): Promise<boolean> {
   if (isTauri) {
     await ensureTauriAPIs();
-    return getInvoke()<boolean>("validate_connection");
+    return getInvoke()<boolean>("validate_connection", { provider });
   }
 
-  const url = buildProxyUrl("/v1/models");
+  const url = buildProxyUrl("/v1/models", provider);
   const resp = await fetch(url, { headers: getAuthHeaders() });
   if (!resp.ok)
     throw new Error(`连接失败: HTTP ${resp.status}`);

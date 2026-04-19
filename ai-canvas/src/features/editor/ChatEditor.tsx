@@ -94,9 +94,9 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
   const imageOptions = useImageRefSources(card.id, refSlots, data.refImages);
 
   const handleModelChange = useCallback(
-    (modelId: string) => {
+    (modelId: string, providerId: string) => {
       setCurrentModel(modelId);
-      updateCard(card.id, { data: { ...data, model: modelId } });
+      updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
@@ -413,7 +413,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     ];
 
     try {
-      const resp = await providerService.chat("openai", {
+      const resp = await providerService.chat("comfly", {
         model,
         systemPrompt: systemPrompt || "You are a helpful AI assistant.",
         messages: unifiedMessages,

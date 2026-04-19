@@ -83,7 +83,7 @@ export class SeedanceProvider implements AIProvider {
     if (req.seed != null && req.seed !== -1) body.seed = req.seed;
     if (req.watermark != null) body.watermark = req.watermark;
 
-    const raw = await aiProxy("openai", SEEDANCE_ENDPOINT, body);
+    const raw = await aiProxy("comfly", SEEDANCE_ENDPOINT, body);
     throwIfError(raw.status, raw.body);
 
     const data = JSON.parse(raw.body);
