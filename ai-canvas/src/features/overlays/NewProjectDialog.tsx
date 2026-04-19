@@ -15,7 +15,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import type { ProjectInfo } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { useChatStore } from "@/stores/chatStore";
-import { WORKFLOW_TEMPLATES } from "@/shared/constants";
+import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { autoSave } from "@/lib/autoSave";
 import { cn } from "@/lib/utils";

@@ -11,7 +11,8 @@ import { useProjectStore } from "@/stores/projectStore";
 import { createProject, updateProjectMeta } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
 import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
-import { WORKFLOW_TEMPLATES, type WorkflowTemplate } from "@/shared/constants";
+import { WORKFLOW_TEMPLATES } from "@/config/workflows";
+import type { WorkflowTemplate } from "@/shared/constants";
 
 const FEATURED_IDS = ["wf-white-bg", "wf-face-gen"];
 

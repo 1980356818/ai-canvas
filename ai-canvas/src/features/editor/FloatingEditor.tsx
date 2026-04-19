@@ -16,6 +16,8 @@ const EDITOR_SIZES: Record<string, { height: number; minWidth: number }> = {
 };
 const DEFAULT_SIZE = { height: 240, minWidth: 400 };
 
+const sizeMemory = new Map<string, { w: number; h: number }>();
+
 export default function FloatingEditor() {
   const editingCardId = useCanvasStore((s) => s.editingCardId);
   const viewport = useCanvasStore((s) => s.viewport);
@@ -28,7 +30,7 @@ export default function FloatingEditor() {
 
   if (editingCardId !== prevCardId.current) {
     prevCardId.current = editingCardId;
-    setUserSize(null);
+    setUserSize(editingCardId ? sizeMemory.get(editingCardId) ?? null : null);
   }
 
   const close = useCallback(() => {
@@ -49,7 +51,10 @@ export default function FloatingEditor() {
       e.preventDefault();
       e.stopPropagation();
       const el = panelRef.current;
+      const handle = e.currentTarget as HTMLElement;
       if (!el) return;
+
+      handle.setPointerCapture(e.pointerId);
 
       const zoom = useCanvasStore.getState().viewport.zoom;
       const startX = e.clientX;
@@ -58,20 +63,26 @@ export default function FloatingEditor() {
       const startH = el.offsetHeight;
 
       const onMove = (ev: PointerEvent) => {
+        ev.stopPropagation();
         const dx = (ev.clientX - startX) / zoom;
         const dy = (ev.clientY - startY) / zoom;
         const newW = edge === "bottom" ? startW : Math.max(MIN_EDITOR_WIDTH, startW + dx);
         const newH = edge === "right" ? startH : Math.max(MIN_EDITOR_HEIGHT, startH + dy);
-        setUserSize({ w: newW, h: newH });
+        const size = { w: newW, h: newH };
+        setUserSize(size);
+        const cid = useCanvasStore.getState().editingCardId;
+        if (cid) sizeMemory.set(cid, size);
       };
 
-      const onUp = () => {
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onUp);
+      const onUp = (ev: PointerEvent) => {
+        ev.stopPropagation();
+        handle.releasePointerCapture(ev.pointerId);
+        handle.removeEventListener("pointermove", onMove);
+        handle.removeEventListener("pointerup", onUp);
       };
 
-      document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp);
+      handle.addEventListener("pointermove", onMove);
+      handle.addEventListener("pointerup", onUp);
     },
     [],
   );

@@ -77,5 +77,4 @@ export const CARD_COLOR_PRESETS = [
   { name: "粉色", value: "#EC4899" },
 ];
 
-// WORKFLOW_TEMPLATES moved to @/config/workflows.ts
-export { WORKFLOW_TEMPLATES } from "@/config/workflows";
+// WORKFLOW_TEMPLATES lives in @/config/workflows.ts — import directly to avoid circular deps
