@@ -3,6 +3,7 @@ import { Sparkles, RefreshCw, Loader2, Lock, X, AlertCircle, Paperclip, Video } 
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { autoSave } from "@/lib/autoSave";
@@ -54,6 +55,7 @@ interface ChatData {
   refImages?: Record<string, RefImageEntry>;
   inlineRefs?: InlineImageRef[];
   directMedia?: MediaAttachment[];
+  upstreamTexts?: Record<string, string>;
   _locked?: boolean;
   _systemPrompt?: string;
   _label?: string;
@@ -81,12 +83,33 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       const p = modelService.tryResolveProvider(data.model);
       if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
     } else {
-      modelService.getDefaultChatModel().then(({ modelId, providerId }) => {
-        setCurrentModel(modelId);
-        updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
-      });
+      const saved = useSettingsStore.getState().getLastModel("chat");
+      if (saved) {
+        setCurrentModel(saved.modelId);
+        updateCard(card.id, { data: { ...data, model: saved.modelId, provider: saved.providerId } });
+      } else {
+        modelService.getDefaultChatModel().then(({ modelId, providerId }) => {
+          setCurrentModel(modelId);
+          updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+        });
+      }
     }
   }, [data.model]);
+
+  useEffect(() => {
+    const d = card.data as Record<string, unknown>;
+    if (d.upstreamContext && !d.upstreamTexts) {
+      const srcId = (d.upstreamCardId as string) || "legacy";
+      updateCard(card.id, {
+        data: {
+          ...card.data,
+          upstreamTexts: { [srcId]: d.upstreamContext as string },
+          upstreamContext: undefined,
+        },
+      });
+      autoSave.markDirty(card.id);
+    }
+  }, []);
 
   const refSlots = useMemo(() => {
     const slots = getRefSlotsForChatModel(currentModel);
@@ -105,6 +128,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       setCurrentModel(modelId);
       updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
       autoSave.markDirty(card.id);
+      useSettingsStore.getState().setLastModel("chat", modelId, providerId);
     },
     [card.id, data, updateCard],
   );
@@ -310,7 +334,10 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
   const handleGenerate = useCallback(async () => {
     const rawPrompt = data.content?.trim();
     const displayPrompt = rawPrompt ? toDisplayText(rawPrompt, data.inlineRefs ?? []) : "";
-    if (!displayPrompt.trim() || generating) return;
+    const rawUpstream = (data as Record<string, unknown>).upstreamTexts as
+      Record<string, string> | undefined;
+    const hasUpstreamText = rawUpstream && Object.keys(rawUpstream).length > 0;
+    if ((!displayPrompt.trim() && !hasUpstreamText) || generating) return;
 
     if (!(await hasApiKey())) {
       useUIStore.getState().addToast({
@@ -403,7 +430,25 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       userContent.push({ type: "text", text: displayPrompt });
     }
 
-    const systemPrompt = data._systemPrompt || "你是一个有帮助的 AI 助手，请用中文回复。请直接回答用户的问题。";
+    const rawUpstreamTexts = (data as Record<string, unknown>).upstreamTexts as
+      Record<string, string> | undefined;
+    const upstreamEntries = rawUpstreamTexts ? Object.entries(rawUpstreamTexts) : [];
+
+    let contextPrefix = "";
+    if (upstreamEntries.length > 0) {
+      const cs = useCardStore.getState();
+      const sections = upstreamEntries.map(([cid, txt]) => {
+        const label = cs.getCard(cid)?.title || "上游节点";
+        return `## ${label}\n${txt}`;
+      });
+      contextPrefix =
+        "<upstream_context>\n" +
+        sections.join("\n\n") +
+        "\n</upstream_context>\n\n";
+    }
+
+    const systemPrompt = contextPrefix
+      + (data._systemPrompt || "你是一个有帮助的 AI 助手，请用中文回复。请直接回答用户的问题。");
     const hasMedia = userContent.some((p) => p.type === "image_url" || p.type === "video_url");
 
     const unifiedUserContent: UnifiedContentPart[] = hasMedia
@@ -451,7 +496,11 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     }
   }, [data, card.id, generating, updateCard, currentModel, setCardProgress, refSlots, imageOptions]);
 
-  const hasContent = !!(data.content?.trim());
+  const hasUpstream = !!(
+    (data as Record<string, unknown>).upstreamTexts &&
+    Object.keys((data as Record<string, unknown>).upstreamTexts as Record<string, string>).length > 0
+  );
+  const hasContent = !!(data.content?.trim()) || hasUpstream;
   const isLocked = !!data._locked;
 
   return (
@@ -516,6 +565,46 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {data.upstreamTexts && Object.keys(data.upstreamTexts).length > 0 && (
+        <div className="flex shrink-0 flex-col gap-1 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-2">
+          <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+            <Paperclip className="h-3 w-3" />
+            <span>引用 {Object.keys(data.upstreamTexts).length} 个上游输出</span>
+          </div>
+          {Object.entries(data.upstreamTexts).map(([srcId, txt]) => {
+            const srcCard = useCardStore.getState().getCard(srcId);
+            const label = srcCard?.title || "上游节点";
+            return (
+              <div
+                key={srcId}
+                className="flex items-center gap-1.5 rounded-md bg-background/60 px-2 py-1 text-[11px]"
+              >
+                <span className="min-w-0 flex-1 truncate text-foreground/80">
+                  <span className="font-medium text-foreground">{label}</span>
+                  {" · "}
+                  {txt.length > 60 ? txt.slice(0, 60) + "…" : txt}
+                  {` (${txt.length}字)`}
+                </span>
+                <button
+                  onClick={() => {
+                    const { connections, removeConnection } = useConnectionStore.getState();
+                    for (const [cid, c] of connections) {
+                      if (c.sourceCardId === srcId && c.targetCardId === card.id) {
+                        removeConnection(cid);
+                        break;
+                      }
+                    }
+                  }}
+                  className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 

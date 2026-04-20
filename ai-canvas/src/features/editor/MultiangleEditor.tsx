@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { Sparkles, Loader2, RefreshCw, ImageIcon, X, AlertCircle } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
@@ -12,14 +12,16 @@ import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import {
   compactRefImages,
+  isMultiangleModel,
   type RefImageEntry,
 } from "@/config/model-ref-images";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize } from "@/shared/constants";
+import ModelSelector from "./ModelSelector";
 import SizeCombo from "./SizeCombo";
 
-const MODEL_ID = "qwen-image-edit-2511-multipie";
+const DEFAULT_MODEL_ID = "qwen-image-edit-2511-multipie";
 
 const ANGLE_PARAMS = [
   { key: "h", label: "水平角度", min: 0, max: 360, step: 5, unit: "°", description: "0°正面 90°右侧 180°背面 270°左侧" },
@@ -35,6 +37,7 @@ interface MultiangleData {
   content?: string;
   imageUrl?: string;
   model?: string;
+  provider?: string;
   size?: string;
   resolution?: string;
   refImages?: Record<string, RefImageEntry>;
@@ -53,6 +56,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
   const generating = useUIStore((s) => s.generatingCards.has(card.id));
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [currentModel, setCurrentModel] = useState(DEFAULT_MODEL_ID);
 
   const data = card.data as MultiangleData;
   const h = data.h ?? 0;
@@ -62,6 +66,36 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
   const canGenerate = hasRef;
   const [currentSize, setCurrentSize] = useState(
     () => normalizeImageSize(data.size) || useSettingsStore.getState().lastImageSize,
+  );
+
+  useEffect(() => {
+    if (data.model) {
+      setCurrentModel(data.model);
+    } else {
+      const saved = useSettingsStore.getState().getLastModel("multiangle");
+      const modelId = saved?.modelId || DEFAULT_MODEL_ID;
+      const providerId = saved?.providerId || "";
+      setCurrentModel(modelId);
+      if (!data.model) {
+        const p = providerId || modelService.tryResolveProvider(modelId)?.descriptor.id || "";
+        updateCard(card.id, { data: { ...data, model: modelId, provider: p } });
+      }
+    }
+  }, [data.model]);
+
+  const handleModelChange = useCallback(
+    (modelId: string, providerId: string) => {
+      setCurrentModel(modelId);
+      updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+      autoSave.markDirty(card.id);
+      useSettingsStore.getState().setLastModel("multiangle", modelId, providerId);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const multiangleFilter = useCallback(
+    (m: { id: string }) => isMultiangleModel(m.id),
+    [],
   );
 
   const handleSizeChange = useCallback(
@@ -101,18 +135,18 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
         key === "v" ? value : v,
         key === "z" ? value : z,
       );
-      newData.model = MODEL_ID;
+      newData.model = currentModel;
       updateCard(card.id, { data: newData });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
     },
-    [card.id, data, h, v, z, updateCard],
+    [card.id, data, h, v, z, currentModel, updateCard],
   );
 
   const setRefImage = useCallback(
     (slotKey: string, entry: RefImageEntry) => {
       const refImages = { ...data.refImages, [slotKey]: entry };
-      updateCard(card.id, { data: { ...data, refImages, model: MODEL_ID } });
+      updateCard(card.id, { data: { ...data, refImages, model: currentModel } });
       autoSave.markDirty(card.id);
 
       if (entry.sourceCardId) {
@@ -133,7 +167,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
         }
       }
     },
-    [card.id, data, updateCard],
+    [card.id, data, currentModel, updateCard],
   );
 
   const clearRefImage = useCallback(
@@ -181,7 +215,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
     useUIStore.getState().setCardError(card.id, null);
 
     try {
-      const provider = modelService.resolveProvider(MODEL_ID);
+      const provider = modelService.resolveProvider(currentModel, (data as MultiangleData).provider);
       if (!provider.generateImage) {
         throw new Error("当前 Provider 不支持图片生成");
       }
@@ -195,7 +229,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
       const result = await provider.generateImage({
         prompt,
         size: currentSize,
-        model: MODEL_ID,
+        model: currentModel,
         quality: "standard",
         referenceImages,
         onProgress: (p) => {
@@ -204,7 +238,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
       });
 
       updateCard(card.id, {
-        data: { ...data, imageUrl: result.url, content: prompt, model: MODEL_ID },
+        data: { ...data, imageUrl: result.url, content: prompt, model: currentModel },
       });
       autoSave.markDirty(card.id);
     } catch (err) {
@@ -215,7 +249,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, h, v, z, generating, canGenerate, updateCard, setCardProgress, currentSize]);
+  }, [data, card.id, h, v, z, generating, canGenerate, updateCard, setCardProgress, currentSize, currentModel]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const handleFile = useCallback(
@@ -330,6 +364,13 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
       )}
 
       <div className="flex items-center gap-2">
+        <ModelSelector
+          capability="IMAGE"
+          value={currentModel}
+          providerId={(data as MultiangleData).provider}
+          onChange={handleModelChange}
+          filter={multiangleFilter}
+        />
         <SizeCombo
           value={currentSize}
           onChange={handleSizeChange}

@@ -95,6 +95,17 @@ export function isEnhancerModel(modelId: string): boolean {
   return cfg?.enhancer === true;
 }
 
+const MULTIANGLE_PATTERN = /^qwen-image-edit.*multipie$/;
+
+export function isMultiangleModel(modelId: string): boolean {
+  if (!modelId) return false;
+  return MULTIANGLE_PATTERN.test(modelId);
+}
+
+export function isStandardImageModel(modelId: string): boolean {
+  return !isEnhancerModel(modelId) && !isMultiangleModel(modelId);
+}
+
 export interface RefImageEntry {
   url: string;
   sourceCardId?: string;

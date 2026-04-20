@@ -1,6 +1,7 @@
 import type { ModelInfo } from "@/types";
 
 export const COMFLY_CHAT_MODELS: ModelInfo[] = [
+  { id: "gpt-5.4", display_name: "GPT-5.4", capability: "CHAT" },
   { id: "gemini-3.1-pro-preview-thinking-high", display_name: "Gemini 3.1 Pro (Thinking)", capability: "CHAT" },
   { id: "gemini-3.1-pro-preview", display_name: "Gemini 3.1 Pro", capability: "CHAT" },
 ];

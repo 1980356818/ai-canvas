@@ -4,6 +4,7 @@ import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import type { ModelCategory } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/platform";
 import { getBase64ForApi } from "@/lib/media";
@@ -14,6 +15,7 @@ import { friendlyError } from "@/lib/errors";
 import {
   getRefSlotsForModel,
   isEnhancerModel,
+  isStandardImageModel,
   compactRefImages,
   buildCompactKeyMap,
   type RefImageEntry,
@@ -115,10 +117,17 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       const p = modelService.tryResolveProvider(data.model);
       if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
     } else {
-      modelService.getDefaultImageModel().then(({ modelId, providerId }) => {
-        setCurrentModel(modelId);
-        updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
-      });
+      const category: ModelCategory = enhancer ? "enhancer" : "image";
+      const saved = useSettingsStore.getState().getLastModel(category);
+      if (saved) {
+        setCurrentModel(saved.modelId);
+        updateCard(card.id, { data: { ...data, model: saved.modelId, provider: saved.providerId } });
+      } else {
+        modelService.getDefaultImageModel().then(({ modelId, providerId }) => {
+          setCurrentModel(modelId);
+          updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+        });
+      }
     }
   }, [data.model]);
 
@@ -136,8 +145,10 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
   const imageOptions = useImageRefSources(card.id, refSlots, data.refImages);
 
-  const enhancerFilter = useMemo(
-    () => enhancer ? (m: { id: string }) => isEnhancerModel(m.id) : undefined,
+  const modelFilter = useMemo(
+    () => enhancer
+      ? (m: { id: string }) => isEnhancerModel(m.id)
+      : (m: { id: string }) => isStandardImageModel(m.id),
     [enhancer],
   );
 
@@ -146,6 +157,8 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       setCurrentModel(modelId);
       updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
       autoSave.markDirty(card.id);
+      const category: ModelCategory = isEnhancerModel(modelId) ? "enhancer" : "image";
+      useSettingsStore.getState().setLastModel(category, modelId, providerId);
     },
     [card.id, data, updateCard],
   );
@@ -708,7 +721,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           value={currentModel}
           providerId={(data as MediaData).provider}
           onChange={handleModelChange}
-          filter={enhancerFilter}
+          filter={modelFilter}
         />
         {!enhancer && !isLocked && (
           <SizeCombo

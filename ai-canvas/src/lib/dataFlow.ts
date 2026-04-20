@@ -185,10 +185,12 @@ function injectIntoCard(
 
     case "ai_chat": {
       if (payload.kind === "text") {
-        const prev = (d.upstreamContext as string) ?? "";
-        if (prev !== payload.text) {
-          d.upstreamContext = payload.text;
-          d.upstreamCardId = sourceCardId;
+        const upstreamTexts = {
+          ...((d.upstreamTexts as Record<string, string>) || {}),
+        };
+        if (upstreamTexts[sourceCardId] !== payload.text) {
+          upstreamTexts[sourceCardId] = payload.text;
+          d.upstreamTexts = upstreamTexts;
           changed = true;
         }
       } else if (payload.kind === "image") {

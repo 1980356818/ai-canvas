@@ -5,6 +5,7 @@ import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { persistImage, getDisplayUrl, exportFile } from "@/lib/media";
 import { autoSave } from "@/lib/autoSave";
@@ -430,8 +431,8 @@ export default function ImageToolbar() {
       collapsed: false,
       data: {
         content: "",
-        model: "SeedVR2-Upscaler",
-        provider: "jijing",
+        model: useSettingsStore.getState().getLastModel("enhancer")?.modelId || "SeedVR2-Upscaler",
+        provider: useSettingsStore.getState().getLastModel("enhancer")?.providerId || "jijing",
       },
       createdAt: now,
       updatedAt: now,
@@ -483,8 +484,8 @@ export default function ImageToolbar() {
       collapsed: false,
       data: {
         content: "h:0,v:0,z:5",
-        model: "qwen-image-edit-2511-multipie",
-        provider: "jijing",
+        model: useSettingsStore.getState().getLastModel("multiangle")?.modelId || "qwen-image-edit-2511-multipie",
+        provider: useSettingsStore.getState().getLastModel("multiangle")?.providerId || "jijing",
         size: "1:1",
         h: 0,
         v: 0,

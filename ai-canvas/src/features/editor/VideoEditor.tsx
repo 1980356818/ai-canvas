@@ -3,6 +3,7 @@ import { Sparkles, Loader2, RefreshCw, ArrowDownLeft, Lock, X, AlertCircle, Imag
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
@@ -95,10 +96,16 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       const p = modelService.tryResolveProvider(data.model);
       if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
     } else {
-      modelService.getDefaultVideoModel().then(({ modelId, providerId }) => {
-        setCurrentModel(modelId);
-        updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
-      });
+      const saved = useSettingsStore.getState().getLastModel("video");
+      if (saved) {
+        setCurrentModel(saved.modelId);
+        updateCard(card.id, { data: { ...data, model: saved.modelId, provider: saved.providerId } });
+      } else {
+        modelService.getDefaultVideoModel().then(({ modelId, providerId }) => {
+          setCurrentModel(modelId);
+          updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+        });
+      }
     }
   }, [data.model]);
 
@@ -109,6 +116,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       setCurrentModel(modelId);
       updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
       autoSave.markDirty(card.id);
+      useSettingsStore.getState().setLastModel("video", modelId, providerId);
     },
     [card.id, data, updateCard],
   );

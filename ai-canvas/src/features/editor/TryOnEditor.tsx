@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useEffect } from "react";
+import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { Sparkles, Loader2, RefreshCw, AlertCircle, X } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
@@ -8,7 +8,7 @@ import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
-import type { RefImageEntry } from "@/config/model-ref-images";
+import { isStandardImageModel, type RefImageEntry } from "@/config/model-ref-images";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
 
@@ -34,6 +34,11 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
   const [currentModel, setCurrentModel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const data = card.data as TryOnData;
+
+  const standardImageFilter = useMemo(
+    () => (m: { id: string }) => isStandardImageModel(m.id),
+    [],
+  );
 
   useEffect(() => {
     if (data.model && data.provider) {
@@ -234,6 +239,7 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
           value={currentModel}
           providerId={data.provider}
           onChange={handleModelChange}
+          filter={standardImageFilter}
         />
         <div className="flex-1" />
         <button

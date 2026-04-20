@@ -43,7 +43,14 @@ export default function ModelSelector({
     modelService
       .getByCapability(capability)
       .then((list) => {
-        if (!cancelled) setModels(filter ? list.filter(filter) : list);
+        if (cancelled) return;
+        const filtered = filter ? list.filter(filter) : list;
+        filtered.sort((a, b) => {
+          const aOwn = a.providerId === "jijing" ? 0 : 1;
+          const bOwn = b.providerId === "jijing" ? 0 : 1;
+          return aOwn - bOwn;
+        });
+        setModels(filtered);
       })
       .catch(() => {
         if (!cancelled) setModels([]);
@@ -56,10 +63,6 @@ export default function ModelSelector({
     };
   }, [capability, filter]);
 
-  const multiProvider = useMemo(() => {
-    const ids = new Set(models.map((m) => m.providerId));
-    return ids.size > 1;
-  }, [models]);
 
   const selectedKey = useMemo(() => {
     if (!value) return "";
@@ -104,9 +107,7 @@ export default function ModelSelector({
           </option>
         )}
         {models.map((m) => {
-          const label = multiProvider
-            ? `[${m.providerName}] ${m.display_name || m.id}`
-            : (m.display_name || m.id);
+          const label = `[${m.providerName}] ${m.display_name || m.id}`;
           return (
             <option key={toCompositeKey(m)} value={toCompositeKey(m)}>
               {label}
