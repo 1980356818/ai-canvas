@@ -1,0 +1,278 @@
+# 服务器部署规则 - AI无限画布
+
+当用户要求部署后端(ai-canvas-server)和管理端(ai-canvas-admin)到服务器时，遵循本规则。
+
+## 项目架构
+
+| 组件 | 技术栈 | 说明 |
+|------|--------|------|
+| ai-canvas-server | Spring Boot 3.4.4 + Java 17 + MyBatis-Plus + MySQL 8 | 后端 API 服务，端口 8090 |
+| ai-canvas-admin | Vue 3 + Element Plus + Vite | 管理后台 SPA，构建后打入 JAR 的 static/admin 目录 |
+| ai-canvas | Vue 3 + Tauri | 客户端桌面应用，不部署到服务器 |
+
+## 判断部署类型
+
+先 SSH 连接服务器检查环境：
+
+```bash
+java -version && mysql --version && systemctl is-active ai-canvas
+```
+
+- 如果上述命令全部成功 → 执行 **【更新部署】**
+- 如果任何一项缺失 → 执行 **【首次部署】**
+
+---
+
+## 【更新部署】（日常使用，最常见）
+
+只需 3 步：构建 → 上传 → 重启
+
+### 1. 本地构建
+
+```bash
+# 构建管理端前端
+cd ai-canvas-admin
+npm install
+npm run build
+
+# 构建后端 JAR（管理端已打入 static/admin）
+cd ../ai-canvas-server
+mvn clean package -DskipTests
+```
+
+### 2. 上传 JAR 到服务器
+
+```python
+import paramiko
+
+client = paramiko.SSHClient()
+client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+client.connect('SERVER_IP', port=22, username='root', password='PASSWORD', timeout=10)
+
+sftp = client.open_sftp()
+sftp.put(r'ai-canvas-server\target\ai-canvas-server-0.1.0.jar', '/opt/ai-canvas/ai-canvas-server.jar')
+sftp.close()
+```
+
+### 3. 重启服务
+
+```bash
+systemctl restart ai-canvas
+```
+
+验证：
+
+```bash
+journalctl -u ai-canvas -f --no-pager -n 20
+# 看到 "Started AiCatServerApplication" 即成功
+```
+
+**更新部署完毕，无需其他操作。**
+
+---
+
+## 【首次部署】（仅新服务器执行一次）
+
+### 1. 安装环境
+
+```bash
+apt-get update -qq
+apt-get install -y openjdk-17-jdk-headless mysql-server nginx
+systemctl start mysql && systemctl enable mysql
+```
+
+### 2. 配置 MySQL
+
+```bash
+# 设置 root 密码
+mysql -u root -e 'ALTER USER "root"@"localhost" IDENTIFIED WITH mysql_native_password BY "YOUR_DB_PASSWORD"; FLUSH PRIVILEGES;'
+```
+
+### 3. 导入数据库
+
+将 `ai-canvas-server/src/main/resources/db/schema.sql` 上传到服务器并执行：
+
+```bash
+mysql -u root -pYOUR_DB_PASSWORD < /tmp/schema.sql
+```
+
+数据库名：`aicat`，共 9 张表。
+
+### 4. 创建应用目录并上传 JAR
+
+```bash
+mkdir -p /opt/ai-canvas
+```
+
+上传 `ai-canvas-server-0.1.0.jar` 到 `/opt/ai-canvas/ai-canvas-server.jar`
+
+### 5. 创建 systemd 服务
+
+写入 `/etc/systemd/system/ai-canvas.service`：
+
+```ini
+[Unit]
+Description=AI Canvas Server
+After=network.target mysql.service
+Requires=mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ai-canvas
+Environment=DB_PASSWORD=YOUR_DB_PASSWORD
+Environment=JWT_SECRET=YOUR_JWT_SECRET_AT_LEAST_256_BITS
+ExecStart=/usr/bin/java -Xms256m -Xmx512m -jar /opt/ai-canvas/ai-canvas-server.jar
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+systemctl daemon-reload
+systemctl enable ai-canvas
+systemctl start ai-canvas
+```
+
+### 6. 配置 Nginx
+
+写入 `/etc/nginx/sites-available/ai-canvas`：
+
+```nginx
+server {
+    listen 80;
+    server_name YOUR_DOMAIN_OR_IP;
+
+    location = /admin/ {
+        rewrite ^ /admin/index.html last;
+    }
+
+    location = /admin {
+        rewrite ^ /admin/index.html last;
+    }
+
+    location /admin/assets/ {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_set_header Host $host;
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location /admin/ {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+```bash
+ln -sf /etc/nginx/sites-available/ai-canvas /etc/nginx/sites-enabled/ai-canvas
+rm -f /etc/nginx/sites-enabled/default
+nginx -t && systemctl reload nginx && systemctl enable nginx
+```
+
+### 7. 防火墙放行
+
+```bash
+ufw allow 80/tcp
+ufw allow 443/tcp
+```
+
+云平台安全组也需要放行 80、443 端口。
+
+---
+
+## 配置参考
+
+| 配置项 | 环境变量 | 默认值 | 说明 |
+|--------|----------|--------|------|
+| 数据库密码 | DB_PASSWORD | root | MySQL root 密码 |
+| JWT 密钥 | JWT_SECRET | 内置默认值 | 生产环境必须修改，至少 256 位 |
+| 服务端口 | - | 8090 | application.yml 中配置 |
+
+## 服务器目录结构
+
+```
+/opt/ai-canvas/
+  └── ai-canvas-server.jar          # 应用 JAR
+
+/etc/systemd/system/
+  └── ai-canvas.service             # 服务定义
+
+/etc/nginx/sites-available/
+  └── ai-canvas                     # Nginx 配置
+```
+
+## 管理后台初始账号
+
+首次启动自动创建，查看密码：
+
+```bash
+journalctl -u ai-canvas | grep "密码"
+```
+
+用户名 `admin`，首次登录后必须修改密码。
+
+## 故障排查
+
+```bash
+# 后端日志
+journalctl -u ai-canvas --no-pager -n 50
+
+# Nginx 错误
+tail -f /var/log/nginx/error.log
+
+# 检查数据库
+mysql -u root -pPASSWORD -e "USE aicat; SHOW TABLES;"
+
+# 内存使用
+free -h
+
+# 重启所有服务
+systemctl restart mysql ai-canvas nginx
+```
+
+## 使用 paramiko 远程操作（Windows 环境）
+
+```python
+import paramiko
+
+client = paramiko.SSHClient()
+client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+client.connect('SERVER_IP', port=22, username='root', password='PASSWORD', timeout=10)
+
+# 执行命令
+stdin, stdout, stderr = client.exec_command('systemctl restart ai-canvas')
+print(stdout.read().decode())
+
+# 上传文件
+sftp = client.open_sftp()
+sftp.put('local_path.jar', '/opt/ai-canvas/ai-canvas-server.jar')
+sftp.close()
+
+client.close()
+```

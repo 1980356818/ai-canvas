@@ -6,7 +6,7 @@ import type { CanvasCard, Connection } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useConnectionStore } from "@/stores/connectionStore";
-import { persistImage, getBase64ForApi, exportFile } from "@/lib/media";
+import { persistImage, getDisplayUrl, exportFile } from "@/lib/media";
 import { autoSave } from "@/lib/autoSave";
 import { injectOnConnect } from "@/lib/dataFlow";
 import { sizeFromRatio } from "@/shared/constants";

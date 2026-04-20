@@ -1,5 +1,7 @@
 export { isTauri } from "./runtime";
 export { lsGet, lsSet, lsRemove, getBrowserApiConfig, buildProxyUrl, getAuthHeaders } from "./storage";
+export { apiLogin, apiRegister, apiRedeem, apiGetUserStatus, getToken, clearAuth } from "./auth.api";
+export type { AuthUser, LoginResult } from "./auth.api";
 
 export {
   listProjects,

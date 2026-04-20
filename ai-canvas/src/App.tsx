@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProviderStore } from "@/stores/providerStore";
+import { useAuthStore } from "@/stores/authStore";
 import { useProjectLifecycle } from "@/hooks/useProjectLifecycle";
 import { useConnectionSync } from "@/hooks/useConnectionSync";
 import { useAutoSaveViewport } from "@/hooks/useAutoSaveViewport";
@@ -21,8 +22,10 @@ import { Toast } from "@/features/overlays/Toast";
 import { ContextMenu } from "@/features/overlays/ContextMenu";
 import SettingsDialog from "@/features/overlays/SettingsDialog";
 import SideCapsule from "@/features/overlays/SideCapsule";
+import LoginWindow from "@/features/auth/LoginWindow";
+import RedeemWindow from "@/features/auth/RedeemWindow";
 
-export default function App() {
+function AuthenticatedApp() {
   const appView = useUIStore((s) => s.appView);
   const agentPanelVisible = useUIStore((s) => s.agentPanelVisible);
   const chatPanelVisible = useUIStore((s) => s.chatPanelVisible);
@@ -65,4 +68,34 @@ export default function App() {
       <SettingsDialog />
     </div>
   );
+}
+
+export default function App() {
+  const authInitialized = useAuthStore((s) => s.initialized);
+  const authenticated = useAuthStore((s) => s.authenticated);
+  const restricted = useAuthStore((s) => s.restricted);
+
+  useEffect(() => {
+    if (!authInitialized) {
+      useAuthStore.getState().initialize();
+    }
+  }, [authInitialized]);
+
+  if (!authInitialized) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return <LoginWindow />;
+  }
+
+  if (restricted) {
+    return <RedeemWindow />;
+  }
+
+  return <AuthenticatedApp />;
 }
