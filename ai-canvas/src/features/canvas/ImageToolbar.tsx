@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, memo } from "react";
-import { Scissors, Download, ChevronDown, HardDriveDownload, Loader2, ZoomIn } from "lucide-react";
+import { Scissors, Download, ChevronDown, HardDriveDownload, Loader2, ZoomIn, RotateCw } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
@@ -451,6 +451,63 @@ export default function ImageToolbar() {
     void updateProjectMeta(projectId, { nodeCount: count });
   }, [card]);
 
+  const handleMultiangle = useCallback(() => {
+    if (!card) return;
+    const imgData = card.data as { imageUrl?: string };
+    if (!imgData.imageUrl) return;
+
+    const projectId = useProjectStore.getState().currentProjectId;
+    if (!projectId) return;
+
+    const { maxZIndex } = useCardStore.getState();
+    const now = new Date().toISOString();
+    const GAP = 80;
+
+    const newCard: CanvasCard = {
+      id: crypto.randomUUID(),
+      projectId,
+      type: "ai_multiangle",
+      x: card.x + card.width + GAP,
+      y: card.y,
+      width: card.width,
+      height: card.width,
+      zIndex: maxZIndex + 1,
+      locked: false,
+      collapsed: false,
+      data: {
+        content: "h:0,v:0,z:5",
+        model: "qwen-image-edit-2511-multipie",
+        provider: "jijing",
+        size: "1:1",
+        h: 0,
+        v: 0,
+        z: 5,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+    useCardStore.getState().addCard(newCard);
+
+    const conn: Connection = {
+      id: crypto.randomUUID(),
+      projectId,
+      sourceCardId: card.id,
+      targetCardId: newCard.id,
+      createdAt: now,
+    };
+    useConnectionStore.getState().addConnection(conn);
+
+    injectOnConnect(card.id, newCard.id);
+
+    useCanvasStore.getState().setSelectedCardIds([newCard.id]);
+    useCanvasStore.getState().setEditingCardId(newCard.id);
+
+    autoSave.markDirty(newCard.id);
+    const count = useCardStore.getState().getCardsByProject(projectId).length;
+    useProjectStore.getState().updateProject(projectId, { nodeCount: count });
+    void updateProjectMeta(projectId, { nodeCount: count });
+  }, [card]);
+
   if (!card || (card.type !== "ai_image" && card.type !== "ai_multiangle")) return null;
   const imgData = card.data as { imageUrl?: string };
   if (!imgData.imageUrl) return null;
@@ -536,6 +593,15 @@ export default function ImageToolbar() {
         >
           <ZoomIn className="h-3.5 w-3.5" />
           <span>高清放大</span>
+        </button>
+
+        <button
+          title="多角度"
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          onClick={handleMultiangle}
+        >
+          <RotateCw className="h-3.5 w-3.5" />
+          <span>多角度</span>
         </button>
 
         <div className="mx-0.5 h-4 w-px bg-border" />

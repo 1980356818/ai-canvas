@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { Sparkles, Loader2, RefreshCw, ImageIcon, X } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, ImageIcon, X, AlertCircle } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -9,6 +9,7 @@ import { hasApiKey } from "@/platform";
 import { getBase64ForApi, getDisplayUrl } from "@/lib/media";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
+import { friendlyError } from "@/lib/errors";
 import {
   compactRefImages,
   type RefImageEntry,
@@ -189,6 +190,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
 
     setCardProgress(card.id, { percent: 0, label: "正在提交请求…" });
     setError(null);
+    useUIStore.getState().setCardError(card.id, null);
 
     try {
       const provider = modelService.resolveProvider(MODEL_ID);
@@ -219,7 +221,9 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
       autoSave.markDirty(card.id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
+      const errMsg = friendlyError(msg);
+      setError(errMsg);
+      useUIStore.getState().setCardError(card.id, errMsg);
     } finally {
       setCardProgress(card.id, null);
     }
@@ -324,6 +328,19 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
         })}
       </div>
 
+      {error && (
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+          <p className="min-w-0 flex-1 text-xs leading-relaxed text-destructive">{error}</p>
+          <button
+            onClick={() => { setError(null); useUIStore.getState().setCardError(card.id, null); }}
+            className="shrink-0 rounded p-0.5 text-destructive/60 hover:bg-destructive/10 hover:text-destructive"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
         <SizeCombo
           value={currentSize}
@@ -332,9 +349,6 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
           onResolutionChange={handleResolutionChange}
           disabled={generating}
         />
-        {error && (
-          <span className="min-w-0 truncate text-[11px] text-destructive">{error}</span>
-        )}
         <div className="flex-1" />
         <button
           onClick={handleGenerate}

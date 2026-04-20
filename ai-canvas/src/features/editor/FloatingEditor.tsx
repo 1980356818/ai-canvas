@@ -1,6 +1,7 @@
 import { useRef, useCallback, useEffect, useState } from "react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
+import { useUIStore } from "@/stores/uiStore";
 import { isEnhancerModel } from "@/config/model-ref-images";
 import EditorSwitch from "./EditorSwitch";
 
@@ -13,7 +14,7 @@ const EDITOR_SIZES: Record<string, { height: number; minWidth: number }> = {
   ai_image: { height: 320, minWidth: 560 },
   ai_video: { height: 300, minWidth: 560 },
   ai_tryon: { height: 300, minWidth: 560 },
-  ai_multiangle: { height: 290, minWidth: 440 },
+  ai_multiangle: { height: 340, minWidth: 440 },
 };
 const DEFAULT_SIZE = { height: 240, minWidth: 400 };
 
@@ -88,6 +89,8 @@ export default function FloatingEditor() {
     [],
   );
 
+  const hasError = useUIStore((s) => editingCardId ? s.cardErrors.has(editingCardId) : false);
+
   if (!card) return null;
   if (card.type === "text" || card.type === "sticky_note") return null;
 
@@ -108,6 +111,7 @@ export default function FloatingEditor() {
   else if (isEnhancer) autoHeight += 60;
   if (!isEnhancer && hasUpstream) autoHeight += 64;
   if (hasRefFrames) autoHeight += 90;
+  if (hasError) autoHeight += 48;
 
   const width = userSize ? userSize.w : Math.max(minWidth, card.width);
   const height = userSize ? userSize.h : autoHeight;
