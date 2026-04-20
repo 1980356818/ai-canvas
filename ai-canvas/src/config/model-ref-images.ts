@@ -99,6 +99,8 @@ export interface RefImageEntry {
   url: string;
   sourceCardId?: string;
   sourceType: "file" | "card";
+  width?: number;
+  height?: number;
 }
 
 /**

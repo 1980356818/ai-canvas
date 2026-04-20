@@ -369,6 +369,25 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       console.log("[MediaEditor] refSlots:", refSlots.map((s) => s.key));
       console.log("[MediaEditor] rawRefImages 数量:", rawRefImages.length);
 
+      if (currentModel === "Real-ESRGAN") {
+        const MAX_DIM = 1024;
+        for (const slot of refSlots) {
+          const entry = data.refImages?.[slot.key];
+          if (entry?.width && entry?.height) {
+            if (entry.width > MAX_DIM || entry.height > MAX_DIM) {
+              useUIStore.getState().addToast({
+                type: "warning",
+                title: "图片分辨率过大",
+                description: `Real-ESRGAN 要求输入图片不超过 ${MAX_DIM}×${MAX_DIM}，当前图片为 ${entry.width}×${entry.height}，请缩小后重试`,
+                duration: 6000,
+              });
+              console.groupEnd();
+              return;
+            }
+          }
+        }
+      }
+
       const referenceImages: Array<{ url: string; role: string }> = [];
       for (const ref of rawRefImages) {
         const dataUrl = await getBase64ForApi(ref.url);

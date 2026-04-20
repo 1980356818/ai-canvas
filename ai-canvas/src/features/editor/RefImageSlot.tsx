@@ -87,8 +87,8 @@ export default function RefImageSlot({
         reader.readAsDataURL(file);
       });
       const pid = useProjectStore.getState().currentProjectId ?? undefined;
-      const { localPath: relativePath } = await persistImage(dataUrl, undefined, pid);
-      onImage({ url: relativePath, sourceType: "file" });
+      const { localPath, width, height } = await persistImage(dataUrl, undefined, pid);
+      onImage({ url: localPath, sourceType: "file", width, height });
     },
     [onImage],
   );

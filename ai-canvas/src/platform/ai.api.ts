@@ -179,15 +179,30 @@ function extractNestedUrl(raw: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
+function parseFirstUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("[")) {
+    try {
+      const arr = JSON.parse(trimmed);
+      if (Array.isArray(arr) && arr.length > 0 && typeof arr[0] === "string") {
+        return arr[0];
+      }
+    } catch { /* not JSON, use as-is */ }
+  }
+  return trimmed;
+}
+
 export function normalizeTaskInfo(raw: Record<string, unknown>): TaskInfo {
   if (DEBUG) {
     console.log("[TaskPoll] raw fields:", Object.keys(raw));
   }
+  const rawUrl = (raw.resultUrl ?? raw.result_url ?? raw.video_url ?? extractNestedUrl(raw)) as string | undefined;
   const info: TaskInfo = {
     id: String(raw.id ?? ""),
     status: String(raw.status ?? ""),
     progress: Number(raw.progress ?? 0),
-    resultUrl: (raw.resultUrl ?? raw.result_url ?? raw.video_url ?? extractNestedUrl(raw)) as string | undefined,
+    resultUrl: parseFirstUrl(rawUrl),
     thumbnailUrl: (raw.thumbnailUrl ?? raw.thumbnail_url) as string | undefined,
     errorMessage: (raw.errorMessage ?? raw.error_message ?? raw.error_msg) as string | undefined,
     createdAt: (raw.createdAt ?? raw.created_at) as string | undefined,

@@ -250,7 +250,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
   );
 
   return (
-    <div className="flex h-full flex-col gap-2.5 p-3">
+    <div className="flex flex-col gap-2 p-3">
       <div className="flex shrink-0 items-center gap-2">
         {hasRef ? (
           <>
@@ -299,19 +299,17 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2.5">
+      <div className="flex flex-col gap-1.5">
         {ANGLE_PARAMS.map((param) => {
           const val = param.key === "h" ? h : param.key === "v" ? v : z;
           return (
-            <div key={param.key} className="flex flex-col gap-1">
-              <div className="flex items-baseline justify-between">
-                <label className="text-xs font-medium text-foreground">
-                  {param.label}
-                </label>
-                <span className="tabular-nums text-xs text-primary">
-                  {val}{param.unit}
-                </span>
-              </div>
+            <div key={param.key} className="flex items-center gap-2">
+              <label
+                className="w-[4.5rem] shrink-0 text-xs font-medium text-foreground"
+                title={param.description}
+              >
+                {param.label}
+              </label>
               <input
                 type="range"
                 min={param.min}
@@ -320,9 +318,11 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
                 value={val}
                 onChange={(e) => handleAngleChange(param.key, Number(e.target.value))}
                 disabled={generating}
-                className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary disabled:cursor-not-allowed disabled:opacity-40"
+                className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary disabled:cursor-not-allowed disabled:opacity-40"
               />
-              <span className="text-[10px] text-muted-foreground">{param.description}</span>
+              <span className="w-8 shrink-0 text-right tabular-nums text-xs text-primary">
+                {val}{param.unit}
+              </span>
             </div>
           );
         })}
