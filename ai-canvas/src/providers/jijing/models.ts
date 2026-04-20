@@ -5,6 +5,7 @@ export const JIJING_CHAT_MODELS: ModelInfo[] = [
 ];
 
 export const JIJING_IMAGE_MODELS: ModelInfo[] = [
+  { id: "gpt-image-2", display_name: "GPT Image 2", capability: "IMAGE" },
   { id: "nano-banana-2", display_name: "Nanobanana 2", capability: "IMAGE" },
   { id: "nano-banana-pro", display_name: "Nanobanana Pro", capability: "IMAGE" },
   { id: "qwen-image-edit-2511-multipie", display_name: "Qwen 多角度", capability: "IMAGE" },

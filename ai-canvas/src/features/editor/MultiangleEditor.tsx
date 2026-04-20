@@ -63,9 +63,6 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
   const [currentSize, setCurrentSize] = useState(
     () => normalizeImageSize(data.size) || useSettingsStore.getState().lastImageSize,
   );
-  const [currentResolution, setCurrentResolution] = useState(
-    () => data.resolution || "2K",
-  );
 
   const handleSizeChange = useCallback(
     (sizeValue: string) => {
@@ -94,15 +91,6 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
       autoSave.markDirty(card.id);
     },
     [card.id, card.x, card.y, card.width, card.height, data, updateCard],
-  );
-
-  const handleResolutionChange = useCallback(
-    (res: string) => {
-      setCurrentResolution(res);
-      updateCard(card.id, { data: { ...data, resolution: res } });
-      autoSave.markDirty(card.id);
-    },
-    [card.id, data, updateCard],
   );
 
   const handleAngleChange = useCallback(
@@ -344,9 +332,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
       <div className="flex items-center gap-2">
         <SizeCombo
           value={currentSize}
-          resolution={currentResolution}
           onChange={handleSizeChange}
-          onResolutionChange={handleResolutionChange}
           disabled={generating}
         />
         <div className="flex-1" />
