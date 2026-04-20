@@ -22,42 +22,49 @@ const GRID_OPTIONS = [
 
 const TOOLBAR_GAP = 10;
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 async function cropImageCell(
   imageUrl: string,
   row: number,
   col: number,
   gridSize: number,
 ): Promise<{ dataUrl: string; cellW: number; cellH: number }> {
-  const dataUrl = await getBase64ForApi(imageUrl);
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const cellW = Math.floor(img.naturalWidth / gridSize);
-        const cellH = Math.floor(img.naturalHeight / gridSize);
-        const canvas = document.createElement("canvas");
-        canvas.width = cellW;
-        canvas.height = cellH;
-        const ctx = canvas.getContext("2d")!;
-        ctx.drawImage(
-          img,
-          col * cellW,
-          row * cellH,
-          cellW,
-          cellH,
-          0,
-          0,
-          cellW,
-          cellH,
-        );
-        resolve({ dataUrl: canvas.toDataURL("image/png"), cellW, cellH });
-      } catch (err) {
-        reject(err);
-      }
-    };
-    img.onerror = () => reject(new Error("图片加载失败"));
-    img.src = dataUrl;
-  });
+  const displayUrl = getDisplayUrl(imageUrl);
+
+  const resp = await fetch(displayUrl);
+  if (!resp.ok) throw new Error(`图片加载失败 (${resp.status})`);
+  const blob = await resp.blob();
+  const bmp = await createImageBitmap(blob);
+
+  const cellW = Math.floor(bmp.width / gridSize);
+  const cellH = Math.floor(bmp.height / gridSize);
+
+  if (typeof OffscreenCanvas !== "undefined") {
+    const oc = new OffscreenCanvas(cellW, cellH);
+    const ctx = oc.getContext("2d")!;
+    ctx.drawImage(bmp, col * cellW, row * cellH, cellW, cellH, 0, 0, cellW, cellH);
+    bmp.close();
+    const outBlob = await oc.convertToBlob({ type: "image/png" });
+    const dataUrl = await blobToDataUrl(outBlob);
+    return { dataUrl, cellW, cellH };
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = cellW;
+  canvas.height = cellH;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(bmp, col * cellW, row * cellH, cellW, cellH, 0, 0, cellW, cellH);
+  bmp.close();
+
+  return { dataUrl: canvas.toDataURL("image/png"), cellW, cellH };
 }
 
 function screenToCanvas(clientX: number, clientY: number) {

@@ -1,5 +1,6 @@
 import { useState, useCallback, type FormEvent } from "react";
-import { Loader2, Eye, EyeOff, UserPlus, LogIn } from "lucide-react";
+import { Loader2, Eye, EyeOff, UserPlus, LogIn, X } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { useAuthStore } from "@/stores/authStore";
 import { cn } from "@/lib/utils";
 import catPawImg from "@/assets/cat-paw.png";
@@ -62,28 +63,50 @@ export default function LoginWindow() {
   };
 
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-gradient-to-br from-background via-muted/30 to-background">
-      <div className="w-full max-w-sm rounded-xl border border-border bg-card p-8 shadow-lg">
-        {/* Header */}
+    <div
+      data-tauri-drag-region
+      className="flex h-screen w-screen items-center justify-center"
+    >
+      {/* Card — all colors use hex to guarantee opacity under WebView2 transparent mode */}
+      <div
+        className="relative w-full max-w-sm rounded-2xl p-8"
+        style={{
+          backgroundColor: "#ffffff",
+          border: "1px solid #e5e5e5",
+          boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25), 0 8px 24px -8px rgba(0,0,0,0.12)",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => void invoke("quit_app")}
+          className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-md transition-colors"
+          style={{ color: "#888" }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#ef4444"; e.currentTarget.style.color = "#fff"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#888"; }}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+
         <div className="mb-6 flex flex-col items-center gap-2">
           <img src={catPawImg} alt="" className="h-10 w-10 opacity-80" />
-          <h1 className="text-xl font-semibold text-foreground">AI猫</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-xl font-semibold" style={{ color: "#111" }}>AI猫</h1>
+          <p className="text-sm" style={{ color: "#888" }}>
             {isLogin ? "登录以继续使用" : "创建新账号"}
           </p>
         </div>
 
-        {/* Error */}
         {error && (
-          <div className="mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div
+            className="mb-4 rounded-md px-3 py-2 text-sm"
+            style={{ backgroundColor: "rgba(239,68,68,0.1)", color: "#ef4444" }}
+          >
             {error}
           </div>
         )}
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+            <label className="mb-1 block text-xs font-medium" style={{ color: "#888" }}>
               用户名
             </label>
             <input
@@ -92,27 +115,29 @@ export default function LoginWindow() {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="请输入用户名"
               autoFocus
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none ring-ring placeholder:text-muted-foreground/50 focus-visible:ring-2"
+              className="w-full rounded-md px-3 py-2 text-sm outline-none"
+              style={{ backgroundColor: "#fafafa", border: "1px solid #e5e5e5", color: "#111" }}
             />
           </div>
 
           {!isLogin && (
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                邮箱 <span className="text-muted-foreground/50">(选填)</span>
+              <label className="mb-1 block text-xs font-medium" style={{ color: "#888" }}>
+                邮箱 <span style={{ color: "#bbb" }}>(选填)</span>
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="用于找回密码"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none ring-ring placeholder:text-muted-foreground/50 focus-visible:ring-2"
+                className="w-full rounded-md px-3 py-2 text-sm outline-none"
+                style={{ backgroundColor: "#fafafa", border: "1px solid #e5e5e5", color: "#111" }}
               />
             </div>
           )}
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+            <label className="mb-1 block text-xs font-medium" style={{ color: "#888" }}>
               密码
             </label>
             <div className="relative">
@@ -121,13 +146,15 @@ export default function LoginWindow() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="请输入密码"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 pr-9 text-sm text-foreground outline-none ring-ring placeholder:text-muted-foreground/50 focus-visible:ring-2"
+                className="w-full rounded-md px-3 py-2 pr-9 text-sm outline-none"
+                style={{ backgroundColor: "#fafafa", border: "1px solid #e5e5e5", color: "#111" }}
               />
               <button
                 type="button"
                 onClick={() => setShowPwd(!showPwd)}
                 tabIndex={-1}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2"
+                style={{ color: "#888" }}
               >
                 {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -136,7 +163,7 @@ export default function LoginWindow() {
 
           {!isLogin && (
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              <label className="mb-1 block text-xs font-medium" style={{ color: "#888" }}>
                 确认密码
               </label>
               <input
@@ -144,7 +171,8 @@ export default function LoginWindow() {
                 value={confirmPwd}
                 onChange={(e) => setConfirmPwd(e.target.value)}
                 placeholder="再次输入密码"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none ring-ring placeholder:text-muted-foreground/50 focus-visible:ring-2"
+                className="w-full rounded-md px-3 py-2 text-sm outline-none"
+                style={{ backgroundColor: "#fafafa", border: "1px solid #e5e5e5", color: "#111" }}
               />
             </div>
           )}
@@ -153,8 +181,9 @@ export default function LoginWindow() {
             type="submit"
             disabled={loading}
             className={cn(
-              "mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50",
+              "mt-2 flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-90 disabled:opacity-50",
             )}
+            style={{ backgroundColor: "#111", color: "#fff" }}
           >
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -167,13 +196,13 @@ export default function LoginWindow() {
           </button>
         </form>
 
-        {/* Switch */}
-        <div className="mt-5 text-center text-sm text-muted-foreground">
+        <div className="mt-5 text-center text-sm" style={{ color: "#888" }}>
           {isLogin ? "还没有账号？" : "已有账号？"}
           <button
             type="button"
             onClick={switchMode}
-            className="ml-1 font-medium text-primary hover:underline"
+            className="ml-1 font-medium hover:underline"
+            style={{ color: "#111" }}
           >
             {isLogin ? "立即注册" : "去登录"}
           </button>
