@@ -14,7 +14,7 @@ const EDITOR_SIZES: Record<string, { height: number; minWidth: number }> = {
   ai_image: { height: 320, minWidth: 560 },
   ai_video: { height: 300, minWidth: 560 },
   ai_tryon: { height: 300, minWidth: 560 },
-  ai_multiangle: { height: 256, minWidth: 400 },
+  ai_multiangle: { height: 176, minWidth: 400 },
 };
 const DEFAULT_SIZE = { height: 240, minWidth: 400 };
 
@@ -107,11 +107,15 @@ export default function FloatingEditor() {
   const refFrames = data?.refFrames as unknown[] | undefined;
   const hasRefFrames = refFrames && refFrames.length > 0;
   let autoHeight = isEnhancer ? 140 : baseHeight;
-  if (hasRefImages && card.type !== "ai_multiangle") autoHeight += isEnhancer ? 80 : 112;
-  else if (isEnhancer) autoHeight += 60;
-  if (!isEnhancer && hasUpstream) autoHeight += 64;
-  if (hasRefFrames) autoHeight += 90;
-  if (hasError) autoHeight += 48;
+  if (card.type === "ai_multiangle") {
+    if (hasError) autoHeight += 48;
+  } else {
+    if (hasRefImages) autoHeight += isEnhancer ? 80 : 112;
+    else if (isEnhancer) autoHeight += 60;
+    if (hasUpstream) autoHeight += 64;
+    if (hasRefFrames) autoHeight += 90;
+    if (hasError) autoHeight += 48;
+  }
 
   const width = userSize ? userSize.w : Math.max(minWidth, card.width);
   const height = userSize ? userSize.h : autoHeight;
