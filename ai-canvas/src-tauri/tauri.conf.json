@@ -13,13 +13,11 @@
     "windows": [
       {
         "title": "AI猫",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 900,
-        "minHeight": 600,
+        "width": 640,
+        "height": 520,
         "decorations": false,
-        "transparent": true,
         "center": true,
+        "resizable": false,
         "dragDropEnabled": false
       }
     ],

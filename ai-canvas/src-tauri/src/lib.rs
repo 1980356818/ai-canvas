@@ -11,6 +11,32 @@ fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+#[tauri::command]
+fn resize_window(
+    app: tauri::AppHandle,
+    width: f64,
+    height: f64,
+    min_width: Option<f64>,
+    min_height: Option<f64>,
+    resizable: Option<bool>,
+) {
+    if let Some(win) = app.get_webview_window("main") {
+        if let Some(r) = resizable {
+            let _ = win.set_resizable(r);
+        }
+        match (min_width, min_height) {
+            (Some(mw), Some(mh)) => {
+                let _ = win.set_min_size(Some(tauri::LogicalSize::new(mw, mh)));
+            }
+            _ => {
+                let _ = win.set_min_size(None::<tauri::LogicalSize<f64>>);
+            }
+        }
+        let _ = win.set_size(tauri::LogicalSize::new(width, height));
+        let _ = win.center();
+    }
+}
+
 pub struct AppState {
     pub db: Mutex<rusqlite::Connection>,
     pub http_client: reqwest::Client,
@@ -68,6 +94,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             quit_app,
+            resize_window,
             commands::project::list_projects,
             commands::project::list_deleted_projects,
             commands::project::create_project,

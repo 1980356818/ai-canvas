@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useUIStore } from "@/stores/uiStore";
 import { useProviderStore } from "@/stores/providerStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -37,6 +38,16 @@ function AuthenticatedApp() {
       useProviderStore.getState().initialize();
     }
   }, [providerInitialized]);
+
+  useEffect(() => {
+    invoke("resize_window", {
+      width: 1280,
+      height: 800,
+      minWidth: 900,
+      minHeight: 600,
+      resizable: true,
+    });
+  }, []);
 
   useProjectLifecycle();
   useConnectionSync();

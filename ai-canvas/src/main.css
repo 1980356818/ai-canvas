@@ -79,12 +79,8 @@
   * {
     @apply border-border;
   }
-  html {
-    background: transparent !important;
-  }
   body {
     @apply overflow-hidden;
-    background: transparent !important;
   }
 }
 
