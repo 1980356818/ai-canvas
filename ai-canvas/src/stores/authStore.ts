@@ -20,6 +20,7 @@ interface AuthState {
   authView: AuthView;
   loading: boolean;
   error: string | null;
+  registerSuccess: { username: string; password: string } | null;
 
   initialize: () => void;
   setAuthView: (view: AuthView) => void;
@@ -39,6 +40,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   authView: "login",
   loading: false,
   error: null,
+  registerSuccess: null,
 
   initialize: () => {
     const token = getToken();
@@ -80,13 +82,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   register: async (username, password, email) => {
     set({ loading: true, error: null });
     try {
-      const result = await apiRegister(username, password, email);
+      await apiRegister(username, password, email);
       set({
-        authenticated: true,
-        restricted: result.restricted,
-        user: result.user,
         loading: false,
-        authView: "redeem",
+        authView: "login",
+        registerSuccess: { username, password },
       });
     } catch (e: any) {
       set({ loading: false, error: e.message || "注册失败" });

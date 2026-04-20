@@ -1,4 +1,4 @@
-import { useState, useCallback, type FormEvent } from "react";
+import { useState, useCallback, useEffect, type FormEvent } from "react";
 import { Loader2, Eye, EyeOff, UserPlus, LogIn, X, Minus, Square } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAuthStore } from "@/stores/authStore";
@@ -18,6 +18,7 @@ export default function LoginWindow() {
   const loading = useAuthStore((s) => s.loading);
   const error = useAuthStore((s) => s.error);
   const clearError = useAuthStore((s) => s.clearError);
+  const registerSuccess = useAuthStore((s) => s.registerSuccess);
 
   const isLogin = authView === "login";
 
@@ -27,15 +28,20 @@ export default function LoginWindow() {
   const [email, setEmail] = useState("");
   const [showPwd, setShowPwd] = useState(false);
 
+  useEffect(() => {
+    if (registerSuccess && isLogin) {
+      setUsername(registerSuccess.username);
+      setPassword(registerSuccess.password);
+      useAuthStore.setState({ registerSuccess: null });
+    }
+  }, [registerSuccess, isLogin]);
+
   const switchMode = useCallback(() => {
-    const next = isLogin ? "register" : "login";
-    setAuthView(next);
+    setAuthView(isLogin ? "register" : "login");
     setUsername("");
     setPassword("");
     setConfirmPwd("");
     setEmail("");
-    const h = next === "login" ? 520 : 620;
-    invoke("resize_window", { width: 640, height: h, resizable: false });
   }, [isLogin, setAuthView]);
 
   const handleSubmit = async (e: FormEvent) => {
