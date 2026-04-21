@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect, type FormEvent } from "react";
-import { Loader2, Eye, EyeOff, UserPlus, LogIn, X, Minus, Square } from "lucide-react";
+import { Loader2, Eye, EyeOff, UserPlus, LogIn, X, Minus } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAuthStore } from "@/stores/authStore";
 import { cn } from "@/lib/utils";
-import appIcon from "@/assets/app-icon.png";
+import loginBrand from "@/assets/login-brand.png";
 
 let appWindow: { minimize(): void; toggleMaximize(): void } | null = null;
 import("@tauri-apps/api/window").then((mod) => {
@@ -11,6 +11,16 @@ import("@tauri-apps/api/window").then((mod) => {
 });
 
 export default function LoginWindow() {
+  useEffect(() => {
+    invoke("resize_window", {
+      width: 640,
+      height: 580,
+      minWidth: 640,
+      minHeight: 580,
+      resizable: false,
+    });
+  }, []);
+
   const authView = useAuthStore((s) => s.authView);
   const setAuthView = useAuthStore((s) => s.setAuthView);
   const login = useAuthStore((s) => s.login);
@@ -71,10 +81,10 @@ export default function LoginWindow() {
   };
 
   const inputClass =
-    "w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground outline-none ring-ring placeholder:text-muted-foreground/50 focus-visible:ring-2";
+    "w-full rounded-md border border-[oklch(0.35_0_0)] bg-[oklch(0.18_0_0)] px-3 py-2 text-sm text-foreground outline-none ring-ring placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:border-primary/60";
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-background text-foreground">
+    <div className="dark flex h-screen w-screen flex-col bg-background text-foreground">
       {/* Title bar */}
       <div data-tauri-drag-region className="flex h-9 shrink-0 items-center">
         <span className="pl-4 text-sm font-semibold text-foreground/70">AI猫</span>
@@ -84,12 +94,6 @@ export default function LoginWindow() {
           className="flex h-7 w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <Minus className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={() => appWindow?.toggleMaximize()}
-          className="flex h-7 w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <Square className="h-3 w-3" />
         </button>
         <button
           onClick={() => void invoke("quit_app")}
@@ -102,23 +106,19 @@ export default function LoginWindow() {
       {/* Main: left brand + right form */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left — brand area */}
-        <div className="flex w-[220px] shrink-0 flex-col items-center justify-center gap-5 bg-muted/40">
-          <img src={appIcon} alt="AI猫" className="h-40 w-40 drop-shadow-lg" />
-          <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">AI猫</h1>
-            <p className="mt-1.5 text-xs text-muted-foreground">AI 驱动的无限创意画布</p>
-          </div>
+        <div className="w-[220px] shrink-0 overflow-hidden">
+          <img src={loginBrand} alt="AI猫" className="h-full w-full object-cover" />
         </div>
 
         {/* Right — login form */}
         <div className="flex flex-1 items-center justify-center px-5">
           <div className="w-full max-w-[280px]">
-            <div className="mb-8">
-              <h2 className="text-2xl font-semibold text-foreground">
-                {isLogin ? "欢迎回来" : "创建账号"}
+            <div className="mb-8 text-center">
+              <h2 className="text-5xl font-bold">
+                <span className="text-login-hero">{isLogin ? "欢迎回来" : "创建账号"}</span>
               </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {isLogin ? "登录以继续使用 AI猫" : "注册一个新的 AI猫 账号"}
+              <p className="mt-3 text-sm text-muted-foreground">
+                {isLogin ? "登录继续使用AI猫" : "注册一个新的AI猫账号"}
               </p>
             </div>
 

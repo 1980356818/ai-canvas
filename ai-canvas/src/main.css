@@ -92,6 +92,32 @@
   display: none;
 }
 
+/* ── Login hero gradient ── */
+
+.text-login-hero {
+  display: inline-block;
+  background: linear-gradient(
+    90deg,
+    oklch(0.92 0.03 280) 0%,
+    oklch(0.82 0.14 275) 15%,
+    oklch(0.72 0.20 265) 30%,
+    oklch(0.80 0.16 285) 45%,
+    oklch(0.92 0.03 280) 60%,
+    oklch(0.82 0.14 275) 75%,
+    oklch(0.72 0.20 265) 90%,
+    oklch(0.92 0.03 280) 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: login-hero-shift 10s linear infinite;
+}
+@keyframes login-hero-shift {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: -300% 50%; }
+}
+
 /* ── Homepage: Apple-style utilities ── */
 
 .text-gradient {

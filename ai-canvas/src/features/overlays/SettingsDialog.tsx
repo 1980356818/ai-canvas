@@ -17,6 +17,8 @@ import {
   ChevronDown,
   ChevronRight,
   Pencil,
+  LogOut,
+  UserCircle,
 } from "lucide-react";
 import {
   getSetting,
@@ -28,10 +30,11 @@ import {
 import { registry } from "@/providers/registry";
 import { modelService } from "@/services/models";
 import { useUIStore } from "@/stores/uiStore";
+import { useAuthStore } from "@/stores/authStore";
 import { isPlatformVisible } from "@/config/platforms";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "platforms" | "general";
+type SettingsTab = "platforms" | "general" | "account";
 type ConnStatus = "idle" | "testing" | "ok" | "error";
 
 interface KeyEntry {
@@ -278,6 +281,19 @@ export default function SettingsDialog() {
             <FolderOpen className="h-3.5 w-3.5" />
             通用
           </button>
+          <button
+            type="button"
+            onClick={() => setTab("account")}
+            className={cn(
+              "flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
+              tab === "account"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <UserCircle className="h-3.5 w-3.5" />
+            账号
+          </button>
         </div>
 
         {/* Body */}
@@ -322,6 +338,8 @@ export default function SettingsDialog() {
               />
             </div>
           )}
+
+          {tab === "account" && <AccountTab onClose={toggleSettings} />}
 
           {/* Footer */}
           <div className="mt-6 flex items-center justify-end gap-2 border-t border-border pt-4">
@@ -671,6 +689,85 @@ function PlatformCard({
 }
 
 // ── Path Field ───────────────────────────────────────────────
+
+function AccountTab({ onClose }: { onClose: () => void }) {
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+  const [confirming, setConfirming] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    onClose();
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-lg border border-border p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <UserCircle className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-foreground">{user?.username ?? "未知用户"}</p>
+            {user?.email && (
+              <p className="text-xs text-muted-foreground">{user.email}</p>
+            )}
+          </div>
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[10px] font-medium",
+              user?.status === "active"
+                ? "bg-emerald-500/10 text-emerald-600"
+                : "bg-amber-500/10 text-amber-600",
+            )}
+          >
+            {user?.status === "active" ? "已激活" : "未激活"}
+          </span>
+        </div>
+        {user?.memberExpireAt && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            会员到期：{new Date(user.memberExpireAt).toLocaleDateString("zh-CN")}
+          </p>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-destructive/20 p-4">
+        <h3 className="mb-2 text-xs font-medium text-foreground">退出登录</h3>
+        <p className="mb-3 text-[11px] text-muted-foreground">
+          退出后需要重新登录才能继续使用
+        </p>
+        {confirming ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              确认退出
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent"
+            >
+              取消
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="flex items-center gap-1.5 rounded-md border border-destructive/30 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            退出登录
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function PathField({
   label,
