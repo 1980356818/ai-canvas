@@ -65,6 +65,7 @@ export const TYPE_COLORS: Record<CardType, string> = {
   ai_multiangle: "#14B8A6",
   text: "#6B7280",
   sticky_note: "#F59E0B",
+  audio: "#F97316",
 };
 
 export const CARD_COLOR_PRESETS = [

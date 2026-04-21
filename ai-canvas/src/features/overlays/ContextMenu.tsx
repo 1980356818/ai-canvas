@@ -15,6 +15,7 @@ import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import { extractCardMedia } from "@/config/model-ref-images";
 import { exportFile, revealInExplorer, batchExportFiles } from "@/lib/media";
 import { copyCards, pasteCards } from "@/lib/clipboard";
+import { HIDDEN_FEATURES } from "@/config/platforms";
 
 function syncNodeCount(projectId: string) {
   const count = useCardStore.getState().getCardsByProject(projectId).length;
@@ -385,12 +386,12 @@ function ContextMenuPanel({
             disabled: noProject,
             onSelect: (e) => addCardAtClick("ai_video", e),
           },
-          {
-            type: "item",
+          ...(!HIDDEN_FEATURES.multiangle ? [{
+            type: "item" as const,
             label: "多角度",
             disabled: noProject,
-            onSelect: (e) => addCardAtClick("ai_multiangle", e),
-          },
+            onSelect: (e: React.MouseEvent) => addCardAtClick("ai_multiangle", e),
+          }] : []),
         ],
       },
       {

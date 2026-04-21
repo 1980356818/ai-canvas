@@ -410,7 +410,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
           description: "Seedance 要求参考音频必须搭配参考图或参考视频一起使用，请先添加图片或视频素材",
           duration: 5000,
         });
-        setCardProgress(card.id, undefined);
+        setCardProgress(card.id, null);
         return;
       }
 

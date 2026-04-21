@@ -737,6 +737,13 @@ pub async fn read_media_base64(app: AppHandle, path: String) -> Result<String, S
         "svg" => "image/svg+xml",
         "heic" => "image/heic",
         "heif" => "image/heif",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mov" => "video/quicktime",
+        "avi" => "video/x-msvideo",
+        "mkv" => "video/x-matroska",
+        "wav" => "audio/wav",
+        "mp3" => "audio/mpeg",
         _ => "application/octet-stream",
     };
 

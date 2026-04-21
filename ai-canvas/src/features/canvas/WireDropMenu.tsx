@@ -9,13 +9,14 @@ import { autoSave } from "@/lib/autoSave";
 import { injectOnConnect } from "@/lib/dataFlow";
 import { cn } from "@/lib/utils";
 import { CARD_DEFAULTS } from "@/shared/constants";
+import { HIDDEN_FEATURES } from "@/config/platforms";
 
 const MENU_ITEMS: Array<{ type: CardType; icon: typeof MessageSquare; label: string }> = [
   { type: "ai_chat", icon: MessageSquare, label: CARD_DEFAULTS.ai_chat.label },
   { type: "ai_image", icon: ImageIcon, label: CARD_DEFAULTS.ai_image.label },
   { type: "ai_video", icon: Video, label: CARD_DEFAULTS.ai_video.label },
   { type: "ai_tryon", icon: Shirt, label: CARD_DEFAULTS.ai_tryon.label },
-  { type: "ai_multiangle", icon: RotateCw, label: CARD_DEFAULTS.ai_multiangle.label },
+  ...(!HIDDEN_FEATURES.multiangle ? [{ type: "ai_multiangle" as CardType, icon: RotateCw, label: CARD_DEFAULTS.ai_multiangle.label }] : []),
   { type: "text", icon: Type, label: CARD_DEFAULTS.text.label },
   { type: "sticky_note", icon: StickyNote, label: CARD_DEFAULTS.sticky_note.label },
 ];

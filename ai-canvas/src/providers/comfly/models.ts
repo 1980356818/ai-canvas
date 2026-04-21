@@ -7,6 +7,7 @@ export const COMFLY_CHAT_MODELS: ModelInfo[] = [
 ];
 
 export const COMFLY_IMAGE_MODELS: ModelInfo[] = [
+  { id: "gpt-image-2", display_name: "GPT Image 2", capability: "IMAGE" },
   { id: "gemini-3.1-flash-image-preview", display_name: "Nanobanana 2", capability: "IMAGE" },
   { id: "nano-banana-pro", display_name: "Nanobanana Pro", capability: "IMAGE" },
 ];

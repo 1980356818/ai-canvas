@@ -28,6 +28,7 @@ import {
 import { registry } from "@/providers/registry";
 import { modelService } from "@/services/models";
 import { useUIStore } from "@/stores/uiStore";
+import { isPlatformVisible } from "@/config/platforms";
 import { cn } from "@/lib/utils";
 
 type SettingsTab = "platforms" | "general";
@@ -63,10 +64,12 @@ function maskKey(key: string): string {
   return key.slice(0, 4) + "····" + key.slice(-4);
 }
 
-const PLATFORMS: { id: string; name: string; defaultBaseUrl: string }[] = [
+const ALL_PLATFORMS: { id: string; name: string; defaultBaseUrl: string }[] = [
   { id: "comfly", name: "Comfly", defaultBaseUrl: "https://ai.comfly.chat" },
   { id: "jijing", name: "极境", defaultBaseUrl: "https://ai.snoworangekeji.cn" },
 ];
+
+const PLATFORMS = ALL_PLATFORMS.filter((p) => isPlatformVisible(p.id));
 
 export default function SettingsDialog() {
   const visible = useUIStore((s) => s.settingsVisible);

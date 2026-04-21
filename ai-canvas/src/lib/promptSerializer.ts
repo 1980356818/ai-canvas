@@ -80,7 +80,8 @@ export function fromDisplayText(
 
 export type ContentPart =
   | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+  | { type: "image_url"; image_url: { url: string } }
+  | { type: "video_url"; video_url: { url: string } };
 
 export async function serializeForApi(
   promptText: string,
@@ -108,7 +109,11 @@ export async function serializeForApi(
       if (!url) continue;
 
       const base64 = await getBase64ForApi(url);
-      parts.push({ type: "image_url", image_url: { url: base64 } });
+      if (ref.source.type === "videoSlot") {
+        parts.push({ type: "video_url", video_url: { url: base64 } });
+      } else {
+        parts.push({ type: "image_url", image_url: { url: base64 } });
+      }
       usedUrls.add(url);
     }
   }
@@ -147,6 +152,14 @@ function resolveRefUrl(
     }
     case "upstream": {
       const opt = optionMap.get(`upstream:${source.sourceCardId}`);
+      return opt?.resolvedUrl ?? null;
+    }
+    case "videoSlot": {
+      const opt = optionMap.get(`video:${source.index}`);
+      return opt?.resolvedUrl ?? null;
+    }
+    case "audioSlot": {
+      const opt = optionMap.get(`audio:${source.index}`);
       return opt?.resolvedUrl ?? null;
     }
     default:

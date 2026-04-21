@@ -68,6 +68,14 @@ export function canAcceptImageConnection(
     return frames.length < 2;
   }
 
+  if (target.type === "ai_chat" && source.type === "ai_video") {
+    const d = target.data as Record<string, unknown>;
+    type VideoRef = { sourceCardId: string };
+    const videos = (d.refVideos as VideoRef[]) || [];
+    if (videos.some((v) => v.sourceCardId === sourceCardId)) return true;
+    return videos.length < 3;
+  }
+
   if (!REF_IMAGE_TARGETS.has(target.type)) return true;
 
   const d = target.data as Record<string, unknown>;
@@ -82,6 +90,7 @@ export function canAcceptImageConnection(
 
 function hasRefImages(target: { type: string; data: Record<string, unknown> }): boolean {
   if (REF_IMAGE_TARGETS.has(target.type)) return true;
+  if (target.type === "ai_tryon") return true;
   if (target.type === "ai_video" && (target.data.imageMode ?? "reference") === "reference") return true;
   return false;
 }
@@ -106,16 +115,26 @@ export function removeRefImageForSource(
   const refImages = { ...((d.refImages || {}) as Record<string, RefImageEntry>) };
 
   let changed = false;
+  const removedKeys: string[] = [];
   for (const key of Object.keys(refImages)) {
     if (refImages[key]?.sourceCardId === sourceCardId) {
+      removedKeys.push(key);
       delete refImages[key];
       changed = true;
     }
   }
 
   if (changed) {
-    const slots = getRefSlotsAny({ type: target.type, data: d });
-    d.refImages = compactRefImages(refImages, slots);
+    if (target.type === "ai_tryon") {
+      for (const key of removedKeys) {
+        if (key === "person") d.personImageUrl = undefined;
+        if (key === "garment") d.garmentImageUrl = undefined;
+      }
+      d.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
+    } else {
+      const slots = getRefSlotsAny({ type: target.type, data: d });
+      d.refImages = compactRefImages(refImages, slots);
+    }
     cardStore.updateCard(targetCardId, { data: d });
     autoSave.markDirty(targetCardId);
   }
@@ -130,14 +149,27 @@ export function removeUpstreamTextForSource(
   if (!target) return;
 
   const d = { ...(target.data as Record<string, unknown>) };
+  let changed = false;
+
+  if (target.type === "text" || target.type === "sticky_note") {
+    if (d.upstreamCardId === sourceCardId) {
+      d.upstreamText = undefined;
+      d.upstreamCardId = undefined;
+      changed = true;
+    }
+  }
+
   const upstreamTexts = {
     ...((d.upstreamTexts as Record<string, string>) || {}),
   };
+  if (sourceCardId in upstreamTexts) {
+    delete upstreamTexts[sourceCardId];
+    d.upstreamTexts = Object.keys(upstreamTexts).length > 0 ? upstreamTexts : undefined;
+    changed = true;
+  }
 
-  if (!(sourceCardId in upstreamTexts)) return;
+  if (!changed) return;
 
-  delete upstreamTexts[sourceCardId];
-  d.upstreamTexts = Object.keys(upstreamTexts).length > 0 ? upstreamTexts : undefined;
   cardStore.updateCard(targetCardId, { data: d });
   autoSave.markDirty(targetCardId);
 }
@@ -188,19 +220,35 @@ export function removeVideoRefForSource(
 ): void {
   const cardStore = useCardStore.getState();
   const target = cardStore.getCard(targetCardId);
-  if (!target || target.type !== "ai_video") return;
+  if (!target || (target.type !== "ai_video" && target.type !== "ai_chat")) return;
 
   const d = { ...(target.data as Record<string, unknown>) };
+  let changed = false;
+
   type VideoRef = { url: string; sourceCardId: string };
   const videos = (d.refVideos as VideoRef[]) || [];
   const filtered = videos.filter((v) => v.sourceCardId !== sourceCardId);
+  if (filtered.length !== videos.length) {
+    d.refVideos = filtered.length > 0 ? filtered : undefined;
+    changed = true;
+  }
 
-  if (filtered.length === videos.length) return;
+  if (target.type === "ai_chat") {
+    type MediaEntry = { url: string; displayUrl: string; kind: string; sourceCardId?: string };
+    const media = (d.directMedia as MediaEntry[]) || [];
+    const filteredMedia = media.filter((m) => !(m.kind === "video" && m.sourceCardId === sourceCardId));
+    if (filteredMedia.length !== media.length) {
+      d.directMedia = filteredMedia.length > 0 ? filteredMedia : undefined;
+      changed = true;
+    }
+  }
 
-  d.refVideos = filtered.length > 0 ? filtered : undefined;
+  if (!changed) return;
+
   cardStore.updateCard(targetCardId, { data: d });
   autoSave.markDirty(targetCardId);
 }
+
 
 export type OutputPayload =
   | { kind: "text"; text: string }
@@ -326,6 +374,23 @@ function injectIntoCard(
               break;
             }
           }
+        }
+      } else if (payload.kind === "video") {
+        const MAX_VIDEOS = 3;
+        type VideoRef = { url: string; sourceCardId: string };
+        const videos = [...((d.refVideos as VideoRef[]) || [])];
+
+        const existIdx = videos.findIndex((v) => v.sourceCardId === sourceCardId);
+        if (existIdx >= 0) {
+          if (videos[existIdx]!.url !== payload.url) {
+            videos[existIdx] = { url: payload.url, sourceCardId };
+            d.refVideos = videos;
+            changed = true;
+          }
+        } else if (videos.length < MAX_VIDEOS) {
+          videos.push({ url: payload.url, sourceCardId });
+          d.refVideos = videos;
+          changed = true;
         }
       }
       break;
@@ -517,12 +582,17 @@ function injectIntoCard(
 
     case "ai_tryon": {
       if (payload.kind === "image") {
-        if (!d.personImageUrl) {
+        const refImages = { ...((d.refImages || {}) as Record<string, RefImageEntry>) };
+        if (!d.personImageUrl || refImages.person?.sourceCardId === sourceCardId) {
           d.personImageUrl = payload.url;
+          refImages.person = { url: payload.url, sourceCardId, sourceType: "card" };
+          d.refImages = refImages;
           d.upstreamCardId = sourceCardId;
           changed = true;
-        } else if (!d.garmentImageUrl) {
+        } else if (!d.garmentImageUrl || refImages.garment?.sourceCardId === sourceCardId) {
           d.garmentImageUrl = payload.url;
+          refImages.garment = { url: payload.url, sourceCardId, sourceType: "card" };
+          d.refImages = refImages;
           d.upstreamCardId = sourceCardId;
           changed = true;
         }

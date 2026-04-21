@@ -47,6 +47,11 @@ interface MediaAttachment {
   kind: "image" | "video";
 }
 
+interface VideoRefEntry {
+  url: string;
+  sourceCardId?: string;
+}
+
 interface ChatData {
   content?: string;
   result?: string;
@@ -55,6 +60,7 @@ interface ChatData {
   refImages?: Record<string, RefImageEntry>;
   inlineRefs?: InlineImageRef[];
   directMedia?: MediaAttachment[];
+  refVideos?: VideoRefEntry[];
   upstreamTexts?: Record<string, string>;
   _locked?: boolean;
   _systemPrompt?: string;
@@ -121,7 +127,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
 
   const [hoveredRefId, setHoveredRefId] = useState<string | null>(null);
 
-  const imageOptions = useImageRefSources(card.id, refSlots, data.refImages);
+  const imageOptions = useImageRefSources(card.id, refSlots, data.refImages, undefined, data.refVideos);
 
   const handleModelChange = useCallback(
     (modelId: string, providerId: string) => {
@@ -146,8 +152,13 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
           const { localPath } = await persistImage(src, undefined, pid);
           url = localPath;
         }
-        const newMedia = [...directMedia, { url, displayUrl: getDisplayUrl(url), kind }];
-        updateCard(card.id, { data: { ...data, directMedia: newMedia } });
+        if (kind === "video") {
+          const videos = [...(data.refVideos ?? []), { url }];
+          updateCard(card.id, { data: { ...data, refVideos: videos } });
+        } else {
+          const newMedia = [...directMedia, { url, displayUrl: getDisplayUrl(url), kind }];
+          updateCard(card.id, { data: { ...data, directMedia: newMedia } });
+        }
         autoSave.markDirty(card.id);
       } catch (err) {
         console.error(`Failed to add ${kind}:`, err);
@@ -161,6 +172,8 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       if (generating) return;
       const pid = useProjectStore.getState().currentProjectId ?? undefined;
       const newMedia = [...directMedia];
+      const newVideos = [...(data.refVideos ?? [])];
+      let changed = false;
       for (const raw of files) {
         try {
           const isVideo = raw.type.startsWith("video/");
@@ -171,11 +184,22 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
             reader.readAsDataURL(file);
           });
           const { localPath } = await persistImage(dataUrl, undefined, pid);
-          newMedia.push({ url: localPath, displayUrl: getDisplayUrl(localPath), kind: isVideo ? "video" : "image" });
+          if (isVideo) {
+            newVideos.push({ url: localPath });
+          } else {
+            newMedia.push({ url: localPath, displayUrl: getDisplayUrl(localPath), kind: "image" });
+          }
+          changed = true;
         } catch { /* skip */ }
       }
-      if (newMedia.length > directMedia.length) {
-        updateCard(card.id, { data: { ...data, directMedia: newMedia } });
+      if (changed) {
+        updateCard(card.id, {
+          data: {
+            ...data,
+            directMedia: newMedia,
+            refVideos: newVideos.length > 0 ? newVideos : undefined,
+          },
+        });
         autoSave.markDirty(card.id);
       }
     },
@@ -189,6 +213,22 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       autoSave.markDirty(card.id);
     },
     [card.id, data, directMedia, updateCard],
+  );
+
+  const disconnectVideo = useCallback(
+    (index: number) => {
+      const entry = data.refVideos?.[index];
+      if (entry?.sourceCardId) {
+        const { connections, removeConnection } = useConnectionStore.getState();
+        for (const [id, c] of connections) {
+          if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
+            removeConnection(id);
+            break;
+          }
+        }
+      }
+    },
+    [data.refVideos, card.id],
   );
 
   const handlePickMedia = useCallback(async () => {
@@ -377,10 +417,9 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
 
     let userContent: ApiContentPart[];
 
-    const allMedia = data.directMedia ?? [];
-    const directImageItems = allMedia.filter((m) => m.kind === "image");
-    const directVideoItems = allMedia.filter((m) => m.kind === "video");
-    const totalMedia = imageEntries.length + allMedia.length;
+    const directImageItems = (data.directMedia ?? []).filter((m) => m.kind === "image");
+    const refVideoEntries = data.refVideos ?? [];
+    const totalMedia = imageEntries.length + directImageItems.length + refVideoEntries.length;
 
     if (hasInlineRefs && modelSupportsVision(model)) {
       userContent = await serializeForApi(
@@ -400,7 +439,8 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         const dataUrl = await getBase64ForApi(img.url);
         userContent.unshift({ type: "image_url", image_url: { url: dataUrl } });
       }
-      for (const vid of directVideoItems) {
+      for (const vid of refVideoEntries) {
+        if (inlineUrls.has(vid.url)) continue;
         const dataUrl = await getBase64ForApi(vid.url);
         userContent.unshift({ type: "video_url", video_url: { url: dataUrl } });
       }
@@ -415,7 +455,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
           const dataUrl = await getBase64ForApi(img.url);
           userContent.push({ type: "image_url", image_url: { url: dataUrl } });
         }
-        for (const vid of directVideoItems) {
+        for (const vid of refVideoEntries) {
           const dataUrl = await getBase64ForApi(vid.url);
           userContent.push({ type: "video_url", video_url: { url: dataUrl } });
         }
@@ -534,29 +574,69 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         </div>
       )}
 
-      {directMedia.length > 0 && (
-        <div className="flex shrink-0 flex-wrap gap-1.5">
-          {directMedia.map((item, idx) => (
-            <div key={idx} className="group relative">
-              {item.kind === "video" ? (
-                <div className="relative h-14 w-20 overflow-hidden rounded-lg border border-border bg-black/5">
+      {data.refVideos && data.refVideos.length > 0 && (
+        <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
+          <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+            <Video className="h-3 w-3" />
+            参考视频 · 连线的视频素材 ({data.refVideos.length}/3)
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {data.refVideos.map((entry, idx) => (
+              <div
+                key={entry.sourceCardId ?? idx}
+                className="relative aspect-square w-[96px] shrink-0 cursor-pointer"
+                onClick={() => {
+                  const opt = imageOptions.find((o) => o.id === `video:${idx}`);
+                  if (opt) promptRef.current?.insertRef(opt);
+                }}
+                title="点击插入引用到提示词"
+              >
+                <div className="h-full w-full overflow-hidden rounded-lg border border-input bg-muted/30 transition-colors hover:border-primary/60 hover:shadow-sm">
                   <video
-                    src={item.displayUrl}
-                    className="h-full w-full object-cover"
-                    preload="metadata"
+                    src={getDisplayUrl(entry.url)}
                     muted
+                    playsInline
+                    preload="metadata"
+                    className="h-full w-full object-cover"
+                    onLoadedMetadata={(e) => {
+                      (e.target as HTMLVideoElement).currentTime = 0.1;
+                    }}
                   />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Video className="h-4 w-4 text-white drop-shadow-md" />
-                  </div>
                 </div>
-              ) : (
-                <img
-                  src={item.displayUrl}
-                  alt=""
-                  className="h-14 w-14 rounded-lg border border-border object-cover"
-                />
-              )}
+                <span className="absolute left-0 top-0 z-10 flex h-5 w-5 -translate-x-1/4 -translate-y-1/4 items-center justify-center rounded-full bg-black/70 text-[10px] font-bold text-white shadow-sm">
+                  {idx + 1}
+                </span>
+                <span className="absolute bottom-0.5 left-0.5 z-10 flex items-center gap-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">
+                  <Video className="h-2 w-2" />
+                  {entry.sourceCardId ? (useCardStore.getState().getCard(entry.sourceCardId)?.title || "AI 视频") : `视频${idx + 1}`}
+                </span>
+                {!generating && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); disconnectVideo(idx); }}
+                    className="absolute right-1 top-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                    title="断开视频连线"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {directMedia.some((m) => m.kind === "image") && (
+        <div className="flex shrink-0 flex-wrap gap-1.5">
+          {directMedia.map((item, idx) => {
+            if (item.kind !== "image") return null;
+            const src = item.displayUrl || getDisplayUrl(item.url);
+            return (
+            <div key={idx} className="group relative">
+              <img
+                src={src}
+                alt=""
+                className="h-14 w-14 rounded-lg border border-border object-cover"
+              />
               <button
                 onClick={() => removeDirectMedia(idx)}
                 className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground group-hover:flex"
@@ -564,7 +644,8 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
                 <X className="h-2.5 w-2.5" />
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

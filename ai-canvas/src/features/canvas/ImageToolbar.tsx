@@ -12,6 +12,7 @@ import { autoSave } from "@/lib/autoSave";
 import { injectOnConnect } from "@/lib/dataFlow";
 import { sizeFromRatio } from "@/shared/constants";
 import { updateProjectMeta } from "@/platform";
+import { HIDDEN_FEATURES } from "@/config/platforms";
 import { cn } from "@/lib/utils";
 
 const GRID_OPTIONS = [
@@ -432,7 +433,7 @@ export default function ImageToolbar() {
       data: {
         content: "",
         model: useSettingsStore.getState().getLastModel("enhancer")?.modelId || "SeedVR2-Upscaler",
-        provider: useSettingsStore.getState().getLastModel("enhancer")?.providerId || "jijing",
+        provider: useSettingsStore.getState().getLastModel("enhancer")?.providerId || "comfly",
       },
       createdAt: now,
       updatedAt: now,
@@ -485,7 +486,7 @@ export default function ImageToolbar() {
       data: {
         content: "h:0,v:0,z:5",
         model: useSettingsStore.getState().getLastModel("multiangle")?.modelId || "qwen-image-edit-2511-multipie",
-        provider: useSettingsStore.getState().getLastModel("multiangle")?.providerId || "jijing",
+        provider: useSettingsStore.getState().getLastModel("multiangle")?.providerId || "comfly",
         size: "1:1",
         h: 0,
         v: 0,
@@ -592,25 +593,31 @@ export default function ImageToolbar() {
           )}
         </div>
 
-        <div className="mx-0.5 h-4 w-px bg-border" />
+        {(!HIDDEN_FEATURES.upscale || !HIDDEN_FEATURES.multiangle) && (
+          <div className="mx-0.5 h-4 w-px bg-border" />
+        )}
 
-        <button
-          title="高清放大"
-          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          onClick={handleUpscale}
-        >
-          <ZoomIn className="h-3.5 w-3.5" />
-          <span>高清放大</span>
-        </button>
+        {!HIDDEN_FEATURES.upscale && (
+          <button
+            title="高清放大"
+            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            onClick={handleUpscale}
+          >
+            <ZoomIn className="h-3.5 w-3.5" />
+            <span>高清放大</span>
+          </button>
+        )}
 
-        <button
-          title="多角度"
-          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          onClick={handleMultiangle}
-        >
-          <RotateCw className="h-3.5 w-3.5" />
-          <span>多角度</span>
-        </button>
+        {!HIDDEN_FEATURES.multiangle && (
+          <button
+            title="多角度"
+            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            onClick={handleMultiangle}
+          >
+            <RotateCw className="h-3.5 w-3.5" />
+            <span>多角度</span>
+          </button>
+        )}
 
         <div className="mx-0.5 h-4 w-px bg-border" />
 

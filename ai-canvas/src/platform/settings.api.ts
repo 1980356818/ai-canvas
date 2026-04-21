@@ -1,5 +1,6 @@
 import { isTauri, ensureTauriAPIs, getInvoke } from "./runtime";
 import { lsGet, lsSet } from "./storage";
+import { isPlatformVisible } from "@/config/platforms";
 
 export async function getSetting(key: string): Promise<string | null> {
   if (isTauri) {
@@ -22,12 +23,15 @@ let _apiKeyCache: boolean | undefined;
 
 export async function hasApiKey(): Promise<boolean> {
   if (_apiKeyCache === undefined) {
-    const [comfly, jijing, legacy] = await Promise.all([
+    const checks = [
       getSetting("comfly_api_key"),
-      getSetting("jijing_api_key"),
       getSetting("openai_api_key"),
-    ]);
-    _apiKeyCache = !!(comfly || jijing || legacy);
+    ];
+    if (isPlatformVisible("jijing")) {
+      checks.push(getSetting("jijing_api_key"));
+    }
+    const results = await Promise.all(checks);
+    _apiKeyCache = results.some(Boolean);
   }
   return _apiKeyCache;
 }

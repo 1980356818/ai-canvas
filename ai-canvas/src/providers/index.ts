@@ -30,6 +30,9 @@ export type {
 import { registry } from "./registry";
 import { ComflyProvider } from "./comfly";
 import { JiJingProvider } from "./jijing";
+import { isPlatformVisible } from "@/config/platforms";
 
 registry.register(new ComflyProvider());
-registry.register(new JiJingProvider());
+if (isPlatformVisible("jijing")) {
+  registry.register(new JiJingProvider());
+}

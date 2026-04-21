@@ -45,11 +45,6 @@ export default function ModelSelector({
       .then((list) => {
         if (cancelled) return;
         const filtered = filter ? list.filter(filter) : list;
-        filtered.sort((a, b) => {
-          const aOwn = a.providerId === "jijing" ? 0 : 1;
-          const bOwn = b.providerId === "jijing" ? 0 : 1;
-          return aOwn - bOwn;
-        });
         setModels(filtered);
       })
       .catch(() => {
@@ -106,14 +101,19 @@ export default function ModelSelector({
             {modelService.getDisplayName(value)}
           </option>
         )}
-        {models.map((m) => {
-          const label = `[${m.providerName}] ${m.display_name || m.id}`;
-          return (
-            <option key={toCompositeKey(m)} value={toCompositeKey(m)}>
-              {label}
-            </option>
-          );
-        })}
+        {(() => {
+          const providerCount = new Set(models.map((m) => m.providerId)).size;
+          return models.map((m) => {
+            const label = providerCount > 1
+              ? `[${m.providerName}] ${m.display_name || m.id}`
+              : (m.display_name || m.id);
+            return (
+              <option key={toCompositeKey(m)} value={toCompositeKey(m)}>
+                {label}
+              </option>
+            );
+          });
+        })()}
       </select>
       <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
     </div>

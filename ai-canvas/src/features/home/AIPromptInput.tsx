@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { MessageSquare, ImageIcon, SendHorizonal, X, ImagePlus } from "lucide-react";
+import { MessageSquare, ImageIcon, SendHorizonal, X, ImagePlus, Video } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useChatStore } from "@/stores/chatStore";
@@ -12,17 +12,32 @@ import ModelSelector from "@/features/editor/ModelSelector";
 
 type InputMode = "chat" | "image";
 
-interface UploadedImage {
+interface UploadedMedia {
   url: string;
   displayUrl: string;
+  kind: "image" | "video";
 }
 
-const IMAGE_LABELS = ["图一", "图二", "图三", "图四", "图五"];
-const MAX_IMAGES = 5;
-const ACCEPTED_MIME = [
+const MEDIA_LABELS = ["附件一", "附件二", "附件三", "附件四", "附件五"];
+const MAX_MEDIA = 5;
+const ACCEPTED_IMAGE_MIME = [
   "image/png", "image/jpeg", "image/gif", "image/webp",
   "image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence",
 ];
+const ACCEPTED_VIDEO_MIME = [
+  "video/mp4", "video/webm", "video/quicktime", "video/x-msvideo", "video/x-matroska",
+];
+const VIDEO_EXTENSIONS = /\.(mp4|webm|mov|avi|mkv)$/i;
+
+function isVideoFile(file: File): boolean {
+  return file.type.startsWith("video/") || VIDEO_EXTENSIONS.test(file.name);
+}
+
+function isMediaFile(file: File): boolean {
+  return ACCEPTED_IMAGE_MIME.includes(file.type)
+    || ACCEPTED_VIDEO_MIME.includes(file.type)
+    || isVideoFile(file);
+}
 
 const MODE_CONFIG: Record<
   InputMode,
@@ -50,7 +65,7 @@ export default function AIPromptInput() {
   const [prompt, setPrompt] = useState("");
   const [sending, setSending] = useState(false);
   const [selectedModel, setSelectedModel] = useState("");
-  const [images, setImages] = useState<UploadedImage[]>([]);
+  const [media, setMedia] = useState<UploadedMedia[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -64,28 +79,61 @@ export default function AIPromptInput() {
     loadDefault.then((ref) => setSelectedModel(ref.modelId));
   }, [mode]);
 
-  const addImages = useCallback(async (sources: string[]) => {
-    const remaining = MAX_IMAGES - images.length;
+  const addMedia = useCallback(async (files: File[]) => {
+    const remaining = MAX_MEDIA - media.length;
     if (remaining <= 0) {
       useUIStore.getState().addToast({
         type: "warning",
-        title: `最多上传 ${MAX_IMAGES} 张图片`,
+        title: `最多上传 ${MAX_MEDIA} 个附件`,
         duration: 3000,
       });
       return;
     }
-    const toAdd = sources.slice(0, remaining);
+    const toAdd = files.slice(0, remaining);
+    const results: UploadedMedia[] = [];
+    for (const raw of toAdd) {
+      try {
+        const video = isVideoFile(raw);
+        const file = video ? raw : await ensureDisplayableImage(raw);
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        const { localPath } = await persistImage(dataUrl);
+        results.push({
+          url: localPath,
+          displayUrl: getDisplayUrl(localPath),
+          kind: video ? "video" : "image",
+        });
+      } catch { /* skip */ }
+    }
+    if (results.length > 0) setMedia((prev) => [...prev, ...results]);
+  }, [media.length]);
+
+  const addMediaFromPaths = useCallback(async (paths: string[]) => {
+    const remaining = MAX_MEDIA - media.length;
+    if (remaining <= 0) {
+      useUIStore.getState().addToast({
+        type: "warning",
+        title: `最多上传 ${MAX_MEDIA} 个附件`,
+        duration: 3000,
+      });
+      return;
+    }
+    const toAdd = paths.slice(0, remaining);
     const results = await Promise.all(
       toAdd.map(async (src) => {
         const { localPath } = await persistImage(src);
-        return { url: localPath, displayUrl: getDisplayUrl(localPath) };
+        const video = VIDEO_EXTENSIONS.test(src);
+        return { url: localPath, displayUrl: getDisplayUrl(localPath), kind: (video ? "video" : "image") as "image" | "video" };
       }),
     );
-    setImages((prev) => [...prev, ...results]);
-  }, [images.length]);
+    setMedia((prev) => [...prev, ...results]);
+  }, [media.length]);
 
-  const removeImage = useCallback((index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
+  const removeMedia = useCallback((index: number) => {
+    setMedia((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -118,24 +166,11 @@ export default function AIPromptInput() {
     dragCounterRef.current = 0;
     setDragOver(false);
 
-    const rawFiles = Array.from(e.dataTransfer.files).filter((f) =>
-      ACCEPTED_MIME.includes(f.type),
-    );
+    const rawFiles = Array.from(e.dataTransfer.files).filter(isMediaFile);
     if (rawFiles.length === 0) return;
 
-    const converted = await Promise.all(rawFiles.map(ensureDisplayableImage));
-    const dataUrls = await Promise.all(
-      converted.map(
-        (f) =>
-          new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.readAsDataURL(f);
-          }),
-      ),
-    );
-    addImages(dataUrls);
-  }, [addImages]);
+    await addMedia(rawFiles);
+  }, [addMedia]);
 
   const handlePickFile = useCallback(async () => {
     if (isTauri) {
@@ -144,46 +179,35 @@ export default function AIPromptInput() {
         const selected = await open({
           multiple: true,
           filters: [
-            { name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif"] },
+            { name: "图片/视频", extensions: ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "mp4", "webm", "mov", "avi", "mkv"] },
           ],
         });
         if (!selected) return;
         const paths = Array.isArray(selected)
           ? selected.map((s) => (typeof s === "string" ? s : (s as { path: string }).path))
           : [typeof selected === "string" ? selected : (selected as { path: string }).path];
-        addImages(paths);
+        await addMediaFromPaths(paths);
       } catch (err) {
         console.error("Failed to pick file:", err);
       }
     } else {
       fileInputRef.current?.click();
     }
-  }, [addImages]);
+  }, [addMediaFromPaths]);
 
   const handleFileInputChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const rawFiles = Array.from(e.target.files ?? []);
+      const rawFiles = Array.from(e.target.files ?? []).filter(isMediaFile);
       if (rawFiles.length === 0) return;
-      const converted = await Promise.all(rawFiles.map(ensureDisplayableImage));
-      const dataUrls = await Promise.all(
-        converted.map(
-          (f) =>
-            new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.readAsDataURL(f);
-            }),
-        ),
-      );
-      addImages(dataUrls);
+      await addMedia(rawFiles);
       e.target.value = "";
     },
-    [addImages],
+    [addMedia],
   );
 
   const clearInput = useCallback(() => {
     setPrompt("");
-    setImages([]);
+    setMedia([]);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   }, []);
 
@@ -218,12 +242,17 @@ export default function AIPromptInput() {
       }
 
       const chatText = mode === "image" ? `/image ${trimmed}` : trimmed;
-      const chatImages = images.map((img) => img.url);
+      const chatImages = media.filter((m) => m.kind === "image").map((m) => m.url);
+      const chatVideos = media.filter((m) => m.kind === "video").map((m) => m.url);
 
       clearInput();
 
       await useChatStore.getState().createSession();
-      await useChatStore.getState().sendMessage(chatText, chatImages.length > 0 ? chatImages : undefined);
+      await useChatStore.getState().sendMessage(
+        chatText,
+        chatImages.length > 0 ? chatImages : undefined,
+        chatVideos.length > 0 ? chatVideos : undefined,
+      );
     } catch (err) {
       useUIStore.getState().addToast({
         type: "error",
@@ -234,7 +263,7 @@ export default function AIPromptInput() {
     } finally {
       setSending(false);
     }
-  }, [prompt, sending, mode, images, clearInput]);
+  }, [prompt, sending, mode, media, clearInput]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -272,7 +301,7 @@ export default function AIPromptInput() {
             <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-primary/40 px-8 py-6">
               <ImagePlus className="h-8 w-8 text-primary/60" />
               <p className="text-sm font-medium text-primary/80">
-                松开鼠标，上传图片
+                松开鼠标，上传图片/视频
               </p>
             </div>
           </div>
@@ -289,26 +318,40 @@ export default function AIPromptInput() {
           style={{ minHeight: "180px", maxHeight: "320px" }}
         />
 
-        {/* Image previews */}
-        {images.length > 0 && (
+        {/* Media previews */}
+        {media.length > 0 && (
           <div className="flex flex-wrap gap-2 px-4 pb-2">
-            {images.map((img, i) => (
+            {media.map((item, i) => (
               <div key={i} className="group relative">
                 <div className="relative overflow-hidden rounded-lg border border-border/60 bg-muted/30">
-                  <img
-                    src={img.displayUrl}
-                    alt={IMAGE_LABELS[i] ?? `图${i + 1}`}
-                    className="h-16 w-16 object-cover"
-                  />
+                  {item.kind === "video" ? (
+                    <div className="relative h-16 w-20">
+                      <video
+                        src={item.displayUrl}
+                        className="h-full w-full object-cover"
+                        preload="metadata"
+                        muted
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Video className="h-4 w-4 text-white drop-shadow-md" />
+                      </div>
+                    </div>
+                  ) : (
+                    <img
+                      src={item.displayUrl}
+                      alt={MEDIA_LABELS[i] ?? `附件${i + 1}`}
+                      className="h-16 w-16 object-cover"
+                    />
+                  )}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1 pb-0.5 pt-3">
                     <span className="text-[10px] font-medium leading-none text-white">
-                      {IMAGE_LABELS[i] ?? `图${i + 1}`}
+                      {MEDIA_LABELS[i] ?? `附件${i + 1}`}
                     </span>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => removeImage(i)}
+                  onClick={() => removeMedia(i)}
                   className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
                 >
                   <X className="h-2.5 w-2.5" />
@@ -316,7 +359,7 @@ export default function AIPromptInput() {
               </div>
             ))}
 
-            {images.length < MAX_IMAGES && (
+            {media.length < MAX_MEDIA && (
               <button
                 type="button"
                 onClick={handlePickFile}
@@ -359,7 +402,7 @@ export default function AIPromptInput() {
 
           <div className="flex-1" />
 
-          {(prompt.trim() || images.length > 0) && (
+          {(prompt.trim() || media.length > 0) && (
             <button
               type="button"
               onClick={clearInput}
@@ -371,12 +414,12 @@ export default function AIPromptInput() {
             </button>
           )}
 
-          {images.length === 0 && (
+          {media.length === 0 && (
             <button
               type="button"
               onClick={handlePickFile}
               className="mr-1 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
-              title="上传图片"
+              title="上传图片/视频"
             >
               <ImagePlus className="h-4 w-4" />
             </button>
@@ -386,7 +429,7 @@ export default function AIPromptInput() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp,image/heic,image/heif,.heic,.heif"
+              accept="image/*,video/*,.heic,.heif,.mp4,.webm,.mov,.avi,.mkv"
               multiple
               className="hidden"
               onChange={handleFileInputChange}
