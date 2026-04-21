@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { Sparkles, Loader2, RefreshCw, ArrowDownLeft, Lock, X, AlertCircle, ImageIcon } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, ArrowDownLeft, Lock, X, AlertCircle, ImageIcon, Music, Upload, Play, Square } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -7,14 +7,16 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
-import { scheduleBackgroundSave, getBase64ForApi, getDisplayUrl } from "@/lib/media";
+import { scheduleBackgroundSave, getBase64ForApi, getDisplayUrl, persistImage } from "@/lib/media";
 import { useProjectStore } from "@/stores/projectStore";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
 import { type InlineImageRef, toDisplayText } from "@/lib/promptSerializer";
+import { getRefSlotsForVideoModel, compactRefImages, type RefImageEntry } from "@/config/model-ref-images";
 import ModelSelector from "./ModelSelector";
+import RefImageSlot from "./RefImageSlot";
 import SizeCombo from "./SizeCombo";
 import PromptTextarea from "./PromptTextarea";
 import { normalizeImageSize } from "@/shared/constants";
@@ -23,6 +25,39 @@ interface VideoFrameRef {
   url: string;
   sourceCardId: string;
 }
+
+const MAX_AUDIO_SLOTS = 3;
+
+interface AudioRefEntry {
+  url: string;
+  filename: string;
+  duration?: number;
+}
+
+function getAudioDuration(file: File): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const audio = new Audio();
+    const blobUrl = URL.createObjectURL(file);
+    const cleanup = () => { audio.onloadedmetadata = null; audio.onerror = null; URL.revokeObjectURL(blobUrl); };
+    const timer = setTimeout(() => { cleanup(); resolve(undefined); }, 3000);
+    audio.onloadedmetadata = () => {
+      clearTimeout(timer);
+      const dur = audio.duration;
+      cleanup();
+      resolve(Number.isFinite(dur) ? Math.round(dur * 10) / 10 : undefined);
+    };
+    audio.onerror = () => { clearTimeout(timer); cleanup(); resolve(undefined); };
+    audio.src = blobUrl;
+  });
+}
+
+function formatDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+type VideoImageMode = "frame" | "reference";
 
 interface VideoData {
   content?: string;
@@ -42,6 +77,9 @@ interface VideoData {
   duration?: number;
   resolution?: string;
   generateAudio?: boolean;
+  imageMode?: VideoImageMode;
+  refImages?: Record<string, RefImageEntry>;
+  refAudios?: AudioRefEntry[];
 }
 
 function buildFinalPrompt(data: VideoData): string {
@@ -79,6 +117,12 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const [currentSize, setCurrentSize] = useState(() => normalizeImageSize((card.data as VideoData).size));
   const [error, setError] = useState<string | null>(null);
   const data = card.data as VideoData;
+  const imageMode: VideoImageMode = data.imageMode ?? "frame";
+
+  const refSlots = useMemo(
+    () => getRefSlotsForVideoModel(currentModel, imageMode),
+    [currentModel, imageMode],
+  );
 
   const upstreamEntries = useMemo(
     () => Object.entries(data.upstreamTexts || {}),
@@ -110,7 +154,156 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     }
   }, [data.model]);
 
-  const imageOptions = useImageRefSources(card.id, [], undefined);
+  const frames = useMemo(() => {
+    if (data.refFrames && data.refFrames.length > 0) return data.refFrames;
+    if (data.upstreamImageUrl) {
+      return [{ url: data.upstreamImageUrl, sourceCardId: data.upstreamCardId ?? "" }];
+    }
+    return [];
+  }, [data.refFrames, data.upstreamImageUrl, data.upstreamCardId]);
+
+  const imageOptions = useImageRefSources(card.id, refSlots, data.refImages, data.refAudios);
+
+  const setRefImage = useCallback(
+    (slotKey: string, entry: RefImageEntry) => {
+      const refImages = { ...data.refImages, [slotKey]: entry };
+      updateCard(card.id, { data: { ...data, refImages } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const clearRefImage = useCallback(
+    (slotKey: string) => {
+      const entry = data.refImages?.[slotKey];
+      if (entry?.sourceCardId) {
+        const { connections, removeConnection } = useConnectionStore.getState();
+        for (const [id, c] of connections) {
+          if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
+            removeConnection(id);
+            break;
+          }
+        }
+      }
+      const refImages = { ...data.refImages };
+      delete refImages[slotKey];
+      const compacted = compactRefImages(refImages, refSlots);
+      updateCard(card.id, { data: { ...data, refImages: compacted } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, refSlots, updateCard],
+  );
+
+  const handleImageModeChange = useCallback(
+    (newMode: VideoImageMode) => {
+      if (imageMode === newMode) return;
+      const newData: Record<string, unknown> = { ...data, imageMode: newMode };
+
+      if (newMode === "reference") {
+        const refImages: Record<string, RefImageEntry> = {};
+        (frames ?? []).forEach((f, i) => {
+          refImages[`refImage${i}`] = { url: f.url, sourceCardId: f.sourceCardId, sourceType: "card" };
+        });
+        newData.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
+        newData.refFrames = undefined;
+      } else {
+        const slots = getRefSlotsForVideoModel(currentModel, "reference");
+        const entries = slots
+          .map((s) => data.refImages?.[s.key])
+          .filter((e): e is RefImageEntry => !!e);
+
+        const kept = entries.slice(0, 2);
+        const dropped = entries.slice(2);
+        const newFrames = kept.map((e) => ({
+          url: e.url,
+          sourceCardId: e.sourceCardId ?? "",
+        }));
+        newData.refFrames = newFrames.length > 0 ? newFrames : undefined;
+        newData.refImages = undefined;
+
+        if (dropped.length > 0) {
+          const { connections, removeConnection } = useConnectionStore.getState();
+          for (const entry of dropped) {
+            if (!entry.sourceCardId) continue;
+            for (const [id, c] of connections) {
+              if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
+                removeConnection(id);
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      updateCard(card.id, { data: newData });
+      autoSave.markDirty(card.id);
+    },
+    [imageMode, data, frames, currentModel, card.id, updateCard],
+  );
+
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const [playingAudioIdx, setPlayingAudioIdx] = useState<number | null>(null);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
+
+  const addAudioFile = useCallback(
+    async (file: File) => {
+      if (!file.type.startsWith("audio/") && !/\.(wav|mp3)$/i.test(file.name)) return;
+      const audios = data.refAudios ?? [];
+      if (audios.length >= MAX_AUDIO_SLOTS) {
+        useUIStore.getState().addToast({ type: "warning", title: `最多添加 ${MAX_AUDIO_SLOTS} 段参考音频`, duration: 3000 });
+        return;
+      }
+      if (file.size > 15 * 1024 * 1024) {
+        useUIStore.getState().addToast({ type: "warning", title: "单段音频不超过 15 MB", duration: 3000 });
+        return;
+      }
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const saved = await persistImage(dataUrl, undefined, pid);
+      const duration = await getAudioDuration(file);
+
+      const newAudios = [...audios, { url: saved.localPath, filename: file.name, duration }];
+      updateCard(card.id, { data: { ...data, refAudios: newAudios } });
+      autoSave.markDirty(card.id);
+    },
+    [data, card.id, updateCard],
+  );
+
+  const removeAudio = useCallback(
+    (index: number) => {
+      if (playingAudioIdx === index) {
+        audioElRef.current?.pause();
+        setPlayingAudioIdx(null);
+      }
+      const newAudios = (data.refAudios ?? []).filter((_, i) => i !== index);
+      updateCard(card.id, { data: { ...data, refAudios: newAudios.length > 0 ? newAudios : undefined } });
+      autoSave.markDirty(card.id);
+    },
+    [data, card.id, updateCard, playingAudioIdx],
+  );
+
+  const togglePlayAudio = useCallback(
+    (index: number) => {
+      const entry = data.refAudios?.[index];
+      if (!entry) return;
+      if (playingAudioIdx === index) {
+        audioElRef.current?.pause();
+        setPlayingAudioIdx(null);
+        return;
+      }
+      if (audioElRef.current) audioElRef.current.pause();
+      const audio = new Audio(getDisplayUrl(entry.url));
+      audio.onended = () => setPlayingAudioIdx(null);
+      audio.play();
+      audioElRef.current = audio;
+      setPlayingAudioIdx(index);
+    },
+    [data.refAudios, playingAudioIdx],
+  );
 
   const handleModelChange = useCallback(
     (modelId: string, providerId: string) => {
@@ -153,14 +346,6 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     },
     [card.id],
   );
-
-  const frames = useMemo(() => {
-    if (data.refFrames && data.refFrames.length > 0) return data.refFrames;
-    if (data.upstreamImageUrl) {
-      return [{ url: data.upstreamImageUrl, sourceCardId: data.upstreamCardId ?? "" }];
-    }
-    return [];
-  }, [data.refFrames, data.upstreamImageUrl, data.upstreamCardId]);
 
   const removeFrame = useCallback(
     (index: number) => {
@@ -219,9 +404,27 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       }
 
       const referenceImages: Array<{ url: string; role: string }> = [];
-      for (let i = 0; i < frames.length; i++) {
-        const dataUrl = await getBase64ForApi(frames[i]!.url);
-        referenceImages.push({ url: dataUrl, role: i === 0 ? "firstFrame" : "lastFrame" });
+      if (imageMode === "reference") {
+        for (const slot of refSlots) {
+          const entry = data.refImages?.[slot.key];
+          if (entry) {
+            const dataUrl = await getBase64ForApi(entry.url);
+            referenceImages.push({ url: dataUrl, role: "referenceImage" });
+          }
+        }
+      } else {
+        for (let i = 0; i < frames.length; i++) {
+          const dataUrl = await getBase64ForApi(frames[i]!.url);
+          referenceImages.push({ url: dataUrl, role: i === 0 ? "firstFrame" : "lastFrame" });
+        }
+      }
+
+      const referenceAudios: Array<{ url: string; role: string }> = [];
+      if (data.refAudios?.length) {
+        for (const entry of data.refAudios) {
+          const dataUrl = await getBase64ForApi(entry.url);
+          referenceAudios.push({ url: dataUrl, role: "referenceAudio" });
+        }
       }
 
       const result = await provider.generateVideo({
@@ -229,6 +432,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         model: currentModel || undefined,
         size: currentSize,
         referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+        referenceAudios: referenceAudios.length > 0 ? referenceAudios : undefined,
         onProgress: (p) => {
           setCardProgress(card.id, { percent: p.percent, label: p.label });
         },
@@ -263,7 +467,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, generating, updateCard, currentModel, currentSize, setCardProgress, frames]);
+  }, [data, card.id, generating, updateCard, currentModel, currentSize, setCardProgress, frames, imageMode, refSlots]);
 
   const isLocked = !!data._locked;
 
@@ -281,35 +485,162 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         </div>
       ) : (
         <>
-          {frames.length > 0 && (
+          {(frames.length > 0 || imageMode === "reference" || refSlots.some((s) => data.refImages?.[s.key])) && (
             <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
-              <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
-                <ImageIcon className="h-3 w-3" />
-                参考帧 · 连线图片卡片自动填充（最多 2 帧）
+              <div className="mb-1.5 flex items-center justify-between">
+                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <ImageIcon className="h-3 w-3" />
+                  {imageMode === "reference" ? "参考图 · 最多 9 张" : "参考帧 · 最多 2 帧"}
+                </div>
+                <div className="flex rounded-md border border-border bg-muted/50 p-0.5 text-[10px]">
+                  <button
+                    onClick={() => handleImageModeChange("frame")}
+                    disabled={generating}
+                    className={cn(
+                      "rounded px-2 py-0.5 transition-colors",
+                      imageMode === "frame"
+                        ? "bg-background font-medium text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    首尾帧
+                  </button>
+                  <button
+                    onClick={() => handleImageModeChange("reference")}
+                    disabled={generating}
+                    className={cn(
+                      "rounded px-2 py-0.5 transition-colors",
+                      imageMode === "reference"
+                        ? "bg-background font-medium text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    参考图
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                {frames.map((frame, idx) => (
-                  <div key={frame.sourceCardId || idx} className="relative">
-                    <img
-                      src={getDisplayUrl(frame.url)}
-                      alt={idx === 0 ? "首帧" : "尾帧"}
-                      className="h-16 w-auto rounded border border-border object-cover"
-                    />
-                    <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">
-                      {idx === 0 ? "首帧" : "尾帧"}
-                    </span>
+
+              {imageMode === "reference" ? (
+                <div className="flex flex-wrap gap-2">
+                  {refSlots.map((slot, idx) => {
+                    const entry = data.refImages?.[slot.key];
+                    const occupiedCount = refSlots.filter((s) => data.refImages?.[s.key]).length;
+                    if (!entry && idx > occupiedCount) return null;
+                    return (
+                      <RefImageSlot
+                        key={slot.key}
+                        label={slot.label}
+                        description={slot.description}
+                        entry={entry}
+                        onImage={(e) => setRefImage(slot.key, e)}
+                        onClear={() => clearRefImage(slot.key)}
+                        disabled={generating}
+                        targetCardId={card.id}
+                        slotKey={slot.key}
+                        index={entry ? idx : undefined}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  {frames.map((frame, idx) => (
+                    <div key={frame.sourceCardId || idx} className="relative">
+                      <img
+                        src={getDisplayUrl(frame.url)}
+                        alt={idx === 0 ? "首帧" : "尾帧"}
+                        className="h-16 w-auto rounded border border-border object-cover"
+                      />
+                      <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">
+                        {idx === 0 ? "首帧" : "尾帧"}
+                      </span>
+                      <button
+                        onClick={() => removeFrame(idx)}
+                        disabled={generating}
+                        className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white shadow-sm transition-opacity hover:opacity-80 disabled:opacity-40"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
+            <div className="mb-1.5 flex items-center justify-between">
+              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <Music className="h-3 w-3" />
+                参考音频 · 最多 {MAX_AUDIO_SLOTS} 段
+              </div>
+              {(data.refAudios?.length ?? 0) < MAX_AUDIO_SLOTS && (
+                <button
+                  onClick={() => audioInputRef.current?.click()}
+                  disabled={generating}
+                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+                >
+                  <Upload className="h-3 w-3" />
+                  添加
+                </button>
+              )}
+            </div>
+            <input
+              ref={audioInputRef}
+              type="file"
+              accept=".wav,.mp3,audio/wav,audio/mpeg"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) addAudioFile(file);
+                e.target.value = "";
+              }}
+            />
+            {data.refAudios && data.refAudios.length > 0 ? (
+              <div className="flex flex-col gap-1.5">
+                {data.refAudios.map((entry, idx) => (
+                  <div
+                    key={`${entry.filename}-${idx}`}
+                    className="flex items-center gap-2 rounded-md bg-muted/60 px-2 py-1.5"
+                  >
                     <button
-                      onClick={() => removeFrame(idx)}
-                      disabled={generating}
-                      className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white shadow-sm transition-opacity hover:opacity-80 disabled:opacity-40"
+                      onClick={() => togglePlayAudio(idx)}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary transition-colors hover:bg-primary/25"
                     >
-                      <X className="h-2.5 w-2.5" />
+                      {playingAudioIdx === idx
+                        ? <Square className="h-2.5 w-2.5 fill-current" />
+                        : <Play className="h-2.5 w-2.5 fill-current" />}
+                    </button>
+                    <span className="min-w-0 flex-1 truncate text-xs">
+                      <span className="font-medium text-foreground">音频{idx + 1}</span>
+                      <span className="ml-1 text-muted-foreground">{entry.filename}</span>
+                    </span>
+                    {entry.duration != null && (
+                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                        {formatDuration(entry.duration)}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => removeAudio(idx)}
+                      disabled={generating}
+                      className="shrink-0 text-muted-foreground transition-colors hover:text-destructive disabled:opacity-40"
+                    >
+                      <X className="h-3 w-3" />
                     </button>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <button
+                onClick={() => audioInputRef.current?.click()}
+                disabled={generating}
+                className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-input py-2 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-40"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                点击上传 .wav / .mp3
+              </button>
+            )}
+          </div>
 
           {hasUpstream && (
             <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">

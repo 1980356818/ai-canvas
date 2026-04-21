@@ -22,6 +22,7 @@ function cardSizeFromPersist(
 }
 
 const VIDEO_EXTENSIONS = /\.(mp4|webm|mov|avi|mkv)$/i;
+const AUDIO_EXTENSIONS = /\.(wav|mp3)$/i;
 
 function isVideoFile(file: File): boolean {
   return file.type.startsWith("video/") || VIDEO_EXTENSIONS.test(file.name);
@@ -29,6 +30,14 @@ function isVideoFile(file: File): boolean {
 
 function isVideoPath(path: string): boolean {
   return VIDEO_EXTENSIONS.test(path);
+}
+
+function isAudioFile(file: File): boolean {
+  return file.type.startsWith("audio/") || AUDIO_EXTENSIONS.test(file.name);
+}
+
+function isAudioPath(path: string): boolean {
+  return AUDIO_EXTENSIONS.test(path);
 }
 
 function getVideoDimensions(src: string): Promise<{ width: number; height: number }> {
@@ -60,6 +69,8 @@ async function videoCardSize(src: string): Promise<{ width: number; height: numb
   return { width: CARD_DEFAULTS.ai_video.width, height: CARD_DEFAULTS.ai_video.height };
 }
 
+const MAX_VIDEO_AUDIO_SLOTS = 3;
+
 function canCardAcceptFileDrop(cardId: string): boolean {
   const card = useCardStore.getState().getCard(cardId);
   if (!card) return false;
@@ -71,6 +82,9 @@ function canCardAcceptFileDrop(cardId: string): boolean {
     const d = card.data as { personImageUrl?: string; garmentImageUrl?: string };
     return !d.personImageUrl || !d.garmentImageUrl;
   }
+  if (card.type === "ai_video") {
+    return true;
+  }
   return false;
 }
 
@@ -80,6 +94,27 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.onload = () => resolve(reader.result as string);
     reader.readAsDataURL(file);
   });
+}
+
+async function handleAudioDropOnVideoCard(
+  targetCardId: string,
+  file: File,
+  projectId: string,
+): Promise<boolean> {
+  const card = useCardStore.getState().getCard(targetCardId);
+  if (!card || card.type !== "ai_video") return false;
+  const d = card.data as { refAudios?: Array<{ url: string; filename: string; duration?: number }> };
+  const audios = d.refAudios ?? [];
+  if (audios.length >= MAX_VIDEO_AUDIO_SLOTS) {
+    useUIStore.getState().addToast({ type: "warning", title: `最多添加 ${MAX_VIDEO_AUDIO_SLOTS} 段参考音频`, duration: 3000 });
+    return true;
+  }
+  const dataUrl = await readFileAsDataUrl(file);
+  const saved = await persistImage(dataUrl, undefined, projectId);
+  const newAudios = [...audios, { url: saved.localPath, filename: file.name }];
+  useCardStore.getState().updateCard(targetCardId, { data: { ...card.data, refAudios: newAudios } });
+  autoSave.markDirty(targetCardId);
+  return true;
 }
 
 async function handleDropOnCard(
@@ -241,7 +276,7 @@ export function useFileDrop(
       }
 
       const rawFiles = Array.from(e.dataTransfer.files).filter(
-        (f) => f.type.startsWith("image/") || isVideoFile(f) || isHeicFile(f),
+        (f) => f.type.startsWith("image/") || isVideoFile(f) || isHeicFile(f) || isAudioFile(f),
       );
       if (rawFiles.length === 0) return;
 
@@ -256,7 +291,17 @@ export function useFileDrop(
       }
 
       (async () => {
-        const files = await Promise.all(rawFiles.map(ensureDisplayableImage));
+        const audioFiles = rawFiles.filter(isAudioFile);
+        if (audioFiles.length > 0 && targetCardId) {
+          for (const af of audioFiles) {
+            await handleAudioDropOnVideoCard(targetCardId, af, currentProjectId);
+          }
+        }
+
+        const mediaRawFiles = rawFiles.filter((f) => !isAudioFile(f));
+        if (mediaRawFiles.length === 0) return;
+
+        const files = await Promise.all(mediaRawFiles.map(ensureDisplayableImage));
         let startIdx = 0;
 
         if (targetCardId) {
@@ -336,18 +381,42 @@ export function useFileDrop(
       const targetCardId = cardEl?.dataset.cardId ?? null;
 
       if (targetCardId && canCardAcceptFileDrop(targetCardId)) {
-        try {
-          const src0 = await convertHeicPath(paths[0]!);
-          const saved = await persistImage(src0, undefined, pid);
-          await handleDropOnCard(targetCardId, saved);
-          startIdx = 1;
-        } catch { /* skip */ }
+        const audioPaths = paths.filter(isAudioPath);
+        if (audioPaths.length > 0) {
+          for (const ap of audioPaths) {
+            try {
+              const saved = await persistImage(ap, undefined, pid);
+              const card = useCardStore.getState().getCard(targetCardId);
+              if (card?.type === "ai_video") {
+                const d = card.data as { refAudios?: Array<{ url: string; filename: string }> };
+                const audios = d.refAudios ?? [];
+                if (audios.length < MAX_VIDEO_AUDIO_SLOTS) {
+                  const fname = ap.split(/[/\\]/).pop() ?? "audio";
+                  const newAudios = [...audios, { url: saved.localPath, filename: fname }];
+                  useCardStore.getState().updateCard(targetCardId, { data: { ...card.data, refAudios: newAudios } });
+                  autoSave.markDirty(targetCardId);
+                }
+              }
+            } catch { /* skip */ }
+          }
+        }
+
+        const nonAudioPaths = paths.filter((p) => !isAudioPath(p));
+        if (nonAudioPaths.length > 0) {
+          try {
+            const src0 = await convertHeicPath(nonAudioPaths[0]!);
+            const saved = await persistImage(src0, undefined, pid);
+            await handleDropOnCard(targetCardId, saved);
+            startIdx = 1;
+          } catch { /* skip */ }
+        }
       }
 
+      const remainingPaths = paths.filter((p) => !isAudioPath(p));
       let tauriCursorX = 0;
-      for (let i = startIdx; i < paths.length; i++) {
+      for (let i = startIdx; i < remainingPaths.length; i++) {
         try {
-          const rawPath = paths[i]!;
+          const rawPath = remainingPaths[i]!;
           const video = isVideoPath(rawPath);
           const filePath = video ? rawPath : await convertHeicPath(rawPath);
           const saved = await persistImage(filePath, undefined, pid);

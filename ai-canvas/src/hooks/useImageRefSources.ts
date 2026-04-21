@@ -11,7 +11,7 @@ import { getDisplayUrl } from "@/lib/media";
 export interface ImageRefOption {
   id: string;
   label: string;
-  category: "slot" | "upstream";
+  category: "slot" | "upstream" | "audio";
   thumbnailUrl: string;
   resolvedUrl: string;
   source: InlineImageSource;
@@ -20,12 +20,20 @@ export interface ImageRefOption {
 
 export type InlineImageSource =
   | { type: "refSlot"; slotKey: string }
-  | { type: "upstream"; sourceCardId: string };
+  | { type: "upstream"; sourceCardId: string }
+  | { type: "audioSlot"; index: number };
+
+interface AudioEntry {
+  url: string;
+  filename: string;
+  duration?: number;
+}
 
 export function useImageRefSources(
   cardId: string,
   refSlots: RefImageSlot[],
   refImages: Record<string, RefImageEntry> | undefined,
+  refAudios?: AudioEntry[],
 ): ImageRefOption[] {
   const cards = useCardStore((s) => s.cards);
   const connections = useConnectionStore((s) => s.connections);
@@ -34,7 +42,6 @@ export function useImageRefSources(
     const options: ImageRefOption[] = [];
     const seenUrls = new Set<string>();
 
-    // 1. 当前节点的参考图槽位
     let slotIdx = 0;
     for (const slot of refSlots) {
       const entry = refImages?.[slot.key];
@@ -56,7 +63,6 @@ export function useImageRefSources(
       });
     }
 
-    // 2. 通过连线连接到当前节点的上游图片
     for (const conn of connections.values()) {
       if (conn.targetCardId !== cardId) continue;
       const sourceCard = cards.get(conn.sourceCardId);
@@ -80,8 +86,23 @@ export function useImageRefSources(
       });
     }
 
+    if (refAudios?.length) {
+      for (let i = 0; i < refAudios.length; i++) {
+        const a = refAudios[i]!;
+        options.push({
+          id: `audio:${i}`,
+          label: `音频${i + 1}`,
+          category: "audio",
+          thumbnailUrl: "",
+          resolvedUrl: a.url,
+          source: { type: "audioSlot", index: i },
+          cardTitle: a.filename,
+        });
+      }
+    }
+
     return options;
-  }, [cardId, refSlots, refImages, cards, connections]);
+  }, [cardId, refSlots, refImages, refAudios, cards, connections]);
 }
 
 function getCardTypeLabel(type: string): string {

@@ -17,7 +17,7 @@ export async function onTauriFileDrop(
           .position ?? { x: 0, y: 0 };
         const paths = (event.payload as { paths?: string[] }).paths ?? [];
         const mediaPaths = paths.filter((p: string) =>
-          /\.(png|jpe?g|gif|webp|bmp|svg|avif|tiff?|mp4|webm|mov|avi|mkv)$/i.test(p),
+          /\.(png|jpe?g|gif|webp|bmp|svg|avif|tiff?|mp4|webm|mov|avi|mkv|wav|mp3)$/i.test(p),
         );
         if (mediaPaths.length > 0) cb(mediaPaths, pos.x, pos.y);
       }

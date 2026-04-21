@@ -3,7 +3,7 @@ import type { CanvasCard } from "@/types";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
-import { getRefSlotsForModel, getRefSlotsForChatModel, compactRefImages, type RefImageEntry } from "@/config/model-ref-images";
+import { getRefSlotsForModel, getRefSlotsForChatModel, getRefSlotsForVideoModel, compactRefImages, type RefImageEntry } from "@/config/model-ref-images";
 
 const DEBUG = import.meta.env.DEV;
 
@@ -24,10 +24,29 @@ export function canAcceptImageConnection(
 ): boolean {
   const cardStore = useCardStore.getState();
   const target = cardStore.getCard(targetCardId);
-  if (!target || !REF_IMAGE_TARGETS.has(target.type)) return true;
+  if (!target) return true;
 
   const source = cardStore.getCard(sourceCardId);
   if (!source || !IMAGE_SOURCE_TYPES.has(source.type)) return true;
+
+  if (target.type === "ai_video") {
+    const d = target.data as Record<string, unknown>;
+    const mode = (d.imageMode as string) ?? "frame";
+    if (mode === "reference") {
+      const slots = getRefSlotsForVideoModel((d.model as string) || "", "reference");
+      const refImages = (d.refImages || {}) as Record<string, RefImageEntry>;
+      for (const slot of slots) {
+        if (refImages[slot.key]?.sourceCardId === sourceCardId) return true;
+      }
+      return slots.some((s) => !refImages[s.key]);
+    }
+    type FrameRef = { url: string; sourceCardId: string };
+    const frames = (d.refFrames as FrameRef[]) || [];
+    if (frames.some((f) => f.sourceCardId === sourceCardId)) return true;
+    return frames.length < 2;
+  }
+
+  if (!REF_IMAGE_TARGETS.has(target.type)) return true;
 
   const d = target.data as Record<string, unknown>;
   const slots = getRefSlots({ type: target.type, data: d });
@@ -39,13 +58,27 @@ export function canAcceptImageConnection(
   return slots.some((s) => !refImages[s.key]);
 }
 
+function hasRefImages(target: { type: string; data: Record<string, unknown> }): boolean {
+  if (REF_IMAGE_TARGETS.has(target.type)) return true;
+  if (target.type === "ai_video" && (target.data.imageMode ?? "frame") === "reference") return true;
+  return false;
+}
+
+function getRefSlotsAny(target: { type: string; data: Record<string, unknown> }) {
+  if (target.type === "ai_video") {
+    const mode = (target.data.imageMode as string) ?? "frame";
+    return getRefSlotsForVideoModel((target.data.model as string) || "", mode as "frame" | "reference");
+  }
+  return getRefSlots(target);
+}
+
 export function removeRefImageForSource(
   targetCardId: string,
   sourceCardId: string,
 ): void {
   const cardStore = useCardStore.getState();
   const target = cardStore.getCard(targetCardId);
-  if (!target || !REF_IMAGE_TARGETS.has(target.type)) return;
+  if (!target || !hasRefImages({ type: target.type, data: target.data as Record<string, unknown> })) return;
 
   const d = { ...(target.data as Record<string, unknown>) };
   const refImages = { ...((d.refImages || {}) as Record<string, RefImageEntry>) };
@@ -59,7 +92,7 @@ export function removeRefImageForSource(
   }
 
   if (changed) {
-    const slots = getRefSlots({ type: target.type, data: d });
+    const slots = getRefSlotsAny({ type: target.type, data: d });
     d.refImages = compactRefImages(refImages, slots);
     cardStore.updateCard(targetCardId, { data: d });
     autoSave.markDirty(targetCardId);
@@ -324,23 +357,55 @@ function injectIntoCard(
           changed = true;
         }
       } else if (payload.kind === "image") {
-        const MAX_FRAMES = 2;
-        type FrameRef = { url: string; sourceCardId: string };
-        const frames = [...((d.refFrames as FrameRef[]) || [])];
+        const imageMode = (d.imageMode as string) ?? "frame";
 
-        const existIdx = frames.findIndex((f) => f.sourceCardId === sourceCardId);
-        if (existIdx >= 0) {
-          if (frames[existIdx]!.url !== payload.url) {
-            frames[existIdx] = { url: payload.url, sourceCardId };
+        if (imageMode === "reference") {
+          const slots = getRefSlotsForVideoModel((d.model as string) || "", "reference");
+          const refImages = {
+            ...((d.refImages || {}) as Record<string, RefImageEntry>),
+          };
+
+          let found = false;
+          for (const slot of slots) {
+            if (refImages[slot.key]?.sourceCardId === sourceCardId) {
+              if (refImages[slot.key]!.url !== payload.url) {
+                refImages[slot.key] = { url: payload.url, sourceCardId, sourceType: "card" };
+                d.refImages = refImages;
+                changed = true;
+              }
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            for (const slot of slots) {
+              if (!refImages[slot.key]) {
+                refImages[slot.key] = { url: payload.url, sourceCardId, sourceType: "card" };
+                d.refImages = refImages;
+                changed = true;
+                break;
+              }
+            }
+          }
+        } else {
+          const MAX_FRAMES = 2;
+          type FrameRef = { url: string; sourceCardId: string };
+          const frames = [...((d.refFrames as FrameRef[]) || [])];
+
+          const existIdx = frames.findIndex((f) => f.sourceCardId === sourceCardId);
+          if (existIdx >= 0) {
+            if (frames[existIdx]!.url !== payload.url) {
+              frames[existIdx] = { url: payload.url, sourceCardId };
+              d.refFrames = frames;
+              d.upstreamCardId = sourceCardId;
+              changed = true;
+            }
+          } else if (frames.length < MAX_FRAMES) {
+            frames.push({ url: payload.url, sourceCardId });
             d.refFrames = frames;
             d.upstreamCardId = sourceCardId;
             changed = true;
           }
-        } else if (frames.length < MAX_FRAMES) {
-          frames.push({ url: payload.url, sourceCardId });
-          d.refFrames = frames;
-          d.upstreamCardId = sourceCardId;
-          changed = true;
         }
       }
       break;

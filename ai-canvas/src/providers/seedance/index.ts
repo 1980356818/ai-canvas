@@ -70,6 +70,11 @@ export class SeedanceProvider implements AIProvider {
         content.push({ type: "image_url", image_url: { url: ref.url }, role });
       }
     }
+    if (req.referenceAudios?.length) {
+      for (const ref of req.referenceAudios) {
+        content.push({ type: "audio_url", audio_url: { url: ref.url }, role: "reference_audio" });
+      }
+    }
 
     const body: Record<string, unknown> = {
       model: resolveModel(req.model),

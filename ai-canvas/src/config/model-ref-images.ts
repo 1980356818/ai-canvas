@@ -65,6 +65,13 @@ const CHAT_REF_SLOTS: RefImageSlot[] = Array.from({ length: 12 }, (_, i) => ({
   required: false,
 }));
 
+const VIDEO_REF_SLOTS: RefImageSlot[] = Array.from({ length: 9 }, (_, i) => ({
+  key: `refImage${i}`,
+  label: `参考图${i + 1}`,
+  description: "视频参考图",
+  required: false,
+}));
+
 const NON_VISION_PATTERNS: RegExp[] = [
   /^spark/i,
   /^ernie[_-]?(lite|speed|tiny)/i,
@@ -81,6 +88,13 @@ export function modelSupportsVision(modelId: string): boolean {
 export function getRefSlotsForChatModel(modelId: string): RefImageSlot[] {
   if (!modelSupportsVision(modelId)) return [];
   return CHAT_REF_SLOTS;
+}
+
+export function getRefSlotsForVideoModel(
+  _modelId: string,
+  imageMode: "frame" | "reference" = "frame",
+): RefImageSlot[] {
+  return imageMode === "reference" ? VIDEO_REF_SLOTS : [];
 }
 
 export function getRefSlotsForModel(modelId: string): RefImageSlot[] {

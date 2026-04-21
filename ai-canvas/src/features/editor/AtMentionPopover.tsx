@@ -5,7 +5,7 @@ import {
   useLayoutEffect,
   type MutableRefObject,
 } from "react";
-import { ImageIcon, Search, Link } from "lucide-react";
+import { ImageIcon, Search, Link, Music } from "lucide-react";
 import type { ImageRefOption } from "@/hooks/useImageRefSources";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +24,7 @@ const CATEGORY_META: Record<
 > = {
   slot: { label: "参考图", icon: ImageIcon },
   upstream: { label: "上游节点", icon: Link },
+  audio: { label: "参考音频", icon: Music },
 };
 
 const VIEWPORT_PADDING = 8;
@@ -135,7 +136,7 @@ export default function AtMentionPopover({
         onMouseDown={(e) => e.preventDefault()}
       >
         <p className="text-xs text-muted-foreground">
-          暂无可引用的图片，请先上传参考图或连接上游节点
+          暂无可引用的素材，请先上传参考图/音频或连接上游节点
         </p>
       </div>
     );
@@ -155,7 +156,7 @@ export default function AtMentionPopover({
       <div className="flex items-center gap-1.5 border-b border-border px-3 py-2">
         <Search className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="text-xs text-muted-foreground">
-          @ 引用图片{query ? ` · "${query}"` : ""}
+          @ 引用素材{query ? ` · "${query}"` : ""}
         </span>
       </div>
 
@@ -192,13 +193,17 @@ export default function AtMentionPopover({
                     onClick={() => onSelect(item)}
                     onMouseEnter={() => setActiveIndex(idx)}
                   >
-                    <div className="h-8 w-8 shrink-0 overflow-hidden rounded border border-input bg-muted/30">
-                      <img
-                        src={item.thumbnailUrl}
-                        alt={item.label}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded border border-input bg-muted/30">
+                      {item.category === "audio" ? (
+                        <Music className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <img
+                          src={item.thumbnailUrl}
+                          alt={item.label}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-medium">
@@ -229,7 +234,7 @@ export default function AtMentionPopover({
 function groupByCategory(
   items: ImageRefOption[],
 ): [string, ImageRefOption[]][] {
-  const order = ["slot", "upstream"];
+  const order = ["slot", "upstream", "audio"];
   const map = new Map<string, ImageRefOption[]>();
   for (const item of items) {
     const list = map.get(item.category) ?? [];
