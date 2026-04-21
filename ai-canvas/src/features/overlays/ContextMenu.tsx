@@ -390,7 +390,7 @@ function ContextMenuPanel({
             type: "item" as const,
             label: "多角度",
             disabled: noProject,
-            onSelect: (e: React.MouseEvent) => addCardAtClick("ai_multiangle", e),
+            onSelect: (e?: React.MouseEvent) => addCardAtClick("ai_multiangle", e),
           }] : []),
         ],
       },

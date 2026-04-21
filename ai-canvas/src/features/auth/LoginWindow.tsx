@@ -150,7 +150,7 @@ export default function LoginWindow() {
     } catch { /* error in store */ }
   };
 
-  const hero = HERO[authView] ?? HERO.login;
+  const hero = (HERO[authView] ?? HERO.login)!;
 
   return (
     <div className="dark relative flex h-screen w-screen bg-[oklch(0.10_0.035_270)] text-white">
