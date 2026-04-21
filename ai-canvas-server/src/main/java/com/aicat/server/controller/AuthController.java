@@ -37,6 +37,20 @@ public class AuthController {
         return Result.ok(data, msg);
     }
 
+    @PostMapping("/reset-password")
+    public Result<?> resetPassword(@Valid @RequestBody ResetPasswordReq req) {
+        authService.resetPassword(req.getUsername(), req.getEmail(), req.getNewPassword());
+        return Result.ok(null, "密码重置成功，请使用新密码登录");
+    }
+
+    @Data
+    static class ResetPasswordReq {
+        @NotBlank(message = "用户名不能为空") private String username;
+        @NotBlank(message = "邮箱不能为空") private String email;
+        @NotBlank(message = "新密码不能为空") @Size(min = 6, max = 32, message = "密码须6-32位")
+        private String newPassword;
+    }
+
     @Data
     static class RegisterReq {
         @NotBlank(message = "用户名不能为空") @Size(min = 4, max = 20, message = "用户名须4-20位")

@@ -2,72 +2,111 @@
 
 当用户要求部署后端(ai-canvas-server)和管理端(ai-canvas-admin)到服务器时，遵循本规则。
 
+---
+
+## 服务器凭据
+
+| 项目 | 值 |
+|------|------|
+| 服务器 IP | 101.37.80.236 |
+| SSH 用户名 | root |
+| SSH 密码 | AImao123456! |
+| 宝塔面板 | https://101.37.80.236:20345/a24f9e6f |
+| 宝塔用户名 | 2hcd5oo2 |
+| 宝塔密码 | 4f3ff73b |
+| MySQL 密码 | AImao123456! |
+| 管理后台 | http://101.37.80.236/admin/ |
+| API 地址 | http://101.37.80.236/api/ |
+
 ## 项目架构
 
 | 组件 | 技术栈 | 说明 |
 |------|--------|------|
 | ai-canvas-server | Spring Boot 3.4.4 + Java 17 + MyBatis-Plus + MySQL 8 | 后端 API 服务，端口 8090 |
 | ai-canvas-admin | Vue 3 + Element Plus + Vite | 管理后台 SPA，构建后打入 JAR 的 static/admin 目录 |
-| ai-canvas | Vue 3 + Tauri | 客户端桌面应用，不部署到服务器 |
+| ai-canvas | React + Tauri v2 | 客户端桌面应用，不部署到服务器 |
+
+## 服务器目录结构
+
+```
+/opt/ai-canvas/
+  └── ai-canvas-server.jar          # 应用 JAR
+
+/etc/systemd/system/
+  └── ai-canvas.service             # systemd 服务（开机自启）
+
+/etc/nginx/sites-available/
+  └── ai-canvas                     # Nginx 反代配置
+```
+
+---
 
 ## 判断部署类型
 
-先 SSH 连接服务器检查环境：
+通过 paramiko SSH 连接服务器后检查：
 
 ```bash
 java -version && mysql --version && systemctl is-active ai-canvas
 ```
 
-- 如果上述命令全部成功 → 执行 **【更新部署】**
-- 如果任何一项缺失 → 执行 **【首次部署】**
+- 全部成功 → 执行 **【更新部署】**
+- 任何一项缺失 → 执行 **【首次部署】**
 
 ---
 
 ## 【更新部署】（日常使用，最常见）
 
-只需 3 步：构建 → 上传 → 重启
+只需 3 步：构建 → 上传 → 重启。**全程使用 paramiko，不依赖 SSH 密钥。**
 
 ### 1. 本地构建
 
 ```bash
-# 构建管理端前端
-cd ai-canvas-admin
+# 如果管理端有改动，先构建管理端前端
+cd d:\Project\AI无限画布\ai-canvas-admin
 npm install
 npm run build
 
-# 构建后端 JAR（管理端已打入 static/admin）
-cd ../ai-canvas-server
+# 构建后端 JAR（管理端 static 资源已在 JAR 中）
+cd d:\Project\AI无限画布\ai-canvas-server
 mvn clean package -DskipTests
 ```
 
-### 2. 上传 JAR 到服务器
+注意：如果本地有 java 进程占用 jar 文件导致 `mvn clean` 失败，先 `Get-WmiObject Win32_Process -Filter "name = 'java.exe'" | Where-Object { $_.CommandLine -like "*ai-canvas-server*" }` 找到 PID 并 kill。
+
+### 2. 上传 JAR + 重启服务 + 验证（一段 Python 搞定）
 
 ```python
-import paramiko
+import paramiko, time
 
 client = paramiko.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-client.connect('SERVER_IP', port=22, username='root', password='PASSWORD', timeout=10)
+client.connect('101.37.80.236', port=22, username='root', password='AImao123456!', timeout=10)
 
+# 上传 JAR
 sftp = client.open_sftp()
-sftp.put(r'ai-canvas-server\target\ai-canvas-server-0.1.0.jar', '/opt/ai-canvas/ai-canvas-server.jar')
+sftp.put(r'd:\Project\AI无限画布\ai-canvas-server\target\ai-canvas-server-0.1.0.jar',
+         '/opt/ai-canvas/ai-canvas-server.jar')
 sftp.close()
+print('JAR uploaded')
+
+# 重启服务
+stdin, stdout, stderr = client.exec_command('systemctl daemon-reload && systemctl restart ai-canvas')
+stdout.channel.recv_exit_status()
+print('Service restarted')
+
+# 等待启动
+time.sleep(8)
+
+# 验证
+stdin, stdout, stderr = client.exec_command('systemctl is-active ai-canvas && journalctl -u ai-canvas --no-pager -n 10')
+output = stdout.read().decode()
+print(output)
+
+# 看到 "active" 和 "Started AiCatServerApplication" 即成功
+client.close()
 ```
 
-### 3. 重启服务
-
-```bash
-systemctl restart ai-canvas
-```
-
-验证：
-
-```bash
-journalctl -u ai-canvas -f --no-pager -n 20
-# 看到 "Started AiCatServerApplication" 即成功
-```
-
-**更新部署完毕，无需其他操作。**
+**更新部署完毕。**
 
 ---
 
@@ -84,16 +123,15 @@ systemctl start mysql && systemctl enable mysql
 ### 2. 配置 MySQL
 
 ```bash
-# 设置 root 密码
-mysql -u root -e 'ALTER USER "root"@"localhost" IDENTIFIED WITH mysql_native_password BY "YOUR_DB_PASSWORD"; FLUSH PRIVILEGES;'
+mysql -u root -e 'ALTER USER "root"@"localhost" IDENTIFIED WITH mysql_native_password BY "AImao123456!"; FLUSH PRIVILEGES;'
 ```
 
 ### 3. 导入数据库
 
-将 `ai-canvas-server/src/main/resources/db/schema.sql` 上传到服务器并执行：
+上传 `ai-canvas-server/src/main/resources/db/schema.sql` 并执行：
 
 ```bash
-mysql -u root -pYOUR_DB_PASSWORD < /tmp/schema.sql
+mysql -u root -pAImao123456! < /tmp/schema.sql
 ```
 
 数据库名：`aicat`，共 9 张表。
@@ -104,7 +142,7 @@ mysql -u root -pYOUR_DB_PASSWORD < /tmp/schema.sql
 mkdir -p /opt/ai-canvas
 ```
 
-上传 `ai-canvas-server-0.1.0.jar` 到 `/opt/ai-canvas/ai-canvas-server.jar`
+上传 `ai-canvas-server-0.1.0.jar` → `/opt/ai-canvas/ai-canvas-server.jar`
 
 ### 5. 创建 systemd 服务
 
@@ -120,8 +158,8 @@ Requires=mysql.service
 Type=simple
 User=root
 WorkingDirectory=/opt/ai-canvas
-Environment=DB_PASSWORD=YOUR_DB_PASSWORD
-Environment=JWT_SECRET=YOUR_JWT_SECRET_AT_LEAST_256_BITS
+Environment=DB_PASSWORD=AImao123456!
+Environment=JWT_SECRET=AiCatServerDefaultJwtSecretKeyMustBeAtLeast256BitsLong!!
 ExecStart=/usr/bin/java -Xms256m -Xmx512m -jar /opt/ai-canvas/ai-canvas-server.jar
 Restart=always
 RestartSec=10
@@ -143,7 +181,7 @@ systemctl start ai-canvas
 ```nginx
 server {
     listen 80;
-    server_name YOUR_DOMAIN_OR_IP;
+    server_name 101.37.80.236;
 
     location = /admin/ {
         rewrite ^ /admin/index.html last;
@@ -208,34 +246,11 @@ ufw allow 443/tcp
 
 ## 配置参考
 
-| 配置项 | 环境变量 | 默认值 | 说明 |
+| 配置项 | 环境变量 | 当前值 | 说明 |
 |--------|----------|--------|------|
-| 数据库密码 | DB_PASSWORD | root | MySQL root 密码 |
-| JWT 密钥 | JWT_SECRET | 内置默认值 | 生产环境必须修改，至少 256 位 |
+| 数据库密码 | DB_PASSWORD | AImao123456! | MySQL root 密码 |
+| JWT 密钥 | JWT_SECRET | AiCatServer...Long!! | 见 application.yml 默认值 |
 | 服务端口 | - | 8090 | application.yml 中配置 |
-
-## 服务器目录结构
-
-```
-/opt/ai-canvas/
-  └── ai-canvas-server.jar          # 应用 JAR
-
-/etc/systemd/system/
-  └── ai-canvas.service             # 服务定义
-
-/etc/nginx/sites-available/
-  └── ai-canvas                     # Nginx 配置
-```
-
-## 管理后台初始账号
-
-首次启动自动创建，查看密码：
-
-```bash
-journalctl -u ai-canvas | grep "密码"
-```
-
-用户名 `admin`，首次登录后必须修改密码。
 
 ## 故障排查
 
@@ -247,32 +262,11 @@ journalctl -u ai-canvas --no-pager -n 50
 tail -f /var/log/nginx/error.log
 
 # 检查数据库
-mysql -u root -pPASSWORD -e "USE aicat; SHOW TABLES;"
+mysql -u root -pAImao123456! -e "USE aicat; SHOW TABLES;"
 
 # 内存使用
 free -h
 
 # 重启所有服务
 systemctl restart mysql ai-canvas nginx
-```
-
-## 使用 paramiko 远程操作（Windows 环境）
-
-```python
-import paramiko
-
-client = paramiko.SSHClient()
-client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-client.connect('SERVER_IP', port=22, username='root', password='PASSWORD', timeout=10)
-
-# 执行命令
-stdin, stdout, stderr = client.exec_command('systemctl restart ai-canvas')
-print(stdout.read().decode())
-
-# 上传文件
-sftp = client.open_sftp()
-sftp.put('local_path.jar', '/opt/ai-canvas/ai-canvas-server.jar')
-sftp.close()
-
-client.close()
 ```

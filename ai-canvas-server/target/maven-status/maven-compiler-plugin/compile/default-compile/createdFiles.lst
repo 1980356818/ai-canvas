@@ -1,6 +1,7 @@
 com\aicat\server\mapper\RedeemCodeMapper.class
 com\aicat\server\security\RateLimitInterceptor$Bucket.class
 com\aicat\server\controller\AuthController$LoginReq.class
+com\aicat\server\controller\UserController$ChangePasswordReq.class
 com\aicat\server\mapper\RedeemLogMapper.class
 com\aicat\server\config\MyBatisPlusConfig$1.class
 com\aicat\server\service\SysConfigService.class
@@ -24,6 +25,7 @@ com\aicat\server\config\WebMvcConfig.class
 com\aicat\server\util\JwtUtil.class
 com\aicat\server\security\RateLimitInterceptor.class
 com\aicat\server\controller\UserController.class
+com\aicat\server\controller\AuthController$ResetPasswordReq.class
 com\aicat\server\entity\SysConfig.class
 com\aicat\server\controller\UserController$UnbindReq.class
 com\aicat\server\controller\AdminController$ForceUnbindReq.class

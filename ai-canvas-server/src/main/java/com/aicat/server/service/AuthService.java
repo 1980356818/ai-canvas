@@ -107,6 +107,34 @@ public class AuthService {
         return uv;
     }
 
+    @Transactional
+    public void resetPassword(String username, String email, String newPassword) {
+        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
+        if (user == null) {
+            throw new BizException(ErrorCode.USER_NOT_FOUND);
+        }
+        if (user.getEmail() == null || user.getEmail().isBlank()) {
+            throw new BizException(ErrorCode.EMAIL_NOT_SET);
+        }
+        if (!user.getEmail().equalsIgnoreCase(email)) {
+            throw new BizException(ErrorCode.EMAIL_MISMATCH);
+        }
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userMapper.updateById(user);
+    }
+
+    public void changePassword(Long userId, String oldPassword, String newPassword) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BizException(ErrorCode.TOKEN_INVALID);
+        }
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new BizException(ErrorCode.OLD_PASSWORD_WRONG);
+        }
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userMapper.updateById(user);
+    }
+
     private Map<String, Object> userVO(User user) {
         Map<String, Object> m = new HashMap<>();
         m.put("id", user.getId());

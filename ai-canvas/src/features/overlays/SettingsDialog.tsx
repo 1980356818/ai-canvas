@@ -19,6 +19,7 @@ import {
   Pencil,
   LogOut,
   UserCircle,
+  KeyRound,
 } from "lucide-react";
 import {
   getSetting,
@@ -31,6 +32,7 @@ import { registry } from "@/providers/registry";
 import { modelService } from "@/services/models";
 import { useUIStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
+import { apiChangePassword } from "@/platform/auth.api";
 import { isPlatformVisible } from "@/config/platforms";
 import { cn } from "@/lib/utils";
 
@@ -693,12 +695,54 @@ function PlatformCard({
 function AccountTab({ onClose }: { onClose: () => void }) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const addToast = useUIStore((s) => s.addToast);
   const [confirming, setConfirming] = useState(false);
+
+  const [showChangePwd, setShowChangePwd] = useState(false);
+  const [oldPwd, setOldPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [changePwdLoading, setChangePwdLoading] = useState(false);
+  const [changePwdError, setChangePwdError] = useState("");
+  const [showOldPwd, setShowOldPwd] = useState(false);
+  const [showNewPwd, setShowNewPwd] = useState(false);
 
   const handleLogout = () => {
     logout();
     onClose();
   };
+
+  const handleChangePassword = async () => {
+    setChangePwdError("");
+    if (!oldPwd.trim() || !newPwd.trim()) {
+      setChangePwdError("请填写所有字段");
+      return;
+    }
+    if (newPwd.length < 6) {
+      setChangePwdError("新密码至少需要6位");
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      setChangePwdError("两次输入的新密码不一致");
+      return;
+    }
+    setChangePwdLoading(true);
+    try {
+      await apiChangePassword(oldPwd, newPwd);
+      setShowChangePwd(false);
+      setOldPwd("");
+      setNewPwd("");
+      setConfirmPwd("");
+      addToast({ type: "success", title: "密码修改成功", duration: 3000 });
+    } catch (err: any) {
+      setChangePwdError(err.message || "修改失败");
+    } finally {
+      setChangePwdLoading(false);
+    }
+  };
+
+  const pwdInputClass =
+    "w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none ring-ring placeholder:text-muted-foreground focus:ring-1";
 
   return (
     <div className="space-y-5">
@@ -731,6 +775,98 @@ function AccountTab({ onClose }: { onClose: () => void }) {
         )}
       </div>
 
+      {/* Change password */}
+      <div className="rounded-lg border border-border p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-medium text-foreground">修改密码</h3>
+          {!showChangePwd && (
+            <button
+              type="button"
+              onClick={() => setShowChangePwd(true)}
+              className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+            >
+              <KeyRound className="h-3 w-3" />
+              修改
+            </button>
+          )}
+        </div>
+        {showChangePwd && (
+          <div className="mt-3 space-y-2.5">
+            {changePwdError && (
+              <p className="rounded-md bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
+                {changePwdError}
+              </p>
+            )}
+            <div className="relative">
+              <input
+                type={showOldPwd ? "text" : "password"}
+                value={oldPwd}
+                onChange={(e) => setOldPwd(e.target.value)}
+                placeholder="原密码"
+                className={cn(pwdInputClass, "pr-7")}
+              />
+              <button
+                type="button"
+                onClick={() => setShowOldPwd(!showOldPwd)}
+                tabIndex={-1}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showOldPwd ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                type={showNewPwd ? "text" : "password"}
+                value={newPwd}
+                onChange={(e) => setNewPwd(e.target.value)}
+                placeholder="新密码（至少6位）"
+                className={cn(pwdInputClass, "pr-7")}
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPwd(!showNewPwd)}
+                tabIndex={-1}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showNewPwd ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+              </button>
+            </div>
+            <input
+              type="password"
+              value={confirmPwd}
+              onChange={(e) => setConfirmPwd(e.target.value)}
+              placeholder="确认新密码"
+              className={pwdInputClass}
+            />
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleChangePassword}
+                disabled={changePwdLoading}
+                className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {changePwdLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+                确认修改
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowChangePwd(false);
+                  setOldPwd("");
+                  setNewPwd("");
+                  setConfirmPwd("");
+                  setChangePwdError("");
+                }}
+                className="rounded-md px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-accent"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Logout */}
       <div className="rounded-lg border border-destructive/20 p-4">
         <h3 className="mb-2 text-xs font-medium text-foreground">退出登录</h3>
         <p className="mb-3 text-[11px] text-muted-foreground">

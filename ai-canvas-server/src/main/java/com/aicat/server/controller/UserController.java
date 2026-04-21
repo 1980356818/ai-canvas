@@ -10,6 +10,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -59,6 +60,20 @@ public class UserController {
         String ip = IpUtil.getClientIp(request);
         deviceBindService.unbindAndRebind(userId, req.getNewMachineCode(), req.getDeviceInfo(), ip, "user");
         return Result.ok(null, "解绑成功，已绑定新设备");
+    }
+
+    @PostMapping("/change-password")
+    public Result<?> changePassword(@Valid @RequestBody ChangePasswordReq req, HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        authService.changePassword(userId, req.getOldPassword(), req.getNewPassword());
+        return Result.ok(null, "密码修改成功");
+    }
+
+    @Data
+    static class ChangePasswordReq {
+        @NotBlank(message = "原密码不能为空") private String oldPassword;
+        @NotBlank(message = "新密码不能为空") @Size(min = 6, max = 32, message = "密码须6-32位")
+        private String newPassword;
     }
 
     @Data

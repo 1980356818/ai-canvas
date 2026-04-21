@@ -4,13 +4,14 @@ import {
   apiRegister,
   apiRedeem,
   apiGetUserStatus,
+  apiResetPassword,
   getToken,
   getStoredUser,
   clearAuth,
   type AuthUser,
 } from "@/platform/auth.api";
 
-export type AuthView = "login" | "register" | "redeem";
+export type AuthView = "login" | "register" | "redeem" | "resetPassword";
 
 interface AuthState {
   initialized: boolean;
@@ -27,6 +28,7 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string, email?: string) => Promise<void>;
   redeem: (code: string) => Promise<void>;
+  resetPassword: (username: string, email: string, newPassword: string) => Promise<void>;
   refreshStatus: () => Promise<void>;
   logout: () => void;
   clearError: () => void;
@@ -108,6 +110,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     } catch (e: any) {
       set({ loading: false, error: e.message || "兑换失败" });
+      throw e;
+    }
+  },
+
+  resetPassword: async (username, email, newPassword) => {
+    set({ loading: true, error: null });
+    try {
+      await apiResetPassword(username, email, newPassword);
+      set({ loading: false, authView: "login" });
+    } catch (e: any) {
+      set({ loading: false, error: e.message || "重置失败" });
       throw e;
     }
   },

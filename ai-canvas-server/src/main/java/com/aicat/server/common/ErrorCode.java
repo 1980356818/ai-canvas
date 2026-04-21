@@ -23,6 +23,10 @@ public enum ErrorCode {
     USERNAME_EXISTS(40901, "用户名已存在"),
     EMAIL_EXISTS(40902, "邮箱已被注册"),
     ADMIN_PWD_CHANGE_REQUIRED(40310, "首次登录需修改密码"),
+    USER_NOT_FOUND(40401, "用户不存在"),
+    EMAIL_MISMATCH(40903, "邮箱与注册信息不匹配"),
+    EMAIL_NOT_SET(40904, "该账号未绑定邮箱，无法重置密码"),
+    OLD_PASSWORD_WRONG(40105, "原密码错误"),
     ;
 
     private final int code;

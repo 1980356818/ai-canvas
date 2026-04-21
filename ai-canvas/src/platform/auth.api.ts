@@ -118,3 +118,25 @@ export async function apiGetUserStatus(): Promise<AuthUser> {
   setStoredUser(data);
   return data;
 }
+
+export async function apiResetPassword(
+  username: string,
+  email: string,
+  newPassword: string,
+): Promise<void> {
+  await request<null>("POST", "/api/auth/reset-password", {
+    username,
+    email,
+    newPassword,
+  });
+}
+
+export async function apiChangePassword(
+  oldPassword: string,
+  newPassword: string,
+): Promise<void> {
+  await request<null>("POST", "/api/user/change-password", {
+    oldPassword,
+    newPassword,
+  });
+}
