@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 export type { CardType, CanvasCard } from "@/types";
-import type { CardType, CanvasCard } from "@/types";
+import type { CanvasCard } from "@/types";
 
 interface CardState {
   cards: Map<string, CanvasCard>;

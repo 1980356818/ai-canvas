@@ -1,5 +1,5 @@
 import { aiProxy } from "@/platform";
-import type { ChatContentPart, Intent, IntentResult, ChatServiceCallbacks, ChatHistoryMessage } from "@/types";
+import type { IntentResult } from "@/types";
 
 export type { ChatContentPart, Intent, IntentResult, ChatServiceCallbacks, ChatHistoryMessage } from "@/types";
 

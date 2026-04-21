@@ -42,6 +42,7 @@ interface MediaData {
   selectedIndex?: number;
   batchSize?: number;
   model?: string;
+  provider?: string;
   size?: string;
   resolution?: string;
   refImages?: Record<string, RefImageEntry>;

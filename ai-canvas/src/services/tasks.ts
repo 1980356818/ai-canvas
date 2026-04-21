@@ -1,5 +1,5 @@
 import { pollTask } from "@/platform";
-import type { TaskInfo } from "@/types";
+import type { TaskInfo, TaskResult } from "@/types";
 
 export type { TaskResult } from "@/types";
 

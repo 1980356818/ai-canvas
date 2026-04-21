@@ -14,8 +14,8 @@ function proxyConfig(target: string, prefix: string) {
     changeOrigin: true,
     rewrite: (p: string) => p.replace(new RegExp(`^${prefix}`), ""),
     secure: false,
-    configure(proxy: import("http-proxy").Server) {
-      proxy.on("proxyReq", (proxyReq) => {
+    configure(proxy: { on: (event: string, handler: (...args: never[]) => void) => void }) {
+      proxy.on("proxyReq", (proxyReq: { removeHeader: (name: string) => void }) => {
         proxyReq.removeHeader("origin");
         proxyReq.removeHeader("referer");
       });

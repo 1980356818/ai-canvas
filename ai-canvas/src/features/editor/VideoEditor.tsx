@@ -28,6 +28,7 @@ interface VideoData {
   content?: string;
   videoUrl?: string;
   model?: string;
+  provider?: string;
   size?: string;
   upstreamTexts?: Record<string, string>;
   inlineRefs?: InlineImageRef[];

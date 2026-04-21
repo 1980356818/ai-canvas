@@ -16,28 +16,24 @@ import {
   parseOpenAIStreamChunk,
   resetStreamState,
   getAccumulatedToolCalls,
-} from "../openai/formatter";
+} from "../openai-compat/formatter";
 import { aiProxy, aiProxyStream, listModels as platformListModels } from "@/platform";
 import type { ModelInfo } from "@/types";
 
 export class CustomProvider implements AIProvider {
   private _id: string;
   private _name: string;
-  private _baseUrl: string;
-  private _apiKey: string;
   private _models: ModelInfo[];
 
   constructor(
     id: string,
     name: string,
-    baseUrl: string = "",
-    apiKey: string = "",
+    _baseUrl: string = "",
+    _apiKey: string = "",
     models: ModelInfo[] = [],
   ) {
     this._id = id;
     this._name = name;
-    this._baseUrl = baseUrl;
-    this._apiKey = apiKey;
     this._models = models;
   }
 
@@ -53,9 +49,8 @@ export class CustomProvider implements AIProvider {
     };
   }
 
-  initialize(config: ProviderConfig): void {
-    this._baseUrl = config.baseUrl;
-    this._apiKey = config.apiKey;
+  initialize(_config: ProviderConfig): void {
+    // Config managed by platform via provider ID
   }
 
   setModels(models: ModelInfo[]): void {
