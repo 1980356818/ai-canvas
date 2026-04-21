@@ -131,6 +131,29 @@ export async function apiResetPassword(
   });
 }
 
+const SAVED_CRED_KEY = "saved_credentials";
+const AUTO_LOGIN_KEY = "auto_login";
+
+export function getSavedCredentials(): { username: string; password: string } | null {
+  return lsGet<{ username: string; password: string } | null>(SAVED_CRED_KEY, null);
+}
+
+export function saveCredentials(username: string, password: string) {
+  lsSet(SAVED_CRED_KEY, { username, password });
+}
+
+export function clearSavedCredentials() {
+  lsRemove(SAVED_CRED_KEY);
+}
+
+export function getAutoLogin(): boolean {
+  return lsGet<boolean>(AUTO_LOGIN_KEY, false);
+}
+
+export function setAutoLogin(enabled: boolean) {
+  lsSet(AUTO_LOGIN_KEY, enabled);
+}
+
 export async function apiChangePassword(
   oldPassword: string,
   newPassword: string,

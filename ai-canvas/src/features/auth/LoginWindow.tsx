@@ -1,7 +1,12 @@
-import { useState, useCallback, useEffect, type FormEvent } from "react";
-import { Loader2, Eye, EyeOff, UserPlus, LogIn, X, Minus, KeyRound } from "lucide-react";
+import { useState, useCallback, useEffect, useRef, type FormEvent } from "react";
+import { Loader2, Eye, EyeOff, UserPlus, LogIn, X, Minus, KeyRound, User, Lock, Mail, ShieldCheck } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAuthStore } from "@/stores/authStore";
+import {
+  getSavedCredentials,
+  saveCredentials,
+  setAutoLogin as persistAutoLogin,
+} from "@/platform/auth.api";
 import { cn } from "@/lib/utils";
 import loginBrand from "@/assets/login-brand.png";
 
@@ -11,7 +16,9 @@ import("@tauri-apps/api/window").then((mod) => {
 });
 
 const INPUT_CLASS =
-  "w-full rounded-md border border-[oklch(0.35_0_0)] bg-[oklch(0.18_0_0)] px-3 py-2 text-sm text-foreground outline-none ring-ring placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:border-primary/60";
+  "w-full rounded-md border border-white/[0.08] bg-white/[0.06] py-2 pl-9 pr-3 text-sm text-white/90 outline-none placeholder:text-white/25 focus-visible:ring-2 focus-visible:ring-[oklch(0.50_0.18_275)] focus-visible:border-[oklch(0.45_0.12_275)] transition-colors";
+
+const INPUT_ICON_CLASS = "pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/25";
 
 const HERO: Record<string, { title: string; sub: string }> = {
   login: { title: "欢迎回来", sub: "登录继续使用AI猫" },
@@ -50,6 +57,25 @@ export default function LoginWindow() {
   const [email, setEmail] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  const autoLoginAttempted = useRef(false);
+
+  useEffect(() => {
+    const saved = getSavedCredentials();
+    if (saved) {
+      setUsername(saved.username);
+      setPassword(saved.password);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (autoLoginAttempted.current) return;
+    if (!isLogin) return;
+    const saved = getSavedCredentials();
+    if (saved && saved.username && saved.password) {
+      autoLoginAttempted.current = true;
+      login(saved.username, saved.password).catch(() => {});
+    }
+  }, [isLogin, login]);
 
   useEffect(() => {
     if (registerSuccess && isLogin) {
@@ -114,15 +140,20 @@ export default function LoginWindow() {
       }
     }
     try {
-      if (isLogin) await login(username, password);
-      else await register(username, password, email || undefined);
+      if (isLogin) {
+        await login(username, password);
+        saveCredentials(username, password);
+        persistAutoLogin(true);
+      } else {
+        await register(username, password, email || undefined);
+      }
     } catch { /* error in store */ }
   };
 
   const hero = HERO[authView] ?? HERO.login;
 
   return (
-    <div className="dark relative flex h-screen w-screen bg-background text-foreground">
+    <div className="dark relative flex h-screen w-screen bg-[oklch(0.10_0.025_260)] text-white">
       {/* Drag region */}
       <div data-tauri-drag-region className="absolute inset-x-0 top-0 z-10 h-9" />
 
@@ -136,7 +167,7 @@ export default function LoginWindow() {
         </button>
         <button
           onClick={() => void invoke("quit_app")}
-          className="flex h-8 w-10 items-center justify-center text-white/50 transition-colors hover:bg-destructive hover:text-white"
+          className="flex h-8 w-10 items-center justify-center text-white/50 transition-colors hover:bg-red-500/80 hover:text-white"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -156,11 +187,11 @@ export default function LoginWindow() {
               <h2 className="text-5xl font-bold">
                 <span className="text-login-hero">{hero.title}</span>
               </h2>
-              <p className="mt-3 text-sm text-muted-foreground">{hero.sub}</p>
+              <p className="mt-3 text-sm text-white/45">{hero.sub}</p>
             </div>
 
             {error && (
-              <div className="mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <div className="mb-4 rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-400">
                 {error}
               </div>
             )}
@@ -170,12 +201,12 @@ export default function LoginWindow() {
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
                   <KeyRound className="h-6 w-6 text-emerald-500" />
                 </div>
-                <p className="text-sm text-foreground">密码已重置成功</p>
-                <p className="text-xs text-muted-foreground">请使用新密码登录</p>
+                <p className="text-sm text-white/90">密码已重置成功</p>
+                <p className="text-xs text-white/45">请使用新密码登录</p>
                 <button
                   type="button"
                   onClick={() => goTo("login")}
-                  className="mt-2 w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                  className="mt-2 w-full rounded-md bg-[oklch(0.50_0.18_275)] px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
                 >
                   返回登录
                 </button>
@@ -183,38 +214,48 @@ export default function LoginWindow() {
             ) : (
               <>
                 <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                  {/* 用户名 */}
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-foreground">用户名</label>
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="请输入用户名"
-                      autoFocus
-                      className={INPUT_CLASS}
-                    />
-                  </div>
-
-                  {(isRegister || isReset) && (
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-foreground">
-                        邮箱{isRegister && <span className="text-muted-foreground"> (选填)</span>}
-                      </label>
+                    <label className="mb-1.5 block text-sm font-medium text-white/70">用户名</label>
+                    <div className="relative">
+                      <User className={INPUT_ICON_CLASS} />
                       <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder={isReset ? "输入注册时的邮箱" : "用于找回密码"}
+                        type="text"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder="请输入用户名"
+                        autoFocus
                         className={INPUT_CLASS}
                       />
                     </div>
+                  </div>
+
+                  {/* 邮箱 (注册/重置) */}
+                  {(isRegister || isReset) && (
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-white/70">
+                        邮箱{isRegister && <span className="text-white/30"> (选填)</span>}
+                      </label>
+                      <div className="relative">
+                        <Mail className={INPUT_ICON_CLASS} />
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder={isReset ? "输入注册时的邮箱" : "用于找回密码"}
+                          className={INPUT_CLASS}
+                        />
+                      </div>
+                    </div>
                   )}
 
+                  {/* 密码 */}
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-foreground">
+                    <label className="mb-1.5 block text-sm font-medium text-white/70">
                       {isReset ? "新密码" : "密码"}
                     </label>
                     <div className="relative">
+                      <Lock className={INPUT_ICON_CLASS} />
                       <input
                         type={showPwd ? "text" : "password"}
                         value={password}
@@ -226,32 +267,37 @@ export default function LoginWindow() {
                         type="button"
                         onClick={() => setShowPwd(!showPwd)}
                         tabIndex={-1}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/25 hover:text-white/60"
                       >
                         {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
                     </div>
                   </div>
 
+                  {/* 确认密码 (注册/重置) */}
                   {(isRegister || isReset) && (
                     <div>
-                      <label className="mb-1.5 block text-sm font-medium text-foreground">确认密码</label>
-                      <input
-                        type="password"
-                        value={confirmPwd}
-                        onChange={(e) => setConfirmPwd(e.target.value)}
-                        placeholder="再次输入密码"
-                        className={INPUT_CLASS}
-                      />
+                      <label className="mb-1.5 block text-sm font-medium text-white/70">确认密码</label>
+                      <div className="relative">
+                        <ShieldCheck className={INPUT_ICON_CLASS} />
+                        <input
+                          type="password"
+                          value={confirmPwd}
+                          onChange={(e) => setConfirmPwd(e.target.value)}
+                          placeholder="再次输入密码"
+                          className={INPUT_CLASS}
+                        />
+                      </div>
                     </div>
                   )}
 
+                  {/* 忘记密码 */}
                   {isLogin && (
-                    <div className="-mt-2 text-right">
+                    <div className="-mt-1 text-right">
                       <button
                         type="button"
                         onClick={() => goTo("resetPassword")}
-                        className="text-xs text-muted-foreground hover:text-primary"
+                        className="text-xs text-white/30 hover:text-[oklch(0.70_0.18_275)]"
                       >
                         忘记密码？
                       </button>
@@ -261,7 +307,7 @@ export default function LoginWindow() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                    className="mt-1 flex w-full items-center justify-center gap-2 rounded-md bg-[oklch(0.50_0.18_275)] px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
                     {loading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -276,25 +322,25 @@ export default function LoginWindow() {
                   </button>
                 </form>
 
-                <div className="mt-6 text-center text-sm text-muted-foreground">
+                <div className="mt-6 text-center text-sm text-white/30">
                   {isReset ? (
                     <>
                       想起密码了？
-                      <button type="button" onClick={() => goTo("login")} className="ml-1 font-medium text-primary hover:underline">
+                      <button type="button" onClick={() => goTo("login")} className="ml-1 font-medium text-[oklch(0.65_0.18_275)] hover:underline">
                         返回登录
                       </button>
                     </>
                   ) : isLogin ? (
                     <>
                       还没有账号？
-                      <button type="button" onClick={() => goTo("register")} className="ml-1 font-medium text-primary hover:underline">
+                      <button type="button" onClick={() => goTo("register")} className="ml-1 font-medium text-[oklch(0.65_0.18_275)] hover:underline">
                         立即注册
                       </button>
                     </>
                   ) : (
                     <>
                       已有账号？
-                      <button type="button" onClick={() => goTo("login")} className="ml-1 font-medium text-primary hover:underline">
+                      <button type="button" onClick={() => goTo("login")} className="ml-1 font-medium text-[oklch(0.65_0.18_275)] hover:underline">
                         去登录
                       </button>
                     </>
