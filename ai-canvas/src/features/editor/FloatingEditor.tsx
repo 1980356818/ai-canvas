@@ -106,14 +106,21 @@ export default function FloatingEditor() {
   const hasUpstream = upstreamTexts && Object.keys(upstreamTexts).length > 0;
   const refFrames = data?.refFrames as unknown[] | undefined;
   const hasRefFrames = refFrames && refFrames.length > 0;
+  const refAudios = data?.refAudios as unknown[] | undefined;
+  const hasRefAudios = refAudios && refAudios.length > 0;
+  const refVideos = data?.refVideos as unknown[] | undefined;
+  const hasRefVideos = refVideos && refVideos.length > 0;
   let autoHeight = isEnhancer ? 140 : baseHeight;
   if (card.type === "ai_multiangle") {
     if (hasError) autoHeight += 48;
   } else {
+    if (card.type === "ai_video") autoHeight += 40;
     if (hasRefImages) autoHeight += isEnhancer ? 80 : 112;
     else if (isEnhancer) autoHeight += 60;
     if (hasUpstream) autoHeight += 64;
     if (hasRefFrames) autoHeight += 90;
+    if (hasRefAudios) autoHeight += 120;
+    if (hasRefVideos) autoHeight += 120;
     if (hasError) autoHeight += 48;
   }
 

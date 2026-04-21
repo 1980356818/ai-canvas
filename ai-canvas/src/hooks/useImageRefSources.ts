@@ -11,7 +11,7 @@ import { getDisplayUrl } from "@/lib/media";
 export interface ImageRefOption {
   id: string;
   label: string;
-  category: "slot" | "upstream" | "audio";
+  category: "slot" | "upstream" | "audio" | "video";
   thumbnailUrl: string;
   resolvedUrl: string;
   source: InlineImageSource;
@@ -21,7 +21,8 @@ export interface ImageRefOption {
 export type InlineImageSource =
   | { type: "refSlot"; slotKey: string }
   | { type: "upstream"; sourceCardId: string }
-  | { type: "audioSlot"; index: number };
+  | { type: "audioSlot"; index: number }
+  | { type: "videoSlot"; index: number };
 
 interface AudioEntry {
   url: string;
@@ -29,11 +30,17 @@ interface AudioEntry {
   duration?: number;
 }
 
+interface VideoEntry {
+  url: string;
+  sourceCardId?: string;
+}
+
 export function useImageRefSources(
   cardId: string,
   refSlots: RefImageSlot[],
   refImages: Record<string, RefImageEntry> | undefined,
   refAudios?: AudioEntry[],
+  refVideos?: VideoEntry[],
 ): ImageRefOption[] {
   const cards = useCardStore((s) => s.cards);
   const connections = useConnectionStore((s) => s.connections);
@@ -101,8 +108,26 @@ export function useImageRefSources(
       }
     }
 
+    if (refVideos?.length) {
+      for (let i = 0; i < refVideos.length; i++) {
+        const v = refVideos[i]!;
+        const title = v.sourceCardId
+          ? cards.get(v.sourceCardId)?.title || getCardTypeLabel(cards.get(v.sourceCardId)?.type ?? "")
+          : undefined;
+        options.push({
+          id: `video:${i}`,
+          label: `视频${i + 1}`,
+          category: "video",
+          thumbnailUrl: "",
+          resolvedUrl: v.url,
+          source: { type: "videoSlot", index: i },
+          cardTitle: title,
+        });
+      }
+    }
+
     return options;
-  }, [cardId, refSlots, refImages, refAudios, cards, connections]);
+  }, [cardId, refSlots, refImages, refAudios, refVideos, cards, connections]);
 }
 
 function getCardTypeLabel(type: string): string {

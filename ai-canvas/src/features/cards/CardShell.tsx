@@ -122,11 +122,17 @@ const Port = memo(function Port({
               .hasConnection(cardId, targetCardId)
           ) {
             if (!canAcceptImageConnection(targetCardId, cardId)) {
+              const srcCard = useCardStore.getState().getCard(cardId);
+              const isAudio = srcCard?.type === "audio";
+              const isVideo = srcCard?.type === "ai_video";
               useUIStore.getState().addToast({
                 type: "warning",
-                title: "参考图已满",
-                description:
-                  "该卡片的参考图位已全部占用，请先移除已有参考图或断开连线",
+                title: isVideo ? "参考视频已满" : isAudio ? "参考音频已满" : "参考图已满",
+                description: isVideo
+                  ? "该视频卡片最多支持 3 段参考视频，请先断开已有连线"
+                  : isAudio
+                    ? "该视频卡片最多支持 3 段参考音频，请先断开已有连线"
+                    : "该卡片的参考图位已全部占用，请先移除已有参考图或断开连线",
                 duration: 3000,
               });
               return;

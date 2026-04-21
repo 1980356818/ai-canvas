@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { Sparkles, Loader2, RefreshCw, ArrowDownLeft, Lock, X, AlertCircle, ImageIcon, Music, Upload, Play, Square } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, ArrowDownLeft, Lock, X, AlertCircle, ImageIcon, Music, Video } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -7,7 +7,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
-import { scheduleBackgroundSave, getBase64ForApi, getDisplayUrl, persistImage } from "@/lib/media";
+import { scheduleBackgroundSave, getBase64ForApi, getDisplayUrl } from "@/lib/media";
 import { useProjectStore } from "@/stores/projectStore";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
@@ -18,8 +18,9 @@ import { getRefSlotsForVideoModel, compactRefImages, type RefImageEntry } from "
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
 import SizeCombo from "./SizeCombo";
-import PromptTextarea from "./PromptTextarea";
+import PromptTextarea, { type PromptTextareaHandle } from "./PromptTextarea";
 import { normalizeImageSize } from "@/shared/constants";
+import { isSeedanceModel } from "@/providers/comfly/models";
 
 interface VideoFrameRef {
   url: string;
@@ -32,23 +33,6 @@ interface AudioRefEntry {
   url: string;
   filename: string;
   duration?: number;
-}
-
-function getAudioDuration(file: File): Promise<number | undefined> {
-  return new Promise((resolve) => {
-    const audio = new Audio();
-    const blobUrl = URL.createObjectURL(file);
-    const cleanup = () => { audio.onloadedmetadata = null; audio.onerror = null; URL.revokeObjectURL(blobUrl); };
-    const timer = setTimeout(() => { cleanup(); resolve(undefined); }, 3000);
-    audio.onloadedmetadata = () => {
-      clearTimeout(timer);
-      const dur = audio.duration;
-      cleanup();
-      resolve(Number.isFinite(dur) ? Math.round(dur * 10) / 10 : undefined);
-    };
-    audio.onerror = () => { clearTimeout(timer); cleanup(); resolve(undefined); };
-    audio.src = blobUrl;
-  });
 }
 
 function formatDuration(sec: number): string {
@@ -80,6 +64,16 @@ interface VideoData {
   imageMode?: VideoImageMode;
   refImages?: Record<string, RefImageEntry>;
   refAudios?: AudioRefEntry[];
+  refVideos?: VideoRefEntry[];
+}
+
+interface VideoRefEntry {
+  url: string;
+  sourceCardId?: string;
+}
+
+interface AudioRefWithSource extends AudioRefEntry {
+  sourceCardId?: string;
 }
 
 function buildFinalPrompt(data: VideoData): string {
@@ -113,11 +107,12 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const setCardProgress = useUIStore((s) => s.setCardProgress);
   const generating = useUIStore((s) => s.generatingCards.has(card.id));
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const promptRef = useRef<PromptTextareaHandle>(null);
   const [currentModel, setCurrentModel] = useState("");
   const [currentSize, setCurrentSize] = useState(() => normalizeImageSize((card.data as VideoData).size));
   const [error, setError] = useState<string | null>(null);
   const data = card.data as VideoData;
-  const imageMode: VideoImageMode = data.imageMode ?? "frame";
+  const imageMode: VideoImageMode = data.imageMode ?? "reference";
 
   const refSlots = useMemo(
     () => getRefSlotsForVideoModel(currentModel, imageMode),
@@ -162,7 +157,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     return [];
   }, [data.refFrames, data.upstreamImageUrl, data.upstreamCardId]);
 
-  const imageOptions = useImageRefSources(card.id, refSlots, data.refImages, data.refAudios);
+  const imageOptions = useImageRefSources(card.id, refSlots, data.refImages, data.refAudios, data.refVideos);
 
   const setRefImage = useCallback(
     (slotKey: string, entry: RefImageEntry) => {
@@ -241,68 +236,36 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     [imageMode, data, frames, currentModel, card.id, updateCard],
   );
 
-  const audioInputRef = useRef<HTMLInputElement>(null);
-  const [playingAudioIdx, setPlayingAudioIdx] = useState<number | null>(null);
-  const audioElRef = useRef<HTMLAudioElement | null>(null);
-
-  const addAudioFile = useCallback(
-    async (file: File) => {
-      if (!file.type.startsWith("audio/") && !/\.(wav|mp3)$/i.test(file.name)) return;
-      const audios = data.refAudios ?? [];
-      if (audios.length >= MAX_AUDIO_SLOTS) {
-        useUIStore.getState().addToast({ type: "warning", title: `最多添加 ${MAX_AUDIO_SLOTS} 段参考音频`, duration: 3000 });
-        return;
+  const disconnectAudio = useCallback(
+    (index: number) => {
+      const entry = (data.refAudios as AudioRefWithSource[] | undefined)?.[index];
+      if (entry?.sourceCardId) {
+        const { connections, removeConnection } = useConnectionStore.getState();
+        for (const [id, c] of connections) {
+          if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
+            removeConnection(id);
+            break;
+          }
+        }
       }
-      if (file.size > 15 * 1024 * 1024) {
-        useUIStore.getState().addToast({ type: "warning", title: "单段音频不超过 15 MB", duration: 3000 });
-        return;
-      }
-      const dataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-      const pid = useProjectStore.getState().currentProjectId ?? undefined;
-      const saved = await persistImage(dataUrl, undefined, pid);
-      const duration = await getAudioDuration(file);
-
-      const newAudios = [...audios, { url: saved.localPath, filename: file.name, duration }];
-      updateCard(card.id, { data: { ...data, refAudios: newAudios } });
-      autoSave.markDirty(card.id);
     },
-    [data, card.id, updateCard],
+    [data.refAudios, card.id],
   );
 
-  const removeAudio = useCallback(
+  const disconnectVideo = useCallback(
     (index: number) => {
-      if (playingAudioIdx === index) {
-        audioElRef.current?.pause();
-        setPlayingAudioIdx(null);
+      const entry = data.refVideos?.[index];
+      if (entry?.sourceCardId) {
+        const { connections, removeConnection } = useConnectionStore.getState();
+        for (const [id, c] of connections) {
+          if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
+            removeConnection(id);
+            break;
+          }
+        }
       }
-      const newAudios = (data.refAudios ?? []).filter((_, i) => i !== index);
-      updateCard(card.id, { data: { ...data, refAudios: newAudios.length > 0 ? newAudios : undefined } });
-      autoSave.markDirty(card.id);
     },
-    [data, card.id, updateCard, playingAudioIdx],
-  );
-
-  const togglePlayAudio = useCallback(
-    (index: number) => {
-      const entry = data.refAudios?.[index];
-      if (!entry) return;
-      if (playingAudioIdx === index) {
-        audioElRef.current?.pause();
-        setPlayingAudioIdx(null);
-        return;
-      }
-      if (audioElRef.current) audioElRef.current.pause();
-      const audio = new Audio(getDisplayUrl(entry.url));
-      audio.onended = () => setPlayingAudioIdx(null);
-      audio.play();
-      audioElRef.current = audio;
-      setPlayingAudioIdx(index);
-    },
-    [data.refAudios, playingAudioIdx],
+    [data.refVideos, card.id],
   );
 
   const handleModelChange = useCallback(
@@ -427,12 +390,37 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         }
       }
 
+      const referenceVideos: Array<{ url: string; role: string }> = [];
+      if (data.refVideos?.length) {
+        for (const entry of data.refVideos) {
+          const dataUrl = await getBase64ForApi(entry.url);
+          referenceVideos.push({ url: dataUrl, role: "referenceVideo" });
+        }
+      }
+
+      if (
+        isSeedanceModel(currentModel) &&
+        referenceAudios.length > 0 &&
+        referenceImages.length === 0 &&
+        referenceVideos.length === 0
+      ) {
+        useUIStore.getState().addToast({
+          type: "warning",
+          title: "参考音频不能单独使用",
+          description: "Seedance 要求参考音频必须搭配参考图或参考视频一起使用，请先添加图片或视频素材",
+          duration: 5000,
+        });
+        setCardProgress(card.id, undefined);
+        return;
+      }
+
       const result = await provider.generateVideo({
         prompt,
         model: currentModel || undefined,
         size: currentSize,
         referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
         referenceAudios: referenceAudios.length > 0 ? referenceAudios : undefined,
+        referenceVideos: referenceVideos.length > 0 ? referenceVideos : undefined,
         onProgress: (p) => {
           setCardProgress(card.id, { percent: p.percent, label: p.label });
         },
@@ -485,8 +473,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         </div>
       ) : (
         <>
-          {(frames.length > 0 || imageMode === "reference" || refSlots.some((s) => data.refImages?.[s.key])) && (
-            <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
+          <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
               <div className="mb-1.5 flex items-center justify-between">
                 <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                   <ImageIcon className="h-3 w-3" />
@@ -534,6 +521,10 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
                         entry={entry}
                         onImage={(e) => setRefImage(slot.key, e)}
                         onClear={() => clearRefImage(slot.key)}
+                        onRefClick={entry ? () => {
+                          const opt = imageOptions.find((o) => o.id === `slot:${slot.key}`);
+                          if (opt) promptRef.current?.insertRef(opt);
+                        } : undefined}
                         disabled={generating}
                         targetCardId={card.id}
                         slotKey={slot.key}
@@ -566,81 +557,99 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
                 </div>
               )}
             </div>
-          )}
 
-          <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
-            <div className="mb-1.5 flex items-center justify-between">
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          {data.refAudios && data.refAudios.length > 0 && (
+            <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
+              <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
                 <Music className="h-3 w-3" />
-                参考音频 · 最多 {MAX_AUDIO_SLOTS} 段
+                参考音频 · {data.refAudios.length} / {MAX_AUDIO_SLOTS}
               </div>
-              {(data.refAudios?.length ?? 0) < MAX_AUDIO_SLOTS && (
-                <button
-                  onClick={() => audioInputRef.current?.click()}
-                  disabled={generating}
-                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
-                >
-                  <Upload className="h-3 w-3" />
-                  添加
-                </button>
-              )}
-            </div>
-            <input
-              ref={audioInputRef}
-              type="file"
-              accept=".wav,.mp3,audio/wav,audio/mpeg"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) addAudioFile(file);
-                e.target.value = "";
-              }}
-            />
-            {data.refAudios && data.refAudios.length > 0 ? (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-wrap gap-2">
                 {data.refAudios.map((entry, idx) => (
                   <div
-                    key={`${entry.filename}-${idx}`}
-                    className="flex items-center gap-2 rounded-md bg-muted/60 px-2 py-1.5"
+                    key={`audio-${idx}`}
+                    className="relative aspect-square w-[96px] shrink-0 cursor-pointer"
+                    onClick={() => {
+                      const opt = imageOptions.find((o) => o.id === `audio:${idx}`);
+                      if (opt) promptRef.current?.insertRef(opt);
+                    }}
+                    title="点击插入引用到提示词"
                   >
-                    <button
-                      onClick={() => togglePlayAudio(idx)}
-                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary transition-colors hover:bg-primary/25"
-                    >
-                      {playingAudioIdx === idx
-                        ? <Square className="h-2.5 w-2.5 fill-current" />
-                        : <Play className="h-2.5 w-2.5 fill-current" />}
-                    </button>
-                    <span className="min-w-0 flex-1 truncate text-xs">
-                      <span className="font-medium text-foreground">音频{idx + 1}</span>
-                      <span className="ml-1 text-muted-foreground">{entry.filename}</span>
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 overflow-hidden rounded-lg border border-input bg-muted/30 transition-colors hover:border-primary/60 hover:shadow-sm">
+                      <Music className="h-6 w-6 text-muted-foreground" />
+                      <span className="max-w-[80px] truncate text-[9px] text-muted-foreground">{entry.filename}</span>
+                      {entry.duration != null && (
+                        <span className="text-[9px] tabular-nums text-muted-foreground/60">{formatDuration(entry.duration)}</span>
+                      )}
+                    </div>
+                    <span className="absolute left-0 top-0 z-10 flex h-5 w-5 -translate-x-1/4 -translate-y-1/4 items-center justify-center rounded-full bg-black/70 text-[10px] font-bold text-white shadow-sm">
+                      {idx + 1}
                     </span>
-                    {entry.duration != null && (
-                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
-                        {formatDuration(entry.duration)}
-                      </span>
+                    {!generating && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); disconnectAudio(idx); }}
+                        className="absolute right-1 top-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                        title="断开音频连线"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
                     )}
-                    <button
-                      onClick={() => removeAudio(idx)}
-                      disabled={generating}
-                      className="shrink-0 text-muted-foreground transition-colors hover:text-destructive disabled:opacity-40"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
                   </div>
                 ))}
               </div>
-            ) : (
-              <button
-                onClick={() => audioInputRef.current?.click()}
-                disabled={generating}
-                className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-input py-2 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-40"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                点击上传 .wav / .mp3
-              </button>
-            )}
-          </div>
+            </div>
+          )}
+
+          {data.refVideos && data.refVideos.length > 0 && (
+            <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
+              <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+                <Video className="h-3 w-3" />
+                参考视频 · 连线的视频素材 ({data.refVideos.length}/3)
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {data.refVideos.map((entry, idx) => (
+                  <div
+                    key={entry.sourceCardId ?? idx}
+                    className="relative aspect-square w-[96px] shrink-0 cursor-pointer"
+                    onClick={() => {
+                      const opt = imageOptions.find((o) => o.id === `video:${idx}`);
+                      if (opt) promptRef.current?.insertRef(opt);
+                    }}
+                    title="点击插入引用到提示词"
+                  >
+                    <div className="h-full w-full overflow-hidden rounded-lg border border-input bg-muted/30 transition-colors hover:border-primary/60 hover:shadow-sm">
+                      <video
+                        src={getDisplayUrl(entry.url)}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="h-full w-full object-cover"
+                        onLoadedMetadata={(e) => {
+                          (e.target as HTMLVideoElement).currentTime = 0.1;
+                        }}
+                      />
+                    </div>
+                    <span className="absolute left-0 top-0 z-10 flex h-5 w-5 -translate-x-1/4 -translate-y-1/4 items-center justify-center rounded-full bg-black/70 text-[10px] font-bold text-white shadow-sm">
+                      {idx + 1}
+                    </span>
+                    <span className="absolute bottom-0.5 left-0.5 z-10 flex items-center gap-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">
+                      <Video className="h-2 w-2" />
+                      {entry.sourceCardId ? getCardTitle(entry.sourceCardId) : `视频${idx + 1}`}
+                    </span>
+                    {!generating && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); disconnectVideo(idx); }}
+                        className="absolute right-1 top-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                        title="断开视频连线"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {hasUpstream && (
             <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
@@ -670,11 +679,12 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
           )}
 
           <PromptTextarea
+            ref={promptRef}
             value={data.content ?? ""}
             inlineRefs={data.inlineRefs ?? []}
             imageOptions={imageOptions}
             onChange={onPromptChange}
-            placeholder={hasUpstream ? "追加你的提示词，按 @ 引用图片…" : "描述你想生成的视频，按 @ 引用图片…"}
+            placeholder={hasUpstream ? "追加你的提示词，按 @ 引用素材…" : "描述你想生成的视频，按 @ 引用素材…"}
             disabled={generating}
           />
         </>

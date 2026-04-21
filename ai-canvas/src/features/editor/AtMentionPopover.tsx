@@ -5,7 +5,7 @@ import {
   useLayoutEffect,
   type MutableRefObject,
 } from "react";
-import { ImageIcon, Search, Link, Music } from "lucide-react";
+import { ImageIcon, Search, Link, Music, Video } from "lucide-react";
 import type { ImageRefOption } from "@/hooks/useImageRefSources";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +25,7 @@ const CATEGORY_META: Record<
   slot: { label: "参考图", icon: ImageIcon },
   upstream: { label: "上游节点", icon: Link },
   audio: { label: "参考音频", icon: Music },
+  video: { label: "参考视频", icon: Video },
 };
 
 const VIEWPORT_PADDING = 8;
@@ -196,6 +197,8 @@ export default function AtMentionPopover({
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded border border-input bg-muted/30">
                       {item.category === "audio" ? (
                         <Music className="h-4 w-4 text-muted-foreground" />
+                      ) : item.category === "video" ? (
+                        <Video className="h-4 w-4 text-muted-foreground" />
                       ) : (
                         <img
                           src={item.thumbnailUrl}
@@ -234,7 +237,7 @@ export default function AtMentionPopover({
 function groupByCategory(
   items: ImageRefOption[],
 ): [string, ImageRefOption[]][] {
-  const order = ["slot", "upstream", "audio"];
+  const order = ["slot", "upstream", "audio", "video"];
   const map = new Map<string, ImageRefOption[]>();
   for (const item of items) {
     const list = map.get(item.category) ?? [];

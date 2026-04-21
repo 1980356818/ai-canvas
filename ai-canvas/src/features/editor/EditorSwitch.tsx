@@ -21,6 +21,12 @@ export default function EditorSwitch({ card }: { card: CanvasCard }) {
       return <MultiangleEditor card={card} />;
     case "ai_tryon":
       return <TryOnEditor card={card} />;
+    case "audio":
+      return (
+        <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">
+          音频素材卡片 · 连线到视频卡片即可作为参考音频
+        </div>
+      );
     default:
       return (
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

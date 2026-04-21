@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useProjectStore } from "@/stores/projectStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { saveConnections } from "@/platform";
-import { removeRefImageForSource, removeUpstreamTextForSource, removeVideoFrameForSource } from "@/lib/dataFlow";
+import { removeRefImageForSource, removeUpstreamTextForSource, removeVideoFrameForSource, removeAudioForSource, removeVideoRefForSource } from "@/lib/dataFlow";
 import { connectionToRow } from "@/lib/mappers";
 
 export function useConnectionSync() {
@@ -18,6 +18,8 @@ export function useConnectionSync() {
             removeRefImageForSource(conn.targetCardId, conn.sourceCardId);
             removeUpstreamTextForSource(conn.targetCardId, conn.sourceCardId);
             removeVideoFrameForSource(conn.targetCardId, conn.sourceCardId);
+            removeAudioForSource(conn.targetCardId, conn.sourceCardId);
+            removeVideoRefForSource(conn.targetCardId, conn.sourceCardId);
           }
         }
       }

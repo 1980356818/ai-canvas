@@ -8,6 +8,7 @@ import { getRefSlotsForModel, getRefSlotsForChatModel, getRefSlotsForVideoModel,
 const DEBUG = import.meta.env.DEV;
 
 const IMAGE_SOURCE_TYPES = new Set(["ai_image", "ai_multiangle", "ai_tryon", "ai_video"]);
+const AUDIO_SOURCE_TYPES = new Set(["audio"]);
 
 const REF_IMAGE_TARGETS = new Set(["ai_image", "ai_multiangle", "ai_chat"]);
 
@@ -27,11 +28,32 @@ export function canAcceptImageConnection(
   if (!target) return true;
 
   const source = cardStore.getCard(sourceCardId);
-  if (!source || !IMAGE_SOURCE_TYPES.has(source.type)) return true;
+  if (!source) return true;
+
+  const isAudioSource = AUDIO_SOURCE_TYPES.has(source.type);
+  const isImageSource = IMAGE_SOURCE_TYPES.has(source.type);
+  if (!isImageSource && !isAudioSource) return true;
+
+  if (isAudioSource) {
+    if (target.type !== "ai_video") return true;
+    const d = target.data as Record<string, unknown>;
+    type AudioRef = { sourceCardId: string };
+    const audios = (d.refAudios as AudioRef[]) || [];
+    if (audios.some((a) => a.sourceCardId === sourceCardId)) return true;
+    return audios.length < 3;
+  }
 
   if (target.type === "ai_video") {
+    if (source.type === "ai_video") {
+      const d = target.data as Record<string, unknown>;
+      type VideoRef = { sourceCardId: string };
+      const videos = (d.refVideos as VideoRef[]) || [];
+      if (videos.some((v) => v.sourceCardId === sourceCardId)) return true;
+      return videos.length < 3;
+    }
+
     const d = target.data as Record<string, unknown>;
-    const mode = (d.imageMode as string) ?? "frame";
+    const mode = (d.imageMode as string) ?? "reference";
     if (mode === "reference") {
       const slots = getRefSlotsForVideoModel((d.model as string) || "", "reference");
       const refImages = (d.refImages || {}) as Record<string, RefImageEntry>;
@@ -60,13 +82,13 @@ export function canAcceptImageConnection(
 
 function hasRefImages(target: { type: string; data: Record<string, unknown> }): boolean {
   if (REF_IMAGE_TARGETS.has(target.type)) return true;
-  if (target.type === "ai_video" && (target.data.imageMode ?? "frame") === "reference") return true;
+  if (target.type === "ai_video" && (target.data.imageMode ?? "reference") === "reference") return true;
   return false;
 }
 
 function getRefSlotsAny(target: { type: string; data: Record<string, unknown> }) {
   if (target.type === "ai_video") {
-    const mode = (target.data.imageMode as string) ?? "frame";
+    const mode = (target.data.imageMode as string) ?? "reference";
     return getRefSlotsForVideoModel((target.data.model as string) || "", mode as "frame" | "reference");
   }
   return getRefSlots(target);
@@ -140,9 +162,51 @@ export function removeVideoFrameForSource(
   autoSave.markDirty(targetCardId);
 }
 
+export function removeAudioForSource(
+  targetCardId: string,
+  sourceCardId: string,
+): void {
+  const cardStore = useCardStore.getState();
+  const target = cardStore.getCard(targetCardId);
+  if (!target || target.type !== "ai_video") return;
+
+  const d = { ...(target.data as Record<string, unknown>) };
+  type AudioRef = { url: string; filename: string; sourceCardId: string };
+  const audios = (d.refAudios as AudioRef[]) || [];
+  const filtered = audios.filter((a) => a.sourceCardId !== sourceCardId);
+
+  if (filtered.length === audios.length) return;
+
+  d.refAudios = filtered.length > 0 ? filtered : undefined;
+  cardStore.updateCard(targetCardId, { data: d });
+  autoSave.markDirty(targetCardId);
+}
+
+export function removeVideoRefForSource(
+  targetCardId: string,
+  sourceCardId: string,
+): void {
+  const cardStore = useCardStore.getState();
+  const target = cardStore.getCard(targetCardId);
+  if (!target || target.type !== "ai_video") return;
+
+  const d = { ...(target.data as Record<string, unknown>) };
+  type VideoRef = { url: string; sourceCardId: string };
+  const videos = (d.refVideos as VideoRef[]) || [];
+  const filtered = videos.filter((v) => v.sourceCardId !== sourceCardId);
+
+  if (filtered.length === videos.length) return;
+
+  d.refVideos = filtered.length > 0 ? filtered : undefined;
+  cardStore.updateCard(targetCardId, { data: d });
+  autoSave.markDirty(targetCardId);
+}
+
 export type OutputPayload =
   | { kind: "text"; text: string }
   | { kind: "image"; url: string }
+  | { kind: "video"; url: string }
+  | { kind: "audio"; url: string; filename: string }
   | { kind: "none" };
 
 export function extractOutput(card: CanvasCard): OutputPayload {
@@ -171,13 +235,19 @@ export function extractOutput(card: CanvasCard): OutputPayload {
 
     case "ai_video": {
       if (typeof d.videoUrl === "string" && d.videoUrl)
-        return { kind: "image", url: d.videoUrl };
+        return { kind: "video", url: d.videoUrl };
       return { kind: "none" };
     }
 
     case "ai_tryon": {
       if (typeof d.resultImageUrl === "string" && d.resultImageUrl)
         return { kind: "image", url: d.resultImageUrl };
+      return { kind: "none" };
+    }
+
+    case "audio": {
+      if (typeof d.audioUrl === "string" && d.audioUrl)
+        return { kind: "audio", url: d.audioUrl, filename: (d.filename as string) ?? "audio" };
       return { kind: "none" };
     }
 
@@ -357,7 +427,7 @@ function injectIntoCard(
           changed = true;
         }
       } else if (payload.kind === "image") {
-        const imageMode = (d.imageMode as string) ?? "frame";
+        const imageMode = (d.imageMode as string) ?? "reference";
 
         if (imageMode === "reference") {
           const slots = getRefSlotsForVideoModel((d.model as string) || "", "reference");
@@ -406,6 +476,40 @@ function injectIntoCard(
             d.upstreamCardId = sourceCardId;
             changed = true;
           }
+        }
+      } else if (payload.kind === "audio") {
+        const MAX_AUDIOS = 3;
+        type AudioRef = { url: string; filename: string; sourceCardId: string };
+        const audios = [...((d.refAudios as AudioRef[]) || [])];
+
+        const existIdx = audios.findIndex((a) => a.sourceCardId === sourceCardId);
+        if (existIdx >= 0) {
+          if (audios[existIdx]!.url !== payload.url) {
+            audios[existIdx] = { url: payload.url, filename: payload.filename, sourceCardId };
+            d.refAudios = audios;
+            changed = true;
+          }
+        } else if (audios.length < MAX_AUDIOS) {
+          audios.push({ url: payload.url, filename: payload.filename, sourceCardId });
+          d.refAudios = audios;
+          changed = true;
+        }
+      } else if (payload.kind === "video") {
+        const MAX_VIDEOS = 3;
+        type VideoRef = { url: string; sourceCardId: string };
+        const videos = [...((d.refVideos as VideoRef[]) || [])];
+
+        const existIdx = videos.findIndex((v) => v.sourceCardId === sourceCardId);
+        if (existIdx >= 0) {
+          if (videos[existIdx]!.url !== payload.url) {
+            videos[existIdx] = { url: payload.url, sourceCardId };
+            d.refVideos = videos;
+            changed = true;
+          }
+        } else if (videos.length < MAX_VIDEOS) {
+          videos.push({ url: payload.url, sourceCardId });
+          d.refVideos = videos;
+          changed = true;
         }
       }
       break;

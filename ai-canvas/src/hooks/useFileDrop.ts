@@ -69,8 +69,6 @@ async function videoCardSize(src: string): Promise<{ width: number; height: numb
   return { width: CARD_DEFAULTS.ai_video.width, height: CARD_DEFAULTS.ai_video.height };
 }
 
-const MAX_VIDEO_AUDIO_SLOTS = 3;
-
 function canCardAcceptFileDrop(cardId: string): boolean {
   const card = useCardStore.getState().getCard(cardId);
   if (!card) return false;
@@ -82,9 +80,6 @@ function canCardAcceptFileDrop(cardId: string): boolean {
     const d = card.data as { personImageUrl?: string; garmentImageUrl?: string };
     return !d.personImageUrl || !d.garmentImageUrl;
   }
-  if (card.type === "ai_video") {
-    return true;
-  }
   return false;
 }
 
@@ -94,27 +89,6 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.onload = () => resolve(reader.result as string);
     reader.readAsDataURL(file);
   });
-}
-
-async function handleAudioDropOnVideoCard(
-  targetCardId: string,
-  file: File,
-  projectId: string,
-): Promise<boolean> {
-  const card = useCardStore.getState().getCard(targetCardId);
-  if (!card || card.type !== "ai_video") return false;
-  const d = card.data as { refAudios?: Array<{ url: string; filename: string; duration?: number }> };
-  const audios = d.refAudios ?? [];
-  if (audios.length >= MAX_VIDEO_AUDIO_SLOTS) {
-    useUIStore.getState().addToast({ type: "warning", title: `最多添加 ${MAX_VIDEO_AUDIO_SLOTS} 段参考音频`, duration: 3000 });
-    return true;
-  }
-  const dataUrl = await readFileAsDataUrl(file);
-  const saved = await persistImage(dataUrl, undefined, projectId);
-  const newAudios = [...audios, { url: saved.localPath, filename: file.name }];
-  useCardStore.getState().updateCard(targetCardId, { data: { ...card.data, refAudios: newAudios } });
-  autoSave.markDirty(targetCardId);
-  return true;
 }
 
 async function handleDropOnCard(
@@ -168,6 +142,32 @@ function createMediaCard(
     data: isVideo
       ? { videoUrl: localPath, content }
       : { imageUrl: localPath, content },
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function createAudioCard(
+  projectId: string,
+  x: number,
+  y: number,
+  zIndex: number,
+  localPath: string,
+  filename: string,
+): CanvasCard {
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    projectId,
+    type: "audio",
+    x: x - 120,
+    y: y - 40,
+    width: CARD_DEFAULTS.audio.width,
+    height: CARD_DEFAULTS.audio.height,
+    zIndex,
+    locked: false,
+    collapsed: false,
+    data: { audioUrl: localPath, filename },
     createdAt: now,
     updatedAt: now,
   };
@@ -292,10 +292,22 @@ export function useFileDrop(
 
       (async () => {
         const audioFiles = rawFiles.filter(isAudioFile);
-        if (audioFiles.length > 0 && targetCardId) {
+        let dropPos = screenToCanvas(e.clientX, e.clientY);
+        if (audioFiles.length > 0) {
+          let audioOffsetY = 0;
           for (const af of audioFiles) {
-            await handleAudioDropOnVideoCard(targetCardId, af, currentProjectId);
+            const dataUrl = await readFileAsDataUrl(af);
+            const saved = await persistImage(dataUrl, undefined, currentProjectId);
+            const { maxZIndex } = useCardStore.getState();
+            const card = createAudioCard(
+              currentProjectId, dropPos.x, dropPos.y + audioOffsetY,
+              maxZIndex + 1, saved.localPath, af.name,
+            );
+            useCardStore.getState().addCard(card);
+            autoSave.markDirty(card.id);
+            audioOffsetY += CARD_DEFAULTS.audio.height + 10;
           }
+          updateNodeCount(currentProjectId);
         }
 
         const mediaRawFiles = rawFiles.filter((f) => !isAudioFile(f));
@@ -317,7 +329,7 @@ export function useFileDrop(
         const remaining = files.slice(startIdx);
         if (remaining.length === 0) return;
 
-        const dropPos = screenToCanvas(e.clientX, e.clientY);
+        dropPos = screenToCanvas(e.clientX, e.clientY);
         const GAP = 20;
         let cursorX = 0;
 
@@ -380,27 +392,26 @@ export function useFileDrop(
       const cardEl = el?.closest("[data-card-id]") as HTMLElement | null;
       const targetCardId = cardEl?.dataset.cardId ?? null;
 
-      if (targetCardId && canCardAcceptFileDrop(targetCardId)) {
-        const audioPaths = paths.filter(isAudioPath);
-        if (audioPaths.length > 0) {
-          for (const ap of audioPaths) {
-            try {
-              const saved = await persistImage(ap, undefined, pid);
-              const card = useCardStore.getState().getCard(targetCardId);
-              if (card?.type === "ai_video") {
-                const d = card.data as { refAudios?: Array<{ url: string; filename: string }> };
-                const audios = d.refAudios ?? [];
-                if (audios.length < MAX_VIDEO_AUDIO_SLOTS) {
-                  const fname = ap.split(/[/\\]/).pop() ?? "audio";
-                  const newAudios = [...audios, { url: saved.localPath, filename: fname }];
-                  useCardStore.getState().updateCard(targetCardId, { data: { ...card.data, refAudios: newAudios } });
-                  autoSave.markDirty(targetCardId);
-                }
-              }
-            } catch { /* skip */ }
-          }
+      const audioPaths = paths.filter(isAudioPath);
+      if (audioPaths.length > 0) {
+        let audioOffsetY = 0;
+        for (const ap of audioPaths) {
+          try {
+            const saved = await persistImage(ap, undefined, pid);
+            const fname = ap.split(/[/\\]/).pop() ?? "audio";
+            const { maxZIndex } = useCardStore.getState();
+            const card = createAudioCard(
+              pid, dropX, dropY + audioOffsetY,
+              maxZIndex + 1, saved.localPath, fname,
+            );
+            useCardStore.getState().addCard(card);
+            autoSave.markDirty(card.id);
+            audioOffsetY += CARD_DEFAULTS.audio.height + 10;
+          } catch { /* skip */ }
         }
+      }
 
+      if (targetCardId && canCardAcceptFileDrop(targetCardId)) {
         const nonAudioPaths = paths.filter((p) => !isAudioPath(p));
         if (nonAudioPaths.length > 0) {
           try {

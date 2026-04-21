@@ -15,6 +15,8 @@ export const COMFLY_VIDEO_MODELS: ModelInfo[] = [
   { id: "veo3.1-fast", display_name: "Veo 3.1 Fast", capability: "VIDEO" },
   { id: "veo3.1-4k", display_name: "Veo 3.1 (4K)", capability: "VIDEO" },
   { id: "veo3.1-pro-4k", display_name: "Veo 3.1 Pro (4K)", capability: "VIDEO" },
+  { id: "doubao-seedance-2-0-260128", display_name: "Seedance 2.0", capability: "VIDEO" },
+  { id: "doubao-seedance-2-0-fast-260128", display_name: "Seedance 2.0 Fast", capability: "VIDEO" },
 ];
 
 export const ALL_COMFLY_MODELS: ModelInfo[] = [
@@ -45,4 +47,8 @@ export function getComflyDisplayName(modelId: string): string | undefined {
   const m = ALL_COMFLY_MODELS.find((m) => m.id === modelId);
   if (m) return m.display_name ?? m.id;
   return LEGACY_DISPLAY[modelId];
+}
+
+export function isSeedanceModel(modelId: string): boolean {
+  return modelId.startsWith("doubao-seedance") || !!LEGACY_DISPLAY[modelId];
 }

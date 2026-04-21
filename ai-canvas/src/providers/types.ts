@@ -107,6 +107,11 @@ export interface AudioRefInput {
   role: string;
 }
 
+export interface VideoRefInput {
+  url: string;
+  role: string;
+}
+
 export interface GenerationProgress {
   percent: number;
   phase: "submitting" | "queued" | "generating" | "saving";
@@ -135,6 +140,7 @@ export interface VideoGenRequest {
   size?: string;
   referenceImages?: ImageRefInput[];
   referenceAudios?: AudioRefInput[];
+  referenceVideos?: VideoRefInput[];
   onProgress?: (p: GenerationProgress) => void;
   signal?: AbortSignal;
   duration?: number;

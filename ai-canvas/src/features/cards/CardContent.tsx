@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useCallback } from "react";
-import { ImageIcon, Loader2, Shirt, Video, RotateCw, AlertCircle, Cloud } from "lucide-react";
+import { ImageIcon, Loader2, Shirt, Video, RotateCw, AlertCircle, Cloud, Music } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -320,6 +320,32 @@ function VideoPreview({ card }: { card: CanvasCard }) {
   );
 }
 
+function AudioCardPreview({ card }: { card: CanvasCard }) {
+  const data = card.data as { audioUrl?: string; filename?: string };
+  const displayUrl = data.audioUrl ? getDisplayUrl(data.audioUrl) : undefined;
+
+  return (
+    <div className="flex h-full items-center gap-2.5 px-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+        <Music className="h-4.5 w-4.5 text-primary" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-medium text-foreground">
+          {data.filename || "音频文件"}
+        </p>
+        {displayUrl && (
+          <audio
+            src={displayUrl}
+            controls
+            className="mt-1 h-6 w-full"
+            style={{ maxHeight: "24px" }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default memo(function CardContent({ card }: { card: CanvasCard }) {
   switch (card.type) {
     case "ai_chat":
@@ -335,6 +361,8 @@ export default memo(function CardContent({ card }: { card: CanvasCard }) {
       return <VideoPreview card={card} />;
     case "ai_tryon":
       return <TryOnPreview card={card} />;
+    case "audio":
+      return <AudioCardPreview card={card} />;
     default:
       return (
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

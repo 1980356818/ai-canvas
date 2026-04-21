@@ -92,7 +92,7 @@ export function getRefSlotsForChatModel(modelId: string): RefImageSlot[] {
 
 export function getRefSlotsForVideoModel(
   _modelId: string,
-  imageMode: "frame" | "reference" = "frame",
+  imageMode: "frame" | "reference" = "reference",
 ): RefImageSlot[] {
   return imageMode === "reference" ? VIDEO_REF_SLOTS : [];
 }
