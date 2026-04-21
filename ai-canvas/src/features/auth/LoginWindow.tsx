@@ -153,7 +153,7 @@ export default function LoginWindow() {
   const hero = HERO[authView] ?? HERO.login;
 
   return (
-    <div className="dark relative flex h-screen w-screen bg-[oklch(0.10_0.025_260)] text-white">
+    <div className="dark relative flex h-screen w-screen bg-[oklch(0.10_0.035_270)] text-white">
       {/* Drag region */}
       <div data-tauri-drag-region className="absolute inset-x-0 top-0 z-10 h-9" />
 
@@ -187,7 +187,7 @@ export default function LoginWindow() {
               <h2 className="text-5xl font-bold">
                 <span className="text-login-hero">{hero.title}</span>
               </h2>
-              <p className="mt-3 text-sm text-white/45">{hero.sub}</p>
+              <p className="mt-3 text-sm tracking-[0.15em] text-white/45">{hero.sub}</p>
             </div>
 
             {error && (

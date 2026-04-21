@@ -118,6 +118,109 @@
   100% { background-position: -300% 50%; }
 }
 
+/* ── Redeem page effects ── */
+
+.redeem-ambient::before {
+  content: "";
+  position: absolute;
+  top: -40%;
+  left: 50%;
+  width: 600px;
+  height: 600px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    oklch(0.25 0.12 275 / 0.25) 0%,
+    oklch(0.15 0.08 270 / 0.10) 40%,
+    transparent 70%
+  );
+  animation: redeem-ambient-pulse 6s ease-in-out infinite;
+}
+@keyframes redeem-ambient-pulse {
+  0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(1); }
+  50%      { opacity: 0.8; transform: translateX(-50%) scale(1.1); }
+}
+
+.redeem-card-glow {
+  box-shadow:
+    0 0 40px -10px oklch(0.40 0.15 275 / 0.15),
+    0 0 80px -20px oklch(0.35 0.12 270 / 0.08),
+    inset 0 1px 0 oklch(1 0 0 / 0.04);
+}
+
+.redeem-icon-ring {
+  background: oklch(0.18 0.06 275 / 0.6);
+  border: 1px solid oklch(0.40 0.12 275 / 0.3);
+  box-shadow: 0 0 20px 2px oklch(0.45 0.15 275 / 0.15);
+  animation: redeem-icon-breathe 3s ease-in-out infinite;
+}
+@keyframes redeem-icon-breathe {
+  0%, 100% { box-shadow: 0 0 20px 2px oklch(0.45 0.15 275 / 0.15); }
+  50%      { box-shadow: 0 0 28px 6px oklch(0.50 0.18 275 / 0.25); }
+}
+
+.redeem-success-ring {
+  background: oklch(0.15 0.04 160 / 0.5);
+  border: 1px solid oklch(0.50 0.12 160 / 0.3);
+  box-shadow: 0 0 24px 4px oklch(0.50 0.15 160 / 0.2);
+  animation: redeem-success-glow 2s ease-in-out infinite;
+}
+@keyframes redeem-success-glow {
+  0%, 100% { box-shadow: 0 0 24px 4px oklch(0.50 0.15 160 / 0.2); }
+  50%      { box-shadow: 0 0 36px 8px oklch(0.55 0.18 160 / 0.3); }
+}
+
+.redeem-scan-line::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(0.60 0.18 275 / 0.4) 30%,
+    oklch(0.70 0.20 275 / 0.6) 50%,
+    oklch(0.60 0.18 275 / 0.4) 70%,
+    transparent 100%
+  );
+  animation: redeem-scan 4s ease-in-out infinite;
+}
+@keyframes redeem-scan {
+  0%   { top: -1px; opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.redeem-btn {
+  background: linear-gradient(135deg, oklch(0.45 0.18 275) 0%, oklch(0.40 0.16 265) 100%);
+  box-shadow: 0 4px 16px -2px oklch(0.40 0.15 275 / 0.3);
+  transition: box-shadow 0.3s, transform 0.15s;
+}
+.redeem-btn:hover:not(:disabled) {
+  box-shadow: 0 6px 24px -2px oklch(0.45 0.18 275 / 0.45);
+  transform: translateY(-1px);
+}
+.redeem-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    oklch(1 0 0 / 0.12) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: redeem-btn-shimmer 3s ease-in-out infinite;
+}
+@keyframes redeem-btn-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* ── Homepage: Apple-style utilities ── */
 
 .text-gradient {

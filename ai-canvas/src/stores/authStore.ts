@@ -109,7 +109,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
       }
     } catch (e: any) {
-      set({ loading: false, error: e.message || "兑换失败" });
+      set({ loading: false, error: e.message || "激活失败" });
       throw e;
     }
   },
