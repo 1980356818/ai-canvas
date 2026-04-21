@@ -3,6 +3,13 @@ import { create } from "zustand";
 export type { SaveStatus, AppView, CardGenSubProgress, CardGenProgress, ToastItem } from "@/types";
 import type { SaveStatus, AppView, CardGenProgress, ToastItem } from "@/types";
 
+export interface CropDialogState {
+  open: boolean;
+  imageUrl: string;
+  displayUrl: string;
+  cardId: string;
+}
+
 interface UIState {
   sidebarVisible: boolean;
   agentPanelVisible: boolean;
@@ -19,6 +26,7 @@ interface UIState {
     worldX?: number;
     worldY?: number;
   };
+  cropDialog: CropDialogState;
   appView: AppView;
   generatingCards: Map<string, CardGenProgress>;
   cardErrors: Map<string, string>;
@@ -42,6 +50,9 @@ interface UIState {
   ) => void;
   hideContextMenu: () => void;
 
+  openCropDialog: (imageUrl: string, displayUrl: string, cardId: string) => void;
+  closeCropDialog: () => void;
+
   setAppView: (view: AppView) => void;
   setCardProgress: (cardId: string, progress: CardGenProgress | null) => void;
   setCardError: (cardId: string, error: string | null) => void;
@@ -57,6 +68,7 @@ export const useUIStore = create<UIState>((set) => ({
   saveStatus: "saved",
   toasts: [],
   contextMenu: { visible: false, x: 0, y: 0, target: "canvas" },
+  cropDialog: { open: false, imageUrl: "", displayUrl: "", cardId: "" },
   appView: "home",
   generatingCards: new Map(),
   cardErrors: new Map(),
@@ -95,6 +107,12 @@ export const useUIStore = create<UIState>((set) => ({
     set((s) => ({
       contextMenu: { ...s.contextMenu, visible: false },
     })),
+
+  openCropDialog: (imageUrl, displayUrl, cardId) =>
+    set({ cropDialog: { open: true, imageUrl, displayUrl, cardId } }),
+
+  closeCropDialog: () =>
+    set({ cropDialog: { open: false, imageUrl: "", displayUrl: "", cardId: "" } }),
 
   setAppView: (view) => set({ appView: view }),
 

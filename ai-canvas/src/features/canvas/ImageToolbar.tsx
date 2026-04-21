@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, memo } from "react";
-import { Scissors, Download, ChevronDown, HardDriveDownload, Loader2, ZoomIn, RotateCw } from "lucide-react";
+import { Scissors, Crop, Download, ChevronDown, HardDriveDownload, Loader2, ZoomIn, RotateCw } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
@@ -8,6 +8,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { persistImage, getDisplayUrl, exportFile } from "@/lib/media";
+import { cropImageCell } from "@/lib/cropImage";
 import { autoSave } from "@/lib/autoSave";
 import { injectOnConnect } from "@/lib/dataFlow";
 import { sizeFromRatio } from "@/shared/constants";
@@ -23,51 +24,6 @@ const GRID_OPTIONS = [
 ];
 
 const TOOLBAR_GAP = 10;
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
-
-async function cropImageCell(
-  imageUrl: string,
-  row: number,
-  col: number,
-  gridSize: number,
-): Promise<{ dataUrl: string; cellW: number; cellH: number }> {
-  const displayUrl = getDisplayUrl(imageUrl);
-
-  const resp = await fetch(displayUrl);
-  if (!resp.ok) throw new Error(`图片加载失败 (${resp.status})`);
-  const blob = await resp.blob();
-  const bmp = await createImageBitmap(blob);
-
-  const cellW = Math.floor(bmp.width / gridSize);
-  const cellH = Math.floor(bmp.height / gridSize);
-
-  if (typeof OffscreenCanvas !== "undefined") {
-    const oc = new OffscreenCanvas(cellW, cellH);
-    const ctx = oc.getContext("2d")!;
-    ctx.drawImage(bmp, col * cellW, row * cellH, cellW, cellH, 0, 0, cellW, cellH);
-    bmp.close();
-    const outBlob = await oc.convertToBlob({ type: "image/png" });
-    const dataUrl = await blobToDataUrl(outBlob);
-    return { dataUrl, cellW, cellH };
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = cellW;
-  canvas.height = cellH;
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(bmp, col * cellW, row * cellH, cellW, cellH, 0, 0, cellW, cellH);
-  bmp.close();
-
-  return { dataUrl: canvas.toDataURL("image/png"), cellW, cellH };
-}
 
 function screenToCanvas(clientX: number, clientY: number) {
   const container = document.querySelector("[data-canvas-viewport]");
@@ -593,6 +549,23 @@ export default function ImageToolbar() {
           )}
         </div>
 
+        {/* Free crop → open dialog */}
+        <button
+          title="自由裁剪"
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          onClick={() => {
+            if (!imgData.imageUrl || !targetCardId) return;
+            useUIStore.getState().openCropDialog(
+              imgData.imageUrl,
+              getDisplayUrl(imgData.imageUrl),
+              targetCardId,
+            );
+          }}
+        >
+          <Crop className="h-3.5 w-3.5" />
+          <span>裁剪</span>
+        </button>
+
         {(!HIDDEN_FEATURES.upscale || !HIDDEN_FEATURES.multiangle) && (
           <div className="mx-0.5 h-4 w-px bg-border" />
         )}
@@ -665,6 +638,7 @@ export default function ImageToolbar() {
           dragOffset={dragOffset}
         />
       )}
+
     </>
   );
 }

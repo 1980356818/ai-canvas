@@ -22,6 +22,7 @@ import ChatPanel from "@/features/chat/ChatPanel";
 import { Toast } from "@/features/overlays/Toast";
 import { ContextMenu } from "@/features/overlays/ContextMenu";
 import SettingsDialog from "@/features/overlays/SettingsDialog";
+import { CropDialog } from "@/features/overlays/CropDialog";
 import SideCapsule from "@/features/overlays/SideCapsule";
 import LoginWindow from "@/features/auth/LoginWindow";
 import RedeemWindow from "@/features/auth/RedeemWindow";
@@ -77,6 +78,7 @@ function AuthenticatedApp() {
       <Toast />
       <ContextMenu />
       <SettingsDialog />
+      <CropDialog />
     </div>
   );
 }
