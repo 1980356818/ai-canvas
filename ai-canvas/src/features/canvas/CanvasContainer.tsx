@@ -136,7 +136,7 @@ export default function CanvasContainer() {
     if (bgMode.current === "panning") {
       vpPointerUp();
     } else if (bgMode.current === "selecting") {
-      finishSelection(e.clientX, e.clientY, e.ctrlKey);
+      finishSelection(e.clientX, e.clientY, e.ctrlKey || e.metaKey);
       justBoxSelected.current = true;
     } else if (wasPending) {
       useCanvasStore.getState().clearSelection();

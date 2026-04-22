@@ -85,6 +85,16 @@ pub fn run() {
             });
 
             tracing::info!("app initialized, data dir: {:?}", app_data_dir);
+
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.set_decorations(true);
+                    use tauri::TitleBarStyle;
+                    let _ = win.set_title_bar_style(TitleBarStyle::Overlay);
+                }
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {

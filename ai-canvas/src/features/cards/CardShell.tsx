@@ -325,7 +325,7 @@ export default memo(
         };
 
         let selectedIds = useCanvasStore.getState().selectedCardIds;
-        if (!selectedIds.has(card.id) && !e.ctrlKey) {
+        if (!selectedIds.has(card.id) && !e.ctrlKey && !e.metaKey) {
           useCanvasStore.getState().setSelectedCardIds([card.id]);
           selectedIds = useCanvasStore.getState().selectedCardIds;
         }
@@ -522,7 +522,7 @@ export default memo(
               }
             }
 
-            if (!ev.ctrlKey && !isGroupDrag) {
+            if (!ev.ctrlKey && !ev.metaKey && !isGroupDrag) {
               useCanvasStore.getState().setSelectedCardIds([card.id]);
             }
           } else {
@@ -530,7 +530,7 @@ export default memo(
             if (pm?.active) {
               const imgUrl = extractCardImage(card);
               if (imgUrl) pm.onPick(card.id, imgUrl);
-            } else if (ev.ctrlKey) {
+            } else if (ev.ctrlKey || ev.metaKey) {
               useCanvasStore.getState().addSelectedCardId(card.id);
             } else {
               useCanvasStore.getState().setSelectedCardIds([card.id]);

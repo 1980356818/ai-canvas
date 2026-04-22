@@ -13,6 +13,8 @@ const isTauri =
   typeof window !== "undefined" &&
   ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
 
+const isMac = /mac|iphone|ipad/i.test(navigator.platform);
+
 let appWindow: { minimize(): void; toggleMaximize(): void; close(): void } | null =
   null;
 
@@ -184,7 +186,7 @@ export default function TitleBar() {
           : "border-b border-border bg-muted/40",
       )}
     >
-      <span className="shrink-0 pl-8 pr-3 text-base font-semibold tracking-wide text-foreground/80">AI猫</span>
+      <span className={cn("shrink-0 pr-3 text-base font-semibold tracking-wide text-foreground/80", isMac ? "pl-[76px]" : "pl-8")}>AI猫</span>
 
       {isCanvas ? (
         <>
@@ -322,24 +324,28 @@ export default function TitleBar() {
               <MessageSquare className="h-3.5 w-3.5" />
             </button>
           )}
-          <button
-            onClick={() => appWindow?.minimize()}
-            className="flex h-7 w-10 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <Minus className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={() => appWindow?.toggleMaximize()}
-            className="flex h-7 w-10 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <Square className="h-3 w-3" />
-          </button>
-          <button
-            onClick={() => { if (isTauri) void invoke("quit_app"); }}
-            className="flex h-7 w-10 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          {!isMac && (
+            <>
+              <button
+                onClick={() => appWindow?.minimize()}
+                className="flex h-7 w-10 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => appWindow?.toggleMaximize()}
+                className="flex h-7 w-10 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Square className="h-3 w-3" />
+              </button>
+              <button
+                onClick={() => { if (isTauri) void invoke("quit_app"); }}
+                className="flex h-7 w-10 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
         </div>
       )}
       <NewProjectDialog

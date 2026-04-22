@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useUIStore } from "@/stores/uiStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
@@ -192,6 +192,8 @@ function ContextMenuPanel({
   const [pos, setPos] = useState({ x: contextMenu.x, y: contextMenu.y });
   const projectId = useProjectStore((s) => s.currentProjectId);
   const selectedCardIds = useCanvasStore((s) => s.selectedCardIds);
+  const isMac = useMemo(() => /mac|iphone|ipad/i.test(navigator.platform), []);
+  const mod = isMac ? "⌘" : "Ctrl";
 
   useLayoutEffect(() => {
     const el = menuRef.current;
@@ -427,7 +429,7 @@ function ContextMenuPanel({
       {
         type: "item",
         label: "粘贴",
-        shortcut: "Ctrl+V",
+        shortcut: `${mod}+V`,
         disabled: noProject,
         onSelect: () => void runPaste(),
       },
@@ -449,7 +451,7 @@ function ContextMenuPanel({
       {
         type: "item",
         label: "复制",
-        shortcut: "Ctrl+C",
+        shortcut: `${mod}+C`,
         disabled: !id || !card,
         onSelect: () => void runCopyCards(new Set(id ? [id] : [])),
       },
@@ -484,7 +486,7 @@ function ContextMenuPanel({
       {
         type: "item",
         label: "删除",
-        shortcut: "Del",
+        shortcut: isMac ? "⌫" : "Del",
         disabled: !id,
         onSelect: () => void deleteIds(id ? [id] : []),
       },
@@ -514,7 +516,7 @@ function ContextMenuPanel({
       {
         type: "item",
         label: "复制",
-        shortcut: "Ctrl+C",
+        shortcut: `${mod}+C`,
         disabled: selectedCardIds.size === 0,
         onSelect: () => void runCopyCards(selectedCardIds),
       },
@@ -574,7 +576,7 @@ function ContextMenuPanel({
       {
         type: "item",
         label: "删除连线",
-        shortcut: "Del",
+        shortcut: isMac ? "⌫" : "Del",
         disabled: !connId,
         onSelect: () => {
           if (connId) {

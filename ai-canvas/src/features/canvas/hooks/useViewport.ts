@@ -51,21 +51,59 @@ export function useViewport(
       const cursorX = e.clientX - rect.left;
       const cursorY = e.clientY - rect.top;
 
-      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, vp.zoom * factor));
-      const ratio = newZoom / vp.zoom;
-      const newX = cursorX - (cursorX - vp.x) * ratio;
-      const newY = cursorY - (cursorY - vp.y) * ratio;
+      if (e.ctrlKey || e.metaKey) {
+        // Pinch-to-zoom (Mac trackpad) or Ctrl+scroll (Windows/Linux)
+        const sensitivity = 0.005;
+        const delta = -e.deltaY * sensitivity;
+        const factor = Math.exp(delta);
+        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, vp.zoom * factor));
+        const ratio = newZoom / vp.zoom;
+        const newX = cursorX - (cursorX - vp.x) * ratio;
+        const newY = cursorY - (cursorY - vp.y) * ratio;
 
-      if (containerRef.current) {
-        applyViewportToDOM(containerRef.current, newX, newY, newZoom);
+        if (containerRef.current) {
+          applyViewportToDOM(containerRef.current, newX, newY, newZoom);
+        }
+        if (wheelRaf.current) cancelAnimationFrame(wheelRaf.current);
+        wheelRaf.current = requestAnimationFrame(() => {
+          wheelRaf.current = 0;
+          setViewport({ zoom: newZoom, x: newX, y: newY });
+        });
+      } else {
+        // Two-finger scroll (Mac trackpad) or mouse wheel (pan/zoom)
+        const isPrecise = Math.abs(e.deltaY) < 50 && e.deltaMode === 0;
+
+        if (isPrecise) {
+          // Trackpad: pan canvas
+          const newX = vp.x - e.deltaX;
+          const newY = vp.y - e.deltaY;
+
+          if (containerRef.current) {
+            applyViewportToDOM(containerRef.current, newX, newY, vp.zoom);
+          }
+          if (wheelRaf.current) cancelAnimationFrame(wheelRaf.current);
+          wheelRaf.current = requestAnimationFrame(() => {
+            wheelRaf.current = 0;
+            setViewport({ x: newX, y: newY });
+          });
+        } else {
+          // Mouse wheel: zoom
+          const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+          const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, vp.zoom * factor));
+          const ratio = newZoom / vp.zoom;
+          const newX = cursorX - (cursorX - vp.x) * ratio;
+          const newY = cursorY - (cursorY - vp.y) * ratio;
+
+          if (containerRef.current) {
+            applyViewportToDOM(containerRef.current, newX, newY, newZoom);
+          }
+          if (wheelRaf.current) cancelAnimationFrame(wheelRaf.current);
+          wheelRaf.current = requestAnimationFrame(() => {
+            wheelRaf.current = 0;
+            setViewport({ zoom: newZoom, x: newX, y: newY });
+          });
+        }
       }
-
-      if (wheelRaf.current) cancelAnimationFrame(wheelRaf.current);
-      wheelRaf.current = requestAnimationFrame(() => {
-        wheelRaf.current = 0;
-        setViewport({ zoom: newZoom, x: newX, y: newY });
-      });
     },
     [containerRef, setViewport],
   );

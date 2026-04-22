@@ -139,8 +139,8 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // ── Delete: delete selected cards or connections ──
-      if (e.key === "Delete" && !mod) {
+      // ── Delete / Backspace: delete selected cards or connections ──
+      if ((e.key === "Delete" || e.key === "Backspace") && !mod) {
         if (isFocusOnInput()) {
           const el = document.activeElement as HTMLElement | null;
           if (el) {
