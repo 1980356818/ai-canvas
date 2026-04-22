@@ -50,6 +50,7 @@
         "installMode": "both",
         "compression": "lzma",
         "startMenuFolder": "AICat",
+        "installerIcon": "icons/icon.ico",
         "installerHooks": "nsis/hooks.nsh"
       }
     }
