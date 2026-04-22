@@ -412,8 +412,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
 
     type ApiContentPart =
       | { type: "text"; text: string }
-      | { type: "image_url"; image_url: { url: string } }
-      | { type: "video_url"; video_url: { url: string } };
+      | { type: "image_url"; image_url: { url: string } };
 
     let userContent: ApiContentPart[];
 
@@ -442,7 +441,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       for (const vid of refVideoEntries) {
         if (inlineUrls.has(vid.url)) continue;
         const dataUrl = await getBase64ForApi(vid.url);
-        userContent.unshift({ type: "video_url", video_url: { url: dataUrl } });
+        userContent.unshift({ type: "image_url", image_url: { url: dataUrl } });
       }
     } else {
       userContent = [];
@@ -457,7 +456,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         }
         for (const vid of refVideoEntries) {
           const dataUrl = await getBase64ForApi(vid.url);
-          userContent.push({ type: "video_url", video_url: { url: dataUrl } });
+          userContent.push({ type: "image_url", image_url: { url: dataUrl } });
         }
       } else if (totalMedia > 0) {
         useUIStore.getState().addToast({
@@ -489,13 +488,12 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
 
     const systemPrompt = contextPrefix
       + (data._systemPrompt || "你是一个有帮助的 AI 助手，请用中文回复。请直接回答用户的问题。");
-    const hasMedia = userContent.some((p) => p.type === "image_url" || p.type === "video_url");
+    const hasMedia = userContent.some((p) => p.type === "image_url");
 
     const unifiedUserContent: UnifiedContentPart[] = hasMedia
       ? userContent.map((p): UnifiedContentPart => {
           if (p.type === "text") return { type: "text", text: p.text };
           if (p.type === "image_url") return { type: "image", url: p.image_url.url };
-          if (p.type === "video_url") return { type: "video", url: p.video_url.url };
           return { type: "text", text: "" };
         })
       : [{ type: "text", text: displayPrompt }];

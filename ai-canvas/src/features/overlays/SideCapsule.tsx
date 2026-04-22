@@ -59,8 +59,7 @@ export default function SideCapsule() {
 
   return (
     <div
-      className="fixed top-1/2 z-50 -translate-y-1/2 transition-[left] duration-200"
-      style={{ left: 0 }}
+      className="fixed left-0 top-1/2 z-30 -translate-y-1/2 transition-[left] duration-200"
     >
       <div className="ml-2 flex flex-col gap-1.5 rounded-full border border-border bg-card/80 p-1.5 shadow-lg backdrop-blur-md">
         {navItems.map((item) => (

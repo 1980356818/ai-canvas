@@ -24,9 +24,12 @@ const MODEL_REF_CONFIGS: ModelRefConfig[] = [
   },
   {
     match: /^gpt-image/,
-    slots: [
-      { key: "refImage0", label: "参考图", description: "编辑或变体生成的参考图", required: false },
-    ],
+    slots: Array.from({ length: 8 }, (_, i) => ({
+      key: `refImage${i}`,
+      label: `参考图${i + 1}`,
+      description: "编辑或变体生成的参考图",
+      required: false,
+    })),
   },
   {
     match: /^grok.*image/,

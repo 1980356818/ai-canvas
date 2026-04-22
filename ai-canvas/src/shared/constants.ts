@@ -21,7 +21,6 @@ export type { ImageSizeOption, QuickCreateItem, WorkflowCardPreset, WorkflowConn
 import type { ImageSizeOption } from "@/types";
 
 export const IMAGE_SIZE_OPTIONS: ImageSizeOption[] = [
-  { value: "auto",  label: "自适应", ratio: 1 },
   { value: "1:1",   label: "1:1",   ratio: 1 },
   { value: "3:2",   label: "3:2",   ratio: 3 / 2 },
   { value: "2:3",   label: "2:3",   ratio: 2 / 3 },
@@ -35,6 +34,7 @@ export const IMAGE_SIZE_OPTIONS: ImageSizeOption[] = [
 export const DEFAULT_IMAGE_SIZE = IMAGE_SIZE_OPTIONS[0]!.value;
 
 const LEGACY_SIZE_MAP: Record<string, string> = {
+  "auto": "1:1",
   "1024x1024": "1:1",
   "1024x1792": "9:16",
   "1792x1024": "16:9",

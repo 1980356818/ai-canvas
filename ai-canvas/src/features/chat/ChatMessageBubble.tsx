@@ -27,7 +27,7 @@ export default memo(function ChatMessageBubble({ message }: Props) {
 
     return (
       <div className="mb-3 flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-primary text-primary-foreground px-3.5 py-2.5">
+        <div className="min-w-0 max-w-[85%] overflow-hidden rounded-2xl rounded-tr-sm bg-primary text-primary-foreground px-3.5 py-2.5">
           {imageParts.length > 0 && (
             <div className="mb-1.5 flex flex-wrap gap-1.5">
               {imageParts.map((part, idx) => (
@@ -45,7 +45,7 @@ export default memo(function ChatMessageBubble({ message }: Props) {
 
   return (
     <div className="mb-3 flex justify-start">
-      <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-muted/60 px-3.5 py-2.5">
+      <div className="min-w-0 max-w-[85%] overflow-hidden rounded-2xl rounded-tl-sm bg-muted/60 px-3.5 py-2.5">
         {message.content.map((part, idx) => (
           <ContentPartRenderer key={idx} part={part} isUser={false} />
         ))}
@@ -141,7 +141,7 @@ function ImageBlock({
       <img
         src={displayUrl}
         alt={prompt || "生成的图片"}
-        className="max-w-[320px] w-full rounded-lg object-cover cursor-grab active:cursor-grabbing"
+        className="max-w-full w-full rounded-lg object-cover cursor-grab active:cursor-grabbing"
         draggable
         onDragStart={handleDragStart}
         loading="lazy"
@@ -203,7 +203,7 @@ function VideoBlock({
     >
       <video
         src={displayUrl}
-        className="max-w-[320px] w-full rounded-lg"
+        className="max-w-full w-full rounded-lg"
         controls={playing}
         preload="metadata"
         onPlay={() => setPlaying(true)}

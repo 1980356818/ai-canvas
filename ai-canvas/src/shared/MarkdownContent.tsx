@@ -175,7 +175,7 @@ export default memo(function MarkdownContent({
   if (!content) return null;
 
   return (
-    <div className={cn("text-sm", compact && "text-xs", className)}>
+    <div className={cn("text-sm overflow-hidden [overflow-wrap:anywhere]", compact && "text-xs", className)}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {content}
       </ReactMarkdown>

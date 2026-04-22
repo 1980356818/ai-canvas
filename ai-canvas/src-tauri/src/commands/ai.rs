@@ -582,25 +582,15 @@ fn resolve_user_media_path(
 ) -> Option<std::path::PathBuf> {
     let db = state.db.lock().ok()?;
 
-    let auto_dir = db
-        .query_row(
-            "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .or_else(|| {
-            db.query_row(
-                "SELECT value FROM settings WHERE key = 'image_auto_save_path'",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-        })?;
-
-    let auto_dir_path = std::path::Path::new(&auto_dir);
+    let internal_abs = app_data_dir.join(internal_path);
+    let internal_stem = internal_abs
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    if internal_stem.is_empty() {
+        return None;
+    }
+    let short_id = &internal_stem[..8.min(internal_stem.len())];
 
     let short_pid = project_id
         .as_ref()
@@ -616,48 +606,71 @@ fn resolve_user_media_path(
         .map(|t| build_project_folder_name(&t, pid))
     });
 
-    let target_dir = if let Some(ref folder) = project_folder {
-        auto_dir_path.join(folder)
-    } else {
-        auto_dir_path.to_path_buf()
-    };
+    let setting_keys = [
+        "file_export_path",
+        "image_export_path",
+        "file_auto_save_path",
+        "image_auto_save_path",
+    ];
 
-    let search_dir = if target_dir.exists() {
-        target_dir
-    } else if let Some(sid) = short_pid {
-        if let Ok(entries) = std::fs::read_dir(auto_dir_path) {
-            let found = entries.flatten().find(|e| {
-                e.file_type().map(|ft| ft.is_dir()).unwrap_or(false)
-                    && e.file_name().to_string_lossy().contains(sid)
-            });
-            found.map(|e| e.path()).unwrap_or_else(|| auto_dir_path.to_path_buf())
-        } else {
-            auto_dir_path.to_path_buf()
-        }
-    } else {
-        auto_dir_path.to_path_buf()
-    };
-
-    let internal_abs = app_data_dir.join(internal_path);
-    let internal_stem = internal_abs
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
-
-    if !internal_stem.is_empty() && search_dir.is_dir() {
-        let short_id = &internal_stem[..8.min(internal_stem.len())];
-        if let Ok(entries) = std::fs::read_dir(&search_dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let name_str = name.to_string_lossy();
-                if name_str.contains(short_id) {
-                    return Some(entry.path());
-                }
+    let mut candidate_dirs: Vec<String> = Vec::new();
+    for key in &setting_keys {
+        if let Ok(val) = db.query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            rusqlite::params![key],
+            |row| row.get::<_, String>(0),
+        ) {
+            let val = val.trim().to_string();
+            if !val.is_empty() && !candidate_dirs.contains(&val) {
+                candidate_dirs.push(val);
             }
         }
     }
 
-    Some(search_dir)
+    for base_dir in &candidate_dirs {
+        let base = std::path::Path::new(base_dir);
+        if !base.is_dir() {
+            continue;
+        }
+
+        let search_dir = if let Some(ref folder) = project_folder {
+            let proj_dir = base.join(folder);
+            if proj_dir.exists() {
+                proj_dir
+            } else if let Some(sid) = short_pid {
+                find_dir_containing(base, sid).unwrap_or_else(|| base.to_path_buf())
+            } else {
+                base.to_path_buf()
+            }
+        } else {
+            base.to_path_buf()
+        };
+
+        if let Some(found) = find_file_by_id(&search_dir, short_id) {
+            return Some(found);
+        }
+    }
+
+    None
+}
+
+fn find_dir_containing(parent: &std::path::Path, substr: &str) -> Option<std::path::PathBuf> {
+    std::fs::read_dir(parent).ok()?.flatten().find(|e| {
+        e.file_type().map(|ft| ft.is_dir()).unwrap_or(false)
+            && e.file_name().to_string_lossy().contains(substr)
+    }).map(|e| e.path())
+}
+
+fn find_file_by_id(dir: &std::path::Path, short_id: &str) -> Option<std::path::PathBuf> {
+    if !dir.is_dir() {
+        return None;
+    }
+    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+        if entry.file_name().to_string_lossy().contains(short_id) {
+            return Some(entry.path());
+        }
+    }
+    None
 }
 
 fn reveal_path(abs_path: &std::path::Path) -> Result<(), String> {

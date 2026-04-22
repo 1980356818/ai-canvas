@@ -20,6 +20,7 @@ import { modelService } from "@/services/models";
 import { providerService } from "@/services/provider.service";
 import { useProviderStore, parseModelRef } from "@/stores/providerStore";
 import { getAccumulatedToolCalls } from "@/providers/openai-compat/formatter";
+import { getBase64ForApi } from "@/lib/media";
 import type { StreamEvent, UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 
 export type { ChatSession, ChatMessage } from "@/types";
@@ -69,18 +70,25 @@ const CHAT_TOOLS = [
   },
 ];
 
-function historyToUnified(history: ChatHistoryMessage[]): UnifiedMessage[] {
-  return history.map((msg) => ({
-    role: msg.role as UnifiedMessage["role"],
-    content: msg.content
-      .filter((p) => p.type !== "loading")
-      .map((p): UnifiedContentPart => {
-        if (p.type === "text") return { type: "text", text: p.text };
-        if (p.type === "image") return { type: "image", url: p.url };
-        if (p.type === "video") return { type: "video", url: p.url ?? "" };
-        return { type: "text", text: "" };
-      }),
-  }));
+async function historyToUnified(history: ChatHistoryMessage[]): Promise<UnifiedMessage[]> {
+  const result: UnifiedMessage[] = [];
+  for (const msg of history) {
+    const parts: UnifiedContentPart[] = [];
+    for (const p of msg.content) {
+      if (p.type === "loading") continue;
+      if (p.type === "text") {
+        parts.push({ type: "text", text: p.text });
+      } else if (p.type === "image") {
+        const url = await getBase64ForApi(p.url);
+        parts.push({ type: "image", url });
+      } else if (p.type === "video") {
+        const url = p.url ? await getBase64ForApi(p.url) : "";
+        parts.push({ type: "video", url });
+      }
+    }
+    result.push({ role: msg.role as UnifiedMessage["role"], content: parts });
+  }
+  return result;
 }
 
 // ── Store ───────────────────────────────────────────────────
@@ -354,6 +362,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         );
 
         let fullText = "";
+        const unifiedMessages = await historyToUnified(history);
         resultParts = await new Promise<ChatContentPart[]>((resolve, reject) => {
           const ac = _abortController!;
           let settled = false;
@@ -375,7 +384,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 model: modelId,
                 systemPrompt:
                   "You are a helpful AI assistant. You can have conversations, and when the user asks you to generate images or videos, use the provided tools. Always respond in the user's language.",
-                messages: historyToUnified(history),
+                messages: unifiedMessages,
                 tools: CHAT_TOOLS,
                 signal: ac.signal,
               },

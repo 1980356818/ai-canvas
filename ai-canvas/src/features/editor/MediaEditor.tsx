@@ -138,6 +138,11 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   );
 
   const enhancer = isEnhancerModel(currentModel);
+  const supportsResolution = useMemo(() => {
+    if (!currentModel) return false;
+    const provider = (data as MediaData).provider;
+    return modelService.resolveImageModelId(currentModel, "4K", provider) !== currentModel;
+  }, [currentModel, data]);
   const hasRequiredRef = enhancer
     && refSlots.some((s) => s.required && data.refImages?.[s.key]);
   const canGenerate = finalPrompt.length > 0 || !!hasRequiredRef;
@@ -727,9 +732,9 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         {!enhancer && !isLocked && (
           <SizeCombo
             value={currentSize}
-            resolution={currentResolution}
+            resolution={supportsResolution ? currentResolution : undefined}
             onChange={handleSizeChange}
-            onResolutionChange={handleResolutionChange}
+            onResolutionChange={supportsResolution ? handleResolutionChange : undefined}
             disabled={generating}
           />
         )}

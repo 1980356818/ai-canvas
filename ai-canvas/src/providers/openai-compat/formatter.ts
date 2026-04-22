@@ -59,8 +59,7 @@ export function normalizeIncomingChatRequest(req: ChatRequest): ChatRequest {
 
 type OpenAIContentPart =
   | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } }
-  | { type: "video_url"; video_url: { url: string } };
+  | { type: "image_url"; image_url: { url: string } };
 
 function formatContentParts(parts: UnifiedContentPart[]): string | OpenAIContentPart[] {
   if (parts.length === 1 && parts[0]!.type === "text") {
@@ -71,9 +70,8 @@ function formatContentParts(parts: UnifiedContentPart[]): string | OpenAIContent
       case "text":
         return { type: "text", text: p.text };
       case "image":
-        return { type: "image_url", image_url: { url: p.url } };
       case "video":
-        return { type: "video_url", video_url: { url: p.url } };
+        return { type: "image_url", image_url: { url: p.url } };
       case "file":
         return { type: "text", text: `[file: ${p.name}]` };
     }
