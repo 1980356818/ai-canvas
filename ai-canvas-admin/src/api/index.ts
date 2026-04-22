@@ -75,6 +75,13 @@ export const adminApi = {
     })
   },
 
+  resetUserPassword(userId: number, newPassword: string) {
+    return api('/admin/user/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ userId, newPassword }),
+    })
+  },
+
   forceUnbind(userId: number, newMachineCode: string, deviceInfo: string) {
     return api('/admin/user/force-unbind', {
       method: 'POST',

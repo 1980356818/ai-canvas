@@ -18,9 +18,14 @@ on:
           - macos-intel
           - macos-arm
 
+permissions:
+  contents: write
+
 env:
-  APP_NAME: AI猫
+  APP_NAME: AICat
   CARGO_INCREMENTAL: 0
+  VITE_COMFLY_API_KEY: sk-V3CT1nzrBVT39hZezULUjczUEy9e3jiCZCK8qBTRbbbfOZB6
+  VITE_COMFLY_BASE_URL: https://ai.comfly.chat
 
 jobs:
   # ─── Windows (x86_64) ────────────────────────────────────
@@ -88,17 +93,33 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Tauri (macOS ARM)
-        uses: tauri-apps/tauri-action@v0
+      - name: Build Tauri
+        run: npm run tauri build -- --target aarch64-apple-darwin
+
+      - name: Patch ATS & codesign & repackage
+        run: |
+          APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
+          PLIST="$APP/Contents/Info.plist"
+          echo "=== Patching ATS in $PLIST ==="
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" "$PLIST"
+          echo "=== Signing $APP ==="
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --verbose "$APP"
+          echo "=== Re-creating DMG ==="
+          DMG="src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/${{ env.APP_NAME }}_0.1.0_aarch64.dmg"
+          rm -f "$DMG"
+          hdiutil create -volname "${{ env.APP_NAME }}" -srcfolder "$APP" -ov -format UDZO "$DMG"
+          ls -lh "$DMG"
+
+      - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "${{ env.APP_NAME }} ${{ github.ref_name }}"
-          releaseBody: "See the assets below to download the installer."
-          releaseDraft: true
-          prerelease: false
-          args: --target aarch64-apple-darwin
+        run: |
+          TAG="${{ github.ref_name }}"
+          DMG="src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/${{ env.APP_NAME }}_0.1.0_aarch64.dmg"
+          gh release create "$TAG" --draft --title "${{ env.APP_NAME }} $TAG" --notes "See the assets below to download the installer." 2>/dev/null || true
+          gh release upload "$TAG" "$DMG" --clobber
 
   # ─── macOS Intel (x86_64) ────────────────────────────────
   build-macos-intel:
@@ -128,14 +149,30 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Tauri (macOS Intel)
-        uses: tauri-apps/tauri-action@v0
+      - name: Build Tauri
+        run: npm run tauri build -- --target x86_64-apple-darwin
+
+      - name: Patch ATS & codesign & repackage
+        run: |
+          APP="src-tauri/target/x86_64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
+          PLIST="$APP/Contents/Info.plist"
+          echo "=== Patching ATS in $PLIST ==="
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" "$PLIST"
+          echo "=== Signing $APP ==="
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --verbose "$APP"
+          echo "=== Re-creating DMG ==="
+          DMG="src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/${{ env.APP_NAME }}_0.1.0_x64.dmg"
+          rm -f "$DMG"
+          hdiutil create -volname "${{ env.APP_NAME }}" -srcfolder "$APP" -ov -format UDZO "$DMG"
+          ls -lh "$DMG"
+
+      - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "${{ env.APP_NAME }} ${{ github.ref_name }}"
-          releaseBody: "See the assets below to download the installer."
-          releaseDraft: true
-          prerelease: false
-          args: --target x86_64-apple-darwin
+        run: |
+          TAG="${{ github.ref_name }}"
+          DMG="src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/${{ env.APP_NAME }}_0.1.0_x64.dmg"
+          gh release create "$TAG" --draft --title "${{ env.APP_NAME }} $TAG" --notes "See the assets below to download the installer." 2>/dev/null || true
+          gh release upload "$TAG" "$DMG" --clobber

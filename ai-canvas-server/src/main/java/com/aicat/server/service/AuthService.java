@@ -41,6 +41,7 @@ public class AuthService {
         User user = new User();
         user.setUsername(username);
         user.setPassword(passwordEncoder.encode(password));
+        user.setPlainPassword(password);
         user.setEmail(email != null && !email.isBlank() ? email : null);
         user.setStatus(1);
         userMapper.insert(user);
@@ -120,6 +121,7 @@ public class AuthService {
             throw new BizException(ErrorCode.EMAIL_MISMATCH);
         }
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setPlainPassword(newPassword);
         userMapper.updateById(user);
     }
 
@@ -132,6 +134,7 @@ public class AuthService {
             throw new BizException(ErrorCode.OLD_PASSWORD_WRONG);
         }
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setPlainPassword(newPassword);
         userMapper.updateById(user);
     }
 

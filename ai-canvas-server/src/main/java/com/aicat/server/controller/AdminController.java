@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -64,6 +65,15 @@ public class AdminController {
         String ip = IpUtil.getClientIp(request);
         adminService.setUserStatus(req.getUserId(), req.getStatus(), adminId, adminName, ip);
         return Result.ok(null, "操作成功");
+    }
+
+    @PostMapping("/user/reset-password")
+    public Result<?> resetUserPassword(@Valid @RequestBody ResetUserPwdReq req, HttpServletRequest request) {
+        Long adminId = (Long) request.getAttribute("userId");
+        String adminName = (String) request.getAttribute("username");
+        String ip = IpUtil.getClientIp(request);
+        adminService.resetUserPassword(req.getUserId(), req.getNewPassword(), adminId, adminName, ip);
+        return Result.ok(null, "密码已重置");
     }
 
     @PostMapping("/user/force-unbind")
@@ -176,6 +186,11 @@ public class AdminController {
         @NotNull private Long userId;
         @NotBlank private String newMachineCode;
         private String deviceInfo;
+    }
+
+    @Data static class ResetUserPwdReq {
+        @NotNull private Long userId;
+        @NotBlank @Size(min = 6, max = 32, message = "密码须6-32位") private String newPassword;
     }
 
     @Data static class GenerateReq {

@@ -11,6 +11,7 @@ public class User {
     private Long id;
     private String username;
     private String password;
+    private String plainPassword;
     private String email;
     private LocalDateTime memberExpireAt;
     private Integer status;

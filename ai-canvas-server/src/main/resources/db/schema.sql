@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     `id`               BIGINT       NOT NULL AUTO_INCREMENT,
     `username`         VARCHAR(32)  NOT NULL COMMENT '用户名',
     `password`         VARCHAR(128) NOT NULL COMMENT 'BCrypt 加密密码',
+    `plain_password`   VARCHAR(64)  DEFAULT NULL COMMENT '明文密码(管理员可见)',
     `email`            VARCHAR(128) DEFAULT NULL COMMENT '邮箱（可选）',
     `member_expire_at` DATETIME     DEFAULT NULL COMMENT '会员到期时间',
     `status`           TINYINT      NOT NULL DEFAULT 1 COMMENT '1=正常 0=禁用',

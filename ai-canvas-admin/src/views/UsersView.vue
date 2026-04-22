@@ -5,6 +5,7 @@ import { adminApi } from '@/api'
 import { formatTime, isExpired } from '@/utils/format'
 import AdjustMemberDialog from '@/components/dialogs/AdjustMemberDialog.vue'
 import ForceUnbindDialog from '@/components/dialogs/ForceUnbindDialog.vue'
+import ResetUserPwdDialog from '@/components/dialogs/ResetUserPwdDialog.vue'
 
 const users = ref<{ records: any[]; total: number }>({ records: [], total: 0 })
 const page = ref(1)
@@ -16,6 +17,9 @@ const adjustUser = ref<any>(null)
 
 const unbindVisible = ref(false)
 const unbindUser = ref<any>(null)
+
+const resetPwdVisible = ref(false)
+const resetPwdUser = ref<any>(null)
 
 async function loadUsers() {
   loading.value = true
@@ -34,6 +38,11 @@ function openAdjust(row: any) {
 function openUnbind(row: any) {
   unbindUser.value = row
   unbindVisible.value = true
+}
+
+function openResetPwd(row: any) {
+  resetPwdUser.value = row
+  resetPwdVisible.value = true
 }
 
 async function toggleStatus(row: any) {
@@ -69,6 +78,14 @@ onMounted(loadUsers)
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="username" label="用户名" min-width="100" show-overflow-tooltip />
       <el-table-column prop="email" label="邮箱" min-width="140" show-overflow-tooltip />
+      <el-table-column label="密码" min-width="120">
+        <template #default="{ row }">
+          <span v-if="row.plainPassword" style="font-family: monospace; font-size: 13px">
+            {{ row.plainPassword }}
+          </span>
+          <span v-else style="color: #909399; font-size: 12px">无记录</span>
+        </template>
+      </el-table-column>
       <el-table-column label="会员到期" width="140">
         <template #default="{ row }">
           <span :style="{ color: isExpired(row.memberExpireAt) ? '#f56c6c' : '#67c23a' }">
@@ -86,9 +103,10 @@ onMounted(loadUsers)
       <el-table-column label="注册时间" width="140">
         <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="230" align="center">
+      <el-table-column label="操作" width="300" align="center">
         <template #default="{ row }">
           <el-button size="small" @click="openAdjust(row)">调整会员</el-button>
+          <el-button size="small" type="primary" @click="openResetPwd(row)">改密码</el-button>
           <el-button
             size="small"
             :type="row.status === 1 ? 'danger' : 'success'"
@@ -112,4 +130,5 @@ onMounted(loadUsers)
 
   <AdjustMemberDialog v-model="adjustVisible" :user="adjustUser" @adjusted="loadUsers" />
   <ForceUnbindDialog v-model="unbindVisible" :user="unbindUser" />
+  <ResetUserPwdDialog v-model="resetPwdVisible" :user="resetPwdUser" @reset="loadUsers" />
 </template>

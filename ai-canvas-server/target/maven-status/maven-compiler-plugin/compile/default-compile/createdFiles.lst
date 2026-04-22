@@ -26,6 +26,7 @@ com\aicat\server\util\JwtUtil.class
 com\aicat\server\security\RateLimitInterceptor.class
 com\aicat\server\controller\UserController.class
 com\aicat\server\controller\AuthController$ResetPasswordReq.class
+com\aicat\server\controller\AdminController$ResetUserPwdReq.class
 com\aicat\server\entity\SysConfig.class
 com\aicat\server\controller\UserController$UnbindReq.class
 com\aicat\server\controller\AdminController$ForceUnbindReq.class

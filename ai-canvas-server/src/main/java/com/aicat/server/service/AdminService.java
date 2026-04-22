@@ -108,6 +108,15 @@ public class AdminService {
                 "days=" + days + ", newExpire=" + newExpire, ip);
     }
 
+    public void resetUserPassword(Long userId, String newPassword, Long adminId, String adminName, String ip) {
+        User user = userMapper.selectById(userId);
+        if (user == null) throw new BizException(ErrorCode.INVALID_PARAM, "用户不存在");
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setPlainPassword(newPassword);
+        userMapper.updateById(user);
+        logOp(adminId, adminName, "reset_user_password", "user", userId, null, ip);
+    }
+
     public void setUserStatus(Long userId, int status, Long adminId, String adminName, String ip) {
         User user = userMapper.selectById(userId);
         if (user == null) throw new BizException(ErrorCode.INVALID_PARAM, "用户不存在");

@@ -11,7 +11,7 @@ export function SidebarContainer() {
   const toggleAgentPanel = useUIStore((s) => s.toggleAgentPanel);
   const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
 
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const hoveringRef = useRef(false);
 
   useEffect(() => {
