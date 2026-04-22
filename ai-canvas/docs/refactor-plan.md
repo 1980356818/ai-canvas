@@ -454,12 +454,7 @@ export async function submitAndWaitForResult(
 
 #### 8.1 移除硬编码密钥
 
-`lib/tauri.ts:665` 的 `COMFLY_API_KEY` 应迁入环境变量或 Tauri 设置：
-
-```typescript
-// 改为从设置读取，不硬编码
-const COMFLY_API_KEY = import.meta.env.VITE_COMFLY_API_KEY ?? "";
-```
+~~`COMFLY_API_KEY` 已从代码中移除。~~ API Key 不再打包在程序中，完全由用户在设置界面配置，存储在本地 SQLite 数据库。
 
 #### 8.2 清理 console.log
 

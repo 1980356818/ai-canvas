@@ -1,4 +1,5 @@
-import { saveMedia, readMediaBase64, isTauri } from "./tauri";
+import { saveMedia, readMediaBase64 } from "@/platform/media.api";
+import { isTauri } from "@/platform/runtime";
 
 let _basePath: string | null = null;
 let _convertFileSrc: ((path: string, protocol?: string) => string) | null = null;

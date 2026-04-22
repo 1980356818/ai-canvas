@@ -311,20 +311,19 @@ fn detect_image_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 }
 
 /// Save media from a remote URL, base64 data-URL, or local path into
-/// `app_data_dir/media/images/{uuid}.{ext}`.  When `image_auto_save_path` is set,
-/// a copy is also written to that user-chosen directory, organized by project subfolder.
+/// `{data_dir}/media/images/{uuid}.{ext}`, plus an auto-save copy in
+/// `{data_dir}/auto-save/{project_folder}/{friendly_name}`.
 /// Returns a **relative** path like `media/images/{uuid}.{ext}`.
 #[tauri::command]
 pub async fn save_media(
-    app: AppHandle,
     state: State<'_, AppState>,
     source: String,
     filename: Option<String>,
     title: Option<String>,
     project_id: Option<String>,
 ) -> Result<SaveMediaResult, String> {
-    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let media_dir = app_data_dir.join("media/images");
+    let data_dir = &state.data_dir;
+    let media_dir = data_dir.join("media/images");
     std::fs::create_dir_all(&media_dir)
         .map_err(|e| format!("创建媒体目录失败: {}", e))?;
 
@@ -396,27 +395,10 @@ pub async fn save_media(
 
     std::fs::write(&dest, &bytes).map_err(|e| format!("写入文件失败: {}", e))?;
 
-    let (auto_save_dir, project_folder_name) = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
-        let dir = db
-            .query_row(
-                "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-            .or_else(|| {
-                db.query_row(
-                    "SELECT value FROM settings WHERE key = 'image_auto_save_path'",
-                    [],
-                    |row| row.get::<_, String>(0),
-                )
-                .ok()
-                .filter(|s| !s.trim().is_empty())
-            });
-
-        let folder = if let (Some(_), Some(pid)) = (&dir, &project_id) {
+    let auto_save_base = data_dir.join("auto-save");
+    let target_dir = if let Some(ref pid) = project_id {
+        let folder = {
+            let db = state.db.lock().map_err(|e| e.to_string())?;
             db.query_row(
                 "SELECT title FROM projects WHERE id = ?1",
                 rusqlite::params![pid],
@@ -424,30 +406,24 @@ pub async fn save_media(
             )
             .ok()
             .map(|t| build_project_folder_name(&t, pid))
-        } else {
-            None
         };
-
-        (dir, folder)
+        match folder {
+            Some(f) => auto_save_base.join(f),
+            None => auto_save_base.clone(),
+        }
+    } else {
+        auto_save_base.clone()
     };
 
-    if let Some(dir) = auto_save_dir {
-        let target_dir = if let Some(ref folder) = project_folder_name {
-            std::path::Path::new(&dir).join(folder)
-        } else {
-            std::path::PathBuf::from(&dir)
-        };
+    let friendly_name = build_friendly_filename(&title, &file_id, &ext);
+    let user_dest = target_dir.join(&friendly_name);
 
-        let friendly_name = build_friendly_filename(&title, &file_id, &ext);
-        let user_dest = target_dir.join(&friendly_name);
-
-        if let Err(e) = std::fs::create_dir_all(&target_dir) {
-            tracing::warn!("创建自动保存目录失败: {}", e);
-        } else if let Err(e) = std::fs::copy(&dest, &user_dest) {
-            tracing::warn!("复制文件到自动保存目录失败: {}", e);
-        } else {
-            tracing::info!("文件已自动保存: {:?}", user_dest);
-        }
+    if let Err(e) = std::fs::create_dir_all(&target_dir) {
+        tracing::warn!("创建自动保存目录失败: {}", e);
+    } else if let Err(e) = std::fs::copy(&dest, &user_dest) {
+        tracing::warn!("复制文件到自动保存目录失败: {}", e);
+    } else {
+        tracing::info!("文件已自动保存: {:?}", user_dest);
     }
 
     let dims = detect_image_dimensions(&bytes);
@@ -460,61 +436,47 @@ pub async fn save_media(
     })
 }
 
-/// Return the absolute path of `app_data_dir` so the frontend can
+/// Return the absolute data directory path so the frontend can
 /// construct asset-protocol URLs via `convertFileSrc()`.
 #[tauri::command]
-pub async fn get_media_base_path(app: AppHandle) -> Result<String, String> {
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    Ok(dir.to_string_lossy().to_string())
+pub async fn get_media_base_path(state: State<'_, AppState>) -> Result<String, String> {
+    Ok(state.data_dir.to_string_lossy().to_string())
 }
 
-/// Copy an image or video from internal storage to the user's file save directory.
-/// Saves to `file_auto_save_path/{project_folder}/export_name`.
+/// Copy an image or video from internal storage to the user's export directory.
+/// Falls back to `{data_dir}/auto-save/{project_folder}/` when no export path is set.
 #[tauri::command]
 pub async fn export_file(
-    app: AppHandle,
     state: State<'_, AppState>,
     source_path: String,
     export_name: String,
     project_id: Option<String>,
 ) -> Result<String, String> {
-    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let abs_source = app_data_dir.join(&source_path);
+    let data_dir = &state.data_dir;
+    let abs_source = data_dir.join(&source_path);
 
     if !abs_source.exists() {
         return Err(format!("源文件不存在: {}", source_path));
     }
 
-    let (base_dir, project_folder_name) = {
+    let base_dir = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        let dir = db
-            .query_row(
-                "SELECT value FROM settings WHERE key = 'file_export_path'",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-            .or_else(|| {
-                db.query_row(
-                    "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
-                    [],
-                    |row| row.get::<_, String>(0),
-                )
-                .ok()
-                .filter(|s| !s.trim().is_empty())
-            })
-            .or_else(|| {
-                db.query_row(
-                    "SELECT value FROM settings WHERE key IN ('image_export_path', 'image_auto_save_path') ORDER BY key ASC LIMIT 1",
-                    [],
-                    |row| row.get::<_, String>(0),
-                )
-                .ok()
-                .filter(|s| !s.trim().is_empty())
-            });
+        db.query_row(
+            "SELECT value FROM settings WHERE key = 'file_export_path'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+    };
 
-        let folder = if let (Some(_), Some(pid)) = (&dir, &project_id) {
+    let dir = base_dir.unwrap_or_else(|| {
+        data_dir.join("auto-save").to_string_lossy().to_string()
+    });
+
+    let target_dir = if let Some(ref pid) = project_id {
+        let folder = {
+            let db = state.db.lock().map_err(|e| e.to_string())?;
             db.query_row(
                 "SELECT title FROM projects WHERE id = ?1",
                 rusqlite::params![pid],
@@ -522,17 +484,11 @@ pub async fn export_file(
             )
             .ok()
             .map(|t| build_project_folder_name(&t, pid))
-        } else {
-            None
         };
-
-        (dir, folder)
-    };
-
-    let dir = base_dir.ok_or("请先在设置中配置「手动保存路径」或「文件自动保存路径」")?;
-
-    let target_dir = if let Some(ref folder) = project_folder_name {
-        std::path::Path::new(&dir).join(folder)
+        match folder {
+            Some(f) => std::path::Path::new(&dir).join(f),
+            None => std::path::PathBuf::from(&dir),
+        }
     } else {
         std::path::PathBuf::from(&dir)
     };
@@ -549,20 +505,18 @@ pub async fn export_file(
 }
 
 /// Open the system file explorer and highlight the given file.
-/// When an auto-save path is configured, opens the user's project folder
-/// instead of the internal app_data_dir.
+/// Prefers the user-facing copy in auto-save/ or export path over internal storage.
 #[tauri::command]
 pub async fn open_in_explorer(
-    app: AppHandle,
     state: State<'_, AppState>,
     path: String,
     project_id: Option<String>,
 ) -> Result<(), String> {
-    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let data_dir = &state.data_dir;
 
     let abs_path = if path.starts_with("media/") {
-        let user_path = resolve_user_media_path(&state, &app_data_dir, &path, &project_id);
-        user_path.unwrap_or_else(|| app_data_dir.join(&path))
+        let user_path = resolve_user_media_path(&state, data_dir, &path, &project_id);
+        user_path.unwrap_or_else(|| data_dir.join(&path))
     } else {
         std::path::PathBuf::from(&path)
     };
@@ -576,13 +530,11 @@ pub async fn open_in_explorer(
 
 fn resolve_user_media_path(
     state: &AppState,
-    app_data_dir: &std::path::Path,
+    data_dir: &std::path::Path,
     internal_path: &str,
     project_id: &Option<String>,
 ) -> Option<std::path::PathBuf> {
-    let db = state.db.lock().ok()?;
-
-    let internal_abs = app_data_dir.join(internal_path);
+    let internal_abs = data_dir.join(internal_path);
     let internal_stem = internal_abs
         .file_stem()
         .and_then(|s| s.to_str())
@@ -597,6 +549,7 @@ fn resolve_user_media_path(
         .map(|pid| &pid[..8.min(pid.len())]);
 
     let project_folder = project_id.as_ref().and_then(|pid| {
+        let db = state.db.lock().ok()?;
         db.query_row(
             "SELECT title FROM projects WHERE id = ?1",
             rusqlite::params![pid],
@@ -606,29 +559,24 @@ fn resolve_user_media_path(
         .map(|t| build_project_folder_name(&t, pid))
     });
 
-    let setting_keys = [
-        "file_export_path",
-        "image_export_path",
-        "file_auto_save_path",
-        "image_auto_save_path",
-    ];
+    let mut candidate_dirs: Vec<std::path::PathBuf> = Vec::new();
 
-    let mut candidate_dirs: Vec<String> = Vec::new();
-    for key in &setting_keys {
+    if let Ok(db) = state.db.lock() {
         if let Ok(val) = db.query_row(
-            "SELECT value FROM settings WHERE key = ?1",
-            rusqlite::params![key],
+            "SELECT value FROM settings WHERE key = 'file_export_path'",
+            [],
             |row| row.get::<_, String>(0),
         ) {
             let val = val.trim().to_string();
-            if !val.is_empty() && !candidate_dirs.contains(&val) {
-                candidate_dirs.push(val);
+            if !val.is_empty() {
+                candidate_dirs.push(std::path::PathBuf::from(val));
             }
         }
     }
 
-    for base_dir in &candidate_dirs {
-        let base = std::path::Path::new(base_dir);
+    candidate_dirs.push(data_dir.join("auto-save"));
+
+    for base in &candidate_dirs {
         if !base.is_dir() {
             continue;
         }
@@ -723,12 +671,11 @@ fn reveal_path(abs_path: &std::path::Path) -> Result<(), String> {
 
 /// Read a local file and return its content as a base64 data-URL.
 /// Accepts both relative paths (e.g. `media/images/uuid.png`) which are
-/// resolved against `app_data_dir`, and absolute paths.
+/// resolved against data_dir, and absolute paths.
 #[tauri::command]
-pub async fn read_media_base64(app: AppHandle, path: String) -> Result<String, String> {
+pub async fn read_media_base64(state: State<'_, AppState>, path: String) -> Result<String, String> {
     let abs_path = if path.starts_with("media/") {
-        let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-        app_data_dir.join(&path)
+        state.data_dir.join(&path)
     } else {
         std::path::PathBuf::from(&path)
     };

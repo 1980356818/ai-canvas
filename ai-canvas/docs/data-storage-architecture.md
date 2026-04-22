@@ -1,0 +1,674 @@
+# AICat 数据存储架构
+
+> 本文档完整梳理 AICat 桌面客户端的数据存储位置、配置体系和文件保存路径。
+
+---
+
+## 1. 数据存储总览
+
+AICat 的数据分布在 **三个独立位置**：
+
+| 存储位置 | 类型 | 内容 |
+|----------|------|------|
+| `{data_dir}/data.db` | SQLite 数据库 | 项目、卡片、连线、设置、聊天、Agent 会话 |
+| `{data_dir}/media/` | 文件目录 | AI 生成的图片/视频（内部存储，按 UUID 命名） |
+| `{data_dir}/auto-save/` | 文件目录 | AI 生成的文件自动保存副本（按项目分文件夹，友好命名） |
+| WebView localStorage | 浏览器存储 | 视口状态、登录 Token、认证信息、主题/模型偏好 |
+
+### 1.1 `data_dir` 解析策略（`resolve_data_dir`）
+
+数据目录通过 `resolve_data_dir()` **自动确定**，无需用户配置：
+
+| 平台 | 策略 | 典型路径 |
+|------|------|----------|
+| **Windows release** | **exe 所在目录/data/**（便携模式） | `D:\AICat\data\`（安装在 D 盘时） |
+| **Windows 回退 1** | 旧版升级：AppData 有数据而 exe/data 没有 → 继续用 AppData | `C:\Users\{用户}\AppData\Roaming\com.ai-canvas.desktop\` |
+| **Windows 回退 2** | exe 在 Program Files → 跳过便携模式 | `C:\Users\{用户}\AppData\Roaming\com.ai-canvas.desktop\` |
+| **Windows 回退 3** | exe 目录不可写 → 退回 AppData | `C:\Users\{用户}\AppData\Roaming\com.ai-canvas.desktop\` |
+| **Windows debug** | 开发模式始终用 AppData（防止 cargo clean 删数据） | `C:\Users\{用户}\AppData\Roaming\com.ai-canvas.desktop\` |
+| **macOS** | 系统 Application Support（平台规范） | `~/Library/Application Support/com.ai-canvas.desktop/` |
+| **Linux** | 系统 XDG data dir | `~/.local/share/com.ai-canvas.desktop/` |
+
+**`resolve_data_dir` 决策流程**（Windows release）：
+```
+exe 在 Program Files 下？ ──是──→ AppData
+         │否
+AppData 有 data.db 且 exe/data 没有？ ──是──→ AppData（旧版升级兼容）
+         │否
+能创建 exe/data/ 目录？ ──是──→ exe/data/（便携模式）
+         │否
+         └──→ AppData（最终回退）
+```
+
+**安全措施**：
+- 启动时通过 `asset_protocol_scope().allow_directory()` 动态注册 data_dir，确保图片能正常显示
+- `tauri.conf.json` 静态配置 `$APPDATA/**` 覆盖回退场景
+- 便携模式下 API Key 存于 `data.db`，位置更显眼，用户分享安装目录时需注意
+
+### 1.2 目录结构
+
+```
+{data_dir}/
+├── data.db              ← SQLite 主数据库
+├── data.db-wal          ← WAL 日志（Write-Ahead Logging）
+├── data.db-shm          ← 共享内存文件
+├── media/
+│   ├── images/          ← AI 生成的图片/视频（内部存储）
+│   │   ├── {uuid}.png
+│   │   ├── {uuid}.jpg
+│   │   ├── {uuid}.webp
+│   │   └── {uuid}.mp4
+│   └── thumbnails/      ← 缩略图（预留目录）
+└── auto-save/           ← 自动保存副本（友好命名，按项目分组）
+    ├── {项目标题}_{短ID}/
+    │   ├── 赛博猫_20260422_143021.png
+    │   ├── 风景画_20260422_143522.jpg
+    │   └── ...
+    └── {另一个项目}_{短ID}/
+        └── ...
+```
+
+> **Windows 示例**：安装到 `D:\AICat` → 数据在 `D:\AICat\data\`，数据库、图片、自动保存全部在 D 盘。
+
+---
+
+## 2. SQLite 数据库表结构
+
+数据库版本通过 `PRAGMA user_version` 管理，当前为 **v6**，共 7 张表。
+
+### 2.1 `projects` — 画布项目
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT PK | UUID |
+| title | TEXT | 项目标题 |
+| thumbnail | TEXT | 缩略图（base64 或路径） |
+| node_count | INTEGER | 卡片数量（查询时动态计算） |
+| deleted_at | TEXT | 软删除时间（v3 添加） |
+| created_at | TEXT | 创建时间 |
+| updated_at | TEXT | 最后更新时间 |
+
+### 2.2 `cards` — 画布卡片/节点
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT PK | UUID |
+| project_id | TEXT FK→projects | 所属项目 |
+| type | TEXT | 卡片类型（text/image/video/chat 等） |
+| x, y | REAL | 画布坐标 |
+| width, height | REAL | 尺寸 |
+| z_index | INTEGER | 层级 |
+| locked | INTEGER | 是否锁定 |
+| collapsed | INTEGER | 是否折叠 |
+| color | TEXT | 卡片颜色 |
+| title | TEXT | 卡片标题 |
+| data | TEXT | **核心数据，JSON 格式**（提示词、图片路径、生成参数等） |
+| created_at | TEXT | 创建时间 |
+| updated_at | TEXT | 最后更新时间 |
+
+### 2.3 `connections` — 卡片连线
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT PK | UUID |
+| project_id | TEXT FK→projects | 所属项目 |
+| source_card_id | TEXT | 起点卡片 |
+| target_card_id | TEXT | 终点卡片 |
+| created_at | TEXT | 创建时间 |
+
+### 2.4 `settings` — 全局设置（含 API KEY）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| key | TEXT PK | 设置项名称 |
+| value | TEXT | 设置值 |
+
+详见 [第4节：settings 表完整 key 清单](#4-settings-表完整-key-清单)。
+
+### 2.5 `agent_sessions` — AI Agent 会话
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT PK | UUID |
+| project_id | TEXT FK→projects | 所属项目 |
+| messages | TEXT | 对话历史 JSON 数组 |
+
+### 2.6 `chat_sessions` — 独立聊天会话
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT PK | UUID |
+| project_id | TEXT | 关联项目（可空） |
+| title | TEXT | 会话标题 |
+
+### 2.7 `chat_messages` — 聊天消息
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT PK | UUID |
+| session_id | TEXT FK→chat_sessions | 所属会话 |
+| role | TEXT | 角色（user/assistant/system） |
+| content | TEXT | 消息内容 JSON 数组 |
+| metadata | TEXT | 元数据 |
+
+---
+
+## 3. 文件保存路径体系
+
+AICat 采用 **三层文件保存**机制，自动保存路径无需用户配置：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. 内部存储（永远保存）                                        │
+│    app_data_dir/media/images/{uuid}.{ext}                    │
+│    所有 AI 生成的媒体文件都会先存到这里                           │
+│    卡片 data 字段中引用此相对路径                                │
+├─────────────────────────────────────────────────────────────┤
+│ 2. 自动保存（自动复制一份，无需配置）                             │
+│    app_data_dir/auto-save/{项目标题}_{短ID}/{友好文件名}         │
+│    每次 AI 生成文件后自动同步一份可读副本                         │
+├─────────────────────────────────────────────────────────────┤
+│ 3. 手动导出（可选，用户触发）                                    │
+│    settings key: file_export_path                             │
+│    用户手动点击「下载/导出」时，从内部存储复制到此路径               │
+│    回退：如果未设置，使用 auto-save 目录                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 3.1 内部存储
+
+- **位置**：`app_data_dir/media/images/`
+- **命名**：`{uuid}.{ext}`（如 `a1b2c3d4-e5f6-7890-abcd-ef1234567890.png`）
+- **触发**：每次 AI 生成图片/视频时自动保存
+- **引用**：卡片 `data` 字段中存储相对路径 `media/images/{uuid}.{ext}`
+- **显示**：通过 Tauri asset protocol 转换为可显示的 URL
+
+### 3.2 自动保存（自动，无需配置）
+
+- **位置**：`app_data_dir/auto-save/`
+- **工作方式**：每次 AI 生成文件后，在写入内部存储的**同时**，自动复制一份到此目录
+- **目录结构**：
+
+```
+{app_data_dir}/auto-save/
+├── {项目标题}_{项目ID前8位}/     ← 按项目分文件夹
+│   ├── 赛博猫_20260422_143021.png
+│   ├── 风景画_20260422_143522.jpg
+│   └── ...
+└── {另一个项目}_{ID前8位}/
+    └── ...
+```
+
+- **文件命名**：`{卡片标题}_{YYYYMMDD_HHMMSS}.{ext}`
+- **回退命名**：无卡片标题时使用 `{UUID前8位}_{YYYYMMDD_HHMMSS}.{ext}`
+
+### 3.3 手动导出
+
+- **设置入口**：设置 → 通用 → 导出路径
+- **存储 key**：`file_export_path`
+- **工作方式**：用户手动点击「下载/导出」按钮时，从内部存储复制到此路径
+- **回退**：如果未设置 `file_export_path`，使用 `app_data_dir/auto-save/{项目文件夹}/`
+- **提示**：导出路径和自动保存路径的文件夹结构一致（按项目分组）
+
+### 3.4 路径解析规则（Rust 侧）
+
+**save_media（AI 生成时自动保存）**：
+```
+1. 写入内部存储 → app_data_dir/media/images/{uuid}.{ext}
+2. 自动复制到  → app_data_dir/auto-save/{项目文件夹}/{友好文件名}
+```
+
+**export_file（手动导出）**：
+```
+file_export_path → app_data_dir/auto-save/ → 报错
+```
+
+**open_in_explorer（打开文件所在位置）**：
+```
+1. 优先在 file_export_path 中查找用户友好的副本
+2. 回退到 app_data_dir/auto-save/ 中查找
+3. 最终回退到 app_data_dir/media/ 内部存储
+```
+
+---
+
+## 4. settings 表完整 key 清单
+
+### 4.1 API KEY 相关
+
+| key | 说明 | 写入来源 |
+|-----|------|----------|
+| `openai_api_key` | 当前活跃的 Comfly API Key | 迁移 v4 / 前端设置 / migrateApiConfig |
+| `openai_base_url` | Comfly Base URL | 迁移 v4 / 前端设置 |
+| `comfly_api_key` | Comfly 当前活跃 key（同 openai_api_key） | 前端设置保存 |
+| `comfly_base_url` | Comfly Base URL | 前端设置保存 |
+| `comfly_api_keys` | 所有 Comfly key 列表（JSON 数组） | 前端设置保存 |
+| `comfly_active_key_id` | 当前选中的 key ID | 前端设置保存 |
+| `comfly_enabled` | 是否启用 Comfly | 前端设置保存 |
+| `jijing_api_key` | 极境 API Key | 前端设置保存 |
+| `jijing_base_url` | 极境 Base URL | 前端设置保存 |
+| `jijing_api_keys` | 所有极境 key 列表（JSON 数组） | 前端设置保存 |
+| `jijing_active_key_id` | 当前选中的极境 key ID | 前端设置保存 |
+| `jijing_enabled` | 是否启用极境 | 前端设置保存 |
+
+### 4.2 文件路径相关
+
+| key | 说明 | 状态 |
+|-----|------|------|
+| `file_export_path` | 手动导出路径 | **当前使用** |
+
+> **已废弃的 key**（旧数据库中可能存在，代码不再读写）：
+> - `file_auto_save_path`（旧版自动保存路径 — 现改为固定的 `app_data_dir/auto-save/`）
+> - `image_auto_save_path`（更早期兼容 key）
+> - `image_export_path`（更早期兼容 key）
+
+### 4.3 `api_keys` JSON 格式
+
+```json
+[
+  { "id": "a1b2c3d4", "name": "生产环境", "key": "sk-xxxx..." },
+  { "id": "e5f6g7h8", "name": "测试环境", "key": "sk-yyyy..." }
+]
+```
+
+---
+
+## 5. API KEY 生命周期
+
+```
+┌─ 首次启动（数据库迁移 v4）──────────────────────────────────┐
+│  Rust: INSERT OR IGNORE INTO settings                     │
+│        openai_base_url = "https://ai.comfly.chat"         │
+│  → 只写入默认 base_url，不写入 API Key                      │
+│  → API Key 完全由用户在设置界面配置，不打包在程序中             │
+└──────────────────────────────────────────────────────────┘
+                          ↓
+┌─ 每次启动（migrateApiConfig）───────────────────────────────┐
+│  JS: 检查 openai_base_url 是否已存在                        │
+│  → 如果不存在（新用户），写入默认 base_url                     │
+│  → 如果已存在，跳过                                         │
+│  → 不涉及任何 API Key 操作                                  │
+└──────────────────────────────────────────────────────────┘
+                          ↓
+┌─ 用户配置 API Key ─────────────────────────────────────────┐
+│  用户在设置界面输入 API Key → 存入 SQLite settings 表         │
+│  完全本地存储，不随程序分发                                    │
+└──────────────────────────────────────────────────────────┘
+                          ↓
+┌─ AI 请求时 ──────────────────────────────────────────────┐
+│  前端: invoke("ai_proxy", { provider, endpoint, body })   │
+│  Rust: read_api_config(&db, &provider)                    │
+│        → SELECT value FROM settings                       │
+│          WHERE key = '{provider}_api_key'                  │
+│        → 拼接 base_url + endpoint，附带 Authorization 头    │
+│        → 代理请求到 AI API                                 │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 6. WebView localStorage 存储
+
+以 `ai_canvas_` 为前缀存储在 WebView 的 localStorage 中：
+
+| key | 说明 | 敏感 |
+|-----|------|------|
+| `ai_canvas_auth_token` | 用户登录 JWT Token | 是 |
+| `ai_canvas_auth_user` | 用户信息 JSON（id, username, email, status） | 否 |
+| `ai_canvas_saved_credentials` | 保存的登录凭证 `{username, password}`（明文） | 是 |
+| `ai_canvas_auto_login` | 是否启用自动登录（boolean） | 否 |
+| `ai_canvas_server_base_url` | 后端服务器地址（默认 `http://101.37.80.236`） | 否 |
+| `ai_canvas_viewport_{projectId}` | 每个项目的画布视口状态（缩放/位置） | 否 |
+| `ai_canvas_setting_*` | 浏览器模式下的设置备份 | 否 |
+
+以 `ai-canvas:` 为前缀的 Zustand 持久化设置：
+
+| key | 说明 |
+|-----|------|
+| `ai-canvas:lastImageSize` | 上次选择的图片尺寸 |
+| `ai-canvas:theme` | 主题偏好（light/dark/system） |
+| `ai-canvas:lastModel:{category}` | 每类任务上次选择的模型 |
+
+> localStorage 位于 WebView 的缓存目录中，清除应用数据或 WebView 缓存会丢失。
+
+---
+
+## 7. 涉及的源文件清单
+
+### 后端 (Rust / src-tauri)
+
+| 文件 | 职责 |
+|------|------|
+| `src/lib.rs` | `resolve_data_dir` 解析数据目录、创建子目录（含 `auto-save/`）、打开数据库、注册命令 |
+| `src/db/mod.rs` | 数据库初始化（WAL 模式、外键、busy_timeout） |
+| `src/db/migrations.rs` | 6 个版本的数据库迁移，含 API KEY 种子数据 |
+| `src/commands/project.rs` | 项目 CRUD、卡片 CRUD、连线 CRUD、`get_setting`/`set_setting` |
+| `src/commands/config.rs` | `read_api_config()` 从 settings 读取 provider 的 key/url |
+| `src/commands/ai.rs` | AI 代理、`save_media`、`export_file`、`open_in_explorer`、`read_media_base64` |
+| `src/commands/chat.rs` | 聊天会话和消息 CRUD |
+| `src/commands/gateway.rs` | 模型列表、任务轮询、连接验证 |
+| `src/commands/clipboard.rs` | 剪贴板读写 |
+
+### 前端 (TypeScript / src)
+
+#### 平台层 (platform/)
+| 文件 | 职责 |
+|------|------|
+| `platform/index.ts` | 统一导出所有平台 API |
+| `platform/runtime.ts` | Tauri 环境检测、`invoke`/`listen` 懒加载 |
+| `platform/storage.ts` | localStorage 封装（`lsGet`/`lsSet`） |
+| `platform/settings.api.ts` | `getSetting`/`setSetting`、`migrateApiConfig`、`hasApiKey` |
+| `platform/media.api.ts` | `saveMedia`/`readMediaBase64` Rust 命令桥接 |
+| `platform/viewport.api.ts` | 视口状态读写（localStorage） |
+| `platform/auth.api.ts` | 登录 Token 存储（localStorage） |
+| `platform/ai.api.ts` | AI 代理/流式/模型列表 Rust 命令桥接 |
+| `platform/project.api.ts` | 项目 CRUD Rust 命令桥接 |
+| `platform/card.api.ts` | 卡片 CRUD Rust 命令桥接 |
+| `platform/connection.api.ts` | 连线 CRUD Rust 命令桥接 |
+| `platform/chat.api.ts` | 聊天 CRUD Rust 命令桥接 |
+| `platform/dialog.api.ts` | 系统对话框（目录选择） |
+| `platform/clipboard.api.ts` | 剪贴板桥接 |
+| `platform/file-drop.ts` | 文件拖放处理 |
+
+#### 核心库 (lib/)
+| 文件 | 职责 |
+|------|------|
+| `lib/media.ts` | 媒体持久化、显示 URL 转换、导出、后台重试 |
+| `lib/autoSave.ts` | 画布卡片自动保存管理器（脏标记 + 定时批量写库） |
+| `lib/tauri.ts` | 兼容层（重导出 platform/，仅 `lib/media.ts` 引用，待清理） |
+| `lib/mappers.ts` | 前后端数据格式映射 |
+| `lib/dataFlow.ts` | 数据流处理 |
+| `lib/errors.ts` | 错误类型定义 |
+| `lib/chatService.ts` | 聊天服务 |
+| `lib/history.ts` | 操作历史（撤销/重做） |
+
+#### 状态管理 (stores/)
+| 文件 | 职责 |
+|------|------|
+| `stores/settingsStore.ts` | 主题、图片尺寸、模型偏好（Zustand + localStorage） |
+| `stores/projectStore.ts` | 项目列表和当前项目 |
+| `stores/cardStore.ts` | 卡片数据 |
+| `stores/connectionStore.ts` | 连线数据 |
+| `stores/canvasStore.ts` | 画布视口和交互状态 |
+| `stores/uiStore.ts` | UI 状态（保存指示、弹窗等） |
+| `stores/chatStore.ts` | 聊天状态 |
+| `stores/authStore.ts` | 认证状态 |
+| `stores/providerStore.ts` | AI Provider 状态 |
+| `stores/agentStore.ts` | AI Agent 状态 |
+
+#### UI (features/)
+| 文件 | 职责 |
+|------|------|
+| `features/overlays/SettingsDialog.tsx` | 设置界面（API Key 管理 + 导出路径选择） |
+
+### 配置文件
+
+| 文件 | 关键配置 |
+|------|----------|
+| `tauri.conf.json` | `identifier: "com.ai-canvas.desktop"` → 决定 app_data_dir 路径 |
+| `.env` | `VITE_COMFLY_BASE_URL`（仅 base URL，不含 API Key） |
+| `.github/workflows/build.yml` | CI 中注入 `VITE_COMFLY_BASE_URL` 环境变量 |
+
+---
+
+## 8. 架构设计决策记录
+
+### 8.1 数据目录策略：便携模式 vs 系统目录
+
+**决策**：Windows 使用 exe 同级 `data/` 目录（便携），macOS/Linux 使用系统目录。
+
+**原因**：
+- Windows 用户通常选择安装到非系统盘（D:），期望数据跟随安装路径
+- macOS 应用在 `.app` bundle 内，不适合存放用户数据
+- 便携模式下换电脑只需拷贝整个安装目录
+
+**实现**：`lib.rs` 中的 `resolve_data_dir()` 函数，Windows 优先尝试 exe 目录，失败则回退到 AppData。
+
+### 8.2 自动保存路径简化
+
+**变更前**（4 个冗余 key + 复杂回退链）：
+```
+save_media:    file_auto_save_path → image_auto_save_path → 不保存
+export_file:   file_export_path → file_auto_save_path → image_export_path → image_auto_save_path → 报错
+open_explorer: 扫描全部 4 个 key 目录
+```
+
+**变更后**（固定路径 + 1 个可选 key）：
+```
+save_media:    {data_dir}/auto-save/{项目文件夹}/  （固定，永远保存）
+export_file:   file_export_path → {data_dir}/auto-save/  （1 级回退）
+open_explorer: file_export_path → {data_dir}/auto-save/ → {data_dir}/media/  （3 级回退）
+```
+
+### 8.3 统一数据目录访问
+
+**变更前**：`ai.rs` 中 7 处分散调用 `app.path().app_data_dir()`。
+
+**变更后**：`AppState` 持有 `data_dir: PathBuf`，所有命令从 `state.data_dir` 读取。5 个命令移除了不再需要的 `AppHandle` 参数。
+
+### 8.4 保留未删的部分
+
+| 内容 | 原因 |
+|------|------|
+| `lib/tauri.ts` 兼容层 | 仅 `lib/media.ts` 引用已改为直接 import `@/platform`，文件暂保留 |
+| DB 中已有的旧 key 行 | 不主动删除数据库行，只是代码不再读写 |
+| 数据库迁移 v1-v6 代码 | 确保旧版本升级正常 |
+
+---
+
+## 9. 数据便携性
+
+### Windows（便携模式 — 新安装）
+
+```
+D:\AICat\                    ← 安装目录
+├── AICat.exe                ← 程序
+└── data\                    ← 所有用户数据
+    ├── data.db              ← 含 API Key，分享时注意
+    ├── media/images/
+    └── auto-save/
+```
+
+- 换电脑：整个 `D:\AICat\` 目录拷走即可
+- **安全提示**：`data.db` 中存储了 API Key，分享/备份安装目录时需注意
+
+### Windows 卸载/重装安全性
+
+| 场景 | 数据是否安全 | 原因 |
+|------|------------|------|
+| 覆盖安装（不卸载） | **安全** | 安装器只覆盖 exe，不碰 data/ |
+| 卸载后原路径重装 | **安全** | NSIS 卸载器不递归删 $INSTDIR，data/ 保留 |
+| 卸载后换路径重装 | **旧数据孤立** | 新路径无数据，旧路径 data/ 残留 |
+| 手动删除安装文件夹 | **数据丢失** | data/ 在安装目录中，一起被删 |
+
+**保护措施**：
+- NSIS 卸载 hook（`NSIS_HOOK_PREUNINSTALL`）：检测到 `$INSTDIR\data\data.db` 时弹出提醒
+- 卸载程序本身**不会删除** data/ 目录
+
+### Windows（旧版升级）
+
+旧版用户升级后，数据**自动留在 AppData**（不会迁移到 exe/data），确保升级不丢数据。
+如果用户希望迁移到便携模式，可手动将 AppData 中的 `data.db` 和 `media/` 拷贝到 `exe/data/`。
+
+### macOS
+
+```
+~/Library/Application Support/com.ai-canvas.desktop/
+├── data.db
+├── media/images/
+└── auto-save/
+```
+
+- 遵循 macOS 标准数据存储规范
+- 换电脑：需手动复制此目录
+
+---
+
+## 10. 设备绑定（一机一码）
+
+### 10.1 整体架构
+
+```
+┌─ 客户端（Tauri Rust）─────────────────────────────────────┐
+│  get_machine_code()     [待实现]                           │
+│  ├─ Windows: HKLM\...\Cryptography\MachineGuid            │
+│  └─ macOS:   ioreg IOPlatformUUID                         │
+│  → 拼接 "ai-canvas:" + 原始ID → SHA-256 → 取前 32 字符     │
+└────────────────────────────────────────────────────────────┘
+                          ↓ machineCode
+┌─ 前端（React）──────────────────────────────────────────────┐
+│  authStore.login(username, password)    [待修改]             │
+│  → invoke("get_machine_code") → machineCode                │
+│  → apiLogin(username, password, machineCode)                │
+└────────────────────────────────────────────────────────────┘
+                          ↓ POST /api/auth/login
+┌─ 服务端（Spring Boot）—— 已实现 ─────────────────────────────┐
+│  AuthService.login()                                       │
+│  → if machineCode 非空:                                     │
+│       DeviceBindService.checkOrBind(userId, machineCode)    │
+│       ├─ 无绑定记录 → 自动绑定（首台设备）                     │
+│       ├─ 已绑定且匹配 → 通过                                 │
+│       └─ 已绑定但不匹配 → 抛出 DEVICE_MISMATCH(40303)        │
+│  → if machineCode 为空: 跳过校验  ← 当前状态                  │
+└────────────────────────────────────────────────────────────┘
+```
+
+### 10.2 服务端实现（已完成）
+
+#### 数据库表
+
+```sql
+-- user_device：一用户一设备（UNIQUE KEY uk_user_id）
+CREATE TABLE user_device (
+    id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id       BIGINT NOT NULL,
+    machine_code  VARCHAR(64) NOT NULL COMMENT '机器码 SHA-256',
+    device_info   VARCHAR(256),
+    bound_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    bound_ip      VARCHAR(64),
+    UNIQUE KEY uk_user_id (user_id),
+    KEY idx_machine_code (machine_code)
+);
+
+-- unbind_log：解绑操作审计
+CREATE TABLE unbind_log (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id          BIGINT NOT NULL,
+    old_machine_code VARCHAR(64),
+    new_machine_code VARCHAR(64),
+    ip               VARCHAR(64),
+    operator         VARCHAR(16) DEFAULT 'user',   -- 'user' 或 'admin'
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- sys_config 相关键
+-- unbind_limit_per_month = 1     每月用户自助解绑次数
+-- unbind_cooldown_days = 0       两次解绑最短间隔天数
+```
+
+#### API 端点
+
+| 端点 | 方法 | 说明 | 状态 |
+|------|------|------|------|
+| `/api/auth/login` | POST | 登录时校验 machineCode | 已实现（machineCode 可选） |
+| `/api/user/device-info` | GET | 查询当前设备绑定信息和解绑余额 | 已实现 |
+| `/api/user/unbind-device` | POST | 用户自助解绑并绑定新设备（有频率限制） | 已实现 |
+| `/api/admin/user/force-unbind` | POST | 管理员强制解绑（不受频率限制） | 已实现 |
+
+#### 错误码
+
+| 错误码 | 枚举名 | 含义 |
+|--------|--------|------|
+| 40303 | `DEVICE_MISMATCH` | 当前设备与绑定设备不同 |
+| 40304 | `UNBIND_LIMIT` | 本月解绑次数已用完 |
+| 40305 | `UNBIND_COOLDOWN` | 解绑操作过于频繁 |
+
+#### 核心逻辑（DeviceBindService）
+
+| 方法 | 行为 |
+|------|------|
+| `checkOrBind(userId, machineCode, ...)` | 无绑定 → 自动绑定首台设备；已绑定且匹配 → 通过；不匹配 → 抛异常 |
+| `unbindAndRebind(userId, newCode, ..., operator)` | operator="user" 时检查月度限额，删旧绑定+写新绑定+写解绑日志 |
+| `getDeviceInfo(userId)` | 返回绑定状态、脱敏机器码、解绑余额（已用/剩余） |
+
+### 10.3 客户端现状（未实现）
+
+当前客户端的断裂点：
+
+| 组件 | 现状 | 问题 |
+|------|------|------|
+| Rust 命令 | **不存在** `get_machine_code` | 无法获取硬件标识 |
+| `authStore.ts` | `login()` 不传 machineCode | 服务端始终跳过校验 |
+| `LoginWindow.tsx` | 自动登录不传 machineCode | 同上 |
+| `deviceInfo` 参数 | 传 `navigator.userAgent` | 不是唯一标识，无法区分设备 |
+| 错误处理 | 无 DEVICE_MISMATCH 处理 | 即使传了 machineCode 也没有 UI 反馈 |
+| 设备管理 UI | 不存在 | 用户无法查看/解绑设备 |
+
+### 10.4 实施计划
+
+#### 阶段一：机器码生成（Rust）
+
+**新建文件**：`src-tauri/src/commands/device.rs`
+
+**Cargo.toml 新增依赖**：
+- `sha2 = "0.10"` — SHA-256 哈希
+
+**跨平台机器码获取策略**：
+
+| 平台 | 数据源 | 稳定性 | 获取方式 |
+|------|--------|--------|---------|
+| Windows | `HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid` | 重装系统才变 | `std::process::Command` 执行 `reg query` |
+| macOS | `IOPlatformUUID` | 硬件级，几乎不变 | `std::process::Command` 执行 `ioreg` 解析 |
+
+**处理流程**：
+```
+原始 UUID
+  → 拼接 "ai-canvas:" + UUID   （加盐防跨应用关联）
+  → SHA-256 哈希
+  → 取前 32 位十六进制          （最终 machineCode）
+```
+
+**降级策略**：如果获取硬件 ID 失败（权限不足等），生成随机 UUID 并持久化到 `{data_dir}/machine_id`，后续读取此文件。
+
+**改动清单**：
+| 文件 | 改动 |
+|------|------|
+| `src-tauri/src/commands/device.rs` | 新建，实现 `get_machine_code` 命令 |
+| `src-tauri/src/commands/mod.rs` | 添加 `pub mod device;` |
+| `src-tauri/src/lib.rs` | 注册 `commands::device::get_machine_code` |
+| `src-tauri/Cargo.toml` | 添加 `sha2 = "0.10"` |
+
+#### 阶段二：登录流程对接（前端）
+
+| 文件 | 改动 |
+|------|------|
+| `stores/authStore.ts` | `login()` 签名改为 `login(username, password, machineCode?)`；内部调用 `invoke("get_machine_code")` 获取机器码后传给 `apiLogin` |
+| `platform/auth.api.ts` | `apiLogin` 签名不变（machineCode 已是可选参数），无需改动 |
+| `features/auth/LoginWindow.tsx` | 手动登录和自动登录前都先 `invoke("get_machine_code")`，传入 `login()` |
+
+#### 阶段三：错误处理与设备管理 UI
+
+**LoginWindow.tsx 错误处理**：
+
+| 服务端错误码 | 前端行为 |
+|-------------|---------|
+| `40303` DEVICE_MISMATCH | 显示"当前设备与绑定设备不同"，提供"解绑并绑定此设备"按钮 |
+| `40304` UNBIND_LIMIT | 显示"本月解绑次数已用完，请联系管理员" |
+| `40305` UNBIND_COOLDOWN | 显示"操作过于频繁，请稍后再试" |
+
+**设备管理（可选，SettingsDialog 或独立页面）**：
+- 调用 `GET /api/user/device-info` 显示：绑定状态、脱敏机器码、绑定时间、剩余解绑次数
+- 提供"解绑设备"按钮，调用 `POST /api/user/unbind-device`
+
+### 10.5 边界情况
+
+| 场景 | 行为 | 说明 |
+|------|------|------|
+| 首次登录（无绑定） | 自动绑定当前设备 | 服务端 `checkOrBind` 自动 INSERT |
+| 同设备重装系统（Win） | MachineGuid 变化，视为新设备 | 需要解绑操作 |
+| 同设备重装系统（Mac） | IOPlatformUUID 不变 | 自动通过 |
+| 硬件 ID 获取失败 | 使用本地持久化的随机 UUID | 该 UUID 跟随 data_dir，便携拷贝仍有效 |
+| 便携安装拷贝到新机器 | 硬件 ID 不同 → DEVICE_MISMATCH | 需要解绑 |
+| machineCode 为空（旧版客户端） | 服务端跳过校验 | 向后兼容，不会阻止登录 |
+| 虚拟机/容器 | 可能共享宿主机 UUID | 可接受 |
+| 管理员强制解绑 | 不受月度限额 | 通过后台管理面板操作 |

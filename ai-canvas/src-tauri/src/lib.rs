@@ -42,6 +42,60 @@ pub struct AppState {
     pub http_client: reqwest::Client,
     pub stream_client: reqwest::Client,
     pub active_streams: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    pub data_dir: std::path::PathBuf,
+}
+
+/// 解析数据存储目录。策略：
+///
+/// - **Windows release**：优先使用 exe 同级 `data/` 目录（便携模式），
+///   但如果旧版 AppData 中已有数据库而 exe/data 中没有，继续使用 AppData（升级兼容）。
+///   Program Files 下安装或 exe 目录不可写时自动回退到 AppData。
+/// - **Windows debug / macOS / Linux**：始终使用系统 app_data_dir。
+fn resolve_data_dir(app: &tauri::App) -> std::path::PathBuf {
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .expect("failed to resolve app data dir");
+
+    #[cfg(target_os = "windows")]
+    {
+        if cfg!(debug_assertions) {
+            tracing::info!("dev mode: using app_data_dir");
+            return app_data;
+        }
+
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(exe_dir) = exe.parent() {
+                let exe_dir_str = exe_dir.to_string_lossy().to_lowercase();
+                if exe_dir_str.contains("program files") {
+                    tracing::info!("exe in Program Files, using app_data_dir");
+                    return app_data;
+                }
+
+                let candidate = exe_dir.join("data");
+                let app_data_has_db = app_data.join("data.db").exists();
+                let exe_data_has_db = candidate.join("data.db").exists();
+
+                if app_data_has_db && !exe_data_has_db {
+                    tracing::info!(
+                        "upgrade detected: AppData has data.db but exe/data does not, staying with AppData"
+                    );
+                    return app_data;
+                }
+
+                if std::fs::create_dir_all(&candidate).is_ok() {
+                    return candidate;
+                }
+
+                tracing::warn!(
+                    "cannot create {:?}, falling back to AppData",
+                    candidate
+                );
+            }
+        }
+    }
+
+    app_data
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -52,16 +106,18 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let app_data_dir = app
-                .path()
-                .app_data_dir()
-                .expect("failed to resolve app data dir");
+            let data_dir = resolve_data_dir(app);
 
-            std::fs::create_dir_all(&app_data_dir)?;
-            std::fs::create_dir_all(app_data_dir.join("media/images"))?;
-            std::fs::create_dir_all(app_data_dir.join("media/thumbnails"))?;
+            std::fs::create_dir_all(&data_dir)?;
+            std::fs::create_dir_all(data_dir.join("media/images"))?;
+            std::fs::create_dir_all(data_dir.join("media/thumbnails"))?;
+            std::fs::create_dir_all(data_dir.join("auto-save"))?;
 
-            let db_path = app_data_dir.join("data.db");
+            if let Err(e) = app.asset_protocol_scope().allow_directory(&data_dir, true) {
+                tracing::warn!("failed to add data_dir to asset scope: {}", e);
+            }
+
+            let db_path = data_dir.join("data.db");
             let conn = db::init(&db_path)?;
 
             let http_client = reqwest::Client::builder()
@@ -82,9 +138,10 @@ pub fn run() {
                 http_client,
                 stream_client,
                 active_streams: Mutex::new(HashMap::new()),
+                data_dir: data_dir.clone(),
             });
 
-            tracing::info!("app initialized, data dir: {:?}", app_data_dir);
+            tracing::info!("app initialized, data dir: {:?}", data_dir);
 
             #[cfg(target_os = "macos")]
             {
@@ -141,6 +198,7 @@ pub fn run() {
             commands::chat::load_chat_messages,
             commands::chat::save_chat_message,
             commands::chat::clear_chat_messages,
+            commands::device::get_machine_code,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

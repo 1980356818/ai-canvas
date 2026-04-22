@@ -20,6 +20,7 @@ import {
   LogOut,
   UserCircle,
   KeyRound,
+  Monitor,
 } from "lucide-react";
 import {
   getSetting,
@@ -32,7 +33,9 @@ import { registry } from "@/providers/registry";
 import { modelService } from "@/services/models";
 import { useUIStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
-import { apiChangePassword } from "@/platform/auth.api";
+import { apiChangePassword, apiGetDeviceInfo, apiUnbindDevice, type DeviceInfo } from "@/platform/auth.api";
+import { isTauri } from "@/platform/runtime";
+import { invoke } from "@tauri-apps/api/core";
 import { isPlatformVisible } from "@/config/platforms";
 import { cn } from "@/lib/utils";
 
@@ -82,7 +85,6 @@ export default function SettingsDialog() {
 
   const [tab, setTab] = useState<SettingsTab>("platforms");
   const [platforms, setPlatforms] = useState<PlatformState[]>([]);
-  const [autoSavePath, setAutoSavePath] = useState("");
   const [exportPath, setExportPath] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -90,12 +92,7 @@ export default function SettingsDialog() {
     if (!visible) return;
 
     (async () => {
-      const [fsp, legacyAsp, exp] = await Promise.all([
-        getSetting("file_auto_save_path"),
-        getSetting("image_auto_save_path"),
-        getSetting("file_export_path"),
-      ]);
-      setAutoSavePath(fsp || legacyAsp || "");
+      const exp = await getSetting("file_export_path");
       setExportPath(exp || "");
 
       const states: PlatformState[] = [];
@@ -173,11 +170,6 @@ export default function SettingsDialog() {
     [updatePlatform],
   );
 
-  const handlePickAutoSavePath = useCallback(async () => {
-    const dir = await pickDirectory();
-    if (dir) setAutoSavePath(dir);
-  }, []);
-
   const handlePickExportPath = useCallback(async () => {
     const dir = await pickDirectory();
     if (dir) setExportPath(dir);
@@ -220,7 +212,6 @@ export default function SettingsDialog() {
       }
       await registry.saveConfigs();
 
-      await setSetting("file_auto_save_path", autoSavePath.trim());
       await setSetting("file_export_path", exportPath.trim());
 
       invalidateApiKeyCache();
@@ -234,7 +225,7 @@ export default function SettingsDialog() {
     } finally {
       setSaving(false);
     }
-  }, [platforms, autoSavePath, exportPath, toggleSettings]);
+  }, [platforms, exportPath, toggleSettings]);
 
   if (!visible) return null;
 
@@ -322,19 +313,17 @@ export default function SettingsDialog() {
 
           {tab === "general" && (
             <div className="space-y-4">
-              <PathField
-                label="自动保存路径"
-                hint="AI 生成的图片/视频自动保存到此目录"
-                value={autoSavePath}
-                placeholder="未设置则仅保存到应用内部"
-                onPick={handlePickAutoSavePath}
-                onClear={() => setAutoSavePath("")}
-              />
+              <div className="rounded-lg border border-border p-3">
+                <p className="text-xs font-medium">自动保存</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  AI 生成的图片/视频会自动保存到应用数据目录的 auto-save 文件夹中，按项目分组
+                </p>
+              </div>
               <PathField
                 label="导出路径"
-                hint="手动下载时保存到此目录"
+                hint="手动下载时保存到此目录（未设置则使用自动保存目录）"
                 value={exportPath}
-                placeholder="未设置则使用自动保存路径"
+                placeholder="未设置则使用 auto-save 目录"
                 onPick={handlePickExportPath}
                 onClear={() => setExportPath("")}
               />
@@ -707,6 +696,40 @@ function AccountTab({ onClose }: { onClose: () => void }) {
   const [showOldPwd, setShowOldPwd] = useState(false);
   const [showNewPwd, setShowNewPwd] = useState(false);
 
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [deviceLoading, setDeviceLoading] = useState(false);
+  const [unbindLoading, setUnbindLoading] = useState(false);
+
+  useEffect(() => {
+    setDeviceLoading(true);
+    apiGetDeviceInfo()
+      .then(setDeviceInfo)
+      .catch(() => {})
+      .finally(() => setDeviceLoading(false));
+  }, []);
+
+  const handleUnbind = async () => {
+    setUnbindLoading(true);
+    try {
+      let mc: string | undefined;
+      if (isTauri) {
+        try { mc = await invoke<string>("get_machine_code"); } catch {}
+      }
+      if (!mc) {
+        addToast({ type: "error", title: "无法获取当前设备标识", duration: 3000 });
+        return;
+      }
+      await apiUnbindDevice(mc, navigator.userAgent);
+      addToast({ type: "success", title: "设备已解绑并绑定当前设备", duration: 3000 });
+      const updated = await apiGetDeviceInfo();
+      setDeviceInfo(updated);
+    } catch (err: any) {
+      addToast({ type: "error", title: err.message || "解绑失败", duration: 4000 });
+    } finally {
+      setUnbindLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     logout();
     onClose();
@@ -863,6 +886,65 @@ function AccountTab({ onClose }: { onClose: () => void }) {
               </button>
             </div>
           </div>
+        )}
+      </div>
+
+      {/* Device info */}
+      <div className="rounded-lg border border-border p-4">
+        <div className="mb-2 flex items-center gap-2">
+          <Monitor className="h-3.5 w-3.5 text-muted-foreground" />
+          <h3 className="text-xs font-medium text-foreground">设备绑定</h3>
+        </div>
+        {deviceLoading ? (
+          <div className="flex items-center gap-2 py-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            <span className="text-[11px] text-muted-foreground">加载中...</span>
+          </div>
+        ) : deviceInfo ? (
+          <div className="space-y-2">
+            {deviceInfo.bound ? (
+              <>
+                <div className="space-y-1 text-[11px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">设备标识</span>
+                    <span className="font-mono text-foreground">{deviceInfo.machineCode ?? "—"}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">绑定时间</span>
+                    <span className="text-foreground">
+                      {deviceInfo.boundAt ? new Date(deviceInfo.boundAt).toLocaleString("zh-CN") : "—"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">本月解绑余额</span>
+                    <span className={cn(
+                      "font-medium",
+                      deviceInfo.unbindRemaining > 0 ? "text-foreground" : "text-amber-600",
+                    )}>
+                      {deviceInfo.unbindRemaining} / {deviceInfo.unbindLimit}
+                    </span>
+                  </div>
+                </div>
+                {deviceInfo.unbindRemaining > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleUnbind}
+                    disabled={unbindLoading}
+                    className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-md border border-amber-500/30 px-3 py-1.5 text-[11px] text-amber-600 transition-colors hover:bg-amber-500/10 disabled:opacity-50"
+                  >
+                    {unbindLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+                    解绑旧设备，绑定当前设备
+                  </button>
+                )}
+              </>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                尚未绑定设备，下次登录时将自动绑定当前设备。
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">无法获取设备信息</p>
         )}
       </div>
 

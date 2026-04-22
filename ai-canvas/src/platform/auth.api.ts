@@ -54,6 +54,14 @@ function authHeaders(): Record<string, string> {
   return { Authorization: `Bearer ${token}` };
 }
 
+export class BizError extends Error {
+  code: number;
+  constructor(code: number, msg: string) {
+    super(msg);
+    this.code = code;
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const resp = await fetch(`${getBaseUrl()}${path}`, {
     method,
@@ -66,7 +74,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
   const json: ApiResult<T> = await resp.json();
   if (json.code !== 0) {
-    throw new Error(json.msg || "请求失败");
+    throw new BizError(json.code, json.msg || "请求失败");
   }
   return json.data;
 }
@@ -161,5 +169,29 @@ export async function apiChangePassword(
   await request<null>("POST", "/api/user/change-password", {
     oldPassword,
     newPassword,
+  });
+}
+
+export interface DeviceInfo {
+  bound: boolean;
+  machineCode: string | null;
+  deviceInfo: string | null;
+  boundAt: string | null;
+  unbindLimit: number;
+  unbindUsed: number;
+  unbindRemaining: number;
+}
+
+export async function apiGetDeviceInfo(): Promise<DeviceInfo> {
+  return request<DeviceInfo>("GET", "/api/user/device-info");
+}
+
+export async function apiUnbindDevice(
+  newMachineCode: string,
+  deviceInfo?: string,
+): Promise<void> {
+  await request<null>("POST", "/api/user/unbind-device", {
+    newMachineCode,
+    deviceInfo,
   });
 }

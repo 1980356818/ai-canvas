@@ -109,12 +109,8 @@ fn migrate_v3(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn migrate_v4(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
-    tracing::info!("running migration v4: seed comfly.chat API config");
+    tracing::info!("running migration v4: seed default API base URL");
 
-    conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES (?1, ?2)",
-        rusqlite::params!["openai_api_key", "sk-V3CT1nzrBVT39hZezULUjczUEy9e3jiCZCK8qBTRbbbfOZB6"],
-    )?;
     conn.execute(
         "INSERT OR IGNORE INTO settings (key, value) VALUES (?1, ?2)",
         rusqlite::params!["openai_base_url", "https://ai.comfly.chat"],

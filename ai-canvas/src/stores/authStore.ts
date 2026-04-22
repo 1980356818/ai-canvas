@@ -8,6 +8,7 @@ import {
   getToken,
   getStoredUser,
   clearAuth,
+  BizError,
   type AuthUser,
 } from "@/platform/auth.api";
 
@@ -21,11 +22,12 @@ interface AuthState {
   authView: AuthView;
   loading: boolean;
   error: string | null;
+  errorCode: number | null;
   registerSuccess: { username: string; password: string } | null;
 
   initialize: () => void;
   setAuthView: (view: AuthView) => void;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, machineCode?: string) => Promise<void>;
   register: (username: string, password: string, email?: string) => Promise<void>;
   redeem: (code: string) => Promise<void>;
   resetPassword: (username: string, email: string, newPassword: string) => Promise<void>;
@@ -42,6 +44,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   authView: "login",
   loading: false,
   error: null,
+  errorCode: null,
   registerSuccess: null,
 
   initialize: () => {
@@ -64,10 +67,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setAuthView: (view) => set({ authView: view, error: null }),
 
-  login: async (username, password) => {
-    set({ loading: true, error: null });
+  login: async (username, password, machineCode) => {
+    set({ loading: true, error: null, errorCode: null });
     try {
-      const result = await apiLogin(username, password);
+      const result = await apiLogin(username, password, machineCode);
       set({
         authenticated: true,
         restricted: result.restricted,
@@ -76,7 +79,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         authView: result.restricted ? "redeem" : "login",
       });
     } catch (e: any) {
-      set({ loading: false, error: e.message || "登录失败" });
+      const code = e instanceof BizError ? e.code : null;
+      set({ loading: false, error: e.message || "登录失败", errorCode: code });
       throw e;
     }
   },
@@ -147,5 +151,5 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 
-  clearError: () => set({ error: null }),
+  clearError: () => set({ error: null, errorCode: null }),
 }));

@@ -24,7 +24,6 @@ permissions:
 env:
   APP_NAME: AICat
   CARGO_INCREMENTAL: 0
-  VITE_COMFLY_API_KEY: sk-V3CT1nzrBVT39hZezULUjczUEy9e3jiCZCK8qBTRbbbfOZB6
   VITE_COMFLY_BASE_URL: https://ai.comfly.chat
 
 jobs:

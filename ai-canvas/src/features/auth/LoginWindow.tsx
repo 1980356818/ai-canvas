@@ -1,14 +1,26 @@
 import { useState, useCallback, useEffect, useRef, type FormEvent } from "react";
-import { Loader2, Eye, EyeOff, UserPlus, LogIn, X, Minus, KeyRound, User, Lock, Mail, ShieldCheck } from "lucide-react";
+import { Loader2, Eye, EyeOff, UserPlus, LogIn, X, Minus, KeyRound, User, Lock, Mail, ShieldCheck, Monitor } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAuthStore } from "@/stores/authStore";
 import {
   getSavedCredentials,
   saveCredentials,
+  getAutoLogin,
   setAutoLogin as persistAutoLogin,
+  apiUnbindDevice,
 } from "@/platform/auth.api";
+import { isTauri } from "@/platform/runtime";
 import { cn } from "@/lib/utils";
 import loginBrand from "@/assets/login-brand.png";
+
+async function getMachineCode(): Promise<string | undefined> {
+  if (!isTauri) return undefined;
+  try {
+    return await invoke<string>("get_machine_code");
+  } catch {
+    return undefined;
+  }
+}
 
 let appWindow: { minimize(): void } | null = null;
 import("@tauri-apps/api/window").then((mod) => {
@@ -44,6 +56,7 @@ export default function LoginWindow() {
   const resetPassword = useAuthStore((s) => s.resetPassword);
   const loading = useAuthStore((s) => s.loading);
   const error = useAuthStore((s) => s.error);
+  const errorCode = useAuthStore((s) => s.errorCode);
   const clearError = useAuthStore((s) => s.clearError);
   const registerSuccess = useAuthStore((s) => s.registerSuccess);
 
@@ -57,7 +70,11 @@ export default function LoginWindow() {
   const [email, setEmail] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [unbinding, setUnbinding] = useState(false);
   const autoLoginAttempted = useRef(false);
+
+  const isDeviceMismatch = errorCode === 40303;
+  const isUnbindLimit = errorCode === 40304 || errorCode === 40305;
 
   useEffect(() => {
     const saved = getSavedCredentials();
@@ -70,10 +87,13 @@ export default function LoginWindow() {
   useEffect(() => {
     if (autoLoginAttempted.current) return;
     if (!isLogin) return;
+    if (!getAutoLogin()) return;
     const saved = getSavedCredentials();
     if (saved && saved.username && saved.password) {
       autoLoginAttempted.current = true;
-      login(saved.username, saved.password).catch(() => {});
+      getMachineCode().then((mc) => {
+        login(saved.username, saved.password, mc).catch(() => {});
+      });
     }
   }, [isLogin, login]);
 
@@ -102,6 +122,26 @@ export default function LoginWindow() {
     },
     [setAuthView, clearFields],
   );
+
+  const handleUnbindAndRetry = async () => {
+    setUnbinding(true);
+    try {
+      const mc = await getMachineCode();
+      if (!mc) {
+        useAuthStore.setState({ error: "无法获取设备标识" });
+        return;
+      }
+      await apiUnbindDevice(mc, navigator.userAgent);
+      clearError();
+      await login(username, password, mc);
+      saveCredentials(username, password);
+      persistAutoLogin(true);
+    } catch (e: any) {
+      useAuthStore.setState({ error: e.message || "解绑失败" });
+    } finally {
+      setUnbinding(false);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -141,7 +181,8 @@ export default function LoginWindow() {
     }
     try {
       if (isLogin) {
-        await login(username, password);
+        const mc = await getMachineCode();
+        await login(username, password, mc);
         saveCredentials(username, password);
         persistAutoLogin(true);
       } else {
@@ -192,7 +233,33 @@ export default function LoginWindow() {
 
             {error && (
               <div className="mb-4 rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-400">
-                {error}
+                {isDeviceMismatch ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Monitor className="h-4 w-4 shrink-0" />
+                      <span>当前设备与已绑定设备不同</span>
+                    </div>
+                    <p className="text-xs text-red-400/70">
+                      你的帐号已绑定在另一台设备上，你可以解绑旧设备并绑定当前设备（每月限 1 次）。
+                    </p>
+                    <button
+                      type="button"
+                      disabled={unbinding}
+                      onClick={handleUnbindAndRetry}
+                      className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-md bg-amber-500/20 px-3 py-1.5 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-500/30 disabled:opacity-50"
+                    >
+                      {unbinding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Monitor className="h-3 w-3" />}
+                      解绑旧设备并绑定此设备
+                    </button>
+                  </div>
+                ) : isUnbindLimit ? (
+                  <div className="space-y-1">
+                    <span>{error}</span>
+                    <p className="text-xs text-red-400/70">请联系管理员解绑设备。</p>
+                  </div>
+                ) : (
+                  error
+                )}
               </div>
             )}
 

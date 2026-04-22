@@ -40,14 +40,10 @@ export function invalidateApiKeyCache() {
   _apiKeyCache = undefined;
 }
 
-const COMFLY_API_KEY = import.meta.env.VITE_COMFLY_API_KEY ?? "";
 const COMFLY_BASE_URL = import.meta.env.VITE_COMFLY_BASE_URL ?? "https://ai.comfly.chat";
 
 export async function migrateApiConfig(): Promise<void> {
   const currentUrl = await getSetting("openai_base_url");
-  if (currentUrl && currentUrl.includes("comfly.chat")) return;
-
-  await setSetting("openai_api_key", COMFLY_API_KEY);
+  if (currentUrl) return;
   await setSetting("openai_base_url", COMFLY_BASE_URL);
-  invalidateApiKeyCache();
 }
