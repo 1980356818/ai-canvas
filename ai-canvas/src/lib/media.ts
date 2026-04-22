@@ -94,6 +94,22 @@ export async function getBase64ForApi(storedPath: string): Promise<string> {
   return readMediaBase64(storedPath);
 }
 
+function sanitizeFilename(raw: string, maxLen = 80): string {
+  return raw
+    .replace(/[\x00-\x1f<>:"/\\|?*\n\r\t]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^[_.\s]+|[_.\s]+$/g, "")
+    .slice(0, maxLen) || "AI文件";
+}
+
+function makeTimestamp(): string {
+  return new Date()
+    .toISOString()
+    .replace(/[-:T]/g, "")
+    .slice(0, 15)
+    .replace(/\.$/, "");
+}
+
 /**
  * Export an image or video to the user's configured save directory.
  * Saves to `file_auto_save_path/{project_folder}/filename`.
@@ -107,12 +123,8 @@ export async function exportFile(
 
   const invoke = await ensureInvoke();
   const ext = storedPath.split(".").pop() || "png";
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/[-:T]/g, "")
-    .slice(0, 15);
-  const safeName = (cardTitle || "AI文件").replace(/[<>:"/\\|?*]/g, "_");
-  const exportName = `${safeName}_${timestamp}.${ext}`;
+  const safeName = sanitizeFilename(cardTitle);
+  const exportName = `${safeName}_${makeTimestamp()}.${ext}`;
 
   return invoke<string>("export_file", {
     sourcePath: storedPath,
@@ -147,12 +159,8 @@ export async function batchExportFiles(
     const { storedPath, cardTitle, projectId } = items[i]!;
     try {
       const ext = storedPath.split(".").pop() || "png";
-      const timestamp = new Date()
-        .toISOString()
-        .replace(/[-:T]/g, "")
-        .slice(0, 15);
-      const safeName = (cardTitle || "AI文件").replace(/[<>:"/\\|?*]/g, "_");
-      const exportName = `${safeName}_${timestamp}_${i + 1}.${ext}`;
+      const safeName = sanitizeFilename(cardTitle);
+      const exportName = `${safeName}_${makeTimestamp()}_${i + 1}.${ext}`;
 
       await invoke<string>("export_file", {
         sourcePath: storedPath,

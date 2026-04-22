@@ -372,6 +372,22 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     setError(null);
     useUIStore.getState().setCardError(card.id, null);
 
+    if (!isEnhancer) {
+      const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === currentSize);
+      if (opt) {
+        const dims = sizeFromRatio(opt.ratio);
+        if (dims.width !== card.width || dims.height !== card.height) {
+          const cx = card.x + card.width / 2;
+          const cy = card.y + card.height / 2;
+          updateCard(card.id, {
+            x: cx - dims.width / 2,
+            y: cy - dims.height / 2,
+            ...dims,
+          });
+        }
+      }
+    }
+
     try {
       const provider = modelService.resolveProvider(currentModel, (data as MediaData).provider);
       if (!provider.generateImage) {
