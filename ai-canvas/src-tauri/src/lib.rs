@@ -106,20 +106,44 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            let log_path = app
+                .path()
+                .app_data_dir()
+                .unwrap_or_else(|_| std::path::PathBuf::from("/tmp"))
+                .join("startup.log");
+            let _ = std::fs::create_dir_all(log_path.parent().unwrap_or(std::path::Path::new(".")));
+            let boot_log = |msg: &str| {
+                use std::io::Write;
+                if let Ok(mut f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&log_path)
+                {
+                    let _ = writeln!(f, "[{}] {}", chrono::Local::now().format("%H:%M:%S%.3f"), msg);
+                }
+            };
+            boot_log("=== AICat startup ===");
+
+            boot_log("resolving data_dir");
             let data_dir = resolve_data_dir(app);
+            boot_log(&format!("data_dir = {:?}", data_dir));
 
             std::fs::create_dir_all(&data_dir)?;
             std::fs::create_dir_all(data_dir.join("media/images"))?;
             std::fs::create_dir_all(data_dir.join("media/thumbnails"))?;
             std::fs::create_dir_all(data_dir.join("auto-save"))?;
+            boot_log("directories created");
 
             if let Err(e) = app.asset_protocol_scope().allow_directory(&data_dir, true) {
-                tracing::warn!("failed to add data_dir to asset scope: {}", e);
+                boot_log(&format!("asset scope error: {}", e));
             }
 
             let db_path = data_dir.join("data.db");
+            boot_log("opening database");
             let conn = db::init(&db_path)?;
+            boot_log("database ready");
 
+            boot_log("creating http clients");
             let http_client = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(600))
                 .connect_timeout(std::time::Duration::from_secs(30))
@@ -132,6 +156,7 @@ pub fn run() {
                 .http1_only()
                 .build()
                 .expect("failed to create streaming http client");
+            boot_log("http clients ready");
 
             app.manage(AppState {
                 db: Mutex::new(conn),
@@ -141,17 +166,21 @@ pub fn run() {
                 data_dir: data_dir.clone(),
             });
 
-            tracing::info!("app initialized, data dir: {:?}", data_dir);
+            boot_log("state managed");
 
             #[cfg(target_os = "macos")]
             {
+                boot_log("configuring macOS title bar");
                 if let Some(win) = app.get_webview_window("main") {
                     let _ = win.set_decorations(true);
                     use tauri::TitleBarStyle;
                     let _ = win.set_title_bar_style(TitleBarStyle::Overlay);
                 }
+                boot_log("macOS title bar configured");
             }
 
+            boot_log("setup complete, entering event loop");
+            tracing::info!("app initialized, data dir: {:?}", data_dir);
             Ok(())
         })
         .on_window_event(|window, event| {

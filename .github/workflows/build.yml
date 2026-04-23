@@ -100,12 +100,23 @@ jobs:
       - name: Build Tauri (universal)
         run: npm run tauri build -- --target universal-apple-darwin
 
-      - name: Ad-hoc codesign & repackage DMG
+      - name: Patch ATS & codesign & repackage DMG
         run: |
           APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
+          PLIST="$APP/Contents/Info.plist"
 
           echo "=== App bundle contents ==="
           ls -la "$APP/Contents/MacOS/"
+          echo "=== Info.plist before patch ==="
+          cat "$PLIST"
+
+          echo "=== Patching ATS ==="
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" "$PLIST"
+
+          echo "=== Info.plist after patch ==="
+          cat "$PLIST"
 
           echo "=== Signing nested components ==="
           if [ -d "$APP/Contents/Frameworks" ]; then
