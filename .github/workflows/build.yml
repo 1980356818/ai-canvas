@@ -150,14 +150,17 @@ jobs:
           file "$BIN"
           lipo -info "$BIN"
 
-          echo "=== Launching binary (timeout 8s) ==="
-          timeout 8 "$BIN" >smoke_stdout.log 2>smoke_stderr.log || EXIT_CODE=$?
-          echo "Exit code: ${EXIT_CODE:-0}"
+          echo "=== Launching binary (8s) ==="
+          "$BIN" >smoke_stdout.log 2>smoke_stderr.log &
+          APP_PID=$!
+          sleep 8
+          kill "$APP_PID" 2>/dev/null || true
+          wait "$APP_PID" 2>/dev/null || true
 
           echo "=== stdout ==="
-          cat smoke_stdout.log || true
+          cat smoke_stdout.log 2>/dev/null || true
           echo "=== stderr ==="
-          cat smoke_stderr.log || true
+          cat smoke_stderr.log 2>/dev/null || true
 
           echo "=== startup.log ==="
           STARTUP_LOG="$HOME/Library/Application Support/com.ai-canvas.desktop/startup.log"
@@ -168,7 +171,11 @@ jobs:
           fi
 
           echo "=== Crash reports ==="
-          find ~/Library/Logs/DiagnosticReports -name "*ai*" -o -name "*AICat*" 2>/dev/null | head -5 || echo "(none)"
+          find ~/Library/Logs/DiagnosticReports \( -name "*ai-canvas*" -o -name "*AICat*" \) -print 2>/dev/null | head -5 || echo "(none)"
+          for f in $(find ~/Library/Logs/DiagnosticReports \( -name "*ai-canvas*" -o -name "*AICat*" \) -print 2>/dev/null | head -2); do
+            echo "--- $f ---"
+            head -80 "$f"
+          done
 
       - name: Upload to release
         env:
