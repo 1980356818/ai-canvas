@@ -141,6 +141,35 @@ jobs:
           hdiutil create -volname "${{ env.APP_NAME }}" -srcfolder "$APP" -ov -format UDZO "$DMG_DIR/$DMG_NAME"
           ls -lh "$DMG_DIR/$DMG_NAME"
 
+      - name: Smoke test – launch app on macOS runner
+        run: |
+          APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
+          BIN="$APP/Contents/MacOS/ai-canvas"
+
+          echo "=== Binary info ==="
+          file "$BIN"
+          lipo -info "$BIN"
+
+          echo "=== Launching binary (timeout 8s) ==="
+          timeout 8 "$BIN" >smoke_stdout.log 2>smoke_stderr.log || EXIT_CODE=$?
+          echo "Exit code: ${EXIT_CODE:-0}"
+
+          echo "=== stdout ==="
+          cat smoke_stdout.log || true
+          echo "=== stderr ==="
+          cat smoke_stderr.log || true
+
+          echo "=== startup.log ==="
+          STARTUP_LOG="$HOME/Library/Application Support/com.ai-canvas.desktop/startup.log"
+          if [ -f "$STARTUP_LOG" ]; then
+            cat "$STARTUP_LOG"
+          else
+            echo "(not found)"
+          fi
+
+          echo "=== Crash reports ==="
+          find ~/Library/Logs/DiagnosticReports -name "*ai*" -o -name "*AICat*" 2>/dev/null | head -5 || echo "(none)"
+
       - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
