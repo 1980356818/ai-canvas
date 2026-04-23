@@ -15,13 +15,10 @@
         "title": "AI猫",
         "width": 640,
         "height": 580,
-        "decorations": true,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true,
+        "decorations": false,
         "center": true,
         "resizable": false,
-        "dragDropEnabled": false,
-        "visible": false
+        "dragDropEnabled": false
       }
     ],
     "security": {

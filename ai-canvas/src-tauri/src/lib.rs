@@ -184,15 +184,17 @@ pub fn run() {
             });
             boot_log("state managed");
 
-            // Platform-specific window adjustments
-            if let Some(win) = app.get_webview_window("main") {
-                #[cfg(target_os = "windows")]
-                {
-                    let _ = win.set_decorations(false);
+            #[cfg(target_os = "macos")]
+            {
+                boot_log("configuring macOS window");
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.set_decorations(true);
+                    use tauri::TitleBarStyle;
+                    let _ = win.set_title_bar_style(TitleBarStyle::Overlay);
                 }
-                let _ = win.show();
+                boot_log("macOS window configured");
             }
-            boot_log("window shown, setup complete");
+            boot_log("setup complete");
 
             tracing::info!("app initialized, data dir: {:?}", data_dir);
             Ok(())
