@@ -15,6 +15,7 @@ interface SizeComboProps {
   onChange: (value: string) => void;
   onResolutionChange?: (res: string) => void;
   disabled?: boolean;
+  allowedSizes?: string[] | null;
 }
 
 function RatioIcon({
@@ -66,7 +67,11 @@ export default function SizeCombo({
   onChange,
   onResolutionChange,
   disabled,
+  allowedSizes,
 }: SizeComboProps) {
+  const filteredOptions = allowedSizes
+    ? IMAGE_SIZE_OPTIONS.filter((o) => allowedSizes.includes(o.value))
+    : IMAGE_SIZE_OPTIONS;
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -103,7 +108,7 @@ export default function SizeCombo({
   }, [open, reposition]);
 
   const current =
-    IMAGE_SIZE_OPTIONS.find((o) => o.value === value) ?? IMAGE_SIZE_OPTIONS[0]!;
+    filteredOptions.find((o) => o.value === value) ?? filteredOptions[0]!;
   const isAuto = current.value === "auto";
 
   const zoom = triggerRef.current ? getEditorZoom(triggerRef.current) : 1;
@@ -176,8 +181,8 @@ export default function SizeCombo({
             <div className="mb-1.5 text-[10px] font-medium text-muted-foreground">
               画面比例
             </div>
-            <div className="grid grid-cols-5 gap-1">
-              {IMAGE_SIZE_OPTIONS.map((opt) => {
+            <div className={cn("grid gap-1", filteredOptions.length <= 4 ? "grid-cols-3" : "grid-cols-5")}>
+              {filteredOptions.map((opt) => {
                 const active = value === opt.value;
                 const optIsAuto = opt.value === "auto";
                 return (

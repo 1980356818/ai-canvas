@@ -2,18 +2,24 @@
 
 > 项目：AI Canvas (AICat)  
 > 技术栈：Tauri 2 + React 19 + Rust  
-> 构建方式：GitHub Actions 远程构建（macOS 无法在 Windows 上交叉编译）
+> 构建方式：GitHub Actions 远程构建（macOS 无法在 Windows 上交叉编译）  
+> 仓库结构：Monorepo（工作流在根目录 `.github/workflows/`，Tauri 项目在 `ai-canvas/` 子目录）
 
 ---
 
 ## 1. 构建方式
 
-macOS 版本通过 GitHub Actions 在 Apple Silicon runner (`macos-latest`) 上构建，产出两个架构：
+macOS 版本通过 GitHub Actions 在 Apple Silicon runner (`macos-latest`) 上构建 **Universal Binary**，单个 DMG 同时兼容 Intel 和 Apple Silicon：
 
-| 架构 | Target | 适用机型 | 产物 |
-|------|--------|---------|------|
-| Apple Silicon | `aarch64-apple-darwin` | M1/M2/M3/M4 Mac (2020年末以后) | `AICat_x.x.x_aarch64.dmg` |
-| Intel | `x86_64-apple-darwin` | Intel Mac (2020年以前) | `AICat_x.x.x_x64.dmg` |
+| 产物 | 架构 | 适用机型 |
+|------|------|---------|
+| `AICat_x.x.x_universal.dmg` | Universal (x86_64 + aarch64) | 所有 Mac（Intel 和 M 芯片均可） |
+
+### 为什么用 Universal Binary
+
+- 用户无需区分 Intel / M 芯片，下载一个 DMG 即可
+- macOS 自动选择对应架构执行，无性能损失
+- 维护成本更低：一次构建，一个产物，一个下载链接
 
 ---
 
@@ -22,17 +28,14 @@ macOS 版本通过 GitHub Actions 在 Apple Silicon runner (`macos-latest`) 上�
 ### 方式一：手动触发（推荐）
 
 ```bash
-# 仅构建 macOS 两个架构
+# 仅构建 macOS（Universal Binary）
 gh workflow run "Build & Release" --ref master --field build_targets=macos --repo XYB0217/ai-canvas
 
-# 仅 Apple Silicon
-gh workflow run "Build & Release" --ref master --field build_targets=macos-arm --repo XYB0217/ai-canvas
-
-# 仅 Intel
-gh workflow run "Build & Release" --ref master --field build_targets=macos-intel --repo XYB0217/ai-canvas
-
-# 全平台（Win + macOS ARM + macOS Intel）
+# 全平台（Win + macOS Universal）
 gh workflow run "Build & Release" --ref master --field build_targets=all --repo XYB0217/ai-canvas
+
+# 仅 Windows
+gh workflow run "Build & Release" --ref master --field build_targets=windows --repo XYB0217/ai-canvas
 ```
 
 ### 方式二：推送 tag 自动触发
@@ -57,11 +60,8 @@ gh run view <RUN_ID> --repo XYB0217/ai-canvas
 ### 下载产物
 
 ```bash
-# 下载所有 DMG
-gh release download master --repo XYB0217/ai-canvas --pattern "AICat*.dmg"
-
-# 下载指定架构
-gh release download master --repo XYB0217/ai-canvas --pattern "AICat*aarch64.dmg"
+# 下载 macOS Universal DMG
+gh release download master --repo XYB0217/ai-canvas --pattern "AICat*universal.dmg"
 ```
 
 ---
@@ -134,24 +134,55 @@ permissions:
 
 ### 3.6 macOS 应用未签名导致"已损坏"提示
 
-**现象**：即使修复了 identifier，macOS 上仍显示"已损坏"。
+**现象**：macOS 上显示"已损坏"、Intel 白屏、M 芯片提示"没有响应"。
 
-**原因**：macOS Ventura (13+) 及更新版本要求应用必须有代码签名。Tauri 默认构建流程中签名步骤不一定生效。从网络下载的无签名应用会被标记为"已损坏"。
+**原因**：
 
-**解决**：在 GitHub Actions 工作流中，Tauri 构建完成后手动执行 ad-hoc 签名，并用签名后的 .app 重建 DMG：
+1. 构建后手动修改 `Info.plist` 添加 ATS 设置 → 使原签名失效
+2. `codesign --force --deep --sign -` 不可靠，`--deep` 可能签名顺序错误
+3. Apple Silicon 强制要求有效签名，签名破损则无法执行
+4. Intel Mac 上 WebView 加载也受签名完整性影响
 
-```yaml
-- name: Ad-hoc codesign & repackage
-  run: |
-    APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/AICat.app"
-    codesign --force --deep --sign - "$APP"
-    codesign --verify --verbose "$APP"
-    DMG="src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/AICat_0.1.0_aarch64.dmg"
-    rm -f "$DMG"
-    hdiutil create -volname "AICat" -srcfolder "$APP" -ov -format UDZO "$DMG"
+**解决（三步走）**：
+
+1. **将 ATS 配置内置到 Tauri 构建流程**：创建 `src-tauri/Info.plist`，Tauri 自动合并到最终 `.app` 中，无需构建后修改：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "...">
+<plist version="1.0">
+<dict>
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <true/>
+  </dict>
+</dict>
+</plist>
 ```
 
-### 3.7 React 19 useRef 类型变更
+2. **使用分层签名替代 `--deep`**：按正确顺序签名（嵌套组件先签，主 bundle 最后签）：
+
+```bash
+# 先签 Frameworks 内的组件
+find "$APP/Contents/Frameworks" -name "*.dylib" -exec codesign --force --sign - {} \;
+# 签主二进制
+codesign --force --sign - "$APP/Contents/MacOS/AICat"
+# 签整个 bundle
+codesign --force --sign - "$APP"
+```
+
+3. **使用 Universal Binary**：避免交叉编译可能的链接问题。
+
+### 3.7 Monorepo 结构导致 workflow_dispatch 失败
+
+**现象**：`gh workflow run` 报 `Workflow does not have 'workflow_dispatch' trigger`，但 YAML 中明明有。
+
+**原因**：GitHub Actions 只识别仓库根目录下的 `.github/workflows/*.yml`。项目作为 monorepo 推送后，`ai-canvas/.github/workflows/build.yml` 不会被 GitHub 识别。
+
+**解决**：在仓库根目录创建 `.github/workflows/build.yml`，通过 `defaults.run.working-directory: ai-canvas` 和 `tauri-action` 的 `projectPath: ai-canvas` 参数指定子目录。同时在 `cache-dependency-path` 和 `workspaces` 中使用 `ai-canvas/` 前缀。
+
+### 3.8 React 19 useRef 类型变更
 
 **现象**：`tsc` 编译报错 `Expected 1 arguments, but got 0`。
 
@@ -166,6 +197,16 @@ const timerRef = useRef<ReturnType<typeof setTimeout>>();
 // 正确
 const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 ```
+
+### 3.9 分架构构建导致 Intel 白屏 + M 芯片无响应
+
+**现象**：分别构建 `x86_64-apple-darwin` 和 `aarch64-apple-darwin` 两个 DMG，Intel 版白屏，M 芯片版提示"没有响应"。
+
+**原因**：
+- 在 ARM runner 上交叉编译 x86_64 可能导致原生库链接问题
+- 构建后手动修补 Info.plist + 重签名破坏了签名完整性
+
+**解决**：使用 `universal-apple-darwin` target 构建通用二进制，并将 ATS 配置内置到构建流程中（见 3.6）。
 
 ---
 
@@ -202,10 +243,11 @@ const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
 | 文件 | 作用 |
 |------|------|
-| `.github/workflows/build.yml` | 构建工作流（多平台 + 签名） |
-| `src-tauri/tauri.conf.json` | Tauri 配置（productName、identifier、bundle） |
-| `src-tauri/Cargo.toml` | Rust 依赖 |
-| `package.json` | 前端依赖 + 构建脚本 |
+| `（仓库根）.github/workflows/build.yml` | 构建工作流（多平台 + 签名），GitHub Actions 只识别根目录 |
+| `ai-canvas/src-tauri/tauri.conf.json` | Tauri 配置（productName、identifier、bundle） |
+| `ai-canvas/src-tauri/Info.plist` | macOS Info.plist 扩展（ATS 等），Tauri 构建时自动合并 |
+| `ai-canvas/src-tauri/Cargo.toml` | Rust 依赖 |
+| `ai-canvas/package.json` | 前端依赖 + 构建脚本 |
 
 ---
 

@@ -10,6 +10,19 @@ use chrono::Local;
 
 const BASE64_ENGINE: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 
+fn root_cause_chain(err: &dyn StdError) -> String {
+    let mut chain = Vec::new();
+    let mut current: Option<&dyn StdError> = Some(err);
+    while let Some(e) = current {
+        let msg = e.to_string();
+        if chain.last().map_or(true, |prev: &String| prev != &msg) {
+            chain.push(msg);
+        }
+        current = e.source();
+    }
+    chain.join(" → ")
+}
+
 #[derive(Serialize)]
 pub struct AiProxyResponse {
     pub body: String,
@@ -30,6 +43,13 @@ pub async fn ai_proxy(
         read_api_config(&db, &provider)?
     };
     let (api_key, base_url) = (config.api_key, config.base_url);
+
+    if base_url.is_empty() {
+        return Err(format!(
+            "Provider '{}' 的 API 地址未配置，请在设置中填写 Base URL",
+            provider
+        ));
+    }
 
     let url = format!("{}{}", base_url.trim_end_matches('/'), endpoint);
     let client = &state.http_client;
@@ -53,13 +73,14 @@ pub async fn ai_proxy(
             let is_timeout = e.is_timeout();
             let is_request = e.is_request();
             let source = StdError::source(&e).map(|s| s.to_string()).unwrap_or_default();
+            let root = root_cause_chain(&e);
             tracing::error!(
-                "[ai_proxy] 请求发送失败: url={}, connect={}, timeout={}, request={}, source={}",
-                url, is_connect, is_timeout, is_request, source
+                "[ai_proxy] 请求发送失败: url={}, connect={}, timeout={}, request={}, source={}, root={}",
+                url, is_connect, is_timeout, is_request, source, root
             );
             return Err(format!(
-                "请求失败: {} (connect={}, timeout={}, detail={})",
-                e, is_connect, is_timeout, source
+                "请求失败: url={}, {} (connect={}, timeout={}, detail={})",
+                url, root, is_connect, is_timeout, source
             ));
         }
     };
@@ -95,6 +116,13 @@ pub async fn ai_proxy_stream(
         let db = state.db.lock().map_err(|e| e.to_string())?;
         read_api_config(&db, &provider)?
     };
+
+    if config.base_url.is_empty() {
+        return Err(format!(
+            "Provider '{}' 的 API 地址未配置，请在设置中填写 Base URL",
+            provider
+        ));
+    }
 
     let cancelled = Arc::new(AtomicBool::new(false));
     {
@@ -153,7 +181,10 @@ async fn do_stream(
         _ => request.header("Authorization", format!("Bearer {}", api_key)),
     };
 
-    let resp = request.send().await.map_err(|e| format!("请求失败: {}", e))?;
+    let resp = request.send().await.map_err(|e| {
+        let root = root_cause_chain(&e);
+        format!("请求失败: url={}, {}", url, root)
+    })?;
 
     let status = resp.status().as_u16();
     let version = format!("{:?}", resp.version());

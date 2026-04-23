@@ -15,8 +15,6 @@ on:
           - all
           - windows
           - macos
-          - macos-intel
-          - macos-arm
 
 permissions:
   contents: write
@@ -70,11 +68,11 @@ jobs:
           releaseDraft: true
           prerelease: false
 
-  # ─── macOS Apple Silicon (aarch64) ───────────────────────
-  build-macos-arm:
+  # ─── macOS Universal (Intel + Apple Silicon) ─────────────
+  build-macos:
     if: >-
       github.event_name == 'push' ||
-      contains(fromJSON('["all","macos","macos-arm"]'), github.event.inputs.build_targets)
+      contains(fromJSON('["all","macos"]'), github.event.inputs.build_targets)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -86,10 +84,10 @@ jobs:
           cache: npm
           cache-dependency-path: ai-canvas/package-lock.json
 
-      - name: Setup Rust (aarch64)
+      - name: Setup Rust (universal)
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -99,87 +97,46 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Tauri
-        run: npm run tauri build -- --target aarch64-apple-darwin
+      - name: Build Tauri (universal)
+        run: npm run tauri build -- --target universal-apple-darwin
 
-      - name: Patch ATS & codesign & repackage
+      - name: Ad-hoc codesign & repackage DMG
         run: |
-          APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
-          PLIST="$APP/Contents/Info.plist"
-          echo "=== Patching ATS in $PLIST ==="
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" "$PLIST"
-          echo "=== Signing $APP ==="
-          codesign --force --deep --sign - "$APP"
+          APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
+
+          echo "=== Signing nested components ==="
+          if [ -d "$APP/Contents/Frameworks" ]; then
+            find "$APP/Contents/Frameworks" -type f -perm +111 -exec codesign --force --sign - {} \; 2>/dev/null || true
+            find "$APP/Contents/Frameworks" -name "*.framework" -exec codesign --force --sign - {} \; 2>/dev/null || true
+            find "$APP/Contents/Frameworks" -name "*.dylib" -exec codesign --force --sign - {} \; 2>/dev/null || true
+          fi
+
+          echo "=== Signing main binary ==="
+          codesign --force --sign - "$APP/Contents/MacOS/${{ env.APP_NAME }}"
+
+          echo "=== Signing app bundle ==="
+          codesign --force --sign - "$APP"
           codesign --verify --verbose "$APP"
+
           echo "=== Re-creating DMG ==="
-          DMG="src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/${{ env.APP_NAME }}_0.1.0_aarch64.dmg"
-          rm -f "$DMG"
-          hdiutil create -volname "${{ env.APP_NAME }}" -srcfolder "$APP" -ov -format UDZO "$DMG"
-          ls -lh "$DMG"
+          VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\(.*\)".*/\1/')
+          DMG_NAME="${{ env.APP_NAME }}_${VERSION}_universal.dmg"
+          DMG_DIR="src-tauri/target/universal-apple-darwin/release/bundle/dmg"
+          mkdir -p "$DMG_DIR"
+          rm -f "$DMG_DIR"/*.dmg
+          hdiutil create -volname "${{ env.APP_NAME }}" -srcfolder "$APP" -ov -format UDZO "$DMG_DIR/$DMG_NAME"
+          ls -lh "$DMG_DIR/$DMG_NAME"
 
       - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
-          DMG="src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/${{ env.APP_NAME }}_0.1.0_aarch64.dmg"
-          gh release create "$TAG" --draft --title "${{ env.APP_NAME }} $TAG" --notes "See the assets below to download the installer." 2>/dev/null || true
-          gh release upload "$TAG" "$DMG" --clobber
-
-  # ─── macOS Intel (x86_64) ────────────────────────────────
-  build-macos-intel:
-    if: >-
-      github.event_name == 'push' ||
-      contains(fromJSON('["all","macos","macos-intel"]'), github.event.inputs.build_targets)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: ai-canvas/package-lock.json
-
-      - name: Setup Rust (x86_64)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: ai-canvas/src-tauri -> target
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Build Tauri
-        run: npm run tauri build -- --target x86_64-apple-darwin
-
-      - name: Patch ATS & codesign & repackage
-        run: |
-          APP="src-tauri/target/x86_64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
-          PLIST="$APP/Contents/Info.plist"
-          echo "=== Patching ATS in $PLIST ==="
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" "$PLIST"
-          echo "=== Signing $APP ==="
-          codesign --force --deep --sign - "$APP"
-          codesign --verify --verbose "$APP"
-          echo "=== Re-creating DMG ==="
-          DMG="src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/${{ env.APP_NAME }}_0.1.0_x64.dmg"
-          rm -f "$DMG"
-          hdiutil create -volname "${{ env.APP_NAME }}" -srcfolder "$APP" -ov -format UDZO "$DMG"
-          ls -lh "$DMG"
-
-      - name: Upload to release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ github.ref_name }}"
-          DMG="src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/${{ env.APP_NAME }}_0.1.0_x64.dmg"
+          DMG=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
+          if [ -z "$DMG" ]; then
+            echo "::error::No DMG found"
+            exit 1
+          fi
+          echo "Uploading $DMG"
           gh release create "$TAG" --draft --title "${{ env.APP_NAME }} $TAG" --notes "See the assets below to download the installer." 2>/dev/null || true
           gh release upload "$TAG" "$DMG" --clobber

@@ -22,7 +22,7 @@ import {
 } from "@/config/model-ref-images";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
-import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize } from "@/shared/constants";
+import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize, getAllowedSizesForModel, coerceToAllowedSize } from "@/shared/constants";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
 import { type InlineImageRef, toDisplayText, remapInlineRefs, reorderInlineRefs } from "@/lib/promptSerializer";
 import ModelSelector from "./ModelSelector";
@@ -158,10 +158,19 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     [enhancer],
   );
 
+  const allowedSizes = useMemo(() => getAllowedSizesForModel(currentModel), [currentModel]);
+
   const handleModelChange = useCallback(
     (modelId: string, providerId: string) => {
       setCurrentModel(modelId);
-      updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+      const allowed = getAllowedSizesForModel(modelId);
+      const corrected = coerceToAllowedSize(currentSize, allowed);
+      if (corrected !== currentSize) {
+        setCurrentSize(corrected);
+        updateCard(card.id, { data: { ...data, model: modelId, provider: providerId, size: corrected } });
+      } else {
+        updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+      }
       autoSave.markDirty(card.id);
       const category: ModelCategory = isEnhancerModel(modelId) ? "enhancer" : "image";
       useSettingsStore.getState().setLastModel(category, modelId, providerId);
@@ -752,6 +761,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             onChange={handleSizeChange}
             onResolutionChange={supportsResolution ? handleResolutionChange : undefined}
             disabled={generating}
+            allowedSizes={allowedSizes}
           />
         )}
         {!enhancer && !isLocked && (

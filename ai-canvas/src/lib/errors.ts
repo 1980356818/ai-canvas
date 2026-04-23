@@ -26,12 +26,37 @@ export function friendlyError(raw: string): string {
     } catch { /* fall through */ }
   }
 
-  if (raw.includes("Failed to fetch") || raw.includes("请求失败")) {
-    return "网络连接失败，请检查网络和 API 地址";
-  }
-  if (raw.includes("timeout") || raw.includes("Timeout")) {
-    return "请求超时，请稍后重试";
+  if (raw.includes("timeout") || raw.includes("Timeout") || raw.includes("timed out")) {
+    return "连接超时，服务器未在规定时间内响应，请稍后重试";
   }
 
-  return raw.length > 120 ? raw.slice(0, 120) + "…" : raw;
+  if (raw.includes("Failed to fetch") || raw.includes("请求失败") || raw.includes("连接失败")) {
+    return classifyNetworkError(raw);
+  }
+
+  return raw.length > 200 ? raw.slice(0, 200) + "…" : raw;
+}
+
+function classifyNetworkError(raw: string): string {
+  const lower = raw.toLowerCase();
+
+  if (lower.includes("dns") || lower.includes("resolve") || lower.includes("getaddrinfo")) {
+    return "域名解析失败，请检查 API 地址是否正确";
+  }
+  if (lower.includes("certificate") || lower.includes("ssl") || lower.includes("tls") || lower.includes("handshake")) {
+    return "TLS/SSL 安全连接失败，可能是证书问题或网络代理干扰";
+  }
+  if (lower.includes("connection refused") || lower.includes("拒绝")) {
+    return "服务器拒绝连接，请检查 API 地址和端口是否正确";
+  }
+  if (lower.includes("connection reset") || lower.includes("broken pipe")) {
+    return "连接被重置，可能是网络不稳定或服务器繁忙";
+  }
+  if (lower.includes("proxy")) {
+    return "代理连接失败，请检查系统代理设置";
+  }
+
+  const urlMatch = raw.match(/url=([^\s,)]+)/);
+  const urlHint = urlMatch ? `（目标: ${urlMatch[1]}）` : "";
+  return `网络连接失败${urlHint}，请检查：1) API 地址是否正确 2) 网络/代理是否通畅 3) 服务是否可用`;
 }

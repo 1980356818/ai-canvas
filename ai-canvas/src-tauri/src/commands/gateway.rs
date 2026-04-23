@@ -1,9 +1,33 @@
 use crate::AppState;
 use super::config::read_api_config;
+use std::error::Error as StdError;
 use tauri::State;
 
 fn resolve_provider(provider: Option<String>) -> String {
     provider.unwrap_or_else(|| "comfly".to_string())
+}
+
+fn format_reqwest_error(e: &reqwest::Error) -> String {
+    let mut parts = Vec::new();
+    if e.is_connect() { parts.push("connection"); }
+    if e.is_timeout() { parts.push("timeout"); }
+
+    let mut cause_chain = String::new();
+    let mut current: Option<&dyn StdError> = Some(e);
+    while let Some(c) = current {
+        let msg = c.to_string();
+        if !cause_chain.contains(&msg) {
+            if !cause_chain.is_empty() { cause_chain.push_str(" → "); }
+            cause_chain.push_str(&msg);
+        }
+        current = c.source();
+    }
+
+    if parts.is_empty() {
+        cause_chain
+    } else {
+        format!("[{}] {}", parts.join("+"), cause_chain)
+    }
 }
 
 /// Fetch available models from the gateway's /v1/models endpoint.
@@ -107,6 +131,14 @@ pub async fn validate_connection(
         "****".to_string()
     };
     let base = config.base_url.trim_end_matches('/');
+
+    if base.is_empty() {
+        return Err("API 地址未配置，请在设置中填写 Base URL".to_string());
+    }
+    if !base.starts_with("http://") && !base.starts_with("https://") {
+        return Err(format!("API 地址格式不正确（缺少 http:// 或 https://）: {}", base));
+    }
+
     tracing::info!("validate_connection [{}]: base_url={}, key_len={}, key_preview={}", p, base, key_len, key_preview);
 
     // Try /v1/models first
@@ -148,7 +180,11 @@ pub async fn validate_connection(
         .json(&chat_body)
         .send()
         .await
-        .map_err(|e| format!("连接失败: {}", e))?;
+        .map_err(|e| {
+            let detail = format_reqwest_error(&e);
+            tracing::error!("validate_connection [{}]: connect failed: {}", p, detail);
+            format!("连接失败: url={}, {}", chat_url, detail)
+        })?;
 
     let chat_status = chat_resp.status().as_u16();
     let chat_body_text = chat_resp.text().await.unwrap_or_default();

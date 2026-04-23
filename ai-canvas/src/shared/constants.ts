@@ -46,6 +46,23 @@ export function normalizeImageSize(raw: string | undefined): string {
   return LEGACY_SIZE_MAP[raw] ?? DEFAULT_IMAGE_SIZE;
 }
 
+const MODEL_SIZE_CONSTRAINTS: Record<string, string[]> = {
+  "gpt-image-2": ["1:1", "2:3", "3:2"],
+};
+
+export function getAllowedSizesForModel(modelId: string): string[] | null {
+  for (const [pattern, sizes] of Object.entries(MODEL_SIZE_CONSTRAINTS)) {
+    if (modelId === pattern || modelId.startsWith(pattern)) return sizes;
+  }
+  return null;
+}
+
+export function coerceToAllowedSize(currentSize: string, allowedSizes: string[] | null): string {
+  if (!allowedSizes) return currentSize;
+  if (allowedSizes.includes(currentSize)) return currentSize;
+  return allowedSizes[0] ?? DEFAULT_IMAGE_SIZE;
+}
+
 export const CARD_DEFAULTS: Record<CardType, CardDefaults> = {
   ai_chat:     { width: 680, height: 420, label: "生成文字", data: { content: "", result: "" } },
   ai_image:    { ...sizeFromRatio(IMAGE_SIZE_OPTIONS[0]!.ratio), label: "AI 图片", data: { content: "", size: IMAGE_SIZE_OPTIONS[0]!.value } },
