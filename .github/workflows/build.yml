@@ -104,6 +104,9 @@ jobs:
         run: |
           APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
 
+          echo "=== App bundle contents ==="
+          ls -la "$APP/Contents/MacOS/"
+
           echo "=== Signing nested components ==="
           if [ -d "$APP/Contents/Frameworks" ]; then
             find "$APP/Contents/Frameworks" -type f -perm +111 -exec codesign --force --sign - {} \; 2>/dev/null || true
@@ -111,8 +114,8 @@ jobs:
             find "$APP/Contents/Frameworks" -name "*.dylib" -exec codesign --force --sign - {} \; 2>/dev/null || true
           fi
 
-          echo "=== Signing main binary ==="
-          codesign --force --sign - "$APP/Contents/MacOS/${{ env.APP_NAME }}"
+          echo "=== Signing all binaries in MacOS/ ==="
+          find "$APP/Contents/MacOS" -type f -perm +111 -exec codesign --force --sign - {} \;
 
           echo "=== Signing app bundle ==="
           codesign --force --sign - "$APP"
