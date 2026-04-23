@@ -44,7 +44,7 @@ pub async fn list_models(
 
     let url = format!("{}/v1/models", config.base_url.trim_end_matches('/'));
     let resp = state
-        .http_client
+        .http_client()
         .get(&url)
         .header("Authorization", format!("Bearer {}", config.api_key))
         .send()
@@ -87,7 +87,7 @@ pub async fn poll_task(
         path
     );
     let resp = state
-        .http_client
+        .http_client()
         .get(&url)
         .header("Authorization", format!("Bearer {}", config.api_key))
         .send()
@@ -144,7 +144,7 @@ pub async fn validate_connection(
     // Try /v1/models first
     let models_url = format!("{}/v1/models", base);
     let models_status = match state
-        .http_client
+        .http_client()
         .get(&models_url)
         .header("Authorization", format!("Bearer {}", config.api_key))
         .send()
@@ -173,7 +173,7 @@ pub async fn validate_connection(
     });
 
     let chat_resp = state
-        .http_client
+        .http_client()
         .post(&chat_url)
         .header("Authorization", format!("Bearer {}", config.api_key))
         .header("Content-Type", "application/json")

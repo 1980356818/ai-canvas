@@ -16,6 +16,7 @@
         "width": 640,
         "height": 580,
         "decorations": false,
+        "visible": false,
         "center": true,
         "resizable": false,
         "dragDropEnabled": false

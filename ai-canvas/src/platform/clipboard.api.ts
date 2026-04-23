@@ -1,9 +1,9 @@
-import { isTauri, ensureTauriAPIs, getInvoke } from "./runtime";
+import { isTauri } from "./runtime";
 
 export async function clipboardWriteText(text: string): Promise<void> {
   if (isTauri) {
-    await ensureTauriAPIs();
-    await getInvoke()("clipboard_write", { text });
+    const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
+    await writeText(text);
     return;
   }
   await navigator.clipboard.writeText(text);
@@ -11,8 +11,8 @@ export async function clipboardWriteText(text: string): Promise<void> {
 
 export async function clipboardReadText(): Promise<string> {
   if (isTauri) {
-    await ensureTauriAPIs();
-    return getInvoke()<string>("clipboard_read");
+    const { readText } = await import("@tauri-apps/plugin-clipboard-manager");
+    return await readText();
   }
   return navigator.clipboard.readText();
 }

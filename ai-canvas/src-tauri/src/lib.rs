@@ -3,7 +3,7 @@ mod db;
 
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use tauri::Manager;
 
 #[tauri::command]
@@ -39,10 +39,33 @@ fn resize_window(
 
 pub struct AppState {
     pub db: Mutex<rusqlite::Connection>,
-    pub http_client: reqwest::Client,
-    pub stream_client: reqwest::Client,
+    http_client: OnceLock<reqwest::Client>,
+    stream_client: OnceLock<reqwest::Client>,
     pub active_streams: Mutex<HashMap<String, Arc<AtomicBool>>>,
     pub data_dir: std::path::PathBuf,
+}
+
+impl AppState {
+    pub fn http_client(&self) -> &reqwest::Client {
+        self.http_client.get_or_init(|| {
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(600))
+                .connect_timeout(std::time::Duration::from_secs(30))
+                .build()
+                .expect("failed to create http client")
+        })
+    }
+
+    pub fn stream_client(&self) -> &reqwest::Client {
+        self.stream_client.get_or_init(|| {
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(300))
+                .connect_timeout(std::time::Duration::from_secs(30))
+                .http1_only()
+                .build()
+                .expect("failed to create stream client")
+        })
+    }
 }
 
 /// 解析数据存储目录。策略：
@@ -138,6 +161,7 @@ pub fn run() {
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             boot_log("setup() entered");
 
@@ -160,39 +184,26 @@ pub fn run() {
             let conn = db::init(&db_path)?;
             boot_log("database ready");
 
-            boot_log("creating http clients (rustls)");
-            let http_client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(600))
-                .connect_timeout(std::time::Duration::from_secs(30))
-                .build()
-                .map_err(|e| format!("http client: {}", e))?;
-
-            let stream_client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(300))
-                .connect_timeout(std::time::Duration::from_secs(30))
-                .http1_only()
-                .build()
-                .map_err(|e| format!("stream client: {}", e))?;
-            boot_log("http clients ready");
-
             app.manage(AppState {
                 db: Mutex::new(conn),
-                http_client,
-                stream_client,
+                http_client: OnceLock::new(),
+                stream_client: OnceLock::new(),
                 active_streams: Mutex::new(HashMap::new()),
                 data_dir: data_dir.clone(),
             });
-            boot_log("state managed");
+            boot_log("state managed (http clients deferred)");
 
-            #[cfg(target_os = "macos")]
-            {
-                boot_log("configuring macOS window");
-                if let Some(win) = app.get_webview_window("main") {
+            if let Some(win) = app.get_webview_window("main") {
+                #[cfg(target_os = "macos")]
+                {
+                    boot_log("configuring macOS window");
                     let _ = win.set_decorations(true);
                     use tauri::TitleBarStyle;
                     let _ = win.set_title_bar_style(TitleBarStyle::Overlay);
+                    boot_log("macOS window configured");
                 }
-                boot_log("macOS window configured");
+                let _ = win.show();
+                boot_log("window shown");
             }
             boot_log("setup complete");
 
@@ -234,8 +245,6 @@ pub fn run() {
             commands::gateway::list_models,
             commands::gateway::poll_task,
             commands::gateway::validate_connection,
-            commands::clipboard::clipboard_write,
-            commands::clipboard::clipboard_read,
             commands::chat::list_chat_sessions,
             commands::chat::create_chat_session,
             commands::chat::rename_chat_session,

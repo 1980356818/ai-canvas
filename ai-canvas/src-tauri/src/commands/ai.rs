@@ -52,7 +52,7 @@ pub async fn ai_proxy(
     }
 
     let url = format!("{}{}", base_url.trim_end_matches('/'), endpoint);
-    let client = &state.http_client;
+    let client = state.http_client();
 
     let mut request = client
         .post(&url)
@@ -131,7 +131,7 @@ pub async fn ai_proxy_stream(
     }
 
     let url = format!("{}{}", config.base_url.trim_end_matches('/'), endpoint);
-    let client = state.stream_client.clone();
+    let client = state.stream_client().clone();
     let sid = stream_id.clone();
 
     tauri::async_runtime::spawn(async move {
@@ -370,7 +370,7 @@ pub async fn save_media(
             .decode(b64)
             .map_err(|e| format!("Base64 解码失败: {}", e))?
     } else if source.starts_with("http://") || source.starts_with("https://") {
-        let client = &state.http_client;
+        let client = state.http_client();
         let max_retries = 3u32;
         let mut last_err = String::new();
         let mut downloaded = None;
@@ -379,7 +379,7 @@ pub async fn save_media(
             if attempt > 0 {
                 let delay = std::time::Duration::from_millis(500 * 2u64.pow(attempt - 1));
                 tracing::info!("[save_media] 重试下载 #{}, 等待 {:?}", attempt + 1, delay);
-                std::thread::sleep(delay);
+                tokio::time::sleep(delay).await;
             }
 
             match client
