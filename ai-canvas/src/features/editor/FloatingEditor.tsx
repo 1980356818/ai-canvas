@@ -7,16 +7,16 @@ import EditorSwitch from "./EditorSwitch";
 
 const GAP = 12;
 const MIN_EDITOR_WIDTH = 360;
-const MIN_EDITOR_HEIGHT = 180;
+const MIN_EDITOR_HEIGHT = 90;
 
 const EDITOR_SIZES: Record<string, { height: number; minWidth: number }> = {
-  ai_chat: { height: 280, minWidth: 560 },
-  ai_image: { height: 320, minWidth: 560 },
-  ai_video: { height: 300, minWidth: 560 },
-  ai_tryon: { height: 300, minWidth: 560 },
-  ai_multiangle: { height: 176, minWidth: 400 },
+  ai_chat: { height: 140, minWidth: 560 },
+  ai_image: { height: 160, minWidth: 560 },
+  ai_video: { height: 150, minWidth: 560 },
+  ai_tryon: { height: 150, minWidth: 560 },
+  ai_multiangle: { height: 88, minWidth: 400 },
 };
-const DEFAULT_SIZE = { height: 240, minWidth: 400 };
+const DEFAULT_SIZE = { height: 120, minWidth: 400 };
 
 const sizeMemory = new Map<string, { w: number; h: number }>();
 
@@ -110,7 +110,7 @@ export default function FloatingEditor() {
   const hasRefAudios = refAudios && refAudios.length > 0;
   const refVideos = data?.refVideos as unknown[] | undefined;
   const hasRefVideos = refVideos && refVideos.length > 0;
-  let autoHeight = isEnhancer ? 140 : baseHeight;
+  let autoHeight = isEnhancer ? 70 : baseHeight;
   if (card.type === "ai_multiangle") {
     if (hasError) autoHeight += 48;
   } else {
