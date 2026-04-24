@@ -1,10 +1,26 @@
 use crate::AppState;
-use super::config::read_api_config;
+use super::config::{read_api_config, read_full_api_config};
 use std::error::Error as StdError;
 use tauri::State;
 
 fn resolve_provider(provider: Option<String>) -> String {
     provider.unwrap_or_else(|| "comfly".to_string())
+}
+
+fn resolve_first_key(state: &State<'_, AppState>, provider: &str) -> Result<String, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let full = read_full_api_config(&db, provider)?;
+    if let Some(first) = full.keys.first() {
+        return Ok(first.key.clone());
+    }
+    let config = read_api_config(&db, provider)?;
+    Ok(config.api_key)
+}
+
+fn resolve_base_url(state: &State<'_, AppState>, provider: &str) -> Result<String, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let full = read_full_api_config(&db, provider)?;
+    Ok(full.base_url)
 }
 
 fn format_reqwest_error(e: &reqwest::Error) -> String {
@@ -37,16 +53,14 @@ pub async fn list_models(
     provider: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let p = resolve_provider(provider);
-    let config = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
-        read_api_config(&db, &p)?
-    };
+    let api_key = resolve_first_key(&state, &p)?;
+    let base_url = resolve_base_url(&state, &p)?;
 
-    let url = format!("{}/v1/models", config.base_url.trim_end_matches('/'));
+    let url = format!("{}/v1/models", base_url.trim_end_matches('/'));
     let resp = state
         .http_client()
         .get(&url)
-        .header("Authorization", format!("Bearer {}", config.api_key))
+        .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
         .map_err(|e| format!("请求模型列表失败: {}", e))?;
@@ -63,8 +77,7 @@ pub async fn list_models(
 }
 
 /// Poll a task's current status and result.
-/// When `endpoint` is provided, uses that path (with `{task_id}` placeholder replaced).
-/// Otherwise defaults to `/v1/tasks/{task_id}`.
+/// Uses the active key (the task was likely started with it).
 #[tauri::command]
 pub async fn poll_task(
     state: State<'_, AppState>,
@@ -73,23 +86,21 @@ pub async fn poll_task(
     provider: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let p = resolve_provider(provider);
-    let config = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
-        read_api_config(&db, &p)?
-    };
+    let api_key = resolve_first_key(&state, &p)?;
+    let base_url = resolve_base_url(&state, &p)?;
 
     let path = endpoint
         .unwrap_or_else(|| format!("/v1/tasks/{}", task_id))
         .replace("{task_id}", &task_id);
     let url = format!(
         "{}{}",
-        config.base_url.trim_end_matches('/'),
+        base_url.trim_end_matches('/'),
         path
     );
     let resp = state
         .http_client()
         .get(&url)
-        .header("Authorization", format!("Bearer {}", config.api_key))
+        .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
         .map_err(|e| format!("查询任务状态失败: {}", e))?;
@@ -114,23 +125,20 @@ pub async fn validate_connection(
     provider: Option<String>,
 ) -> Result<bool, String> {
     let p = resolve_provider(provider);
-    let config = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
-        read_api_config(&db, &p)?
-    };
+    let key = resolve_first_key(&state, &p)?;
 
-    if config.api_key.is_empty() {
+    if key.is_empty() {
         return Err("API Key 未配置，请在设置中填写".to_string());
     }
 
-    let key = &config.api_key;
     let key_len = key.len();
     let key_preview = if key_len > 8 {
         format!("{}...{}", &key[..4], &key[key_len-4..])
     } else {
         "****".to_string()
     };
-    let base = config.base_url.trim_end_matches('/');
+    let base_url = resolve_base_url(&state, &p)?;
+    let base = base_url.trim_end_matches('/');
 
     if base.is_empty() {
         return Err("API 地址未配置，请在设置中填写 Base URL".to_string());
@@ -146,7 +154,7 @@ pub async fn validate_connection(
     let models_status = match state
         .http_client()
         .get(&models_url)
-        .header("Authorization", format!("Bearer {}", config.api_key))
+        .header("Authorization", format!("Bearer {}", key))
         .send()
         .await
     {
@@ -175,7 +183,7 @@ pub async fn validate_connection(
     let chat_resp = state
         .http_client()
         .post(&chat_url)
-        .header("Authorization", format!("Bearer {}", config.api_key))
+        .header("Authorization", format!("Bearer {}", key))
         .header("Content-Type", "application/json")
         .json(&chat_body)
         .send()

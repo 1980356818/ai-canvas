@@ -1,5 +1,5 @@
 use crate::AppState;
-use super::config::read_api_config;
+use super::config::{read_api_config, read_full_api_config, set_active_key, is_retryable_status};
 use base64::Engine as _;
 use serde::Serialize;
 use std::error::Error as StdError;
@@ -23,14 +23,35 @@ fn root_cause_chain(err: &dyn StdError) -> String {
     chain.join(" → ")
 }
 
+fn build_auth_request(
+    client: &reqwest::Client,
+    url: &str,
+    provider: &str,
+    api_key: &str,
+    body: &serde_json::Value,
+) -> reqwest::RequestBuilder {
+    let mut request = client
+        .post(url)
+        .header("Content-Type", "application/json")
+        .json(body);
+    request = match provider {
+        "anthropic" => request
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01"),
+        _ => request.header("Authorization", format!("Bearer {}", api_key)),
+    };
+    request
+}
+
 #[derive(Serialize)]
 pub struct AiProxyResponse {
     pub body: String,
     pub status: u16,
+    pub rotated_key_name: Option<String>,
+    pub tried_count: u32,
 }
 
-/// Generic HTTP proxy for AI API calls.
-/// API keys live in the `settings` table — the frontend never sees them.
+/// Generic HTTP proxy for AI API calls with automatic key rotation.
 #[tauri::command]
 pub async fn ai_proxy(
     state: State<'_, AppState>,
@@ -38,60 +59,119 @@ pub async fn ai_proxy(
     endpoint: String,
     body: serde_json::Value,
 ) -> Result<AiProxyResponse, String> {
-    let config = {
+    let full_config = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        read_api_config(&db, &provider)?
+        read_full_api_config(&db, &provider)?
     };
-    let (api_key, base_url) = (config.api_key, config.base_url);
 
-    if base_url.is_empty() {
+    if full_config.keys.is_empty() {
+        let config = {
+            let db = state.db.lock().map_err(|e| e.to_string())?;
+            read_api_config(&db, &provider)?
+        };
+        return ai_proxy_single(state.http_client(), &provider, &endpoint, &body, &config.api_key, &config.base_url).await;
+    }
+
+    if full_config.base_url.is_empty() {
         return Err(format!(
             "Provider '{}' 的 API 地址未配置，请在设置中填写 Base URL",
             provider
         ));
     }
 
-    let url = format!("{}{}", base_url.trim_end_matches('/'), endpoint);
+    let url = format!("{}{}", full_config.base_url.trim_end_matches('/'), endpoint);
     let client = state.http_client();
+    let keys = &full_config.keys;
+    let can_rotate = full_config.auto_rotate && keys.len() > 1;
 
-    let mut request = client
-        .post(&url)
-        .header("Content-Type", "application/json")
-        .json(&body);
+    let mut last_body = String::new();
+    let mut last_status: u16 = 0;
 
-    request = match provider.as_str() {
-        "anthropic" => request
-            .header("x-api-key", &api_key)
-            .header("anthropic-version", "2023-06-01"),
-        _ => request.header("Authorization", format!("Bearer {}", api_key)),
-    };
+    for (i, key_entry) in keys.iter().enumerate() {
+        let key_preview = if key_entry.key.len() > 8 {
+            format!("{}…{}", &key_entry.key[..4], &key_entry.key[key_entry.key.len()-4..])
+        } else {
+            "****".to_string()
+        };
+        tracing::info!(
+            "[key_rotation] provider={}, trying key \"{}\" ({}) ({}/{})",
+            provider, key_entry.name, key_preview, i + 1, keys.len()
+        );
 
+        let request = build_auth_request(client, &url, &provider, &key_entry.key, &body);
+
+        let resp = match request.send().await {
+            Ok(r) => r,
+            Err(e) => {
+                let root = root_cause_chain(&e);
+                tracing::error!("[ai_proxy] 请求发送失败: url={}, {}", url, root);
+                return Err(format!("请求失败: url={}, {}", url, root));
+            }
+        };
+
+        let status = resp.status().as_u16();
+        let resp_body = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+
+        if status < 400 || !can_rotate || !is_retryable_status(status) {
+            let rotated = if i > 0 {
+                if let Ok(db) = state.db.lock() {
+                    let _ = set_active_key(&db, &provider, &key_entry.id, &key_entry.key);
+                }
+                tracing::info!(
+                    "[key_rotation] provider={}, active key changed to \"{}\"",
+                    provider, key_entry.name
+                );
+                Some(key_entry.name.clone())
+            } else {
+                None
+            };
+            return Ok(AiProxyResponse {
+                body: resp_body,
+                status,
+                rotated_key_name: rotated,
+                tried_count: (i + 1) as u32,
+            });
+        }
+
+        tracing::warn!(
+            "[key_rotation] provider={}, key \"{}\" failed: HTTP {} — rotating",
+            provider, key_entry.name, status
+        );
+        last_body = resp_body;
+        last_status = status;
+    }
+
+    Ok(AiProxyResponse {
+        body: last_body,
+        status: last_status,
+        rotated_key_name: None,
+        tried_count: keys.len() as u32,
+    })
+}
+
+async fn ai_proxy_single(
+    client: &reqwest::Client,
+    provider: &str,
+    endpoint: &str,
+    body: &serde_json::Value,
+    api_key: &str,
+    base_url: &str,
+) -> Result<AiProxyResponse, String> {
+    if base_url.is_empty() {
+        return Err(format!("Provider '{}' 的 API 地址未配置", provider));
+    }
+    let url = format!("{}{}", base_url.trim_end_matches('/'), endpoint);
+    let request = build_auth_request(client, &url, provider, api_key, body);
     let resp = match request.send().await {
         Ok(r) => r,
         Err(e) => {
-            let is_connect = e.is_connect();
-            let is_timeout = e.is_timeout();
-            let is_request = e.is_request();
-            let source = StdError::source(&e).map(|s| s.to_string()).unwrap_or_default();
             let root = root_cause_chain(&e);
-            tracing::error!(
-                "[ai_proxy] 请求发送失败: url={}, connect={}, timeout={}, request={}, source={}, root={}",
-                url, is_connect, is_timeout, is_request, source, root
-            );
-            return Err(format!(
-                "请求失败: url={}, {} (connect={}, timeout={}, detail={})",
-                url, root, is_connect, is_timeout, source
-            ));
+            return Err(format!("请求失败: url={}, {}", url, root));
         }
     };
-
     let status = resp.status().as_u16();
-    let body = resp
-        .text()
-        .await
-        .map_err(|e| format!("读取响应失败: {}", e))?;
-
-    Ok(AiProxyResponse { body, status })
+    let resp_body = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+    Ok(AiProxyResponse { body: resp_body, status, rotated_key_name: None, tried_count: 1 })
 }
 
 // ── Streaming AI Proxy ──────────────────────────────────────
@@ -112,12 +192,12 @@ pub async fn ai_proxy_stream(
     body: serde_json::Value,
     stream_id: String,
 ) -> Result<(), String> {
-    let config = {
+    let full_config = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        read_api_config(&db, &provider)?
+        read_full_api_config(&db, &provider)?
     };
 
-    if config.base_url.is_empty() {
+    if full_config.base_url.is_empty() {
         return Err(format!(
             "Provider '{}' 的 API 地址未配置，请在设置中填写 Base URL",
             provider
@@ -130,18 +210,82 @@ pub async fn ai_proxy_stream(
         streams.insert(stream_id.clone(), cancelled.clone());
     }
 
-    let url = format!("{}{}", config.base_url.trim_end_matches('/'), endpoint);
+    let url = format!("{}{}", full_config.base_url.trim_end_matches('/'), endpoint);
     let client = state.stream_client().clone();
     let sid = stream_id.clone();
 
+    let keys = full_config.keys.clone();
+    let can_rotate = full_config.auto_rotate && keys.len() > 1;
+    let provider_clone = provider.clone();
+
     tauri::async_runtime::spawn(async move {
-        let result = do_stream(&app, &client, &url, &config.api_key, &provider, &body, &sid, &cancelled).await;
-        if let Err(e) = &result {
+        let mut succeeded = false;
+
+        if keys.is_empty() {
             let _ = app.emit("ai-stream", StreamEvent {
                 stream_id: sid.clone(),
                 event: "error".into(),
-                data: e.clone(),
+                data: format!("Provider '{}' 未配置 API Key", provider_clone),
             });
+        } else {
+            for (i, key_entry) in keys.iter().enumerate() {
+                tracing::info!(
+                    "[key_rotation][stream] provider={}, trying key \"{}\" ({}/{})",
+                    provider_clone, key_entry.name, i + 1, keys.len()
+                );
+
+                let result = do_stream(
+                    &app, &client, &url, &key_entry.key, &provider_clone, &body, &sid, &cancelled,
+                ).await;
+
+                match result {
+                    Ok(()) => {
+                        if i > 0 {
+                            if let Ok(db) = app.state::<AppState>().db.lock() {
+                                let _ = set_active_key(&db, &provider_clone, &key_entry.id, &key_entry.key);
+                            }
+                            tracing::info!(
+                                "[key_rotation][stream] provider={}, active key changed to \"{}\"",
+                                provider_clone, key_entry.name
+                            );
+                            let _ = app.emit("ai-stream", StreamEvent {
+                                stream_id: sid.clone(),
+                                event: "key_switched".into(),
+                                data: serde_json::json!({
+                                    "key_name": key_entry.name,
+                                    "tried_count": i + 1,
+                                }).to_string(),
+                            });
+                        }
+                        succeeded = true;
+                        break;
+                    }
+                    Err(ref e) if can_rotate && is_stream_retryable(e) => {
+                        tracing::warn!(
+                            "[key_rotation][stream] provider={}, key \"{}\" failed: {} — rotating",
+                            provider_clone, key_entry.name, e
+                        );
+                        continue;
+                    }
+                    Err(e) => {
+                        let _ = app.emit("ai-stream", StreamEvent {
+                            stream_id: sid.clone(),
+                            event: "error".into(),
+                            data: e,
+                        });
+                        succeeded = true;
+                        break;
+                    }
+                }
+            }
+
+            if !succeeded {
+                let _ = app.emit("ai-stream", StreamEvent {
+                    stream_id: sid.clone(),
+                    event: "error".into(),
+                    data: format!("所有 API Key 均不可用 (尝试了 {} 个)", keys.len()),
+                });
+            }
         }
 
         let _ = app.emit("ai-stream", StreamEvent {
@@ -156,6 +300,15 @@ pub async fn ai_proxy_stream(
     });
 
     Ok(())
+}
+
+fn is_stream_retryable(err: &str) -> bool {
+    if let Some(pos) = err.find("HTTP ") {
+        if let Ok(code) = err[pos + 5..].split(|c: char| !c.is_ascii_digit()).next().unwrap_or("0").parse::<u16>() {
+            return code >= 400;
+        }
+    }
+    false
 }
 
 async fn do_stream(
@@ -426,7 +579,18 @@ pub async fn save_media(
 
     std::fs::write(&dest, &bytes).map_err(|e| format!("写入文件失败: {}", e))?;
 
-    let auto_save_base = data_dir.join("auto-save");
+    let auto_save_base = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        db.query_row(
+            "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| std::path::PathBuf::from(s.trim()))
+        .unwrap_or_else(|| data_dir.join("auto-save"))
+    };
     let target_dir = if let Some(ref pid) = project_id {
         let folder = {
             let db = state.db.lock().map_err(|e| e.to_string())?;
@@ -490,7 +654,7 @@ pub async fn export_file(
         return Err(format!("源文件不存在: {}", source_path));
     }
 
-    let base_dir = {
+    let dir = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         db.query_row(
             "SELECT value FROM settings WHERE key = 'file_export_path'",
@@ -499,11 +663,17 @@ pub async fn export_file(
         )
         .ok()
         .filter(|s| !s.trim().is_empty())
+        .or_else(|| {
+            db.query_row(
+                "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+        })
+        .unwrap_or_else(|| data_dir.join("auto-save").to_string_lossy().to_string())
     };
-
-    let dir = base_dir.unwrap_or_else(|| {
-        data_dir.join("auto-save").to_string_lossy().to_string()
-    });
 
     let target_dir = if let Some(ref pid) = project_id {
         let folder = {
@@ -593,14 +763,16 @@ fn resolve_user_media_path(
     let mut candidate_dirs: Vec<std::path::PathBuf> = Vec::new();
 
     if let Ok(db) = state.db.lock() {
-        if let Ok(val) = db.query_row(
-            "SELECT value FROM settings WHERE key = 'file_export_path'",
-            [],
-            |row| row.get::<_, String>(0),
-        ) {
-            let val = val.trim().to_string();
-            if !val.is_empty() {
-                candidate_dirs.push(std::path::PathBuf::from(val));
+        for key in &["file_export_path", "file_auto_save_path"] {
+            if let Ok(val) = db.query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                rusqlite::params![key],
+                |row| row.get::<_, String>(0),
+            ) {
+                let val = val.trim().to_string();
+                if !val.is_empty() {
+                    candidate_dirs.push(std::path::PathBuf::from(val));
+                }
             }
         }
     }

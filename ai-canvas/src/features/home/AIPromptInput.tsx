@@ -3,6 +3,7 @@ import { MessageSquare, ImageIcon, SendHorizonal, X, ImagePlus, Video } from "lu
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useChatStore } from "@/stores/chatStore";
+import { useProviderStore, parseModelRef } from "@/stores/providerStore";
 import { createProject, hasApiKey, isTauri } from "@/platform";
 import { persistImage, getDisplayUrl } from "@/lib/media";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
@@ -72,12 +73,26 @@ export default function AIPromptInput() {
   const dragCounterRef = useRef(0);
   const config = MODE_CONFIG[mode];
 
+  const activeChatRef = useProviderStore((s) => s.activeChatRef);
+  const activeImageRef = useProviderStore((s) => s.activeImageRef);
+  const providerReady = useProviderStore((s) => s.initialized);
+
   useEffect(() => {
+    const existingRef = mode === "chat" ? activeChatRef : activeImageRef;
+    const parsed = parseModelRef(existingRef);
+    if (parsed.modelId) {
+      setSelectedModel(parsed.modelId);
+      return;
+    }
     const loadDefault = mode === "chat"
       ? modelService.getDefaultChatModel()
       : modelService.getDefaultImageModel();
-    loadDefault.then((ref) => setSelectedModel(ref.modelId));
-  }, [mode]);
+    loadDefault.then((ref) => {
+      setSelectedModel(ref.modelId);
+      const scene = mode === "chat" ? "chat" : "image";
+      useProviderStore.getState().setActiveRef(scene, `${ref.providerId}:${ref.modelId}`);
+    });
+  }, [mode, activeChatRef, activeImageRef, providerReady]);
 
   const addMedia = useCallback(async (files: File[]) => {
     const remaining = MAX_MEDIA - media.length;
@@ -397,7 +412,11 @@ export default function AIPromptInput() {
           <ModelSelector
             capability={mode === "chat" ? "CHAT" : "IMAGE"}
             value={selectedModel}
-            onChange={(modelId) => setSelectedModel(modelId)}
+            onChange={(modelId, providerId) => {
+              setSelectedModel(modelId);
+              const scene = mode === "chat" ? "chat" : "image";
+              useProviderStore.getState().setActiveRef(scene, `${providerId}:${modelId}`);
+            }}
           />
 
           <div className="flex-1" />

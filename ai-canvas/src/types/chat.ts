@@ -4,7 +4,9 @@ export type ChatContentPart =
   | { type: "text"; text: string }
   | { type: "image"; url: string; prompt?: string }
   | { type: "video"; url: string; prompt?: string; coverUrl?: string }
-  | { type: "loading"; mediaType: "image" | "video" };
+  | { type: "loading"; mediaType: "image" | "video" }
+  | { type: "image_pending"; prompt: string; suggestedSize?: string }
+  | { type: "video_pending"; prompt: string };
 
 export type Intent = "chat" | "image" | "video";
 

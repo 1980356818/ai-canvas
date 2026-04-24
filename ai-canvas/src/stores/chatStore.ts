@@ -75,7 +75,7 @@ async function historyToUnified(history: ChatHistoryMessage[]): Promise<UnifiedM
   for (const msg of history) {
     const parts: UnifiedContentPart[] = [];
     for (const p of msg.content) {
-      if (p.type === "loading") continue;
+      if (p.type === "loading" || p.type === "image_pending" || p.type === "video_pending") continue;
       if (p.type === "text") {
         parts.push({ type: "text", text: p.text });
       } else if (p.type === "image") {
@@ -116,6 +116,9 @@ interface ChatState {
   renameSession: (id: string, title: string) => Promise<void>;
 
   sendMessage: (text: string, imageUrls?: string[], videoUrls?: string[]) => Promise<void>;
+  confirmImageGeneration: (messageId: string, partIndex: number, prompt: string, modelRef: string, size: string) => Promise<void>;
+  confirmVideoGeneration: (messageId: string, partIndex: number, prompt: string, modelRef: string) => Promise<void>;
+  updatePendingPrompt: (messageId: string, partIndex: number, prompt: string) => void;
   stopGenerating: () => void;
   clearMessages: () => Promise<void>;
 }
@@ -328,30 +331,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (intent === "image") {
         const { cleanPrompt, size } = extractSizeFromPrompt(prompt);
-        const { providerId, modelId } = parseModelRef(
-          useProviderStore.getState().activeImageRef,
-        );
-        const result = await providerService.generateImage(providerId, {
-          prompt: cleanPrompt,
-          model: modelId,
-          size,
-          onProgress: (p) =>
-            set({ generatingProgress: p.percent, generatingStatus: p.label }),
-          signal: _abortController!.signal,
-        });
-        resultParts = [{ type: "image", url: result.url, prompt: cleanPrompt }];
+        resultParts = [{ type: "image_pending", prompt: cleanPrompt, suggestedSize: size }];
+        set({ generating: false, generatingType: null, generatingProgress: 0, generatingStatus: "", generatingStartedAt: 0 });
       } else if (intent === "video") {
-        const { providerId, modelId } = parseModelRef(
-          useProviderStore.getState().activeVideoRef,
-        );
-        const result = await providerService.generateVideo(providerId, {
-          prompt,
-          model: modelId,
-          onProgress: (p) =>
-            set({ generatingProgress: p.percent, generatingStatus: p.label }),
-          signal: _abortController!.signal,
-        });
-        resultParts = [{ type: "video", url: result.url, prompt }];
+        resultParts = [{ type: "video_pending", prompt }];
+        set({ generating: false, generatingType: null, generatingProgress: 0, generatingStatus: "", generatingStartedAt: 0 });
       } else {
         const history: ChatHistoryMessage[] = get().messages.map((m) => ({
           role: m.role,
@@ -411,58 +395,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
                           try {
                             const args = JSON.parse(tc.arguments || "{}");
                             if (tc.name === "generate_image") {
-                              set({
-                                generatingType: "image",
-                                generatingProgress: 0,
-                                generatingStatus: "",
-                              });
-                              const imgRef = parseModelRef(
-                                useProviderStore.getState().activeImageRef,
-                              );
-                              const imgResult = await providerService.generateImage(
-                                imgRef.providerId,
-                                {
-                                  prompt: String(args.prompt ?? ""),
-                                  model: imgRef.modelId,
-                                  size: args.size as string | undefined,
-                                  onProgress: (p) =>
-                                    set({
-                                      generatingProgress: p.percent,
-                                      generatingStatus: p.label,
-                                    }),
-                                  signal: ac.signal,
-                                },
-                              );
                               parts.push({
-                                type: "image",
-                                url: imgResult.url,
+                                type: "image_pending",
                                 prompt: String(args.prompt ?? ""),
+                                suggestedSize: args.size as string | undefined,
                               });
                             } else if (tc.name === "generate_video") {
-                              set({
-                                generatingType: "video",
-                                generatingProgress: 0,
-                                generatingStatus: "",
-                              });
-                              const vidRef = parseModelRef(
-                                useProviderStore.getState().activeVideoRef,
-                              );
-                              const vidResult = await providerService.generateVideo(
-                                vidRef.providerId,
-                                {
-                                  prompt: String(args.prompt ?? ""),
-                                  model: vidRef.modelId,
-                                  onProgress: (p) =>
-                                    set({
-                                      generatingProgress: p.percent,
-                                      generatingStatus: p.label,
-                                    }),
-                                  signal: ac.signal,
-                                },
-                              );
                               parts.push({
-                                type: "video",
-                                url: vidResult.url,
+                                type: "video_pending",
                                 prompt: String(args.prompt ?? ""),
                               });
                             }
@@ -561,6 +501,174 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     _abortController = null;
+  },
+
+  async confirmImageGeneration(messageId, partIndex, prompt, modelRef, size) {
+    if (get().generating) return;
+
+    set({
+      generating: true,
+      generatingType: "image",
+      generatingProgress: 0,
+      generatingStatus: "",
+      generatingStartedAt: Date.now(),
+    });
+
+    set((s) => ({
+      messages: s.messages.map((m) => {
+        if (m.id !== messageId) return m;
+        const newContent = [...m.content];
+        newContent[partIndex] = { type: "loading", mediaType: "image" as const };
+        return { ...m, content: newContent };
+      }),
+    }));
+
+    _abortController = new AbortController();
+
+    try {
+      const { providerId, modelId } = parseModelRef(modelRef);
+      const result = await providerService.generateImage(providerId, {
+        prompt,
+        model: modelId,
+        size: size || undefined,
+        onProgress: (p) =>
+          set({ generatingProgress: p.percent, generatingStatus: p.label }),
+        signal: _abortController!.signal,
+      });
+
+      set((s) => ({
+        messages: s.messages.map((m) => {
+          if (m.id !== messageId) return m;
+          const newContent = [...m.content];
+          newContent[partIndex] = { type: "image", url: result.url, prompt };
+          return { ...m, content: newContent, metadata: { ...m.metadata, model: modelId, intent: "image" as const } };
+        }),
+        generating: false,
+        generatingType: null,
+        generatingProgress: 0,
+        generatingStatus: "",
+        generatingStartedAt: 0,
+      }));
+
+      const msg = get().messages.find((m) => m.id === messageId);
+      if (msg) {
+        await saveChatMessage(messageToRow(msg));
+      }
+    } catch (e) {
+      const errorText = e instanceof Error ? e.message : String(e);
+      set((s) => ({
+        messages: s.messages.map((m) => {
+          if (m.id !== messageId) return m;
+          const newContent = [...m.content];
+          newContent[partIndex] = { type: "image_pending", prompt, suggestedSize: size };
+          return { ...m, content: newContent };
+        }),
+        generating: false,
+        generatingType: null,
+        generatingProgress: 0,
+        generatingStatus: "",
+        generatingStartedAt: 0,
+      }));
+
+      const msg = get().messages.find((m) => m.id === messageId);
+      if (msg) await saveChatMessage(messageToRow(msg));
+
+      const { addToast } = await import("@/stores/uiStore").then((m) => m.useUIStore.getState());
+      addToast({ type: "error", title: `图片生成失败: ${errorText}`, duration: 5000 });
+    }
+
+    _abortController = null;
+  },
+
+  async confirmVideoGeneration(messageId, partIndex, prompt, modelRef) {
+    if (get().generating) return;
+
+    set({
+      generating: true,
+      generatingType: "video",
+      generatingProgress: 0,
+      generatingStatus: "",
+      generatingStartedAt: Date.now(),
+    });
+
+    set((s) => ({
+      messages: s.messages.map((m) => {
+        if (m.id !== messageId) return m;
+        const newContent = [...m.content];
+        newContent[partIndex] = { type: "loading", mediaType: "video" as const };
+        return { ...m, content: newContent };
+      }),
+    }));
+
+    _abortController = new AbortController();
+
+    try {
+      const { providerId, modelId } = parseModelRef(modelRef);
+      const result = await providerService.generateVideo(providerId, {
+        prompt,
+        model: modelId,
+        onProgress: (p) =>
+          set({ generatingProgress: p.percent, generatingStatus: p.label }),
+        signal: _abortController!.signal,
+      });
+
+      set((s) => ({
+        messages: s.messages.map((m) => {
+          if (m.id !== messageId) return m;
+          const newContent = [...m.content];
+          newContent[partIndex] = { type: "video", url: result.url, prompt };
+          return { ...m, content: newContent, metadata: { ...m.metadata, model: modelId, intent: "video" as const } };
+        }),
+        generating: false,
+        generatingType: null,
+        generatingProgress: 0,
+        generatingStatus: "",
+        generatingStartedAt: 0,
+      }));
+
+      const msg = get().messages.find((m) => m.id === messageId);
+      if (msg) {
+        await saveChatMessage(messageToRow(msg));
+      }
+    } catch (e) {
+      const errorText = e instanceof Error ? e.message : String(e);
+      set((s) => ({
+        messages: s.messages.map((m) => {
+          if (m.id !== messageId) return m;
+          const newContent = [...m.content];
+          newContent[partIndex] = { type: "video_pending", prompt };
+          return { ...m, content: newContent };
+        }),
+        generating: false,
+        generatingType: null,
+        generatingProgress: 0,
+        generatingStatus: "",
+        generatingStartedAt: 0,
+      }));
+
+      const msg = get().messages.find((m) => m.id === messageId);
+      if (msg) await saveChatMessage(messageToRow(msg));
+
+      const { addToast } = await import("@/stores/uiStore").then((m) => m.useUIStore.getState());
+      addToast({ type: "error", title: `视频生成失败: ${errorText}`, duration: 5000 });
+    }
+
+    _abortController = null;
+  },
+
+  updatePendingPrompt(messageId, partIndex, prompt) {
+    set((s) => ({
+      messages: s.messages.map((m) => {
+        if (m.id !== messageId) return m;
+        const part = m.content[partIndex];
+        if (!part || (part.type !== "image_pending" && part.type !== "video_pending")) return m;
+        const newContent = [...m.content];
+        newContent[partIndex] = { ...part, prompt };
+        return { ...m, content: newContent };
+      }),
+    }));
+    const msg = get().messages.find((m) => m.id === messageId);
+    if (msg) saveChatMessage(messageToRow(msg));
   },
 
   stopGenerating() {

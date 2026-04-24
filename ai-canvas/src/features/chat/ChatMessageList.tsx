@@ -36,6 +36,8 @@ export default function ChatMessageList() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isMediaGenerating = generating && !streamingText && (generatingType === "image" || generatingType === "video");
+  const hasLoadingPart = isMediaGenerating && messages.some((m) => m.content.some((p) => p.type === "loading"));
+  const showMediaCard = isMediaGenerating && !hasLoadingPart;
   const isThinking = generating && !streamingText && !isMediaGenerating;
 
   const [elapsed, setElapsed] = useState(0);
@@ -94,7 +96,7 @@ export default function ChatMessageList() {
         </div>
       )}
 
-      {isMediaGenerating && (
+      {showMediaCard && (
         <div className="mb-3 flex justify-start">
           <div className="w-[260px] rounded-2xl rounded-tl-sm bg-muted/60 px-4 py-3">
             <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">

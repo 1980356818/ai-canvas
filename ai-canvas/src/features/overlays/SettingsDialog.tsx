@@ -21,6 +21,8 @@ import {
   UserCircle,
   KeyRound,
   Monitor,
+  GripVertical,
+  RefreshCw,
 } from "lucide-react";
 import {
   getSetting,
@@ -61,6 +63,7 @@ interface PlatformState {
   showKeyIds: Set<string>;
   connStatus: ConnStatus;
   connError: string;
+  autoRotate: boolean;
 }
 
 function genId() {
@@ -85,19 +88,36 @@ export default function SettingsDialog() {
 
   const [tab, setTab] = useState<SettingsTab>("platforms");
   const [platforms, setPlatforms] = useState<PlatformState[]>([]);
+  const [autoSavePath, setAutoSavePath] = useState("");
   const [exportPath, setExportPath] = useState("");
   const [saving, setSaving] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
+
+  useEffect(() => {
+    if (isTauri) {
+      import("@tauri-apps/api/app")
+        .then((m) => m.getVersion())
+        .then(setAppVersion)
+        .catch(() => setAppVersion(__APP_VERSION__));
+    } else {
+      setAppVersion(__APP_VERSION__);
+    }
+  }, []);
 
   useEffect(() => {
     if (!visible) return;
 
     (async () => {
-      const exp = await getSetting("file_export_path");
+      const [autoSave, exp] = await Promise.all([
+        getSetting("file_auto_save_path"),
+        getSetting("file_export_path"),
+      ]);
+      setAutoSavePath(autoSave || "");
       setExportPath(exp || "");
 
       const states: PlatformState[] = [];
       for (const p of PLATFORMS) {
-        const [keysJson, activeId, legacyKey, url, legacyUrl, enabledStr] =
+        const [keysJson, activeId, legacyKey, url, legacyUrl, enabledStr, autoRotateStr] =
           await Promise.all([
             getSetting(`${p.id}_api_keys`),
             getSetting(`${p.id}_active_key_id`),
@@ -107,6 +127,7 @@ export default function SettingsDialog() {
             getSetting(`${p.id}_base_url`),
             p.id === "comfly" ? getSetting("openai_base_url") : null,
             getSetting(`${p.id}_enabled`),
+            getSetting(`${p.id}_auto_rotate`),
           ]);
 
         let keys: KeyEntry[] = [];
@@ -139,6 +160,7 @@ export default function SettingsDialog() {
           showKeyIds: new Set(),
           connStatus: "idle",
           connError: "",
+          autoRotate: autoRotateStr !== "false",
         });
       }
       setPlatforms(states);
@@ -170,6 +192,11 @@ export default function SettingsDialog() {
     [updatePlatform],
   );
 
+  const handlePickAutoSavePath = useCallback(async () => {
+    const dir = await pickDirectory();
+    if (dir) setAutoSavePath(dir);
+  }, []);
+
   const handlePickExportPath = useCallback(async () => {
     const dir = await pickDirectory();
     if (dir) setExportPath(dir);
@@ -196,6 +223,7 @@ export default function SettingsDialog() {
         await setSetting(`${p.id}_api_key`, activeKey);
         if (trimmedUrl) await setSetting(`${p.id}_base_url`, trimmedUrl);
         await setSetting(`${p.id}_enabled`, String(p.enabled));
+        await setSetting(`${p.id}_auto_rotate`, String(p.autoRotate));
 
         if (p.id === "comfly") {
           await setSetting("openai_api_key", activeKey);
@@ -212,6 +240,7 @@ export default function SettingsDialog() {
       }
       await registry.saveConfigs();
 
+      await setSetting("file_auto_save_path", autoSavePath.trim());
       await setSetting("file_export_path", exportPath.trim());
 
       invalidateApiKeyCache();
@@ -225,73 +254,59 @@ export default function SettingsDialog() {
     } finally {
       setSaving(false);
     }
-  }, [platforms, exportPath, toggleSettings]);
+  }, [platforms, autoSavePath, exportPath, toggleSettings]);
 
   if (!visible) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="flex w-full max-w-lg flex-col rounded-xl border border-border bg-background shadow-2xl">
+      <div className="flex w-full max-w-2xl flex-col rounded-2xl border border-border bg-background shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <Settings className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-semibold">设置</h2>
+            {appVersion && (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                v{appVersion}
+              </span>
+            )}
           </div>
           <button
             onClick={toggleSettings}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-border px-6 pt-1">
-          <button
-            type="button"
-            onClick={() => setTab("platforms")}
-            className={cn(
-              "flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
-              tab === "platforms"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Zap className="h-3.5 w-3.5" />
-            AI 平台
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("general")}
-            className={cn(
-              "flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
-              tab === "general"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <FolderOpen className="h-3.5 w-3.5" />
-            通用
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("account")}
-            className={cn(
-              "flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
-              tab === "account"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <UserCircle className="h-3.5 w-3.5" />
-            账号
-          </button>
+        <div className="flex gap-1 border-b border-border px-6">
+          {([
+            { key: "platforms" as const, icon: Zap, label: "AI 平台" },
+            { key: "general" as const, icon: FolderOpen, label: "通用" },
+            { key: "account" as const, icon: UserCircle, label: "账号" },
+          ]).map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={cn(
+                "flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors",
+                tab === t.key
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <t.icon className="h-4 w-4" />
+              {t.label}
+            </button>
+          ))}
         </div>
 
         {/* Body */}
         <form
-          className="max-h-[60vh] overflow-y-auto px-6 py-5"
+          className="max-h-[60vh] overflow-y-auto px-6 py-6"
           onSubmit={(e) => {
             e.preventDefault();
             void handleSave();
@@ -313,17 +328,19 @@ export default function SettingsDialog() {
 
           {tab === "general" && (
             <div className="space-y-4">
-              <div className="rounded-lg border border-border p-3">
-                <p className="text-xs font-medium">自动保存</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  AI 生成的图片/视频会自动保存到应用数据目录的 auto-save 文件夹中，按项目分组
-                </p>
-              </div>
+              <PathField
+                label="自动保存路径"
+                hint="AI 生成的图片/视频自动保存到此目录，按项目分组"
+                value={autoSavePath}
+                placeholder="未设置则使用应用数据目录的 auto-save 文件夹"
+                onPick={handlePickAutoSavePath}
+                onClear={() => setAutoSavePath("")}
+              />
               <PathField
                 label="导出路径"
                 hint="手动下载时保存到此目录（未设置则使用自动保存目录）"
                 value={exportPath}
-                placeholder="未设置则使用 auto-save 目录"
+                placeholder="未设置则使用自动保存目录"
                 onPick={handlePickExportPath}
                 onClear={() => setExportPath("")}
               />
@@ -333,11 +350,11 @@ export default function SettingsDialog() {
           {tab === "account" && <AccountTab onClose={toggleSettings} />}
 
           {/* Footer */}
-          <div className="mt-6 flex items-center justify-end gap-2 border-t border-border pt-4">
+          <div className="mt-6 flex items-center justify-end gap-3 border-t border-border pt-5">
             <button
               type="button"
               onClick={toggleSettings}
-              className="rounded-lg px-4 py-2 text-sm text-muted-foreground hover:bg-accent"
+              className="rounded-lg px-5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               取消
             </button>
@@ -345,12 +362,12 @@ export default function SettingsDialog() {
               type="submit"
               disabled={saving}
               className={cn(
-                "flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90",
+                "flex items-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90",
                 saving && "opacity-60",
               )}
             >
-              <Save className="h-3.5 w-3.5" />
-              {saving ? "保存中..." : "保存"}
+              <Save className="h-4 w-4" />
+              {saving ? "保存中..." : "保存设置"}
             </button>
           </div>
         </form>
@@ -371,6 +388,8 @@ function PlatformCard({
   onTestConnection: () => void;
 }) {
   const activeEntry = p.keys.find((e) => e.id === p.activeKeyId);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
 
   const handleAddKey = () => {
     const entry: KeyEntry = { id: genId(), name: "", key: "" };
@@ -410,6 +429,17 @@ function PlatformCard({
     onUpdate({ showKeyIds: next });
   };
 
+  const handleDragEnd = () => {
+    if (dragIdx != null && overIdx != null && dragIdx !== overIdx) {
+      const reordered = [...p.keys];
+      const [moved] = reordered.splice(dragIdx, 1);
+      reordered.splice(overIdx, 0, moved!);
+      onUpdate({ keys: reordered });
+    }
+    setDragIdx(null);
+    setOverIdx(null);
+  };
+
   const keyCount = p.keys.filter((e) => e.key.trim()).length;
 
   return (
@@ -422,16 +452,16 @@ function PlatformCard({
       )}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2.5">
+      <div className="flex items-center gap-2.5 px-4 py-3">
         <button
           type="button"
           onClick={() => onUpdate({ expanded: !p.expanded })}
-          className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+          className="flex-shrink-0 text-muted-foreground transition-colors hover:text-foreground"
         >
           {p.expanded ? (
-            <ChevronDown className="h-3.5 w-3.5" />
+            <ChevronDown className="h-4 w-4" />
           ) : (
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-4 w-4" />
           )}
         </button>
 
@@ -440,83 +470,138 @@ function PlatformCard({
           onClick={() => onUpdate({ expanded: !p.expanded })}
           className="min-w-0 flex-1 text-left"
         >
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium">{p.name}</span>
+          <div className="flex items-center gap-2.5">
+            <span className="text-sm font-semibold">{p.name}</span>
             {keyCount > 0 ? (
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                 {keyCount} 个密钥{activeEntry ? ` · ${activeEntry.name || maskKey(activeEntry.key)}` : ""}
               </span>
             ) : (
-              <span className="text-[10px] text-amber-500">未配置</span>
+              <span className="text-xs font-medium text-amber-500">未配置</span>
+            )}
+            {p.autoRotate && keyCount > 1 && (
+              <RefreshCw className="h-3.5 w-3.5 text-primary/60" />
             )}
           </div>
         </button>
 
         {p.connStatus === "ok" && (
-          <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0 text-emerald-500" />
+          <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-500" />
         )}
         {p.connStatus === "error" && (
-          <XCircle className="h-3.5 w-3.5 flex-shrink-0 text-destructive" />
+          <XCircle className="h-4 w-4 flex-shrink-0 text-destructive" />
         )}
         {p.connStatus === "testing" && (
-          <Loader2 className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-muted-foreground" />
+          <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-muted-foreground" />
         )}
 
         <button
           type="button"
           onClick={() => onUpdate({ enabled: !p.enabled })}
-          className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+          className="flex-shrink-0 text-muted-foreground transition-colors hover:text-foreground"
           title={p.enabled ? "禁用" : "启用"}
         >
           {p.enabled ? (
-            <ToggleRight className="h-5 w-5 text-primary" />
+            <ToggleRight className="h-6 w-6 text-primary" />
           ) : (
-            <ToggleLeft className="h-5 w-5" />
+            <ToggleLeft className="h-6 w-6" />
           )}
         </button>
       </div>
 
       {/* Expanded */}
       {p.expanded && (
-        <div className="space-y-3 border-t border-border/50 px-3 pb-3 pt-2.5">
+        <div className="space-y-4 border-t border-border/50 px-4 pb-4 pt-3">
+          {/* Auto-rotate toggle */}
+          {p.keys.length > 1 && (
+            <div className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2.5">
+              <div>
+                <p className="text-xs font-semibold text-foreground">自动切换 Key</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Key 不可用时自动尝试下一个，按列表顺序
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onUpdate({ autoRotate: !p.autoRotate })}
+                className="flex-shrink-0"
+              >
+                {p.autoRotate ? (
+                  <ToggleRight className="h-6 w-6 text-primary" />
+                ) : (
+                  <ToggleLeft className="h-6 w-6 text-muted-foreground" />
+                )}
+              </button>
+            </div>
+          )}
+
           {/* Keys */}
           <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="text-[11px] font-medium text-muted-foreground">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-xs font-semibold text-foreground">
                 API Key
+                {p.autoRotate && p.keys.length > 1 && (
+                  <span className="ml-2 font-normal text-muted-foreground">
+                    拖拽调整优先级
+                  </span>
+                )}
               </label>
               <button
                 type="button"
                 onClick={handleAddKey}
-                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-primary hover:bg-primary/10"
+                className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
               >
-                <Plus className="h-3 w-3" />
+                <Plus className="h-3.5 w-3.5" />
                 添加
               </button>
             </div>
 
             {p.keys.length === 0 ? (
-              <div className="rounded-md border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
+              <div className="rounded-lg border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
                 暂无密钥，点击「添加」创建
               </div>
             ) : (
-              <div className="space-y-1.5">
-                {p.keys.map((entry) => {
+              <div className="space-y-2">
+                {p.keys.map((entry, idx) => {
                   const isActive = entry.id === p.activeKeyId;
                   const isEditing = entry.id === p.editingKeyId;
                   const isShown = p.showKeyIds.has(entry.id);
+                  const isDragOver = overIdx === idx && dragIdx !== idx;
 
                   return (
                     <div
                       key={entry.id}
+                      draggable={p.keys.length > 1 && !isEditing}
+                      onDragStart={() => setDragIdx(idx)}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setOverIdx(idx);
+                      }}
+                      onDragEnd={handleDragEnd}
                       className={cn(
-                        "rounded-md border px-2.5 py-2 transition-colors",
+                        "rounded-lg border px-3 py-2.5 transition-colors",
                         isActive
                           ? "border-primary/30 bg-primary/[0.03]"
-                          : "border-border/70",
+                          : "border-border",
+                        isDragOver && "border-primary/50 bg-primary/5",
+                        dragIdx === idx && "opacity-50",
                       )}
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
+                        {/* Drag handle */}
+                        {p.keys.length > 1 && !isEditing && (
+                          <div className="flex-shrink-0 cursor-grab text-muted-foreground/40 active:cursor-grabbing">
+                            <GripVertical className="h-4 w-4" />
+                          </div>
+                        )}
+
+                        {/* Priority badge */}
+                        {p.autoRotate && p.keys.length > 1 && (
+                          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+                            {idx + 1}
+                          </span>
+                        )}
+
                         {/* Radio */}
                         <button
                           type="button"
@@ -528,14 +613,14 @@ function PlatformCard({
                         >
                           <div
                             className={cn(
-                              "flex h-3.5 w-3.5 items-center justify-center rounded-full border-[1.5px] transition-colors",
+                              "flex h-4 w-4 items-center justify-center rounded-full border-2 transition-colors",
                               isActive
                                 ? "border-primary"
-                                : "border-muted-foreground/40 hover:border-muted-foreground",
+                                : "border-muted-foreground/30 hover:border-muted-foreground",
                             )}
                           >
                             {isActive && (
-                              <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                              <div className="h-2 w-2 rounded-full bg-primary" />
                             )}
                           </div>
                         </button>
@@ -543,7 +628,7 @@ function PlatformCard({
                         {/* Content */}
                         <div className="min-w-0 flex-1">
                           {isEditing ? (
-                            <div className="space-y-1">
+                            <div className="space-y-1.5">
                               <input
                                 type="text"
                                 value={entry.name}
@@ -553,7 +638,7 @@ function PlatformCard({
                                   })
                                 }
                                 placeholder="名称（如：生产环境）"
-                                className="w-full rounded border border-input bg-background px-2 py-1 text-[11px] outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+                                className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none ring-ring placeholder:text-muted-foreground/60 focus:ring-1"
                                 autoFocus
                               />
                               <div className="relative">
@@ -566,17 +651,17 @@ function PlatformCard({
                                     })
                                   }
                                   placeholder="sk-..."
-                                  className="w-full rounded border border-input bg-background px-2 py-1 pr-7 text-[11px] outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+                                  className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 pr-8 text-xs outline-none ring-ring placeholder:text-muted-foreground/60 focus:ring-1"
                                 />
                                 <button
                                   type="button"
                                   onClick={() => toggleShowKey(entry.id)}
-                                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
                                 >
                                   {isShown ? (
-                                    <EyeOff className="h-3 w-3" />
+                                    <EyeOff className="h-3.5 w-3.5" />
                                   ) : (
-                                    <Eye className="h-3 w-3" />
+                                    <Eye className="h-3.5 w-3.5" />
                                   )}
                                 </button>
                               </div>
@@ -589,10 +674,10 @@ function PlatformCard({
                                 onUpdate({ editingKeyId: entry.id })
                               }
                             >
-                              <div className="truncate text-[11px] font-medium leading-tight">
+                              <div className="truncate text-xs font-medium text-foreground">
                                 {entry.name || "未命名"}
                               </div>
-                              <div className="text-[10px] text-muted-foreground">
+                              <div className="mt-0.5 text-xs text-muted-foreground">
                                 {maskKey(entry.key)}
                               </div>
                             </button>
@@ -600,14 +685,14 @@ function PlatformCard({
                         </div>
 
                         {/* Actions */}
-                        <div className="flex flex-shrink-0 items-center gap-0.5">
+                        <div className="flex flex-shrink-0 items-center gap-1">
                           {isEditing ? (
                             <button
                               type="button"
                               onClick={() =>
                                 onUpdate({ editingKeyId: null })
                               }
-                              className="rounded px-1.5 py-0.5 text-[10px] text-primary hover:bg-primary/10"
+                              className="rounded-md px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
                             >
                               完成
                             </button>
@@ -617,19 +702,19 @@ function PlatformCard({
                               onClick={() =>
                                 onUpdate({ editingKeyId: entry.id })
                               }
-                              className="rounded p-1 text-muted-foreground hover:text-foreground"
+                              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                               title="编辑"
                             >
-                              <Pencil className="h-2.5 w-2.5" />
+                              <Pencil className="h-3.5 w-3.5" />
                             </button>
                           )}
                           <button
                             type="button"
                             onClick={() => handleRemoveKey(entry.id)}
-                            className="rounded p-1 text-muted-foreground hover:text-destructive"
+                            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                             title="删除"
                           >
-                            <Trash2 className="h-2.5 w-2.5" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       </div>
@@ -642,7 +727,7 @@ function PlatformCard({
 
           {/* Base URL */}
           <div>
-            <label className="mb-1 block text-[11px] font-medium text-muted-foreground">
+            <label className="mb-1.5 block text-xs font-semibold text-foreground">
               Base URL
             </label>
             <input
@@ -650,25 +735,25 @@ function PlatformCard({
               value={p.baseUrl}
               onChange={(e) => onUpdate({ baseUrl: e.target.value })}
               placeholder={p.defaultBaseUrl}
-              className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground/60 focus:ring-1"
             />
           </div>
 
           {/* Test connection */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={onTestConnection}
               disabled={!activeEntry?.key || p.connStatus === "testing"}
-              className="rounded-md border border-input px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent disabled:opacity-40"
+              className="rounded-lg border border-input px-3.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-40"
             >
               {p.connStatus === "testing" ? "测试中..." : "测试连接"}
             </button>
             {p.connStatus === "ok" && (
-              <span className="text-[11px] text-emerald-600">连接成功</span>
+              <span className="text-xs font-medium text-emerald-600">连接成功</span>
             )}
             {p.connStatus === "error" && (
-              <span className="max-w-[240px] truncate text-[11px] text-destructive" title={p.connError}>
+              <span className="max-w-[300px] truncate text-xs text-destructive" title={p.connError}>
                 {p.connError || "连接失败"}
               </span>
             )}
@@ -765,24 +850,25 @@ function AccountTab({ onClose }: { onClose: () => void }) {
   };
 
   const pwdInputClass =
-    "w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none ring-ring placeholder:text-muted-foreground focus:ring-1";
+    "w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground/60 focus:ring-1";
 
   return (
     <div className="space-y-5">
+      {/* User profile card */}
       <div className="rounded-lg border border-border p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <div className="flex items-center gap-3.5">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary">
             <UserCircle className="h-6 w-6" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-foreground">{user?.username ?? "未知用户"}</p>
+            <p className="text-sm font-semibold text-foreground">{user?.username ?? "未知用户"}</p>
             {user?.email && (
-              <p className="text-xs text-muted-foreground">{user.email}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{user.email}</p>
             )}
           </div>
           <span
             className={cn(
-              "rounded-full px-2 py-0.5 text-[10px] font-medium",
+              "rounded-full px-2.5 py-1 text-xs font-medium",
               user?.status === "active"
                 ? "bg-emerald-500/10 text-emerald-600"
                 : "bg-amber-500/10 text-amber-600",
@@ -801,22 +887,22 @@ function AccountTab({ onClose }: { onClose: () => void }) {
       {/* Change password */}
       <div className="rounded-lg border border-border p-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-medium text-foreground">修改密码</h3>
+          <h3 className="text-sm font-semibold text-foreground">修改密码</h3>
           {!showChangePwd && (
             <button
               type="button"
               onClick={() => setShowChangePwd(true)}
-              className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+              className="flex items-center gap-1.5 text-xs font-medium text-primary transition-colors hover:underline"
             >
-              <KeyRound className="h-3 w-3" />
+              <KeyRound className="h-3.5 w-3.5" />
               修改
             </button>
           )}
         </div>
         {showChangePwd && (
-          <div className="mt-3 space-y-2.5">
+          <div className="mt-3 space-y-3">
             {changePwdError && (
-              <p className="rounded-md bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive">
+              <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
                 {changePwdError}
               </p>
             )}
@@ -826,15 +912,15 @@ function AccountTab({ onClose }: { onClose: () => void }) {
                 value={oldPwd}
                 onChange={(e) => setOldPwd(e.target.value)}
                 placeholder="原密码"
-                className={cn(pwdInputClass, "pr-7")}
+                className={cn(pwdInputClass, "pr-9")}
               />
               <button
                 type="button"
                 onClick={() => setShowOldPwd(!showOldPwd)}
                 tabIndex={-1}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
               >
-                {showOldPwd ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                {showOldPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
             <div className="relative">
@@ -843,15 +929,15 @@ function AccountTab({ onClose }: { onClose: () => void }) {
                 value={newPwd}
                 onChange={(e) => setNewPwd(e.target.value)}
                 placeholder="新密码（至少6位）"
-                className={cn(pwdInputClass, "pr-7")}
+                className={cn(pwdInputClass, "pr-9")}
               />
               <button
                 type="button"
                 onClick={() => setShowNewPwd(!showNewPwd)}
                 tabIndex={-1}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
               >
-                {showNewPwd ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                {showNewPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
             <input
@@ -861,14 +947,14 @@ function AccountTab({ onClose }: { onClose: () => void }) {
               placeholder="确认新密码"
               className={pwdInputClass}
             />
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-2.5 pt-1">
               <button
                 type="button"
                 onClick={handleChangePassword}
                 disabled={changePwdLoading}
-                className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
-                {changePwdLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+                {changePwdLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 确认修改
               </button>
               <button
@@ -880,7 +966,7 @@ function AccountTab({ onClose }: { onClose: () => void }) {
                   setConfirmPwd("");
                   setChangePwdError("");
                 }}
-                className="rounded-md px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-accent"
+                className="rounded-lg px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent"
               >
                 取消
               </button>
@@ -891,20 +977,20 @@ function AccountTab({ onClose }: { onClose: () => void }) {
 
       {/* Device info */}
       <div className="rounded-lg border border-border p-4">
-        <div className="mb-2 flex items-center gap-2">
-          <Monitor className="h-3.5 w-3.5 text-muted-foreground" />
-          <h3 className="text-xs font-medium text-foreground">设备绑定</h3>
+        <div className="mb-3 flex items-center gap-2">
+          <Monitor className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold text-foreground">设备绑定</h3>
         </div>
         {deviceLoading ? (
           <div className="flex items-center gap-2 py-2">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-            <span className="text-[11px] text-muted-foreground">加载中...</span>
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">加载中...</span>
           </div>
         ) : deviceInfo ? (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {deviceInfo.bound ? (
               <>
-                <div className="space-y-1 text-[11px]">
+                <div className="space-y-2 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">设备标识</span>
                     <span className="font-mono text-foreground">{deviceInfo.machineCode ?? "—"}</span>
@@ -930,44 +1016,44 @@ function AccountTab({ onClose }: { onClose: () => void }) {
                     type="button"
                     onClick={handleUnbind}
                     disabled={unbindLoading}
-                    className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-md border border-amber-500/30 px-3 py-1.5 text-[11px] text-amber-600 transition-colors hover:bg-amber-500/10 disabled:opacity-50"
+                    className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 px-3.5 py-2 text-xs font-medium text-amber-600 transition-colors hover:bg-amber-500/10 disabled:opacity-50"
                   >
-                    {unbindLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+                    {unbindLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                     解绑旧设备，绑定当前设备
                   </button>
                 )}
               </>
             ) : (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 尚未绑定设备，下次登录时将自动绑定当前设备。
               </p>
             )}
           </div>
         ) : (
-          <p className="text-[11px] text-muted-foreground">无法获取设备信息</p>
+          <p className="text-xs text-muted-foreground">无法获取设备信息</p>
         )}
       </div>
 
       {/* Logout */}
       <div className="rounded-lg border border-destructive/20 p-4">
-        <h3 className="mb-2 text-xs font-medium text-foreground">退出登录</h3>
-        <p className="mb-3 text-[11px] text-muted-foreground">
+        <h3 className="mb-1.5 text-sm font-semibold text-foreground">退出登录</h3>
+        <p className="mb-3 text-xs text-muted-foreground">
           退出后需要重新登录才能继续使用
         </p>
         {confirming ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={handleLogout}
-              className="flex items-center gap-1.5 rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90"
+              className="flex items-center gap-1.5 rounded-lg bg-destructive px-4 py-2 text-xs font-medium text-destructive-foreground transition-colors hover:bg-destructive/90"
             >
-              <LogOut className="h-3.5 w-3.5" />
+              <LogOut className="h-4 w-4" />
               确认退出
             </button>
             <button
               type="button"
               onClick={() => setConfirming(false)}
-              className="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent"
+              className="rounded-lg px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent"
             >
               取消
             </button>
@@ -976,9 +1062,9 @@ function AccountTab({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={() => setConfirming(true)}
-            className="flex items-center gap-1.5 rounded-md border border-destructive/30 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10"
+            className="flex items-center gap-1.5 rounded-lg border border-destructive/30 px-4 py-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
           >
-            <LogOut className="h-3.5 w-3.5" />
+            <LogOut className="h-4 w-4" />
             退出登录
           </button>
         )}
@@ -1003,25 +1089,23 @@ function PathField({
   onClear: () => void;
 }) {
   return (
-    <div>
-      <label className="mb-1 block text-xs font-medium">
-        {label}
-        <span className="ml-1.5 font-normal text-muted-foreground">{hint}</span>
-      </label>
-      <div className="flex gap-2">
+    <div className="rounded-lg border border-border p-4">
+      <label className="block text-sm font-semibold text-foreground">{label}</label>
+      <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
+      <div className="mt-2.5 flex gap-2">
         <input
           type="text"
           value={value}
           placeholder={placeholder}
-          className="min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+          className="min-w-0 flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground/60 focus:ring-1"
           readOnly
         />
         <button
           type="button"
           onClick={onPick}
-          className="flex items-center gap-1 rounded-md border border-input px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="flex items-center gap-1.5 rounded-lg border border-input px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
         >
-          <FolderOpen className="h-3 w-3" />
+          <FolderOpen className="h-4 w-4" />
           选择
         </button>
       </div>
@@ -1029,7 +1113,7 @@ function PathField({
         <button
           type="button"
           onClick={onClear}
-          className="mt-1 text-[11px] text-muted-foreground hover:text-destructive"
+          className="mt-2 text-xs text-muted-foreground transition-colors hover:text-destructive"
         >
           清除路径
         </button>

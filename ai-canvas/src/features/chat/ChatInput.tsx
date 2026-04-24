@@ -9,11 +9,13 @@ import {
   ImagePlus,
 } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
+import { useProviderStore, parseModelRef } from "@/stores/providerStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { persistImage, getDisplayUrl } from "@/lib/media";
 import { CARD_REF_MIME, type CardRefPayload } from "@/config/model-ref-images";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { cn } from "@/lib/utils";
+import ModelSelector from "@/features/editor/ModelSelector";
 
 const IMAGE_MIME = new Set([
   "image/png", "image/jpeg", "image/gif", "image/webp",
@@ -58,6 +60,10 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
   const generating = useChatStore((s) => s.generating);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const stopGenerating = useChatStore((s) => s.stopGenerating);
+
+  const activeChatRef = useProviderStore((s) => s.activeChatRef);
+  const chatModelId = parseModelRef(activeChatRef).modelId;
+  const chatProviderId = parseModelRef(activeChatRef).providerId;
 
   const filteredCommands = input.startsWith("/")
     ? SLASH_COMMANDS.filter((c) =>
@@ -460,6 +466,19 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
           </span>
         </div>
       )}
+
+      {/* Model selector row */}
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <ModelSelector
+          capability="CHAT"
+          value={chatModelId}
+          providerId={chatProviderId}
+          onChange={(modelId, providerId) => {
+            useProviderStore.getState().setActiveRef("chat", `${providerId}:${modelId}`);
+          }}
+          className="flex-1"
+        />
+      </div>
 
       <div className="flex items-end gap-2">
         <button

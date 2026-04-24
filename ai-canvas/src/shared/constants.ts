@@ -47,7 +47,7 @@ export function normalizeImageSize(raw: string | undefined): string {
 }
 
 const MODEL_SIZE_CONSTRAINTS: Record<string, string[]> = {
-  "gpt-image-2": ["1:1", "2:3", "3:2"],
+  "gpt-image-2": ["1:1", "2:3", "3:2", "16:9", "9:16"],
 };
 
 export function getAllowedSizesForModel(modelId: string): string[] | null {

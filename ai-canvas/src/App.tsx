@@ -57,6 +57,22 @@ function AuthenticatedApp() {
   useGlobalShortcuts();
   useKeyboardShortcuts();
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const keyName = (e as CustomEvent).detail?.keyName;
+      if (keyName) {
+        useUIStore.getState().addToast({
+          type: "warning",
+          title: `API Key 已自动切换到「${keyName}」`,
+          description: "前一个 Key 不可用，已自动轮转到下一个",
+          duration: 5000,
+        });
+      }
+    };
+    window.addEventListener("ai-key-rotated", handler);
+    return () => window.removeEventListener("ai-key-rotated", handler);
+  }, []);
+
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       <TitleBar />
