@@ -157,6 +157,18 @@ const PromptTextarea = forwardRef<PromptTextareaHandle, PromptTextareaProps>(fun
     setEmpty(!value);
   }, [value, inlineRefs, imageOptions]);
 
+  // macOS WKWebView: contentEditable may not fire `input` from
+  // composition (IME) sessions. Listen for compositionend as backup.
+  useEffect(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    const onCompositionEnd = () => {
+      emitChange(el, inlineRefs);
+    };
+    el.addEventListener("compositionend", onCompositionEnd);
+    return () => el.removeEventListener("compositionend", onCompositionEnd);
+  }, [emitChange, inlineRefs]);
+
   // ── Emit DOM → parent ────────────────────────────────────
   const emitChange = useCallback(
     (el: HTMLElement, refs: InlineImageRef[]) => {

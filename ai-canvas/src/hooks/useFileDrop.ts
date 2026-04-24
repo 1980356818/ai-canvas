@@ -40,6 +40,16 @@ function isAudioPath(path: string): boolean {
   return AUDIO_EXTENSIONS.test(path);
 }
 
+function getImageDimensions(src: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const timer = setTimeout(() => { img.onload = null; img.onerror = null; resolve({ width: 0, height: 0 }); }, 5000);
+    img.onload = () => { clearTimeout(timer); resolve({ width: img.naturalWidth, height: img.naturalHeight }); };
+    img.onerror = () => { clearTimeout(timer); resolve({ width: 0, height: 0 }); };
+    img.src = src;
+  });
+}
+
 function getVideoDimensions(src: string): Promise<{ width: number; height: number }> {
   return new Promise((resolve) => {
     const video = document.createElement("video");
@@ -258,7 +268,12 @@ export function useFileDrop(
           if (isVideo) {
             ({ width: cardW, height: cardH } = await videoCardSize(getDisplayUrl(media.url)));
           } else {
-            ({ width: cardW, height: cardH } = { width: CARD_DEFAULTS.ai_image.width, height: CARD_DEFAULTS.ai_image.height });
+            const dims = await getImageDimensions(getDisplayUrl(media.url));
+            if (dims.width > 0 && dims.height > 0) {
+              ({ width: cardW, height: cardH } = sizeFromRatio(dims.width / dims.height));
+            } else {
+              ({ width: cardW, height: cardH } = { width: CARD_DEFAULTS.ai_image.width, height: CARD_DEFAULTS.ai_image.height });
+            }
           }
 
           const { maxZIndex } = useCardStore.getState();

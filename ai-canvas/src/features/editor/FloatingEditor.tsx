@@ -149,7 +149,17 @@ export default function FloatingEditor() {
         transformOrigin: "top left",
       }}
       onWheel={(e) => e.stopPropagation()}
-      onPointerDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        const el = e.target as HTMLElement;
+        if (el.isContentEditable || el.closest("[contenteditable]")) {
+          return;
+        }
+        if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT") {
+          return;
+        }
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.stopPropagation()}
     >

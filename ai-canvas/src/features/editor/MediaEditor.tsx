@@ -799,12 +799,24 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         )}
         <div className="flex-1" />
         <button
-          onClick={handleGenerate}
-          disabled={generating || !canGenerate}
+          onClick={() => {
+            if (!canGenerate && !generating) {
+              useUIStore.getState().addToast({
+                type: "info",
+                title: enhancer ? "请先上传参考图" : "请先输入提示词",
+                description: enhancer ? "在上方插槽中上传一张图片" : "在上方输入框中描述你想生成的图片",
+                duration: 3000,
+              });
+              return;
+            }
+            handleGenerate();
+          }}
+          disabled={generating}
           className={cn(
             "flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
             "bg-primary text-primary-foreground hover:bg-primary/90",
-            (generating || !canGenerate) && "cursor-not-allowed opacity-40",
+            generating && "cursor-not-allowed opacity-40",
+            !generating && !canGenerate && "opacity-60",
           )}
         >
           {generating ? (

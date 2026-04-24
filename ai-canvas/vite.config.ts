@@ -34,6 +34,12 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    target:
+      process.env.TAURI_ENV_PLATFORM === "windows"
+        ? "chrome105"
+        : "safari15",
+  },
   clearScreen: false,
   server: {
     port: 1620,

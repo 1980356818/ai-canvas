@@ -397,8 +397,8 @@ export default function AIPromptInput() {
                 className={cn(
                   "flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200",
                   mode === m
-                    ? "bg-foreground/10 text-foreground"
-                    : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -425,7 +425,7 @@ export default function AIPromptInput() {
             <button
               type="button"
               onClick={clearInput}
-              className="mr-1 flex h-8 items-center gap-1 rounded-full px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+              className="mr-1 flex h-8 items-center gap-1 rounded-full px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title="清空内容"
             >
               <X className="h-3.5 w-3.5" />
@@ -437,7 +437,7 @@ export default function AIPromptInput() {
             <button
               type="button"
               onClick={handlePickFile}
-              className="mr-1 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+              className="mr-1 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title="上传图片/视频"
             >
               <ImagePlus className="h-4 w-4" />

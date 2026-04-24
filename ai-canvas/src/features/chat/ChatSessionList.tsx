@@ -67,7 +67,7 @@ export default function ChatSessionList({ onClose }: Props) {
             onClick={() => handleSwitch(s.id)}
             className={cn(
               "group flex cursor-pointer items-center gap-2 px-3 py-2 text-sm transition-colors hover:bg-accent",
-              s.id === currentSessionId && "bg-accent/60",
+              s.id === currentSessionId && "bg-accent",
             )}
           >
             <MessageSquare className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

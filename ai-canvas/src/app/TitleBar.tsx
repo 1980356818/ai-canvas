@@ -197,7 +197,7 @@ export default function TitleBar() {
               title={sidebarVisible ? "收起侧边栏" : "展开侧边栏"}
               className={cn(
                 "flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-                sidebarVisible && "bg-accent/60 text-foreground",
+                sidebarVisible && "bg-accent text-foreground",
               )}
             >
               <PanelLeft className="h-3.5 w-3.5" />
@@ -237,7 +237,7 @@ export default function TitleBar() {
                     "group relative flex h-7 max-w-[180px] shrink-0 cursor-pointer items-center gap-1 rounded-t-lg px-3 text-xs transition-colors",
                     isActive
                       ? "bg-background text-foreground shadow-[0_-1px_3px_0_rgba(0,0,0,0.06)]"
-                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
                 >
                   {isEditing ? (

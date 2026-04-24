@@ -752,12 +752,24 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         )}
         <div className="flex-1" />
         <button
-          onClick={handleGenerate}
-          disabled={generating || !hasContent}
+          onClick={() => {
+            if (!hasContent && !generating) {
+              useUIStore.getState().addToast({
+                type: "info",
+                title: "请先输入提示词",
+                description: "在上方输入框中输入你的问题或指令",
+                duration: 3000,
+              });
+              return;
+            }
+            handleGenerate();
+          }}
+          disabled={generating}
           className={cn(
             "flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
             "bg-primary text-primary-foreground hover:bg-primary/90",
-            (generating || !hasContent) && "cursor-not-allowed opacity-40",
+            generating && "cursor-not-allowed opacity-40",
+            !generating && !hasContent && "opacity-60",
           )}
         >
           {generating ? (

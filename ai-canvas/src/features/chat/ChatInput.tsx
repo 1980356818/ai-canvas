@@ -393,7 +393,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
                 "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors",
                 idx === selectedSlashIdx
                   ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent/50",
+                  : "text-muted-foreground hover:bg-accent",
               )}
               onClick={() => {
                 setInput(cmd.command);

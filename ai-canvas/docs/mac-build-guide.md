@@ -9,17 +9,40 @@
 
 ## 1. 构建方式
 
-macOS 版本通过 GitHub Actions 在 Apple Silicon runner (`macos-latest`) 上构建 **Universal Binary**，单个 DMG 同时兼容 Intel 和 Apple Silicon：
+macOS 版本通过 GitHub Actions 分别在 ARM 和 Intel 原生 runner 上编译，然后用 `lipo` 合并为 **Universal Binary**，最终打包成 **pkg 安装包**：
 
-| 产物 | 架构 | 适用机型 |
-|------|------|---------|
-| `AICat_x.x.x_universal.dmg` | Universal (x86_64 + aarch64) | 所有 Mac（Intel 和 M 芯片均可） |
+| 产物 | 架构 | 格式 | 适用机型 |
+|------|------|------|---------|
+| `AICat_x.x.x_universal.pkg` | Universal (x86_64 + aarch64) | pkg 安装包 | 所有 Mac（Intel 和 M 芯片均可） |
 
-### 为什么用 Universal Binary
+### 构建流程
 
-- 用户无需区分 Intel / M 芯片，下载一个 DMG 即可
-- macOS 自动选择对应架构执行，无性能损失
-- 维护成本更低：一次构建，一个产物，一个下载链接
+```
+┌─────────────────────┐     ┌──────────────────────┐
+│  build-macos-arm    │     │  build-macos-intel    │
+│  (macos-latest/ARM) │     │  (macos-13/Intel)     │
+│  原生 aarch64 编译   │     │  原生 x86_64 编译     │
+└──────────┬──────────┘     └──────────┬───────────┘
+           │ upload-artifact            │ upload-artifact
+           └────────────┬──────────────┘
+                        ▼
+              ┌───────────────────┐
+              │   package-macos   │
+              │  (macos-latest)   │
+              │                   │
+              │  lipo 合并二进制    │
+              │  Patch ATS        │
+              │  Codesign         │
+              │  pkgbuild → .pkg  │
+              │  上传到 Release    │
+              └───────────────────┘
+```
+
+### 为什么这样做
+
+- **分开编译 + lipo 合并**：避免交叉编译导致的 `rusqlite` 等原生库链接问题
+- **pkg 安装包**：双击自动安装到 `/Applications`，用户无需手动拖拽
+- **Universal Binary**：用户无需区分 Intel / M 芯片，下载一个 pkg 即可
 
 ---
 
@@ -28,7 +51,7 @@ macOS 版本通过 GitHub Actions 在 Apple Silicon runner (`macos-latest`) 上�
 ### 方式一：手动触发（推荐）
 
 ```bash
-# 仅构建 macOS（Universal Binary）
+# 仅构建 macOS（Universal pkg）
 gh workflow run "Build & Release" --ref master --field build_targets=macos --repo XYB0217/ai-canvas
 
 # 全平台（Win + macOS Universal）
@@ -37,6 +60,8 @@ gh workflow run "Build & Release" --ref master --field build_targets=all --repo 
 # 仅 Windows
 gh workflow run "Build & Release" --ref master --field build_targets=windows --repo XYB0217/ai-canvas
 ```
+
+可选构建目标：`all`、`windows`、`macos`
 
 ### 方式二：推送 tag 自动触发
 
@@ -60,8 +85,8 @@ gh run view <RUN_ID> --repo XYB0217/ai-canvas
 ### 下载产物
 
 ```bash
-# 下载 macOS Universal DMG
-gh release download master --repo XYB0217/ai-canvas --pattern "AICat*universal.dmg"
+# 下载 macOS Universal pkg
+gh release download <TAG> --repo XYB0217/ai-canvas --pattern "AICat*universal.pkg"
 ```
 
 ---
@@ -124,11 +149,11 @@ permissions:
 
 **原因**：WiX 3 对 Unicode 路径/产品名支持不完善。
 
-**解决**：在 `tauri.conf.json` 中指定使用 NSIS 打包（替代 WiX）：
+**解决**：在 `tauri.conf.json` 中指定使用 NSIS 打包（替代 WiX），不再需要 DMG：
 
 ```json
 "bundle": {
-  "targets": ["nsis", "dmg", "app"]
+  "targets": ["nsis", "app"]
 }
 ```
 
@@ -206,7 +231,21 @@ const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 - 在 ARM runner 上交叉编译 x86_64 可能导致原生库链接问题
 - 构建后手动修补 Info.plist + 重签名破坏了签名完整性
 
-**解决**：使用 `universal-apple-darwin` target 构建通用二进制，并将 ATS 配置内置到构建流程中（见 3.6）。
+**解决**：ARM 和 Intel 分别在原生 runner 上编译，通过 `lipo` 合并为 Universal Binary（见第 1 节构建流程）。
+
+### 3.10 oklch / color-mix CSS 在旧版 Safari 上不兼容
+
+**现象**：macOS 12.0-12.2 (Safari 15.0-15.3) 上按钮点击变黑、颜色异常。
+
+**原因**：
+- `oklch()` 需要 Safari 15.4+
+- Tailwind CSS v4 的透明度修饰符（如 `bg-foreground/10`）使用 `color-mix()` 函数，需要 Safari 16.2+
+- 当 CSS 属性失效时，WKWebView 的系统按钮默认高亮覆盖显示
+
+**解决**：
+1. 为所有 CSS 颜色变量添加 hex 回退值（`oklch()` 之前写一行 hex）
+2. 全局添加 `-webkit-tap-highlight-color: transparent`
+3. 关键交互元素避免使用 `color-mix()` 依赖的透明度修饰符
 
 ---
 
@@ -222,20 +261,21 @@ const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
 | 提示 | 解决方法 |
 |------|---------|
+| "AICat.pkg 无法打开，因为无法验证开发者" | 系统偏好设置 → 安全性与隐私 → 点击"仍要打开" |
 | "AICat 已损坏，无法打开" | 终端执行 `sudo xattr -cr /Applications/AICat.app` |
-| "无法验证开发者" | 系统偏好设置 → 安全性与隐私 → 点击"仍要打开" |
 | 无任何提示但闪退 | 终端执行 `/Applications/AICat.app/Contents/MacOS/AICat` 查看报错 |
 
 **给用户的安装步骤：**
 
-1. 双击 `.dmg` 文件挂载
-2. 将 `AICat.app` 拖到 `Applications` 文件夹
-3. 打开终端，执行：
+1. 下载 `AICat_x.x.x_universal.pkg`
+2. 双击 `.pkg` 文件，按引导完成安装（自动安装到 `/Applications`）
+3. 首次打开时若提示"无法验证开发者"：
+   - 前往 **系统设置 → 隐私与安全性**，点击 **"仍要打开"**
+4. 若提示"已损坏"，打开终端执行：
    ```bash
    sudo xattr -cr /Applications/AICat.app
    ```
-4. 输入 Mac 密码，回车
-5. 双击打开 AICat
+5. 从启动台 (Launchpad) 或 Spotlight 打开 AICat
 
 ---
 
@@ -243,11 +283,13 @@ const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
 | 文件 | 作用 |
 |------|------|
-| `（仓库根）.github/workflows/build.yml` | 构建工作流（多平台 + 签名），GitHub Actions 只识别根目录 |
-| `ai-canvas/src-tauri/tauri.conf.json` | Tauri 配置（productName、identifier、bundle） |
+| `（仓库根）.github/workflows/build.yml` | 构建工作流（多平台 + 签名 + lipo 合并），GitHub Actions 只识别根目录 |
+| `ai-canvas/src-tauri/tauri.conf.json` | Tauri 配置（productName、identifier、bundle targets: `["nsis", "app"]`） |
 | `ai-canvas/src-tauri/Info.plist` | macOS Info.plist 扩展（ATS 等），Tauri 构建时自动合并 |
 | `ai-canvas/src-tauri/Cargo.toml` | Rust 依赖 |
 | `ai-canvas/package.json` | 前端依赖 + 构建脚本 |
+| `ai-canvas/vite.config.ts` | 前端构建目标（macOS: `safari15`，Windows: `chrome105`） |
+| `ai-canvas/src/main.css` | 主题颜色定义（含 oklch + hex 回退） |
 
 ---
 

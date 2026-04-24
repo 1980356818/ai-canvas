@@ -15,8 +15,6 @@ on:
           - all
           - windows
           - macos
-          - macos-intel
-          - macos-arm
 
 permissions:
   contents: write
@@ -68,7 +66,7 @@ jobs:
   build-macos-arm:
     if: >-
       github.event_name == 'push' ||
-      contains(fromJSON('["all","macos","macos-arm"]'), github.event.inputs.build_targets)
+      contains(fromJSON('["all","macos"]'), github.event.inputs.build_targets)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -95,37 +93,23 @@ jobs:
       - name: Build Tauri
         run: npm run tauri build -- --target aarch64-apple-darwin
 
-      - name: Patch ATS & codesign & repackage
+      - name: Archive app bundle
         run: |
-          APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
-          PLIST="$APP/Contents/Info.plist"
-          echo "=== Patching ATS in $PLIST ==="
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" "$PLIST"
-          echo "=== Signing $APP ==="
-          codesign --force --deep --sign - "$APP"
-          codesign --verify --verbose "$APP"
-          echo "=== Re-creating DMG ==="
-          DMG="src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/${{ env.APP_NAME }}_0.1.0_aarch64.dmg"
-          rm -f "$DMG"
-          hdiutil create -volname "${{ env.APP_NAME }}" -srcfolder "$APP" -ov -format UDZO "$DMG"
-          ls -lh "$DMG"
+          cd src-tauri/target/aarch64-apple-darwin/release/bundle/macos
+          tar czf "${{ env.APP_NAME }}-arm64.tar.gz" "${{ env.APP_NAME }}.app"
 
-      - name: Upload to release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ github.ref_name }}"
-          DMG="src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/${{ env.APP_NAME }}_0.1.0_aarch64.dmg"
-          gh release create "$TAG" --draft --title "${{ env.APP_NAME }} $TAG" --notes "See the assets below to download the installer." 2>/dev/null || true
-          gh release upload "$TAG" "$DMG" --clobber
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm-app
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}-arm64.tar.gz
 
   # ─── macOS Intel (x86_64) ────────────────────────────────
   build-macos-intel:
     if: >-
       github.event_name == 'push' ||
-      contains(fromJSON('["all","macos","macos-intel"]'), github.event.inputs.build_targets)
-    runs-on: macos-latest
+      contains(fromJSON('["all","macos"]'), github.event.inputs.build_targets)
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
 
@@ -151,27 +135,105 @@ jobs:
       - name: Build Tauri
         run: npm run tauri build -- --target x86_64-apple-darwin
 
-      - name: Patch ATS & codesign & repackage
+      - name: Archive app bundle
         run: |
-          APP="src-tauri/target/x86_64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
-          PLIST="$APP/Contents/Info.plist"
-          echo "=== Patching ATS in $PLIST ==="
+          cd src-tauri/target/x86_64-apple-darwin/release/bundle/macos
+          tar czf "${{ env.APP_NAME }}-x64.tar.gz" "${{ env.APP_NAME }}.app"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-intel-app
+          path: src-tauri/target/x86_64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}-x64.tar.gz
+
+  # ─── macOS Universal Package ─────────────────────────────
+  package-macos:
+    needs: [build-macos-arm, build-macos-intel]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download ARM app
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-arm-app
+          path: artifacts
+
+      - name: Download Intel app
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-intel-app
+          path: artifacts
+
+      - name: Read version from tauri.conf.json
+        id: version
+        run: |
+          VERSION=$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Detected version: $VERSION"
+
+      - name: Create universal binary & pkg
+        env:
+          APP_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          mkdir -p arm64 x64
+          tar xzf "artifacts/${{ env.APP_NAME }}-arm64.tar.gz" -C arm64
+          tar xzf "artifacts/${{ env.APP_NAME }}-x64.tar.gz" -C x64
+
+          ARM_APP="arm64/${{ env.APP_NAME }}.app"
+          INTEL_APP="x64/${{ env.APP_NAME }}.app"
+          UNIVERSAL_APP="${{ env.APP_NAME }}.app"
+
+          cp -R "$ARM_APP" "$UNIVERSAL_APP"
+
+          echo "=== Merging main executable ==="
+          lipo -create \
+            "$ARM_APP/Contents/MacOS/${{ env.APP_NAME }}" \
+            "$INTEL_APP/Contents/MacOS/${{ env.APP_NAME }}" \
+            -output "$UNIVERSAL_APP/Contents/MacOS/${{ env.APP_NAME }}"
+
+          echo "=== Merging dylibs (if any) ==="
+          find "$ARM_APP/Contents" -name "*.dylib" -type f | while read arm_dylib; do
+            rel="${arm_dylib#$ARM_APP/}"
+            intel_dylib="$INTEL_APP/$rel"
+            if [ -f "$intel_dylib" ]; then
+              echo "  Merging $rel"
+              lipo -create "$arm_dylib" "$intel_dylib" -output "$UNIVERSAL_APP/$rel"
+            fi
+          done
+
+          echo "=== Verifying universal binary ==="
+          file "$UNIVERSAL_APP/Contents/MacOS/${{ env.APP_NAME }}"
+          lipo -info "$UNIVERSAL_APP/Contents/MacOS/${{ env.APP_NAME }}"
+
+          echo "=== Patching ATS ==="
+          PLIST="$UNIVERSAL_APP/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" "$PLIST"
-          echo "=== Signing $APP ==="
-          codesign --force --deep --sign - "$APP"
-          codesign --verify --verbose "$APP"
-          echo "=== Re-creating DMG ==="
-          DMG="src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/${{ env.APP_NAME }}_0.1.0_x64.dmg"
-          rm -f "$DMG"
-          hdiutil create -volname "${{ env.APP_NAME }}" -srcfolder "$APP" -ov -format UDZO "$DMG"
-          ls -lh "$DMG"
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" "$PLIST"
+
+          echo "=== Codesigning ==="
+          codesign --force --deep --sign - "$UNIVERSAL_APP"
+          codesign --verify --verbose "$UNIVERSAL_APP"
+
+          echo "=== Creating pkg installer ==="
+          PKG="${{ env.APP_NAME }}_${APP_VERSION}_universal.pkg"
+
+          pkgbuild \
+            --component "$UNIVERSAL_APP" \
+            --install-location /Applications \
+            --identifier "com.ai-canvas.desktop" \
+            --version "${APP_VERSION}" \
+            "$PKG"
+
+          ls -lh "$PKG"
 
       - name: Upload to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_VERSION: ${{ steps.version.outputs.value }}
         run: |
           TAG="${{ github.ref_name }}"
-          DMG="src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/${{ env.APP_NAME }}_0.1.0_x64.dmg"
+          PKG="${{ env.APP_NAME }}_${APP_VERSION}_universal.pkg"
           gh release create "$TAG" --draft --title "${{ env.APP_NAME }} $TAG" --notes "See the assets below to download the installer." 2>/dev/null || true
-          gh release upload "$TAG" "$DMG" --clobber
+          gh release upload "$TAG" "$PKG" --clobber

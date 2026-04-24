@@ -189,7 +189,7 @@ export default function AtMentionPopover({
                       "flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors",
                       isActive
                         ? "bg-accent text-accent-foreground"
-                        : "text-foreground hover:bg-accent/50",
+                        : "text-foreground hover:bg-accent",
                     )}
                     onClick={() => onSelect(item)}
                     onMouseEnter={() => setActiveIndex(idx)}
