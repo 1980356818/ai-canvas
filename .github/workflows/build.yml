@@ -186,21 +186,34 @@ jobs:
         env:
           APP_VERSION: ${{ steps.version.outputs.value }}
         run: |
+          echo "=== Debug: pwd and listing artifacts ==="
+          pwd
+          ls -la artifacts/ || echo "artifacts/ not found"
+
           mkdir -p arm64 x64
           tar xzf "artifacts/${{ env.APP_NAME }}-arm64.tar.gz" -C arm64
           tar xzf "artifacts/${{ env.APP_NAME }}-x64.tar.gz" -C x64
+
+          echo "=== Debug: listing extracted dirs ==="
+          ls -la arm64/
+          ls -la arm64/${{ env.APP_NAME }}.app/Contents/MacOS/ || echo "ARM MacOS dir not found"
+          ls -la x64/${{ env.APP_NAME }}.app/Contents/MacOS/ || echo "Intel MacOS dir not found"
+          find arm64/ -name "AICat*" -o -name "ai-canvas*" -o -name "ai_canvas*" | head -20
 
           ARM_APP="arm64/${{ env.APP_NAME }}.app"
           INTEL_APP="x64/${{ env.APP_NAME }}.app"
           UNIVERSAL_APP="${{ env.APP_NAME }}.app"
 
+          BINARY_NAME=$(ls "$ARM_APP/Contents/MacOS/" | head -1)
+          echo "=== Detected binary name: $BINARY_NAME ==="
+
           cp -R "$ARM_APP" "$UNIVERSAL_APP"
 
           echo "=== Merging main executable ==="
           lipo -create \
-            "$ARM_APP/Contents/MacOS/${{ env.APP_NAME }}" \
-            "$INTEL_APP/Contents/MacOS/${{ env.APP_NAME }}" \
-            -output "$UNIVERSAL_APP/Contents/MacOS/${{ env.APP_NAME }}"
+            "$ARM_APP/Contents/MacOS/$BINARY_NAME" \
+            "$INTEL_APP/Contents/MacOS/$BINARY_NAME" \
+            -output "$UNIVERSAL_APP/Contents/MacOS/$BINARY_NAME"
 
           echo "=== Merging dylibs (if any) ==="
           find "$ARM_APP/Contents" -name "*.dylib" -type f | while read arm_dylib; do
@@ -213,8 +226,8 @@ jobs:
           done
 
           echo "=== Verifying universal binary ==="
-          file "$UNIVERSAL_APP/Contents/MacOS/${{ env.APP_NAME }}"
-          lipo -info "$UNIVERSAL_APP/Contents/MacOS/${{ env.APP_NAME }}"
+          file "$UNIVERSAL_APP/Contents/MacOS/$BINARY_NAME"
+          lipo -info "$UNIVERSAL_APP/Contents/MacOS/$BINARY_NAME"
 
           echo "=== Patching ATS ==="
           PLIST="$UNIVERSAL_APP/Contents/Info.plist"
