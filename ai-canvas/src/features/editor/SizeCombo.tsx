@@ -16,6 +16,7 @@ interface SizeComboProps {
   onResolutionChange?: (res: string) => void;
   disabled?: boolean;
   allowedSizes?: string[] | null;
+  resolutionOptions?: readonly { value: string; label: string }[];
 }
 
 function RatioIcon({
@@ -68,6 +69,7 @@ export default function SizeCombo({
   onResolutionChange,
   disabled,
   allowedSizes,
+  resolutionOptions,
 }: SizeComboProps) {
   const filteredOptions = allowedSizes
     ? IMAGE_SIZE_OPTIONS.filter((o) => allowedSizes.includes(o.value))
@@ -152,7 +154,7 @@ export default function SizeCombo({
                   分辨率
                 </div>
                 <div className="flex gap-1.5">
-                  {RESOLUTION_OPTIONS.map((res) => {
+                  {(resolutionOptions ?? RESOLUTION_OPTIONS).map((res) => {
                     const active = resolution === res.value;
                     return (
                       <button

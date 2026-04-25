@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { Sparkles, Loader2, RefreshCw, ArrowDownLeft, Lock, X, AlertCircle, ImageIcon, Music, Video } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, ArrowDownLeft, Lock, X, AlertCircle, Music, Video, Volume2, VolumeX } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -28,6 +28,11 @@ interface VideoFrameRef {
 }
 
 const MAX_AUDIO_SLOTS = 3;
+
+const VIDEO_RESOLUTION_OPTIONS = [
+  { value: "480p", label: "480p" },
+  { value: "720p", label: "720p" },
+] as const;
 
 interface AudioRefEntry {
   url: string;
@@ -120,8 +125,12 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const promptRef = useRef<PromptTextareaHandle>(null);
   const [currentModel, setCurrentModel] = useState("");
   const [currentSize, setCurrentSize] = useState(() => normalizeImageSize((card.data as VideoData).size));
+  const [currentResolution, setCurrentResolution] = useState(() => (card.data as VideoData).resolution ?? "720p");
+  const [currentDuration, setCurrentDuration] = useState(() => (card.data as VideoData).duration ?? 5);
+  const [currentAudio, setCurrentAudio] = useState(() => (card.data as VideoData).generateAudio ?? true);
   const [error, setError] = useState<string | null>(null);
   const data = card.data as VideoData;
+  const isSeedance = isSeedanceModel(currentModel);
   const imageMode: VideoImageMode = resolveImageMode(data);
 
   const refSlots = useMemo(
@@ -341,6 +350,31 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     [card.id, data, updateCard],
   );
 
+  const handleResolutionChange = useCallback(
+    (res: string) => {
+      setCurrentResolution(res);
+      updateCard(card.id, { data: { ...data, resolution: res } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const handleDurationChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const dur = Number(e.target.value);
+      setCurrentDuration(dur);
+      updateCard(card.id, { data: { ...data, duration: dur } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const handleAudioToggle = useCallback(() => {
+    const next = !currentAudio;
+    setCurrentAudio(next);
+    updateCard(card.id, { data: { ...data, generateAudio: next } });
+    autoSave.markDirty(card.id);
+  }, [card.id, data, currentAudio, updateCard]);
 
   const onPromptChange = useCallback(
     (newContent: string, newRefs: InlineImageRef[]) => {
@@ -478,6 +512,9 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
         referenceAudios: referenceAudios.length > 0 ? referenceAudios : undefined,
         referenceVideos: referenceVideos.length > 0 ? referenceVideos : undefined,
+        duration: isSeedance ? currentDuration : undefined,
+        resolution: isSeedance ? currentResolution : undefined,
+        generateAudio: isSeedance ? currentAudio : undefined,
         onProgress: (p) => {
           setCardProgress(card.id, { percent: p.percent, label: p.label });
         },
@@ -512,7 +549,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, generating, updateCard, currentModel, currentSize, setCardProgress, frames, imageMode, refSlots]);
+  }, [data, card.id, generating, updateCard, currentModel, currentSize, currentResolution, currentDuration, currentAudio, setCardProgress, frames, imageMode, refSlots]);
 
   const isLocked = !!data._locked;
 
@@ -530,120 +567,98 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         </div>
       ) : (
         <>
-          <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
-              <div className="mb-1.5 flex items-center justify-between">
-                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <ImageIcon className="h-3 w-3" />
-                  {imageMode === "text" && "纯文本"}
-                  {imageMode === "firstFrame" && "首帧 · 1 张图"}
-                  {imageMode === "firstLastFrame" && "首尾帧 · 2 张图"}
-                  {imageMode === "reference" && "多模态参考"}
-                </div>
-                <div className="flex rounded-md border border-border bg-muted/50 p-0.5 text-[10px]">
-                  {(["text", "firstFrame", "firstLastFrame", "reference"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => handleImageModeChange(mode)}
-                      disabled={generating}
-                      className={cn(
-                        "rounded px-1.5 py-0.5 transition-colors",
-                        imageMode === mode
-                          ? "bg-background font-medium text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {{ text: "文生", firstFrame: "首帧", firstLastFrame: "首尾帧", reference: "参考" }[mode]}
-                    </button>
-                  ))}
-                </div>
-              </div>
+          <div className="mb-1 flex flex-wrap items-center gap-1.5">
+            {(["text", "firstFrame", "firstLastFrame", "reference"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => handleImageModeChange(mode)}
+                disabled={generating}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs transition-all",
+                  imageMode === mode
+                    ? "border-primary bg-primary/10 font-medium text-primary shadow-sm"
+                    : "border-border bg-muted/40 text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground",
+                  generating && "opacity-50",
+                )}
+              >
+                {{ text: "文生", firstFrame: "首帧", firstLastFrame: "首尾帧", reference: "参考" }[mode]}
+              </button>
+            ))}
+          </div>
 
-              {imageMode === "text" && (
-                <p className="py-2 text-center text-[10px] text-muted-foreground/60">纯文本生视频，无需图片/视频/音频素材</p>
-              )}
-
-              {imageMode === "firstFrame" && (
-                <div className="flex gap-2">
-                  {frames.slice(0, 1).map((frame, idx) => (
-                    <div key={frame.sourceCardId || idx} className="relative">
-                      <img
-                        src={getDisplayUrl(frame.url)}
-                        alt="首帧"
-                        className="h-16 w-auto rounded border border-border object-cover"
-                      />
-                      <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">首帧</span>
-                      <button
-                        onClick={() => removeFrame(idx)}
-                        disabled={generating}
-                        className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white shadow-sm transition-opacity hover:opacity-80 disabled:opacity-40"
-                      >
-                        <X className="h-2.5 w-2.5" />
-                      </button>
-                    </div>
-                  ))}
-                  {frames.length === 0 && (
-                    <p className="py-2 text-[10px] text-muted-foreground/60">连线一张图片卡片作为首帧</p>
-                  )}
+          {imageMode === "firstFrame" && frames.length > 0 && (
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {frames.slice(0, 1).map((frame, idx) => (
+                <div key={frame.sourceCardId || idx} className="relative">
+                  <img
+                    src={getDisplayUrl(frame.url)}
+                    alt="首帧"
+                    className="h-16 w-auto rounded border border-border object-cover"
+                  />
+                  <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">首帧</span>
+                  <button
+                    onClick={() => removeFrame(idx)}
+                    disabled={generating}
+                    className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white shadow-sm transition-opacity hover:opacity-80 disabled:opacity-40"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
                 </div>
-              )}
-
-              {imageMode === "firstLastFrame" && (
-                <div className="flex gap-2">
-                  {frames.map((frame, idx) => (
-                    <div key={frame.sourceCardId || idx} className="relative">
-                      <img
-                        src={getDisplayUrl(frame.url)}
-                        alt={idx === 0 ? "首帧" : "尾帧"}
-                        className="h-16 w-auto rounded border border-border object-cover"
-                      />
-                      <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">
-                        {idx === 0 ? "首帧" : "尾帧"}
-                      </span>
-                      <button
-                        onClick={() => removeFrame(idx)}
-                        disabled={generating}
-                        className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white shadow-sm transition-opacity hover:opacity-80 disabled:opacity-40"
-                      >
-                        <X className="h-2.5 w-2.5" />
-                      </button>
-                    </div>
-                  ))}
-                  {frames.length < 2 && (
-                    <p className="py-2 text-[10px] text-muted-foreground/60">
-                      {frames.length === 0 ? "连线图片卡片作为首帧和尾帧" : "再连线一张图片作为尾帧"}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {imageMode === "reference" && (
-                <div className="flex flex-wrap gap-2">
-                  {refSlots.map((slot, idx) => {
-                    const entry = data.refImages?.[slot.key];
-                    const occupiedCount = refSlots.filter((s) => data.refImages?.[s.key]).length;
-                    if (!entry && idx > occupiedCount) return null;
-                    return (
-                      <RefImageSlot
-                        key={slot.key}
-                        label={slot.label}
-                        description={slot.description}
-                        entry={entry}
-                        onImage={(e) => setRefImage(slot.key, e)}
-                        onClear={() => clearRefImage(slot.key)}
-                        onRefClick={entry ? () => {
-                          const opt = imageOptions.find((o) => o.id === `slot:${slot.key}`);
-                          if (opt) promptRef.current?.insertRef(opt);
-                        } : undefined}
-                        disabled={generating}
-                        targetCardId={card.id}
-                        slotKey={slot.key}
-                        index={entry ? idx : undefined}
-                      />
-                    );
-                  })}
-                </div>
-              )}
+              ))}
             </div>
+          )}
+
+          {imageMode === "firstLastFrame" && frames.length > 0 && (
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {frames.map((frame, idx) => (
+                <div key={frame.sourceCardId || idx} className="relative">
+                  <img
+                    src={getDisplayUrl(frame.url)}
+                    alt={idx === 0 ? "首帧" : "尾帧"}
+                    className="h-16 w-auto rounded border border-border object-cover"
+                  />
+                  <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">
+                    {idx === 0 ? "首帧" : "尾帧"}
+                  </span>
+                  <button
+                    onClick={() => removeFrame(idx)}
+                    disabled={generating}
+                    className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white shadow-sm transition-opacity hover:opacity-80 disabled:opacity-40"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {imageMode === "reference" && refSlots.some((s) => data.refImages?.[s.key]) && (
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {refSlots.map((slot, idx) => {
+                const entry = data.refImages?.[slot.key];
+                const occupiedCount = refSlots.filter((s) => data.refImages?.[s.key]).length;
+                if (!entry && idx > occupiedCount) return null;
+                return (
+                  <RefImageSlot
+                    key={slot.key}
+                    label={slot.label}
+                    description={slot.description}
+                    entry={entry}
+                    onImage={(e) => setRefImage(slot.key, e)}
+                    onClear={() => clearRefImage(slot.key)}
+                    onRefClick={entry ? () => {
+                      const opt = imageOptions.find((o) => o.id === `slot:${slot.key}`);
+                      if (opt) promptRef.current?.insertRef(opt);
+                    } : undefined}
+                    disabled={generating}
+                    targetCardId={card.id}
+                    slotKey={slot.key}
+                    index={entry ? idx : undefined}
+                  />
+                );
+              })}
+            </div>
+          )}
 
           {imageMode === "reference" && data.refAudios && data.refAudios.length > 0 && (
             <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
@@ -801,8 +816,44 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
           <SizeCombo
             value={currentSize}
             onChange={handleSizeChange}
+            resolution={isSeedance ? currentResolution : undefined}
+            onResolutionChange={isSeedance ? handleResolutionChange : undefined}
+            resolutionOptions={isSeedance ? VIDEO_RESOLUTION_OPTIONS : undefined}
             disabled={generating}
           />
+        )}
+        {isSeedance && !isLocked && (
+          <>
+            <select
+              value={currentDuration}
+              onChange={handleDurationChange}
+              disabled={generating}
+              className={cn(
+                "rounded-lg border border-border bg-transparent px-2 py-1.5 text-sm font-medium transition-colors",
+                "text-muted-foreground hover:bg-muted hover:text-foreground",
+                generating && "cursor-not-allowed opacity-40",
+              )}
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 4).map((s) => (
+                <option key={s} value={s}>{s}s</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleAudioToggle}
+              disabled={generating}
+              className={cn(
+                "flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
+                currentAudio
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+                generating && "cursor-not-allowed opacity-40",
+              )}
+            >
+              {currentAudio ? <Volume2 className="h-3 w-3" /> : <VolumeX className="h-3 w-3" />}
+              {currentAudio ? "有声" : "无声"}
+            </button>
+          </>
         )}
         <div className="flex-1" />
         <button
