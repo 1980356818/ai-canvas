@@ -41,7 +41,17 @@ function formatDuration(sec: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-type VideoImageMode = "frame" | "reference";
+type VideoImageMode = "text" | "firstFrame" | "firstLastFrame" | "reference";
+
+function resolveImageMode(data: { imageMode?: string; refFrames?: unknown[] }): VideoImageMode {
+  const raw = data.imageMode;
+  if (raw === "text" || raw === "firstFrame" || raw === "firstLastFrame" || raw === "reference") return raw;
+  if (raw === "frame") {
+    const len = data.refFrames?.length ?? 0;
+    return len <= 1 ? "firstFrame" : "firstLastFrame";
+  }
+  return "reference";
+}
 
 interface VideoData {
   content?: string;
@@ -112,7 +122,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const [currentSize, setCurrentSize] = useState(() => normalizeImageSize((card.data as VideoData).size));
   const [error, setError] = useState<string | null>(null);
   const data = card.data as VideoData;
-  const imageMode: VideoImageMode = data.imageMode ?? "reference";
+  const imageMode: VideoImageMode = resolveImageMode(data);
 
   const refSlots = useMemo(
     () => getRefSlotsForVideoModel(currentModel, imageMode),
@@ -189,51 +199,95 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     [card.id, data, refSlots, updateCard],
   );
 
+  const disconnectCards = useCallback(
+    (sourceCardIds: string[]) => {
+      if (sourceCardIds.length === 0) return;
+      const { connections, removeConnection } = useConnectionStore.getState();
+      for (const sid of sourceCardIds) {
+        if (!sid) continue;
+        for (const [id, c] of connections) {
+          if (c.sourceCardId === sid && c.targetCardId === card.id) {
+            removeConnection(id);
+            break;
+          }
+        }
+      }
+    },
+    [card.id],
+  );
+
+  const collectAllSourceCardIds = useCallback((): string[] => {
+    const ids: string[] = [];
+    if (data.refImages) {
+      for (const e of Object.values(data.refImages)) if (e.sourceCardId) ids.push(e.sourceCardId);
+    }
+    for (const f of frames) if (f.sourceCardId) ids.push(f.sourceCardId);
+    if (data.refAudios) {
+      for (const a of data.refAudios as Array<{ sourceCardId?: string }>) if (a.sourceCardId) ids.push(a.sourceCardId);
+    }
+    if (data.refVideos) {
+      for (const v of data.refVideos) if (v.sourceCardId) ids.push(v.sourceCardId);
+    }
+    return ids;
+  }, [data.refImages, data.refAudios, data.refVideos, frames]);
+
   const handleImageModeChange = useCallback(
     (newMode: VideoImageMode) => {
       if (imageMode === newMode) return;
       const newData: Record<string, unknown> = { ...data, imageMode: newMode };
 
-      if (newMode === "reference") {
+      if (newMode === "text") {
+        disconnectCards(collectAllSourceCardIds());
+        newData.refFrames = undefined;
+        newData.refImages = undefined;
+        newData.refAudios = undefined;
+        newData.refVideos = undefined;
+      } else if (newMode === "firstFrame") {
+        const firstImage = frames[0] ?? (data.refImages && Object.values(data.refImages)[0]);
+        const droppedIds = collectAllSourceCardIds();
+        const keptFrame = firstImage
+          ? { url: firstImage.url, sourceCardId: firstImage.sourceCardId ?? "" }
+          : undefined;
+        if (keptFrame?.sourceCardId) {
+          const idx = droppedIds.indexOf(keptFrame.sourceCardId);
+          if (idx >= 0) droppedIds.splice(idx, 1);
+        }
+        disconnectCards(droppedIds);
+        newData.refFrames = keptFrame ? [keptFrame] : undefined;
+        newData.refImages = undefined;
+        newData.refAudios = undefined;
+        newData.refVideos = undefined;
+      } else if (newMode === "firstLastFrame") {
+        const keptFrames: VideoFrameRef[] = [];
+        if (frames.length > 0) {
+          keptFrames.push(...frames.slice(0, 2));
+        } else if (data.refImages) {
+          const slots = getRefSlotsForVideoModel(currentModel, "reference");
+          const entries = slots.map((s) => data.refImages?.[s.key]).filter((e): e is RefImageEntry => !!e);
+          for (const e of entries.slice(0, 2)) {
+            keptFrames.push({ url: e.url, sourceCardId: e.sourceCardId ?? "" });
+          }
+        }
+        const keptIds = new Set(keptFrames.map((f) => f.sourceCardId).filter(Boolean));
+        const droppedIds = collectAllSourceCardIds().filter((id) => !keptIds.has(id));
+        disconnectCards(droppedIds);
+        newData.refFrames = keptFrames.length > 0 ? keptFrames : undefined;
+        newData.refImages = undefined;
+        newData.refAudios = undefined;
+        newData.refVideos = undefined;
+      } else {
         const refImages: Record<string, RefImageEntry> = {};
         (frames ?? []).forEach((f, i) => {
           refImages[`refImage${i}`] = { url: f.url, sourceCardId: f.sourceCardId, sourceType: "card" };
         });
         newData.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
         newData.refFrames = undefined;
-      } else {
-        const slots = getRefSlotsForVideoModel(currentModel, "reference");
-        const entries = slots
-          .map((s) => data.refImages?.[s.key])
-          .filter((e): e is RefImageEntry => !!e);
-
-        const kept = entries.slice(0, 2);
-        const dropped = entries.slice(2);
-        const newFrames = kept.map((e) => ({
-          url: e.url,
-          sourceCardId: e.sourceCardId ?? "",
-        }));
-        newData.refFrames = newFrames.length > 0 ? newFrames : undefined;
-        newData.refImages = undefined;
-
-        if (dropped.length > 0) {
-          const { connections, removeConnection } = useConnectionStore.getState();
-          for (const entry of dropped) {
-            if (!entry.sourceCardId) continue;
-            for (const [id, c] of connections) {
-              if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
-                removeConnection(id);
-                break;
-              }
-            }
-          }
-        }
       }
 
       updateCard(card.id, { data: newData });
       autoSave.markDirty(card.id);
     },
-    [imageMode, data, frames, currentModel, card.id, updateCard],
+    [imageMode, data, frames, currentModel, card.id, updateCard, disconnectCards, collectAllSourceCardIds],
   );
 
   const disconnectAudio = useCallback(
@@ -367,7 +421,20 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       }
 
       const referenceImages: Array<{ url: string; role: string }> = [];
-      if (imageMode === "reference") {
+      const referenceAudios: Array<{ url: string; role: string }> = [];
+      const referenceVideos: Array<{ url: string; role: string }> = [];
+
+      if (imageMode === "firstFrame") {
+        if (frames[0]) {
+          const dataUrl = await getBase64ForApi(frames[0].url);
+          referenceImages.push({ url: dataUrl, role: "firstFrame" });
+        }
+      } else if (imageMode === "firstLastFrame") {
+        for (let i = 0; i < frames.length; i++) {
+          const dataUrl = await getBase64ForApi(frames[i]!.url);
+          referenceImages.push({ url: dataUrl, role: i === 0 ? "firstFrame" : "lastFrame" });
+        }
+      } else if (imageMode === "reference") {
         for (const slot of refSlots) {
           const entry = data.refImages?.[slot.key];
           if (entry) {
@@ -375,43 +442,33 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
             referenceImages.push({ url: dataUrl, role: "referenceImage" });
           }
         }
-      } else {
-        for (let i = 0; i < frames.length; i++) {
-          const dataUrl = await getBase64ForApi(frames[i]!.url);
-          referenceImages.push({ url: dataUrl, role: i === 0 ? "firstFrame" : "lastFrame" });
+        if (data.refAudios?.length) {
+          for (const entry of data.refAudios) {
+            const dataUrl = await getBase64ForApi(entry.url);
+            referenceAudios.push({ url: dataUrl, role: "referenceAudio" });
+          }
         }
-      }
-
-      const referenceAudios: Array<{ url: string; role: string }> = [];
-      if (data.refAudios?.length) {
-        for (const entry of data.refAudios) {
-          const dataUrl = await getBase64ForApi(entry.url);
-          referenceAudios.push({ url: dataUrl, role: "referenceAudio" });
+        if (data.refVideos?.length) {
+          for (const entry of data.refVideos) {
+            const dataUrl = await getBase64ForApi(entry.url);
+            referenceVideos.push({ url: dataUrl, role: "referenceVideo" });
+          }
         }
-      }
-
-      const referenceVideos: Array<{ url: string; role: string }> = [];
-      if (data.refVideos?.length) {
-        for (const entry of data.refVideos) {
-          const dataUrl = await getBase64ForApi(entry.url);
-          referenceVideos.push({ url: dataUrl, role: "referenceVideo" });
+        if (
+          isSeedanceModel(currentModel) &&
+          referenceAudios.length > 0 &&
+          referenceImages.length === 0 &&
+          referenceVideos.length === 0
+        ) {
+          useUIStore.getState().addToast({
+            type: "warning",
+            title: "参考音频不能单独使用",
+            description: "Seedance 要求参考音频必须搭配参考图或参考视频一起使用，请先添加图片或视频素材",
+            duration: 5000,
+          });
+          setCardProgress(card.id, null);
+          return;
         }
-      }
-
-      if (
-        isSeedanceModel(currentModel) &&
-        referenceAudios.length > 0 &&
-        referenceImages.length === 0 &&
-        referenceVideos.length === 0
-      ) {
-        useUIStore.getState().addToast({
-          type: "warning",
-          title: "参考音频不能单独使用",
-          description: "Seedance 要求参考音频必须搭配参考图或参考视频一起使用，请先添加图片或视频素材",
-          duration: 5000,
-        });
-        setCardProgress(card.id, null);
-        return;
       }
 
       const result = await provider.generateVideo({
@@ -477,37 +534,89 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
               <div className="mb-1.5 flex items-center justify-between">
                 <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                   <ImageIcon className="h-3 w-3" />
-                  {imageMode === "reference" ? "参考图 · 最多 9 张" : "参考帧 · 最多 2 帧"}
+                  {imageMode === "text" && "纯文本"}
+                  {imageMode === "firstFrame" && "首帧 · 1 张图"}
+                  {imageMode === "firstLastFrame" && "首尾帧 · 2 张图"}
+                  {imageMode === "reference" && "多模态参考"}
                 </div>
                 <div className="flex rounded-md border border-border bg-muted/50 p-0.5 text-[10px]">
-                  <button
-                    onClick={() => handleImageModeChange("frame")}
-                    disabled={generating}
-                    className={cn(
-                      "rounded px-2 py-0.5 transition-colors",
-                      imageMode === "frame"
-                        ? "bg-background font-medium text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    首尾帧
-                  </button>
-                  <button
-                    onClick={() => handleImageModeChange("reference")}
-                    disabled={generating}
-                    className={cn(
-                      "rounded px-2 py-0.5 transition-colors",
-                      imageMode === "reference"
-                        ? "bg-background font-medium text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    参考图
-                  </button>
+                  {(["text", "firstFrame", "firstLastFrame", "reference"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => handleImageModeChange(mode)}
+                      disabled={generating}
+                      className={cn(
+                        "rounded px-1.5 py-0.5 transition-colors",
+                        imageMode === mode
+                          ? "bg-background font-medium text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {{ text: "文生", firstFrame: "首帧", firstLastFrame: "首尾帧", reference: "参考" }[mode]}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {imageMode === "reference" ? (
+              {imageMode === "text" && (
+                <p className="py-2 text-center text-[10px] text-muted-foreground/60">纯文本生视频，无需图片/视频/音频素材</p>
+              )}
+
+              {imageMode === "firstFrame" && (
+                <div className="flex gap-2">
+                  {frames.slice(0, 1).map((frame, idx) => (
+                    <div key={frame.sourceCardId || idx} className="relative">
+                      <img
+                        src={getDisplayUrl(frame.url)}
+                        alt="首帧"
+                        className="h-16 w-auto rounded border border-border object-cover"
+                      />
+                      <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">首帧</span>
+                      <button
+                        onClick={() => removeFrame(idx)}
+                        disabled={generating}
+                        className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white shadow-sm transition-opacity hover:opacity-80 disabled:opacity-40"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {frames.length === 0 && (
+                    <p className="py-2 text-[10px] text-muted-foreground/60">连线一张图片卡片作为首帧</p>
+                  )}
+                </div>
+              )}
+
+              {imageMode === "firstLastFrame" && (
+                <div className="flex gap-2">
+                  {frames.map((frame, idx) => (
+                    <div key={frame.sourceCardId || idx} className="relative">
+                      <img
+                        src={getDisplayUrl(frame.url)}
+                        alt={idx === 0 ? "首帧" : "尾帧"}
+                        className="h-16 w-auto rounded border border-border object-cover"
+                      />
+                      <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">
+                        {idx === 0 ? "首帧" : "尾帧"}
+                      </span>
+                      <button
+                        onClick={() => removeFrame(idx)}
+                        disabled={generating}
+                        className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white shadow-sm transition-opacity hover:opacity-80 disabled:opacity-40"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {frames.length < 2 && (
+                    <p className="py-2 text-[10px] text-muted-foreground/60">
+                      {frames.length === 0 ? "连线图片卡片作为首帧和尾帧" : "再连线一张图片作为尾帧"}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {imageMode === "reference" && (
                 <div className="flex flex-wrap gap-2">
                   {refSlots.map((slot, idx) => {
                     const entry = data.refImages?.[slot.key];
@@ -533,32 +642,10 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
                     );
                   })}
                 </div>
-              ) : (
-                <div className="flex gap-2">
-                  {frames.map((frame, idx) => (
-                    <div key={frame.sourceCardId || idx} className="relative">
-                      <img
-                        src={getDisplayUrl(frame.url)}
-                        alt={idx === 0 ? "首帧" : "尾帧"}
-                        className="h-16 w-auto rounded border border-border object-cover"
-                      />
-                      <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">
-                        {idx === 0 ? "首帧" : "尾帧"}
-                      </span>
-                      <button
-                        onClick={() => removeFrame(idx)}
-                        disabled={generating}
-                        className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white shadow-sm transition-opacity hover:opacity-80 disabled:opacity-40"
-                      >
-                        <X className="h-2.5 w-2.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
               )}
             </div>
 
-          {data.refAudios && data.refAudios.length > 0 && (
+          {imageMode === "reference" && data.refAudios && data.refAudios.length > 0 && (
             <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
               <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
                 <Music className="h-3 w-3" />
@@ -600,7 +687,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
             </div>
           )}
 
-          {data.refVideos && data.refVideos.length > 0 && (
+          {imageMode === "reference" && data.refVideos && data.refVideos.length > 0 && (
             <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
               <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
                 <Video className="h-3 w-3" />
