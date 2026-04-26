@@ -29,7 +29,7 @@ export function instantiateWorkflowTemplate(
       locked: false,
       collapsed: false,
       title: preset.title,
-      data: { ...preset.data },
+      data: { _showLabel: true, ...preset.data },
       createdAt: now,
       updatedAt: now,
     };

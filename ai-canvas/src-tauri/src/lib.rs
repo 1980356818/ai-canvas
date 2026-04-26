@@ -50,7 +50,7 @@ impl AppState {
         self.http_client.get_or_init(|| {
             reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(600))
-                .connect_timeout(std::time::Duration::from_secs(30))
+                .connect_timeout(std::time::Duration::from_secs(120))
                 .build()
                 .expect("failed to create http client")
         })
@@ -60,7 +60,7 @@ impl AppState {
         self.stream_client.get_or_init(|| {
             reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(300))
-                .connect_timeout(std::time::Duration::from_secs(30))
+                .connect_timeout(std::time::Duration::from_secs(120))
                 .http1_only()
                 .build()
                 .expect("failed to create stream client")

@@ -8,7 +8,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { deleteCard, updateProjectMeta } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
 import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
-import { recordBatchDelete } from "@/lib/history";
+import { recordBatchDelete, recordUpdate } from "@/lib/history";
 import { cn } from "@/lib/utils";
 import { CARD_DEFAULTS } from "@/shared/constants";
 import { WORKFLOW_TEMPLATES } from "@/config/workflows";
@@ -447,6 +447,7 @@ function ContextMenuPanel({
     const cardMediaPath = card ? extractCardMedia(card) : null;
     const hasLocalMedia = !!cardMediaPath && !cardMediaPath.startsWith("data:") && !cardMediaPath.startsWith("http");
     const isVideo = card?.type === "ai_video";
+    const showLabel = !!(card?.data as { _showLabel?: boolean } | undefined)?._showLabel;
     entries = [
       {
         type: "item",
@@ -454,6 +455,20 @@ function ContextMenuPanel({
         shortcut: `${mod}+C`,
         disabled: !id || !card,
         onSelect: () => void runCopyCards(new Set(id ? [id] : [])),
+      },
+      {
+        type: "item",
+        label: showLabel ? "隐藏标签" : "显示标签",
+        disabled: !id || !card,
+        onSelect: () => {
+          if (!id || !card) return;
+          recordUpdate(id, { data: { ...card.data } });
+          useCardStore.getState().updateCard(id, {
+            data: { ...card.data, _showLabel: !showLabel },
+          });
+          autoSave.markDirty(id);
+          hide();
+        },
       },
       {
         type: "item",

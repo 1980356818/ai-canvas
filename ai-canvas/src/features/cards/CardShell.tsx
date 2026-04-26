@@ -20,6 +20,7 @@ import {
   canAcceptImageConnection,
   injectOnConnect,
 } from "@/lib/dataFlow";
+import CardLabel from "./CardLabel";
 
 function findInputPortAt(
   clientX: number,
@@ -704,6 +705,10 @@ export default memo(
           </div>
         </div>
 
+        {(card.data as { _showLabel?: boolean })?._showLabel && (
+          <CardLabel card={card} />
+        )}
+
         <Port side="input" cardId={card.id} color={accentColor} inset={selected ? 1.5 : 1} />
         <Port side="output" cardId={card.id} color={accentColor} inset={selected ? 1.5 : 1} />
 
@@ -744,5 +749,8 @@ export default memo(
     prev.card.zIndex === next.card.zIndex &&
     prev.card.locked === next.card.locked &&
     prev.card.type === next.card.type &&
+    prev.card.title === next.card.title &&
+    (prev.card.data as { _showLabel?: boolean })?._showLabel ===
+      (next.card.data as { _showLabel?: boolean })?._showLabel &&
     prev.selected === next.selected,
 );
