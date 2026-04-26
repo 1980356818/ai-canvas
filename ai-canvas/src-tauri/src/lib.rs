@@ -165,6 +165,41 @@ pub fn run() {
         .setup(|app| {
             boot_log("setup() entered");
 
+            // macOS 上必须注册原生 Edit 菜单，否则 Cmd+C/V/A/Z 等会被系统吞掉，
+            // webview 收不到 keydown 事件、剪贴板事件，导致复制粘贴失效。
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::menu::{MenuBuilder, SubmenuBuilder};
+                let app_submenu = SubmenuBuilder::new(app, "AICat")
+                    .about(None)
+                    .separator()
+                    .hide()
+                    .hide_others()
+                    .show_all()
+                    .separator()
+                    .quit()
+                    .build()?;
+                let edit_submenu = SubmenuBuilder::new(app, "Edit")
+                    .undo()
+                    .redo()
+                    .separator()
+                    .cut()
+                    .copy()
+                    .paste()
+                    .separator()
+                    .select_all()
+                    .build()?;
+                let window_submenu = SubmenuBuilder::new(app, "Window")
+                    .minimize()
+                    .fullscreen()
+                    .build()?;
+                let menu = MenuBuilder::new(app)
+                    .items(&[&app_submenu, &edit_submenu, &window_submenu])
+                    .build()?;
+                app.set_menu(menu)?;
+                boot_log("macOS native menu registered");
+            }
+
             boot_log("resolving data_dir");
             let data_dir = resolve_data_dir(app)?;
             boot_log(&format!("data_dir = {:?}", data_dir));

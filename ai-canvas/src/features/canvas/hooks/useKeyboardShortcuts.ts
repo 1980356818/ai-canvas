@@ -26,6 +26,24 @@ function isFocusOnInput(): boolean {
   return false;
 }
 
+// 焦点在输入元素，且当前确实有选中文本（用于复制时让默认行为走）
+function hasTextSelectionInInput(): boolean {
+  const el = document.activeElement as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA") {
+    const inputEl = el as HTMLInputElement | HTMLTextAreaElement;
+    const start = inputEl.selectionStart ?? 0;
+    const end = inputEl.selectionEnd ?? 0;
+    return end > start;
+  }
+  if (el.isContentEditable) {
+    const sel = window.getSelection();
+    return !!sel && sel.toString().length > 0;
+  }
+  return false;
+}
+
 async function deleteSelected() {
   const ids = useCanvasStore.getState().selectedCardIds;
   if (ids.size === 0) return;
@@ -116,17 +134,19 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // ── Ctrl+C: copy selected cards (not while focus on text input) ──
-      if (mod && e.key === "c") {
-        if (isFocusOnInput()) return;
+      // ── Ctrl+C: copy selected cards ──
+      // 关键：焦点即使在输入元素上，只要没选中文本，就复制卡片（解决编辑模式下复制卡片）
+      if (mod && e.key.toLowerCase() === "c") {
+        if (hasTextSelectionInInput()) return; // 有选中文本，让默认复制走
         if (selectedCardIds.size === 0) return;
         e.preventDefault();
         void copyCards(selectedCardIds);
         return;
       }
 
-      // ── Ctrl+V: paste cards (not while focus on text input) ──
-      if (mod && e.key === "v") {
+      // ── Ctrl+V: paste cards ──
+      // 焦点在输入元素时（如卡片编辑模式 textarea）让默认粘贴文本走，否则粘贴卡片
+      if (mod && e.key.toLowerCase() === "v") {
         if (isFocusOnInput()) return;
         e.preventDefault();
         const pid = useProjectStore.getState().currentProjectId;
