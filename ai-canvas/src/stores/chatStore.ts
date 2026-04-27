@@ -373,6 +373,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 signal: ac.signal,
               },
               (event: StreamEvent) => {
+                if (import.meta.env.DEV) {
+                  console.debug("[chatStore] stream event:", event.type, event.type === "text" ? event.text.slice(0, 50) : event);
+                }
                 switch (event.type) {
                   case "text":
                     fullText += event.text;
@@ -412,6 +415,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                               text: `\n\n> Generation failed: ${e instanceof Error ? e.message : String(e)}`,
                             });
                           }
+                        }
+                        if (parts.length === 0) {
+                          parts.push({ type: "text", text: "（模型未返回有效内容，请尝试重新发送或切换模型）" });
                         }
                         set({ streamingText: "" });
                         settle(() => resolve(parts));

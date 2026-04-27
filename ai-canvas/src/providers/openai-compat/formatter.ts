@@ -137,13 +137,21 @@ export function parseOpenAIStreamChunk(
 ): void {
   try {
     const parsed = JSON.parse(raw);
-    const delta = parsed.choices?.[0]?.delta;
+    const choice = parsed.choices?.[0];
+    const delta = choice?.delta;
     if (!delta) return;
 
-    if (delta.content) {
+    if (typeof delta.content === "string" && delta.content) {
       emit({ type: "text", text: delta.content });
     }
 
+    // Gemini thinking models may emit reasoning in a separate field
+    if (typeof delta.reasoning_content === "string" && delta.reasoning_content) {
+      // Treat reasoning as text so the user sees the model's thinking
+      emit({ type: "text", text: delta.reasoning_content });
+    }
+
+    // Standard OpenAI tool_calls format
     if (delta.tool_calls) {
       for (const tc of delta.tool_calls) {
         const idx = tc.index ?? 0;
@@ -161,8 +169,27 @@ export function parseOpenAIStreamChunk(
         }
       }
     }
-  } catch {
-    // skip malformed chunks
+
+    // Legacy function_call format (used by some Gemini-compatible proxies)
+    if (delta.function_call && !delta.tool_calls) {
+      const fc = delta.function_call;
+      const idx = 0;
+      if (!_tcAccum[idx]) {
+        _tcAccum[idx] = { id: fc.id ?? `fc_${Date.now()}`, name: fc.name ?? "", arguments: "" };
+      }
+      if (fc.name) {
+        _tcAccum[idx]!.name = fc.name;
+        emit({ type: "tool_call_start", id: _tcAccum[idx]!.id, name: fc.name });
+      }
+      if (fc.arguments) {
+        _tcAccum[idx]!.arguments += fc.arguments;
+        emit({ type: "tool_call_delta", id: _tcAccum[idx]!.id, arguments: fc.arguments });
+      }
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.warn("[parseOpenAIStreamChunk] failed to parse:", raw?.slice(0, 200), e);
+    }
   }
 }
 
@@ -177,13 +204,26 @@ export function parseOpenAIChatResponse(raw: AiProxyResponse): ChatResponse {
   const choice = data.choices?.[0];
   if (!choice) throw new Error("No response from model");
 
-  const toolCalls = (choice.message.tool_calls ?? []).map(
-    (tc: { id: string; function: { name: string; arguments: string } }) => ({
-      id: tc.id,
-      name: tc.function.name,
-      arguments: JSON.parse(tc.function.arguments),
-    }),
-  );
+  let toolCalls: { id: string; name: string; arguments: Record<string, unknown> }[] = [];
+
+  if (choice.message.tool_calls?.length) {
+    toolCalls = choice.message.tool_calls.map(
+      (tc: { id: string; function: { name: string; arguments: string } }) => ({
+        id: tc.id,
+        name: tc.function.name,
+        arguments: JSON.parse(tc.function.arguments),
+      }),
+    );
+  } else if (choice.message.function_call) {
+    const fc = choice.message.function_call;
+    toolCalls = [{
+      id: fc.id ?? `fc_${Date.now()}`,
+      name: fc.name,
+      arguments: typeof fc.arguments === "string" ? JSON.parse(fc.arguments) : fc.arguments,
+    }];
+  }
+
+  const fr = choice.finish_reason;
 
   return {
     content: choice.message.content ?? null,
@@ -193,7 +233,7 @@ export function parseOpenAIChatResponse(raw: AiProxyResponse): ChatResponse {
       completionTokens: data.usage?.completion_tokens ?? 0,
     },
     finishReason:
-      choice.finish_reason === "tool_calls" ? "tool_calls" : "stop",
+      fr === "tool_calls" || fr === "function_call" ? "tool_calls" : "stop",
   };
 }
 

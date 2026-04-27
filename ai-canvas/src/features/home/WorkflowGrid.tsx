@@ -17,7 +17,7 @@ import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import type { WorkflowTemplate } from "@/shared/constants";
 
-const FEATURED_IDS = ["wf-white-bg", "wf-face-gen", "wf-tryon", "wf-pose-fission", "wf-scene-replace", "wf-face-merge", "wf-look-fission"];
+const FEATURED_IDS = ["wf-white-bg", "wf-tryon", "wf-pose-fission", "wf-scene-replace", "wf-face-merge", "wf-look-fission"];
 
 const CARD_STYLES: Record<
   string,
@@ -28,12 +28,6 @@ const CARD_STYLES: Record<
     icon: ImageIcon,
     iconRight: ImageIcon,
     accent: "text-violet-500",
-  },
-  "wf-face-gen": {
-    gradient: "from-sky-500/10 via-blue-500/5 to-indigo-500/10",
-    icon: User,
-    iconRight: ScanFace,
-    accent: "text-sky-500",
   },
   "wf-tryon": {
     gradient: "from-pink-500/10 via-rose-500/5 to-fuchsia-500/10",

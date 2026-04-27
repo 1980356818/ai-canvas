@@ -131,6 +131,9 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const [error, setError] = useState<string | null>(null);
   const data = card.data as VideoData;
   const isSeedance = isSeedanceModel(currentModel);
+  const availableModes: VideoImageMode[] = isSeedance
+    ? ["text", "firstFrame", "firstLastFrame", "reference"]
+    : ["text", "firstLastFrame"];
   const imageMode: VideoImageMode = resolveImageMode(data);
 
   const refSlots = useMemo(
@@ -334,11 +337,33 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const handleModelChange = useCallback(
     (modelId: string, providerId: string) => {
       setCurrentModel(modelId);
-      updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+      const newData: Record<string, unknown> = { ...data, model: modelId, provider: providerId };
+      const newIsSeedance = isSeedanceModel(modelId);
+      if (!newIsSeedance && (imageMode === "firstFrame" || imageMode === "reference")) {
+        newData.imageMode = "firstLastFrame";
+        if (imageMode === "firstFrame" && frames.length > 0) {
+          newData.refFrames = frames.slice(0, 1);
+        }
+        if (imageMode === "reference") {
+          const keptFrames: VideoFrameRef[] = [];
+          if (data.refImages) {
+            const slots = getRefSlotsForVideoModel(modelId, "reference");
+            const entries = slots.map((s) => data.refImages?.[s.key]).filter((e): e is RefImageEntry => !!e);
+            for (const e of entries.slice(0, 2)) {
+              keptFrames.push({ url: e.url, sourceCardId: e.sourceCardId ?? "" });
+            }
+          }
+          newData.refFrames = keptFrames.length > 0 ? keptFrames : undefined;
+          newData.refImages = undefined;
+          newData.refAudios = undefined;
+          newData.refVideos = undefined;
+        }
+      }
+      updateCard(card.id, { data: newData });
       autoSave.markDirty(card.id);
       useSettingsStore.getState().setLastModel("video", modelId, providerId);
     },
-    [card.id, data, updateCard],
+    [card.id, data, imageMode, frames, updateCard],
   );
 
   const handleSizeChange = useCallback(
@@ -568,7 +593,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       ) : (
         <>
           <div className="mb-1 flex flex-wrap items-center gap-1.5">
-            {(["text", "firstFrame", "firstLastFrame", "reference"] as const).map((mode) => (
+            {availableModes.map((mode) => (
               <button
                 key={mode}
                 onClick={() => handleImageModeChange(mode)}

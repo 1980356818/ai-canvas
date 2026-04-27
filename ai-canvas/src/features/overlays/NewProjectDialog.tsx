@@ -117,14 +117,6 @@ const TEMPLATE_OPTIONS: {
     gradient: "from-violet-500/10 via-purple-500/5 to-fuchsia-500/10",
   },
   {
-    id: "wf-face-gen",
-    name: "AI 捏脸",
-    desc: "上传照片，AI 生成多种风格人像",
-    icon: ScanFace,
-    accent: "text-sky-500",
-    gradient: "from-sky-500/10 via-blue-500/5 to-indigo-500/10",
-  },
-  {
     id: "wf-tryon",
     name: "模特换装",
     desc: "上传模特图与服装图，一键换装",
@@ -168,7 +160,6 @@ const TEMPLATE_OPTIONS: {
 
 const FEATURE_ICONS: Record<string, { icon2: LucideIcon }> = {
   "wf-white-bg": { icon2: ImageIcon },
-  "wf-face-gen": { icon2: ScanFace },
   "wf-tryon": { icon2: Shirt },
   "wf-pose-fission": { icon2: ImageIcon },
   "wf-scene-replace": { icon2: ImageIcon },
