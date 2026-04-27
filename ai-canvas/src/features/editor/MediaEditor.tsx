@@ -645,26 +645,32 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           </div>
           {data._params && (
             <div className="flex shrink-0 items-center gap-2">
-              {Object.entries(data._params).map(([key, value]) => (
-                <label key={key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <span>{key === "gender" ? "性别" : key}</span>
-                  <select
-                    value={value}
-                    onChange={(e) => handleParamChange(key, e.target.value)}
-                    disabled={generating}
-                    className="h-6 rounded border border-input bg-background px-1.5 text-xs text-foreground outline-none ring-ring focus:ring-1"
-                  >
-                    {key === "gender" ? (
-                      <>
-                        <option value="女">女</option>
-                        <option value="男">男</option>
-                      </>
-                    ) : (
-                      <option value={value}>{value}</option>
-                    )}
-                  </select>
-                </label>
-              ))}
+              {Object.entries(data._params).map(([key, value]) => {
+                const options = key === "gender" ? ["女", "男"] : [value];
+                return (
+                  <div key={key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span>{key === "gender" ? "性别" : key}</span>
+                    <div className="flex items-center rounded-md border border-input">
+                      {options.map((opt) => (
+                        <button
+                          key={opt}
+                          onClick={() => handleParamChange(key, opt)}
+                          disabled={generating}
+                          className={cn(
+                            "px-2.5 py-1 text-xs font-medium transition-colors",
+                            "first:rounded-l-[5px] last:rounded-r-[5px]",
+                            value === opt
+                              ? "bg-primary text-primary-foreground"
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          )}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </>

@@ -126,11 +126,13 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
     else parts.push("将服装穿在人物身上，保持人物姿态和背景不变");
 
     if (!data.personImageUrl && !data.garmentImageUrl) {
-      setError("请至少上传一张图片");
+      const msg = "请至少上传一张图片";
+      setError(msg);
+      useUIStore.getState().setCardError(card.id, msg);
       return;
     }
 
-    const prompt = `AI虚拟换装: ${parts.join("。")}`;
+    const prompt = `模特换装: ${parts.join("。")}`;
 
     setCardProgress(card.id, { percent: 0, label: "正在提交请求…" });
     setError(null);

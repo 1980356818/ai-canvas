@@ -5,6 +5,8 @@ import {
   Sparkles,
   ScanFace,
   Shirt,
+  PersonStanding,
+  Mountain,
   type LucideIcon,
 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
@@ -15,7 +17,7 @@ import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import type { WorkflowTemplate } from "@/shared/constants";
 
-const FEATURED_IDS = ["wf-white-bg", "wf-face-gen", "wf-tryon"];
+const FEATURED_IDS = ["wf-white-bg", "wf-face-gen", "wf-tryon", "wf-pose-fission", "wf-scene-replace", "wf-face-merge", "wf-look-fission"];
 
 const CARD_STYLES: Record<
   string,
@@ -38,6 +40,30 @@ const CARD_STYLES: Record<
     icon: User,
     iconRight: Shirt,
     accent: "text-pink-500",
+  },
+  "wf-pose-fission": {
+    gradient: "from-amber-500/10 via-orange-500/5 to-yellow-500/10",
+    icon: PersonStanding,
+    iconRight: ImageIcon,
+    accent: "text-amber-500",
+  },
+  "wf-scene-replace": {
+    gradient: "from-teal-500/10 via-cyan-500/5 to-emerald-500/10",
+    icon: User,
+    iconRight: Mountain,
+    accent: "text-teal-500",
+  },
+  "wf-face-merge": {
+    gradient: "from-indigo-500/10 via-violet-500/5 to-purple-500/10",
+    icon: User,
+    iconRight: ScanFace,
+    accent: "text-indigo-500",
+  },
+  "wf-look-fission": {
+    gradient: "from-rose-500/10 via-pink-500/5 to-red-500/10",
+    icon: PersonStanding,
+    iconRight: ImageIcon,
+    accent: "text-rose-500",
   },
 };
 

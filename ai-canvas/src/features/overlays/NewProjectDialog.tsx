@@ -9,6 +9,8 @@ import {
   Sparkles,
   Shirt,
   User,
+  PersonStanding,
+  Mountain,
   type LucideIcon,
 } from "lucide-react";
 import { createProject, updateProjectMeta, loadCards } from "@/platform";
@@ -130,12 +132,48 @@ const TEMPLATE_OPTIONS: {
     accent: "text-pink-500",
     gradient: "from-pink-500/10 via-rose-500/5 to-fuchsia-500/10",
   },
+  {
+    id: "wf-pose-fission",
+    name: "姿态裂变",
+    desc: "上传人物图，AI 裂变生成多种姿态",
+    icon: PersonStanding,
+    accent: "text-amber-500",
+    gradient: "from-amber-500/10 via-orange-500/5 to-yellow-500/10",
+  },
+  {
+    id: "wf-scene-replace",
+    name: "场景替换",
+    desc: "上传人物图与场景图，AI 融合替换场景",
+    icon: Mountain,
+    accent: "text-teal-500",
+    gradient: "from-teal-500/10 via-cyan-500/5 to-emerald-500/10",
+  },
+  {
+    id: "wf-face-merge",
+    name: "人脸合成",
+    desc: "上传两张人物照片，AI 融合生成新人像",
+    icon: ScanFace,
+    accent: "text-indigo-500",
+    gradient: "from-indigo-500/10 via-violet-500/5 to-purple-500/10",
+  },
+  {
+    id: "wf-look-fission",
+    name: "Look全身裂变",
+    desc: "锁定机位构图，仅变姿势生成变体",
+    icon: PersonStanding,
+    accent: "text-rose-500",
+    gradient: "from-rose-500/10 via-pink-500/5 to-red-500/10",
+  },
 ];
 
 const FEATURE_ICONS: Record<string, { icon2: LucideIcon }> = {
   "wf-white-bg": { icon2: ImageIcon },
   "wf-face-gen": { icon2: ScanFace },
   "wf-tryon": { icon2: Shirt },
+  "wf-pose-fission": { icon2: ImageIcon },
+  "wf-scene-replace": { icon2: ImageIcon },
+  "wf-face-merge": { icon2: ScanFace },
+  "wf-look-fission": { icon2: ImageIcon },
 };
 
 function NameProjectDialog({
