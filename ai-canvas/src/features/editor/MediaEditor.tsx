@@ -139,9 +139,8 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
   const enhancer = isEnhancerModel(currentModel);
   const supportsResolution = useMemo(() => {
-    if (!currentModel) return false;
     const provider = (data as MediaData).provider;
-    return modelService.resolveImageModelId(currentModel, "4K", provider) !== currentModel;
+    return modelService.supportsImageResolution(currentModel, provider);
   }, [currentModel, data]);
   const hasRequiredRef = enhancer
     && refSlots.some((s) => s.required && data.refImages?.[s.key]);
@@ -464,6 +463,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         const r = await provider.generateImage!({
           prompt: prompt || undefined,
           size: isEnhancer ? undefined : currentSize,
+          resolution: supportsResolution ? currentResolution : undefined,
           model: resolvedModel,
           quality: isEnhancer ? undefined : "standard",
           referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
@@ -495,6 +495,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             return provider.generateImage!({
               prompt: prompt || undefined,
               size: isEnhancer ? undefined : currentSize,
+              resolution: supportsResolution ? currentResolution : undefined,
               model: resolvedModel,
               quality: isEnhancer ? undefined : "standard",
               referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
@@ -572,7 +573,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, generating, updateCard, currentModel, currentSize, currentResolution, setCardProgress, refSlots]);
+  }, [data, card.id, generating, updateCard, currentModel, currentSize, currentResolution, supportsResolution, setCardProgress, refSlots]);
 
   const isLocked = !!data._locked;
   const currentBatchSize = data.batchSize ?? 1;

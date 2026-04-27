@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef, memo } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Viewport } from "@/types";
@@ -12,6 +12,10 @@ import { getDisplayUrl } from "@/lib/media";
 const LOD_SCREEN_THRESHOLD = 80;
 const VIEWPORT_MARGIN = 200;
 const PRELOAD_SCREEN_PX = 400;
+// viewport 屏幕坐标位移阈值：小于此值不重算可视卡片列表（margin 留出缓冲）
+const VP_REBUILD_PX = 80;
+// zoom 相对变化阈值：小于此值不重算（影响 LOD 切换可忽略）
+const VP_REBUILD_ZOOM_RATIO = 0.05;
 
 function getCardImageUrl(card: CanvasCard): string | undefined {
   if (card.type === "ai_image" || card.type === "ai_multiangle") {
@@ -70,9 +74,44 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
   const layoutVersion = useCardStore((s) => s.layoutVersion);
   const selectedCardIds = useCanvasStore((s) => s.selectedCardIds);
 
-  const { fullCards, thumbCards } = useMemo(() => {
-    if (!projectId || viewport.width === 0 || viewport.height === 0)
-      return { fullCards: [] as CanvasCard[], thumbCards: [] as CanvasCard[] };
+  const [{ fullCards, thumbCards }, setVisible] = useState<{
+    fullCards: CanvasCard[];
+    thumbCards: CanvasCard[];
+  }>({ fullCards: [], thumbCards: [] });
+
+  // 保存上一次重算时的 viewport / 内容版本，用于阈值判断
+  const lastVpRef = useRef<{ x: number; y: number; zoom: number; w: number; h: number } | null>(null);
+  const lastLayoutRef = useRef(-1);
+  const lastCardsRef = useRef<typeof cards | null>(null);
+  const lastPidRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!projectId || viewport.width === 0 || viewport.height === 0) {
+      setVisible({ fullCards: [], thumbCards: [] });
+      lastVpRef.current = null;
+      return;
+    }
+
+    const last = lastVpRef.current;
+    const layoutChanged = lastLayoutRef.current !== layoutVersion;
+    const cardsChanged = lastCardsRef.current !== cards;
+    const pidChanged = lastPidRef.current !== projectId;
+    const sizeChanged =
+      !last || last.w !== viewport.width || last.h !== viewport.height;
+
+    let vpSignificant = !last;
+    if (last && !vpSignificant) {
+      const dx = Math.abs(viewport.x - last.x);
+      const dy = Math.abs(viewport.y - last.y);
+      const dz = Math.abs(viewport.zoom - last.zoom) / last.zoom;
+      if (dx >= VP_REBUILD_PX || dy >= VP_REBUILD_PX || dz >= VP_REBUILD_ZOOM_RATIO) {
+        vpSignificant = true;
+      }
+    }
+
+    if (!vpSignificant && !layoutChanged && !cardsChanged && !pidChanged && !sizeChanged) {
+      return;
+    }
 
     const worldLeft = -viewport.x / viewport.zoom - VIEWPORT_MARGIN;
     const worldTop = -viewport.y / viewport.zoom - VIEWPORT_MARGIN;
@@ -112,9 +151,28 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
         full.push(c);
       }
     }
-    return { fullCards: full, thumbCards: thumb };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cards, projectId, viewport, layoutVersion]);
+
+    lastVpRef.current = {
+      x: viewport.x,
+      y: viewport.y,
+      zoom: viewport.zoom,
+      w: viewport.width,
+      h: viewport.height,
+    };
+    lastLayoutRef.current = layoutVersion;
+    lastCardsRef.current = cards;
+    lastPidRef.current = projectId;
+    setVisible({ fullCards: full, thumbCards: thumb });
+  }, [
+    viewport.x,
+    viewport.y,
+    viewport.zoom,
+    viewport.width,
+    viewport.height,
+    projectId,
+    layoutVersion,
+    cards,
+  ]);
 
   const prevVp = useRef({ x: viewport.x, y: viewport.y });
 

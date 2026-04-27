@@ -1,5 +1,5 @@
-import { useRef, useCallback, useEffect, useState } from "react";
-import { useCanvasStore } from "@/stores/canvasStore";
+import { useRef, useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCanvasStore, liveViewport, subscribeViewport } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { isEnhancerModel } from "@/config/model-ref-images";
@@ -22,7 +22,6 @@ const sizeMemory = new Map<string, { w: number; h: number }>();
 
 export default function FloatingEditor() {
   const editingCardId = useCanvasStore((s) => s.editingCardId);
-  const viewport = useCanvasStore((s) => s.viewport);
   const card = useCardStore((s) =>
     editingCardId ? s.cards.get(editingCardId) : undefined,
   );
@@ -91,11 +90,71 @@ export default function FloatingEditor() {
 
   const hasError = useUIStore((s) => editingCardId ? s.cardErrors.has(editingCardId) : false);
 
+  // imperative 跟随：viewport / dragOffsets 高频变化时通过 ref 直接同步
+  // left / top / transform，避免重渲染整个编辑器面板。
+  useLayoutEffect(() => {
+    if (!editingCardId) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    let rafId = 0;
+    let scheduled = false;
+    let prevSig = "";
+
+    const sync = () => {
+      scheduled = false;
+      const c = useCardStore.getState().cards.get(editingCardId);
+      if (!c) return;
+      const vp = liveViewport;
+      const off = useCanvasStore.getState().dragOffsets.get(editingCardId);
+      const offDx = off ? off.dx * vp.zoom : 0;
+      const offDy = off ? off.dy * vp.zoom : 0;
+
+      const w = panel.offsetWidth;
+      const scaledW = w * vp.zoom;
+      const cardScreenLeft = c.x * vp.zoom + vp.x + offDx;
+      const cardScreenCenterX = cardScreenLeft + (c.width * vp.zoom) / 2;
+      const screenLeft = cardScreenCenterX - scaledW / 2;
+      const screenTop = (c.y + c.height) * vp.zoom + vp.y + offDy + GAP;
+
+      const sig = `${screenLeft}|${screenTop}|${vp.zoom}`;
+      if (sig === prevSig) return;
+      prevSig = sig;
+
+      panel.style.left = `${screenLeft}px`;
+      panel.style.top = `${screenTop}px`;
+      panel.style.transform = `scale(${vp.zoom})`;
+      panel.dataset.editorZoom = String(vp.zoom);
+    };
+
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = true;
+      rafId = requestAnimationFrame(sync);
+    };
+
+    sync();
+
+    const unsubVp = subscribeViewport(schedule);
+    const unsubCanvas = useCanvasStore.subscribe((s, prev) => {
+      if (s.dragOffsets !== prev.dragOffsets) schedule();
+    });
+    const unsubCards = useCardStore.subscribe((s, prev) => {
+      if (s.cards !== prev.cards) schedule();
+    });
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      unsubVp();
+      unsubCanvas();
+      unsubCards();
+    };
+  }, [editingCardId, userSize]);
+
   if (!card) return null;
   if (card.type === "text" || card.type === "sticky_note") return null;
 
   const { height: baseHeight, minWidth } = EDITOR_SIZES[card.type] ?? DEFAULT_SIZE;
-  const zoom = viewport.zoom;
 
   const data = card.data as Record<string, unknown> | undefined;
   const modelId = (data?.model as string) || "";
@@ -128,25 +187,16 @@ export default function FloatingEditor() {
   const width = userSize ? userSize.w : Math.max(minWidth, card.width);
   const height = userSize ? userSize.h : autoHeight;
 
-  const scaledWidth = width * zoom;
-  const cardScreenLeft = card.x * zoom + viewport.x;
-  const cardScreenCenterX = cardScreenLeft + card.width * zoom / 2;
-
-  const screenLeft = cardScreenCenterX - scaledWidth / 2;
-  const screenTop = (card.y + card.height) * zoom + viewport.y + GAP;
-
   return (
     <div
       ref={panelRef}
       className="absolute z-40 overflow-hidden rounded-xl border border-border bg-card shadow-xl"
       data-floating-editor
-      data-editor-zoom={zoom}
+      data-editor-zoom="1"
+      // left / top / transform 由上方 useLayoutEffect 通过 ref imperative 设置
       style={{
-        left: screenLeft,
-        top: screenTop,
         width,
         height,
-        transform: `scale(${zoom})`,
         transformOrigin: "top left",
       }}
       onWheel={(e) => e.stopPropagation()}

@@ -122,6 +122,8 @@ export interface ImageGenRequest {
   prompt?: string;
   model?: string;
   size?: string;
+  /** Resolution tier (e.g. "2K", "4K"); used by providers that map size to pixel dimensions. */
+  resolution?: string;
   quality?: string;
   n?: number;
   referenceImages?: ImageRefInput[];

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { memo, useCallback } from "react";
 import { Minus, Plus, Maximize, MessageSquare } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
@@ -6,25 +6,27 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { MIN_ZOOM, MAX_ZOOM } from "@/shared/constants";
 
-export default function ZoomControls({ zoom }: { zoom: number }) {
+function ZoomControls({ zoom }: { zoom: number }) {
   const setViewport = useCanvasStore((s) => s.setViewport);
-  const viewport = useCanvasStore((s) => s.viewport);
   const chatPanelVisible = useUIStore((s) => s.chatPanelVisible);
   const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
 
+  // viewport 仅在按钮 click 时读，不订阅。这样拖拽/滚轮 commit 时此组件不重渲染，
+  // zoom 数字显示仍由 prop 提供（来自 CanvasContainer）。
   const zoomTo = useCallback(
     (newZoom: number) => {
       const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newZoom));
-      const cx = viewport.width / 2;
-      const cy = viewport.height / 2;
-      const ratio = clamped / viewport.zoom;
+      const vp = useCanvasStore.getState().viewport;
+      const cx = vp.width / 2;
+      const cy = vp.height / 2;
+      const ratio = clamped / vp.zoom;
       setViewport({
         zoom: clamped,
-        x: cx - (cx - viewport.x) * ratio,
-        y: cy - (cy - viewport.y) * ratio,
+        x: cx - (cx - vp.x) * ratio,
+        y: cy - (cy - vp.y) * ratio,
       });
     },
-    [viewport, setViewport],
+    [setViewport],
   );
 
   const fitAll = useCallback(() => {
@@ -35,6 +37,7 @@ export default function ZoomControls({ zoom }: { zoom: number }) {
       setViewport({ x: 0, y: 0, zoom: 1 });
       return;
     }
+    const vp = useCanvasStore.getState().viewport;
     const PAD = 60;
     let minX = Infinity,
       minY = Infinity,
@@ -49,17 +52,17 @@ export default function ZoomControls({ zoom }: { zoom: number }) {
     const cw = maxX - minX;
     const ch = maxY - minY;
     const z = Math.min(
-      (viewport.width - PAD * 2) / cw,
-      (viewport.height - PAD * 2) / ch,
+      (vp.width - PAD * 2) / cw,
+      (vp.height - PAD * 2) / ch,
       2,
     );
     const clamped = Math.max(MIN_ZOOM, z);
     setViewport({
       zoom: clamped,
-      x: (viewport.width - cw * clamped) / 2 - minX * clamped,
-      y: (viewport.height - ch * clamped) / 2 - minY * clamped,
+      x: (vp.width - cw * clamped) / 2 - minX * clamped,
+      y: (vp.height - ch * clamped) / 2 - minY * clamped,
     });
-  }, [viewport.width, viewport.height, setViewport]);
+  }, [setViewport]);
 
   return (
     <div
@@ -112,3 +115,5 @@ export default function ZoomControls({ zoom }: { zoom: number }) {
     </div>
   );
 }
+
+export default memo(ZoomControls);

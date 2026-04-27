@@ -139,6 +139,19 @@ export const modelService = {
     return provider?.resolveImageModelId?.(baseId, resolution) ?? baseId;
   },
 
+  /**
+   * Whether a given image model exposes a 2K/4K resolution selector in the UI.
+   *
+   * Two patterns are supported:
+   * 1. ID-swap models (nano-banana, gemini flash) → resolveImageModelId returns a different id
+   * 2. Size-map models (gpt-image-2) → same id, but body.size carries pixel dimensions
+   */
+  supportsImageResolution(baseId: string, providerId?: string): boolean {
+    if (!baseId) return false;
+    if (baseId.toLowerCase().startsWith("gpt-image-2")) return true;
+    return modelService.resolveImageModelId(baseId, "4K", providerId) !== baseId;
+  },
+
   getDisplayName(modelId: string, providerId?: string): string {
     if (providerId) {
       const name = registry.tryGet(providerId)?.getDisplayName?.(modelId);

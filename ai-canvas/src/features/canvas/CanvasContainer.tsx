@@ -223,7 +223,10 @@ export default function CanvasContainer() {
           data-canvas-background
           className="absolute inset-0 origin-top-left"
           style={{
-            transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+            // 始终引用 CSS 变量，渲染字符串永不变化，避免 React commit 与
+            // useViewport 的 imperative DOM 写入冲突而打破 GPU 合成层。
+            transform:
+              "translate3d(var(--vp-x, 0px), var(--vp-y, 0px), 0) scale(var(--vp-zoom, 1))",
             opacity: isBirdView ? 0 : 1,
             transition: transitioning ? "opacity 200ms ease" : "none",
             pointerEvents: isBirdView ? "none" : "auto",

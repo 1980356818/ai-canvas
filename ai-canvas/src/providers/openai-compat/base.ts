@@ -36,6 +36,30 @@ function toAspectRatio(size: string): string {
   return `${w / d}:${h / d}`;
 }
 
+// gpt-image-2 后端约束: 单边 832-3840、整除 16、比例 ≤ 3:1、总像素 ≤ 8.29MP
+// 每条尺寸均经过约束校验，比例误差 0%
+const GPT_IMAGE_2_SIZE_MAP: Record<string, Record<string, string>> = {
+  "2K": {
+    "1:1": "2048x2048",
+    "3:2": "1920x1280",
+    "2:3": "1280x1920",
+    "16:9": "2560x1440",
+    "9:16": "1440x2560",
+  },
+  "4K": {
+    "1:1": "2880x2880",
+    "3:2": "3072x2048",
+    "2:3": "2048x3072",
+    "16:9": "3840x2160",
+    "9:16": "2160x3840",
+  },
+};
+
+function toGptImage2Size(size: string, resolution: string): string | undefined {
+  const ratio = toAspectRatio(size);
+  return GPT_IMAGE_2_SIZE_MAP[resolution]?.[ratio];
+}
+
 /**
  * Base class for providers using the OpenAI-compatible API protocol.
  * Subclasses only need to provide `descriptor` and optionally override
@@ -165,7 +189,13 @@ export abstract class OpenAICompatProvider implements AIProvider {
 
     if (req.prompt) {
       body.prompt = req.prompt;
-      body.size = toAspectRatio(req.size || "1024x1024");
+      const baseSize = req.size || "1024x1024";
+      const modelId = (req.model ?? this.defaultImageModel()).toLowerCase();
+      const isGptImage2 = modelId.startsWith("gpt-image-2");
+      const pixelSize = isGptImage2 && req.resolution
+        ? toGptImage2Size(baseSize, req.resolution)
+        : undefined;
+      body.size = pixelSize ?? toAspectRatio(baseSize);
       body.quality = req.quality || "standard";
     }
 

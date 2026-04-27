@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef, memo } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo } from "react";
 import { Scissors, Crop, Download, ChevronDown, HardDriveDownload, Loader2, ZoomIn, RotateCw } from "lucide-react";
-import { useCanvasStore } from "@/stores/canvasStore";
+import { useCanvasStore, liveViewport, subscribeViewport } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
@@ -44,21 +44,23 @@ interface CellDragInfo {
   clientY: number;
 }
 
-const GridOverlay = memo(function GridOverlay({
-  card,
-  gridSize,
-  viewport,
-  onCellDrop,
-  disabled,
-  dragOffset,
-}: {
-  card: CanvasCard;
+interface GridOverlayProps {
+  cardId: string;
   gridSize: number;
-  viewport: { x: number; y: number; zoom: number };
   onCellDrop: (info: CellDragInfo) => void;
   disabled: boolean;
-  dragOffset: { dx: number; dy: number } | null;
-}) {
+  // 由父级共享的 ref，imperative 同步 left/top/width/height/borderRadius，
+  // 避免 GridOverlay 在 viewport / dragOffset 变化时重渲染。
+  overlayRef: React.RefObject<HTMLDivElement | null>;
+}
+
+const GridOverlay = memo(function GridOverlay({
+  cardId,
+  gridSize,
+  onCellDrop,
+  disabled,
+  overlayRef,
+}: GridOverlayProps) {
   const [hoveredCell, setHoveredCell] = useState<{
     row: number;
     col: number;
@@ -71,18 +73,11 @@ const GridOverlay = memo(function GridOverlay({
     cy: number;
   } | null>(null);
 
+  const draggingFloatRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef(dragging);
   dragRef.current = dragging;
 
-  const zoom = viewport.zoom;
-  const offsetDx = dragOffset ? dragOffset.dx * zoom : 0;
-  const offsetDy = dragOffset ? dragOffset.dy * zoom : 0;
-  const left = card.x * zoom + viewport.x + offsetDx;
-  const top = card.y * zoom + viewport.y + offsetDy;
-  const width = card.width * zoom;
-  const height = card.height * zoom;
-  const cellScreenW = width / gridSize;
-  const cellScreenH = height / gridSize;
+  const cellPercent = 100 / gridSize;
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, row: number, col: number) => {
@@ -92,9 +87,20 @@ const GridOverlay = memo(function GridOverlay({
       setDragging({ row, col, cx: e.clientX, cy: e.clientY });
 
       const onMove = (ev: PointerEvent) => {
-        setDragging((prev) =>
-          prev ? { ...prev, cx: ev.clientX, cy: ev.clientY } : null,
-        );
+        // imperative 移动浮动框，避免 setState 触发重渲染
+        const fl = draggingFloatRef.current;
+        const ov = overlayRef.current;
+        if (fl && ov) {
+          const cellW = ov.offsetWidth / gridSize;
+          const cellH = ov.offsetHeight / gridSize;
+          fl.style.left = `${ev.clientX - cellW / 2}px`;
+          fl.style.top = `${ev.clientY - cellH / 2}px`;
+          fl.style.width = `${cellW}px`;
+          fl.style.height = `${cellH}px`;
+        }
+        // 同步坐标到 ref（onUp 时使用）
+        const cur = dragRef.current;
+        if (cur) dragRef.current = { ...cur, cx: ev.clientX, cy: ev.clientY };
       };
 
       const onUp = (ev: PointerEvent) => {
@@ -123,8 +129,22 @@ const GridOverlay = memo(function GridOverlay({
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
     },
-    [disabled, onCellDrop],
+    [disabled, gridSize, onCellDrop, overlayRef],
   );
+
+  // 浮动框初始位置：拖拽刚开始时设置一次（之后由 onMove imperative 更新）
+  useLayoutEffect(() => {
+    if (!dragging) return;
+    const fl = draggingFloatRef.current;
+    const ov = overlayRef.current;
+    if (!fl || !ov) return;
+    const cellW = ov.offsetWidth / gridSize;
+    const cellH = ov.offsetHeight / gridSize;
+    fl.style.left = `${dragging.cx - cellW / 2}px`;
+    fl.style.top = `${dragging.cy - cellH / 2}px`;
+    fl.style.width = `${cellW}px`;
+    fl.style.height = `${cellH}px`;
+  }, [dragging, gridSize, overlayRef]);
 
   const cells = [];
   for (let r = 0; r < gridSize; r++) {
@@ -144,11 +164,12 @@ const GridOverlay = memo(function GridOverlay({
               : "crop-cell-idle",
             isDraggingThis && "opacity-40",
           )}
+          // 使用百分比定位：尺寸完全独立于 zoom，无需在 viewport 变化时重渲染
           style={{
-            left: c * cellScreenW,
-            top: r * cellScreenH,
-            width: cellScreenW,
-            height: cellScreenH,
+            left: `${c * cellPercent}%`,
+            top: `${r * cellPercent}%`,
+            width: `${cellPercent}%`,
+            height: `${cellPercent}%`,
           }}
           onPointerEnter={() => setHoveredCell({ row: r, col: c })}
           onPointerLeave={() => setHoveredCell(null)}
@@ -166,17 +187,13 @@ const GridOverlay = memo(function GridOverlay({
     }
   }
 
+  // 标记便于父组件 imperative 寻找此 overlay（cardId 仅用于调试 / 数据语义）
   return (
     <>
       <div
+        ref={overlayRef}
+        data-card-id={cardId}
         className="crop-overlay absolute z-40 overflow-hidden"
-        style={{
-          left,
-          top,
-          width,
-          height,
-          borderRadius: 12 * zoom,
-        }}
         onPointerDown={(e) => e.stopPropagation()}
       >
         <div className="pointer-events-none absolute inset-0 bg-black/20" />
@@ -185,13 +202,8 @@ const GridOverlay = memo(function GridOverlay({
 
       {dragging && (
         <div
+          ref={draggingFloatRef}
           className="pointer-events-none fixed z-[9999] rounded-lg border-2 border-primary bg-primary/10 shadow-xl backdrop-blur-sm"
-          style={{
-            left: dragging.cx - cellScreenW / 2,
-            top: dragging.cy - cellScreenH / 2,
-            width: cellScreenW,
-            height: cellScreenH,
-          }}
         >
           <div className="flex h-full items-center justify-center text-xs font-medium text-primary">
             释放放置
@@ -205,7 +217,6 @@ const GridOverlay = memo(function GridOverlay({
 export default function ImageToolbar() {
   const editingCardId = useCanvasStore((s) => s.editingCardId);
   const selectedCardIds = useCanvasStore((s) => s.selectedCardIds);
-  const viewport = useCanvasStore((s) => s.viewport);
 
   const targetCardId =
     editingCardId ??
@@ -217,13 +228,87 @@ export default function ImageToolbar() {
     targetCardId ? s.cards.get(targetCardId) : undefined,
   );
 
-  const dragOffset = useCanvasStore((s) =>
-    targetCardId ? s.dragOffsets.get(targetCardId) ?? null : null,
-  );
-
   const [activeGrid, setActiveGrid] = useState<number | null>(null);
   const [cropping, setCropping] = useState(false);
   const gridCardId = useRef<string | null>(null);
+
+  // imperative 跟随：toolbar 容器和 grid overlay 的位置由 ref + rAF 同步，
+  // 不参与 React 渲染。这样 viewport / dragOffset 高频变化都不会触发本组件重渲染。
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const scheduleSyncRef = useRef<(() => void) | null>(null);
+
+  useLayoutEffect(() => {
+    if (!targetCardId) {
+      scheduleSyncRef.current = null;
+      return;
+    }
+
+    let rafId = 0;
+    let scheduled = false;
+    let prevSig = "";
+
+    const sync = () => {
+      scheduled = false;
+      const c = useCardStore.getState().cards.get(targetCardId);
+      if (!c) return;
+      const vp = liveViewport;
+      const off = useCanvasStore.getState().dragOffsets.get(targetCardId);
+      const offDx = off ? off.dx * vp.zoom : 0;
+      const offDy = off ? off.dy * vp.zoom : 0;
+      const left = c.x * vp.zoom + vp.x + offDx;
+      const top = c.y * vp.zoom + vp.y + offDy;
+      const width = c.width * vp.zoom;
+      const height = c.height * vp.zoom;
+      const sig = `${left}|${top}|${width}|${height}`;
+      if (sig === prevSig) return;
+      prevSig = sig;
+
+      const tb = toolbarRef.current;
+      if (tb) {
+        tb.style.left = `${left + width / 2}px`;
+        tb.style.top = `${top - TOOLBAR_GAP}px`;
+      }
+      const ov = overlayRef.current;
+      if (ov) {
+        ov.style.left = `${left}px`;
+        ov.style.top = `${top}px`;
+        ov.style.width = `${width}px`;
+        ov.style.height = `${height}px`;
+        ov.style.borderRadius = `${12 * vp.zoom}px`;
+      }
+    };
+
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = true;
+      rafId = requestAnimationFrame(sync);
+    };
+
+    scheduleSyncRef.current = schedule;
+    sync();
+
+    const unsubVp = subscribeViewport(schedule);
+    const unsubCanvas = useCanvasStore.subscribe((s, prev) => {
+      if (s.dragOffsets !== prev.dragOffsets) schedule();
+    });
+    const unsubCards = useCardStore.subscribe((s, prev) => {
+      if (s.cards !== prev.cards) schedule();
+    });
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      unsubVp();
+      unsubCanvas();
+      unsubCards();
+      scheduleSyncRef.current = null;
+    };
+  }, [targetCardId]);
+
+  // GridOverlay 挂载/卸载后立刻同步一次位置（overlayRef.current 此时刚就绪）
+  useLayoutEffect(() => {
+    scheduleSyncRef.current?.();
+  }, [activeGrid]);
 
   useEffect(() => {
     if (activeGrid && gridCardId.current && targetCardId !== gridCardId.current) {
@@ -479,22 +564,15 @@ export default function ImageToolbar() {
 
   const showSaveLocal = isRemoteUrl(imgData.imageUrl);
 
-  const zoom = viewport.zoom;
-  const dragScreenDx = dragOffset ? dragOffset.dx * zoom : 0;
-  const dragScreenDy = dragOffset ? dragOffset.dy * zoom : 0;
-  const cardScreenLeft = card.x * zoom + viewport.x + dragScreenDx;
-  const cardScreenTop = card.y * zoom + viewport.y + dragScreenDy;
-  const cardScreenWidth = card.width * zoom;
-
   const activeLabel = GRID_OPTIONS.find((o) => o.size === activeGrid)?.label;
 
   return (
     <>
       <div
+        ref={toolbarRef}
         className="absolute z-50"
+        // left/top 由上方 useLayoutEffect 通过 ref imperative 设置
         style={{
-          left: cardScreenLeft + cardScreenWidth / 2,
-          top: cardScreenTop - TOOLBAR_GAP,
           transform: "translateX(-50%) translateY(-100%)",
         }}
       >
@@ -628,14 +706,13 @@ export default function ImageToolbar() {
       </div>
       </div>
 
-      {activeGrid && (
+      {activeGrid && targetCardId && (
         <GridOverlay
-          card={card}
+          cardId={targetCardId}
           gridSize={activeGrid}
-          viewport={viewport}
           onCellDrop={handleCellDrop}
           disabled={cropping}
-          dragOffset={dragOffset}
+          overlayRef={overlayRef}
         />
       )}
 

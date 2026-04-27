@@ -1,10 +1,26 @@
-import { useEffect, useCallback, useRef, useState } from "react";
-import { useCanvasStore } from "@/stores/canvasStore";
+import { useEffect, useLayoutEffect, useCallback, useRef, useState } from "react";
+import {
+  useCanvasStore,
+  liveViewport,
+  notifyViewportChanged,
+} from "@/stores/canvasStore";
 import { MIN_ZOOM, MAX_ZOOM } from "@/shared/constants";
 
-// 直接更新 DOM transform，绕开 React 渲染。translate3d 提示浏览器使用 GPU 合成层。
-function applyViewportToDOM(bg: HTMLElement | null, x: number, y: number, zoom: number) {
-  if (bg) bg.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${zoom})`;
+// 通过 CSS 变量驱动背景层 transform。React 渲染的 transform 字符串始终是
+// `translate3d(var(--vp-x), var(--vp-y), 0) scale(var(--vp-zoom))`，永不变化，
+// 避免 React commit 用新的字符串覆盖、打破 GPU 合成层。
+// 同时同步 liveViewport + 通知订阅者，让浮层组件能跟上 60fps 的 imperative 更新。
+function applyViewportToDOM(container: HTMLElement | null, x: number, y: number, zoom: number) {
+  liveViewport.x = x;
+  liveViewport.y = y;
+  liveViewport.zoom = zoom;
+  if (container) {
+    const s = container.style;
+    s.setProperty("--vp-x", `${x}px`);
+    s.setProperty("--vp-y", `${y}px`);
+    s.setProperty("--vp-zoom", String(zoom));
+  }
+  notifyViewportChanged();
 }
 
 // 视图状态提交节流（ms）。期间 DOM 已经被实时更新，只是把 React store 的状态延迟提交，
@@ -23,18 +39,18 @@ export function useViewport(
   const panCommitTimer = useRef(0);
   const wheelCommitTimer = useRef(0);
   const pendingWheel = useRef<{ x: number; y: number; zoom: number } | null>(null);
-  const cachedBg = useRef<HTMLElement | null>(null);
 
-  // birdview 切换时背景层会重新挂载，所以失效时重新查
-  const getBgEl = useCallback(() => {
-    const cached = cachedBg.current;
-    if (cached && cached.isConnected) return cached;
-    const fresh = containerRef.current?.querySelector(
-      "[data-canvas-background]",
-    ) as HTMLElement | null;
-    cachedBg.current = fresh;
-    return fresh;
-  }, [containerRef]);
+  // CSS 变量挂在 container 上：背景层在 birdview 切换时会被卸载/重新挂载，
+  // container 一直存在，子层用 var() 引用自动恢复正确位置。
+  const getRoot = useCallback(() => containerRef.current, [containerRef]);
+
+  // store viewport 变化时同步写一次 CSS 变量。覆盖以下场景：
+  //   - 挂载 / 项目切换的初始 viewport
+  //   - fitAll / zoomTo 等 imperative 修改
+  //   - 拖拽/滚轮节流提交后保持 DOM 与 store 一致
+  useLayoutEffect(() => {
+    applyViewportToDOM(getRoot(), viewport.x, viewport.y, viewport.zoom);
+  }, [viewport.x, viewport.y, viewport.zoom, getRoot]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -109,10 +125,10 @@ export function useViewport(
       }
 
       pendingWheel.current = { x: newX, y: newY, zoom: newZoom };
-      applyViewportToDOM(getBgEl(), newX, newY, newZoom);
+      applyViewportToDOM(getRoot(), newX, newY, newZoom);
       scheduleWheelCommit();
     },
-    [containerRef, getBgEl, scheduleWheelCommit],
+    [containerRef, getRoot, scheduleWheelCommit],
   );
 
   const onPointerDown = useCallback(
@@ -151,7 +167,7 @@ export function useViewport(
       panLast.current = { x: newX, y: newY };
 
       const zoom = useCanvasStore.getState().viewport.zoom;
-      applyViewportToDOM(getBgEl(), newX, newY, zoom);
+      applyViewportToDOM(getRoot(), newX, newY, zoom);
 
       if (!panCommitTimer.current) {
         panCommitTimer.current = window.setTimeout(() => {
@@ -162,7 +178,7 @@ export function useViewport(
         }, 150);
       }
     },
-    [getBgEl, setViewport],
+    [getRoot, setViewport],
   );
 
   const onPointerUp = useCallback(() => {

@@ -29,6 +29,23 @@ interface CanvasState {
 
 export const lastPointerWorld = { x: 0, y: 0 };
 
+// 实时 viewport 共享对象。useViewport 在拖拽/滚轮路径上会 60fps 更新此对象（绕开 React），
+// store viewport 在节流提交时同步过来。浮层组件（FloatingEditor / ImageToolbar 等）
+// 通过 subscribeViewport 注册回调，imperative 更新自身位置而无需触发 React 重渲染。
+export const liveViewport = { x: 0, y: 0, zoom: 1 };
+const viewportSubs = new Set<() => void>();
+
+export function notifyViewportChanged() {
+  for (const cb of viewportSubs) cb();
+}
+
+export function subscribeViewport(cb: () => void): () => void {
+  viewportSubs.add(cb);
+  return () => {
+    viewportSubs.delete(cb);
+  };
+}
+
 export const useCanvasStore = create<CanvasState>((set) => ({
   viewport: { x: 0, y: 0, zoom: 1, width: 0, height: 0 },
   selectedCardIds: new Set(),
@@ -39,7 +56,15 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   dragOffsets: new Map(),
 
   setViewport: (partial) =>
-    set((s) => ({ viewport: { ...s.viewport, ...partial } })),
+    set((s) => {
+      const next = { ...s.viewport, ...partial };
+      // 同步 imperative 共享对象 + 通知订阅者，覆盖 fitAll / zoomTo 等非拖拽路径
+      liveViewport.x = next.x;
+      liveViewport.y = next.y;
+      liveViewport.zoom = next.zoom;
+      notifyViewportChanged();
+      return { viewport: next };
+    }),
 
   setTool: (tool) => set({ tool }),
 
