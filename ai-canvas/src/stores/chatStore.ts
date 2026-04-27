@@ -21,6 +21,7 @@ import { providerService } from "@/services/provider.service";
 import { useProviderStore, parseModelRef } from "@/stores/providerStore";
 import { getAccumulatedToolCalls } from "@/providers/openai-compat/formatter";
 import { getBase64ForApi } from "@/lib/media";
+import { getAllowedSizesForModel, coerceToAllowedSize } from "@/shared/constants";
 import type { StreamEvent, UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 
 export type { ChatSession, ChatMessage } from "@/types";
@@ -69,6 +70,22 @@ const CHAT_TOOLS = [
     },
   },
 ];
+
+// 根据当前对话模型推导出对应的图片模型 ref：
+//  - GPT 系列 → gpt-image-2（同 provider 优先）
+//  - Gemini 系列 → nanobanana 2（jijing 用 nano-banana-2，否则 comfly 的 gemini-3.1-flash-image-preview）
+//  - 其他 → 沿用 activeImageRef
+function pickImageModelRefForChat(chatProviderId: string, chatModelId: string): string {
+  const id = (chatModelId || "").toLowerCase();
+  if (id.includes("gpt")) {
+    return `${chatProviderId}:gpt-image-2`;
+  }
+  if (id.includes("gemini")) {
+    if (chatProviderId === "jijing") return "jijing:nano-banana-2";
+    return "comfly:gemini-3.1-flash-image-preview";
+  }
+  return useProviderStore.getState().activeImageRef;
+}
 
 async function historyToUnified(history: ChatHistoryMessage[]): Promise<UnifiedMessage[]> {
   const result: UnifiedMessage[] = [];
@@ -327,16 +344,101 @@ export const useChatStore = create<ChatState>((set, get) => ({
     _abortController = new AbortController();
 
     try {
-      let resultParts: ChatContentPart[];
-
       if (intent === "image") {
+        // /image：直接根据当前对话模型选择对应图片模型并出图，不再生成确认卡片
         const { cleanPrompt, size } = extractSizeFromPrompt(prompt);
-        resultParts = [{ type: "image_pending", prompt: cleanPrompt, suggestedSize: size }];
-        set({ generating: false, generatingType: null, generatingProgress: 0, generatingStatus: "", generatingStartedAt: 0 });
+        const chatRef = useProviderStore.getState().activeChatRef;
+        const { providerId: chatProvId, modelId: chatModId } = parseModelRef(chatRef);
+        const imageRef = pickImageModelRefForChat(chatProvId, chatModId);
+        const { providerId: imgProvId, modelId: imgModId } = parseModelRef(imageRef);
+        useProviderStore.getState().setActiveRef("image", imageRef);
+
+        const allowedSizes = getAllowedSizesForModel(imgModId);
+        const finalSize = coerceToAllowedSize(size || "1:1", allowedSizes);
+
+        const assistantId = crypto.randomUUID();
+        const placeholder: ChatMessage = {
+          id: assistantId,
+          sessionId,
+          role: "assistant",
+          content: [{ type: "loading", mediaType: "image" }],
+          metadata: { intent: "image", model: imgModId },
+          createdAt: new Date().toISOString(),
+        };
+        set((s) => ({ messages: [...s.messages, placeholder] }));
+
+        try {
+          const result = await providerService.generateImage(imgProvId, {
+            prompt: cleanPrompt,
+            model: imgModId,
+            size: finalSize,
+            onProgress: (p) =>
+              set({ generatingProgress: p.percent, generatingStatus: p.label }),
+            signal: _abortController!.signal,
+          });
+          set((s) => ({
+            messages: s.messages.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    content: [
+                      { type: "image", url: result.url, prompt: cleanPrompt },
+                    ],
+                  }
+                : m,
+            ),
+          }));
+        } catch (e) {
+          const errorText = e instanceof Error ? e.message : String(e);
+          set((s) => ({
+            messages: s.messages.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    content: [
+                      { type: "text", text: `图片生成失败: ${errorText}` },
+                    ],
+                  }
+                : m,
+            ),
+          }));
+        }
+
+        set({
+          generating: false,
+          generatingType: null,
+          generatingProgress: 0,
+          generatingStatus: "",
+          generatingStartedAt: 0,
+          streamingText: "",
+        });
+        const finalMsg = get().messages.find((m) => m.id === assistantId);
+        if (finalMsg) await saveChatMessage(messageToRow(finalMsg));
       } else if (intent === "video") {
-        resultParts = [{ type: "video_pending", prompt }];
-        set({ generating: false, generatingType: null, generatingProgress: 0, generatingStatus: "", generatingStartedAt: 0 });
+        // 视频暂保留确认卡片（本次仅改造图片生成）
+        const assistantMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          sessionId,
+          role: "assistant",
+          content: [{ type: "video_pending", prompt }],
+          metadata: {
+            model: parseModelRef(useProviderStore.getState().activeVideoRef).modelId,
+            intent,
+          },
+          createdAt: new Date().toISOString(),
+        };
+        set((s) => ({
+          messages: [...s.messages, assistantMsg],
+          generating: false,
+          generatingType: null,
+          generatingProgress: 0,
+          generatingStatus: "",
+          generatingStartedAt: 0,
+          streamingText: "",
+        }));
+        await saveChatMessage(messageToRow(assistantMsg));
       } else {
+        // 普通对话：流式获取，遇到 generate_image tool_call 直接出图
         const history: ChatHistoryMessage[] = get().messages.map((m) => ({
           role: m.role,
           content: m.content,
@@ -347,7 +449,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         let fullText = "";
         const unifiedMessages = await historyToUnified(history);
-        resultParts = await new Promise<ChatContentPart[]>((resolve, reject) => {
+        const streamResult = await new Promise<{
+          textParts: ChatContentPart[];
+          imageJobs: { prompt: string; size?: string }[];
+          videoJobs: { prompt: string }[];
+        }>((resolve, reject) => {
           const ac = _abortController!;
           let settled = false;
           const settle = (fn: () => void) => {
@@ -386,50 +492,45 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   case "error":
                     settle(() => reject(new Error(event.message)));
                     break;
-                  case "done":
-                    void (async () => {
+                  case "done": {
+                    const textParts: ChatContentPart[] = [];
+                    if (fullText) textParts.push({ type: "text", text: fullText });
+
+                    const imageJobs: { prompt: string; size?: string }[] = [];
+                    const videoJobs: { prompt: string }[] = [];
+                    const toolCalls = getAccumulatedToolCalls();
+                    for (const tc of toolCalls) {
                       try {
-                        const parts: ChatContentPart[] = [];
-                        if (fullText) {
-                          parts.push({ type: "text", text: fullText });
+                        const args = JSON.parse(tc.arguments || "{}");
+                        if (tc.name === "generate_image") {
+                          imageJobs.push({
+                            prompt: String(args.prompt ?? ""),
+                            size: args.size as string | undefined,
+                          });
+                        } else if (tc.name === "generate_video") {
+                          videoJobs.push({ prompt: String(args.prompt ?? "") });
                         }
-                        const toolCalls = getAccumulatedToolCalls();
-                        for (const tc of toolCalls) {
-                          try {
-                            const args = JSON.parse(tc.arguments || "{}");
-                            if (tc.name === "generate_image") {
-                              parts.push({
-                                type: "image_pending",
-                                prompt: String(args.prompt ?? ""),
-                                suggestedSize: args.size as string | undefined,
-                              });
-                            } else if (tc.name === "generate_video") {
-                              parts.push({
-                                type: "video_pending",
-                                prompt: String(args.prompt ?? ""),
-                              });
-                            }
-                          } catch (e) {
-                            parts.push({
-                              type: "text",
-                              text: `\n\n> Generation failed: ${e instanceof Error ? e.message : String(e)}`,
-                            });
-                          }
-                        }
-                        if (parts.length === 0) {
-                          parts.push({ type: "text", text: "（模型未返回有效内容，请尝试重新发送或切换模型）" });
-                        }
-                        set({ streamingText: "" });
-                        settle(() => resolve(parts));
                       } catch (e) {
-                        settle(() =>
-                          reject(
-                            e instanceof Error ? e : new Error(String(e)),
-                          ),
-                        );
+                        textParts.push({
+                          type: "text",
+                          text: `\n\n> Generation failed: ${e instanceof Error ? e.message : String(e)}`,
+                        });
                       }
-                    })();
+                    }
+                    if (
+                      textParts.length === 0 &&
+                      imageJobs.length === 0 &&
+                      videoJobs.length === 0
+                    ) {
+                      textParts.push({
+                        type: "text",
+                        text: "（模型未返回有效内容，请尝试重新发送或切换模型）",
+                      });
+                    }
+                    set({ streamingText: "" });
+                    settle(() => resolve({ textParts, imageJobs, videoJobs }));
                     break;
+                  }
                   default:
                     break;
                 }
@@ -437,36 +538,109 @@ export const useChatStore = create<ChatState>((set, get) => ({
             )
             .catch((e) => settle(() => reject(e instanceof Error ? e : new Error(String(e)))));
         });
+
+        const initialContent: ChatContentPart[] = [...streamResult.textParts];
+        const imageLoadingIndices: number[] = [];
+        for (let i = 0; i < streamResult.imageJobs.length; i++) {
+          imageLoadingIndices.push(initialContent.length);
+          initialContent.push({ type: "loading", mediaType: "image" });
+        }
+        for (const job of streamResult.videoJobs) {
+          initialContent.push({ type: "video_pending", prompt: job.prompt });
+        }
+
+        const assistantId = crypto.randomUUID();
+        const assistantMsg: ChatMessage = {
+          id: assistantId,
+          sessionId,
+          role: "assistant",
+          content: initialContent,
+          metadata: {
+            model: parseModelRef(useProviderStore.getState().activeChatRef).modelId,
+            intent,
+          },
+          createdAt: new Date().toISOString(),
+        };
+        set((s) => ({ messages: [...s.messages, assistantMsg] }));
+
+        if (streamResult.imageJobs.length === 0) {
+          set({
+            generating: false,
+            generatingType: null,
+            generatingProgress: 0,
+            generatingStatus: "",
+            generatingStartedAt: 0,
+            streamingText: "",
+          });
+          await saveChatMessage(messageToRow(assistantMsg));
+        } else {
+          set({
+            generatingType: "image",
+            generatingProgress: 0,
+            generatingStatus: "",
+            generatingStartedAt: Date.now(),
+            streamingText: "",
+          });
+
+          const chatRef = useProviderStore.getState().activeChatRef;
+          const { providerId: chatProvId, modelId: chatModId } = parseModelRef(chatRef);
+          const imageRef = pickImageModelRefForChat(chatProvId, chatModId);
+          const { providerId: imgProvId, modelId: imgModId } = parseModelRef(imageRef);
+          useProviderStore.getState().setActiveRef("image", imageRef);
+          const allowedSizes = getAllowedSizesForModel(imgModId);
+
+          for (let i = 0; i < streamResult.imageJobs.length; i++) {
+            const job = streamResult.imageJobs[i]!;
+            const partIdx = imageLoadingIndices[i]!;
+            const finalSize = coerceToAllowedSize(job.size || "1:1", allowedSizes);
+            try {
+              const result = await providerService.generateImage(imgProvId, {
+                prompt: job.prompt,
+                model: imgModId,
+                size: finalSize,
+                onProgress: (p) =>
+                  set({ generatingProgress: p.percent, generatingStatus: p.label }),
+                signal: _abortController!.signal,
+              });
+              set((s) => ({
+                messages: s.messages.map((m) => {
+                  if (m.id !== assistantId) return m;
+                  const newContent = [...m.content];
+                  newContent[partIdx] = {
+                    type: "image",
+                    url: result.url,
+                    prompt: job.prompt,
+                  };
+                  return { ...m, content: newContent };
+                }),
+              }));
+            } catch (e) {
+              const errorText = e instanceof Error ? e.message : String(e);
+              set((s) => ({
+                messages: s.messages.map((m) => {
+                  if (m.id !== assistantId) return m;
+                  const newContent = [...m.content];
+                  newContent[partIdx] = {
+                    type: "text",
+                    text: `\n图片生成失败: ${errorText}`,
+                  };
+                  return { ...m, content: newContent };
+                }),
+              }));
+            }
+          }
+
+          set({
+            generating: false,
+            generatingType: null,
+            generatingProgress: 0,
+            generatingStatus: "",
+            generatingStartedAt: 0,
+          });
+          const finalMsg = get().messages.find((m) => m.id === assistantId);
+          if (finalMsg) await saveChatMessage(messageToRow(finalMsg));
+        }
       }
-
-      const assistantMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        sessionId,
-        role: "assistant",
-        content: resultParts,
-        metadata: {
-          model:
-            intent === "image"
-              ? parseModelRef(useProviderStore.getState().activeImageRef).modelId
-              : intent === "video"
-                ? parseModelRef(useProviderStore.getState().activeVideoRef).modelId
-                : parseModelRef(useProviderStore.getState().activeChatRef).modelId,
-          intent,
-        },
-        createdAt: new Date().toISOString(),
-      };
-
-      set((s) => ({
-        messages: [...s.messages, assistantMsg],
-        generating: false,
-        generatingType: null,
-        generatingProgress: 0,
-        generatingStatus: "",
-        generatingStartedAt: 0,
-        streamingText: "",
-      }));
-
-      await saveChatMessage(messageToRow(assistantMsg));
 
       if (isFirstMessage && sessionId) {
         const firstText = text.slice(0, 200);
