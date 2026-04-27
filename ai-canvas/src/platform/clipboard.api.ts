@@ -2,17 +2,36 @@ import { isTauri } from "./runtime";
 
 export async function clipboardWriteText(text: string): Promise<void> {
   if (isTauri) {
-    const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
-    await writeText(text);
-    return;
+    try {
+      const { writeText } = await import("@tauri-apps/plugin-clipboard-manager");
+      await writeText(text);
+      return;
+    } catch (e) {
+      console.error("[clipboard.writeText] tauri plugin failed, falling back to browser API", e);
+    }
   }
-  await navigator.clipboard.writeText(text);
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    console.error("[clipboard.writeText] browser API failed", e);
+    throw e;
+  }
 }
 
 export async function clipboardReadText(): Promise<string> {
   if (isTauri) {
-    const { readText } = await import("@tauri-apps/plugin-clipboard-manager");
-    return await readText();
+    try {
+      const { readText } = await import("@tauri-apps/plugin-clipboard-manager");
+      const text = await readText();
+      return text ?? "";
+    } catch (e) {
+      console.error("[clipboard.readText] tauri plugin failed, falling back to browser API", e);
+    }
   }
-  return navigator.clipboard.readText();
+  try {
+    return await navigator.clipboard.readText();
+  } catch (e) {
+    console.error("[clipboard.readText] browser API failed", e);
+    throw e;
+  }
 }

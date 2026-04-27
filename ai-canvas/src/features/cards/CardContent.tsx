@@ -240,7 +240,7 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
       <Shirt className="h-12 w-12 opacity-40" />
-      <span className="text-sm font-medium opacity-50">AI 换装</span>
+      <span className="text-sm font-medium opacity-50">模特换装</span>
     </div>
   );
 }

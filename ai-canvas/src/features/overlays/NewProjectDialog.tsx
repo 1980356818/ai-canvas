@@ -7,6 +7,8 @@ import {
   Layers,
   ArrowRight,
   Sparkles,
+  Shirt,
+  User,
   type LucideIcon,
 } from "lucide-react";
 import { createProject, updateProjectMeta, loadCards } from "@/platform";
@@ -120,11 +122,20 @@ const TEMPLATE_OPTIONS: {
     accent: "text-sky-500",
     gradient: "from-sky-500/10 via-blue-500/5 to-indigo-500/10",
   },
+  {
+    id: "wf-tryon",
+    name: "模特换装",
+    desc: "上传模特图与服装图，一键换装",
+    icon: User,
+    accent: "text-pink-500",
+    gradient: "from-pink-500/10 via-rose-500/5 to-fuchsia-500/10",
+  },
 ];
 
 const FEATURE_ICONS: Record<string, { icon2: LucideIcon }> = {
   "wf-white-bg": { icon2: ImageIcon },
   "wf-face-gen": { icon2: ScanFace },
+  "wf-tryon": { icon2: Shirt },
 };
 
 function NameProjectDialog({

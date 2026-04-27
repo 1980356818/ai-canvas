@@ -157,7 +157,7 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
       useUIStore.getState().addToast({
         type: "success",
         title: "换装完成",
-        description: "AI 换装已完成",
+        description: "模特换装已完成",
         duration: 3000,
       });
     } catch (err) {

@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Sparkles,
   ScanFace,
+  Shirt,
   type LucideIcon,
 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
@@ -14,27 +15,36 @@ import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import type { WorkflowTemplate } from "@/shared/constants";
 
-const FEATURED_IDS = ["wf-white-bg", "wf-face-gen"];
+const FEATURED_IDS = ["wf-white-bg", "wf-face-gen", "wf-tryon"];
 
 const CARD_STYLES: Record<
   string,
-  { gradient: string; icon: LucideIcon; accent: string }
+  { gradient: string; icon: LucideIcon; iconRight: LucideIcon; accent: string }
 > = {
   "wf-white-bg": {
     gradient: "from-violet-500/10 via-purple-500/5 to-fuchsia-500/10",
     icon: ImageIcon,
+    iconRight: ImageIcon,
     accent: "text-violet-500",
   },
   "wf-face-gen": {
     gradient: "from-sky-500/10 via-blue-500/5 to-indigo-500/10",
     icon: User,
+    iconRight: ScanFace,
     accent: "text-sky-500",
+  },
+  "wf-tryon": {
+    gradient: "from-pink-500/10 via-rose-500/5 to-fuchsia-500/10",
+    icon: User,
+    iconRight: Shirt,
+    accent: "text-pink-500",
   },
 };
 
 function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
   const style = CARD_STYLES[workflow.id] ?? CARD_STYLES["wf-white-bg"]!;
   const Icon = style.icon;
+  const IconRight = style.iconRight;
 
   const handleClick = async () => {
     try {
@@ -71,11 +81,7 @@ function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
         <ArrowRight className="h-3 w-3 text-muted-foreground/40" />
         <Sparkles className={`h-4.5 w-4.5 ${style.accent} opacity-40`} />
         <ArrowRight className="h-3 w-3 text-muted-foreground/40" />
-        {workflow.id === "wf-face-gen" ? (
-          <ScanFace className={`h-5 w-5 ${style.accent} opacity-60`} />
-        ) : (
-          <ImageIcon className={`h-5 w-5 ${style.accent} opacity-60`} />
-        )}
+        <IconRight className={`h-5 w-5 ${style.accent} opacity-60`} />
       </div>
 
       <div className="flex flex-1 flex-col gap-0.5 px-2 py-1.5">

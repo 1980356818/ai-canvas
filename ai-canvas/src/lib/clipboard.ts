@@ -14,6 +14,8 @@ import { recordBatchCreate } from "@/lib/history";
 const CLIPBOARD_KIND = "ai-canvas-card/v2";
 const CLIPBOARD_KIND_V1 = "ai-canvas-card/v1";
 
+let inMemoryClipboard: string | null = null;
+
 interface ClipboardPayload {
   kind: string;
   cards: CanvasCard[];
@@ -98,16 +100,23 @@ export async function copyCards(cardIds: Set<string>): Promise<number> {
   if (cards.length === 0) return 0;
 
   const payload: ClipboardPayload = { kind: CLIPBOARD_KIND, cards, connections };
+  const text = JSON.stringify(payload);
+  inMemoryClipboard = text;
+  const connMsg = connections.length > 0 ? `和 ${connections.length} 条连线` : "";
   try {
-    await clipboardWriteText(JSON.stringify(payload));
-    const connMsg = connections.length > 0 ? `和 ${connections.length} 条连线` : "";
+    await clipboardWriteText(text);
     useUIStore.getState().addToast({
       type: "info",
       title: `已复制 ${cards.length} 张卡片${connMsg}`,
       duration: 1500,
     });
-  } catch {
-    /* clipboard denied */
+  } catch (e) {
+    console.error("[clipboard.copyCards] write failed, in-memory fallback only", e);
+    useUIStore.getState().addToast({
+      type: "info",
+      title: `已复制 ${cards.length} 张卡片${connMsg}（应用内）`,
+      duration: 1500,
+    });
   }
   return cards.length;
 }
@@ -125,15 +134,26 @@ export async function pasteCards(
   projectId: string,
   position?: PastePosition,
 ): Promise<string[]> {
-  let text: string;
+  let text = "";
   try {
     text = await clipboardReadText();
-  } catch {
-    return [];
+  } catch (e) {
+    console.error("[clipboard.pasteCards] read failed, will try in-memory", e);
   }
 
-  const payload = parseClipboard(text);
-  if (!payload) return [];
+  let payload = parseClipboard(text);
+  if (!payload && inMemoryClipboard) {
+    console.warn("[clipboard.pasteCards] system clipboard miss, using in-memory fallback");
+    payload = parseClipboard(inMemoryClipboard);
+  }
+  if (!payload) {
+    useUIStore.getState().addToast({
+      type: "warning",
+      title: "剪贴板里没有可粘贴的卡片",
+      duration: 2000,
+    });
+    return [];
+  }
 
   return materialize(payload, projectId, position);
 }

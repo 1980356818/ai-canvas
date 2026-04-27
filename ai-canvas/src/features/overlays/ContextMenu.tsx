@@ -403,7 +403,7 @@ function ContextMenuPanel({
         children: [
           {
             type: "item",
-            label: "AI换衣",
+            label: "模特换装",
             disabled: noProject,
             onSelect: (e) => addCardAtClick("ai_tryon", e),
           },

@@ -16,6 +16,8 @@
     "core:window:allow-start-resize-dragging",
     "core:event:default",
     "dialog:default",
-    "clipboard-manager:default"
+    "clipboard-manager:default",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text"
   ]
 }
