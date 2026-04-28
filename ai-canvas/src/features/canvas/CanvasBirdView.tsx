@@ -84,7 +84,7 @@ export default function CanvasBirdView({
       ctx.scale(viewport.zoom, viewport.zoom);
 
       drawGrid(ctx, viewport);
-      drawConnections(ctx, connections, cards, projectId, selectedConnectionId);
+      drawConnections(ctx, connections, cards, projectId, selectedConnectionId, viewport.zoom);
       drawCards(ctx, cards, selectedCardIds, viewport.zoom, projectId, imageCacheRef.current ?? undefined);
 
       if (selBox) {
@@ -306,7 +306,7 @@ export default function CanvasBirdView({
       style={{
         width: "100%",
         height: "100%",
-        cursor: isPanning ? "grabbing" : spaceHeld.current ? "crosshair" : "default",
+        cursor: isPanning ? "grabbing" : "crosshair",
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

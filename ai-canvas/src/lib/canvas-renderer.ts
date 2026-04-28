@@ -79,7 +79,7 @@ function isDark(): boolean {
 }
 
 function cardBg(): string {
-  return isDark() ? "#0a0a0a" : "#ffffff";
+  return isDark() ? "#141414" : "#ffffff";
 }
 
 function cardBorder(): string {
@@ -96,7 +96,7 @@ export function drawCards(
   ctx: CanvasRenderingContext2D,
   cards: Map<string, CanvasCard>,
   selectedIds: Set<string>,
-  _zoom: number,
+  zoom: number,
   projectId: string,
   imageCache?: CardImageCache,
 ) {
@@ -105,24 +105,29 @@ export function drawCards(
     .sort((a, b) => a.zIndex - b.zIndex);
 
   const bg = cardBg();
-  const border = cardBorder();
+  const dark = isDark();
+  const minBorder = Math.max(1, 1 / zoom);
+  const minSelectedBorder = Math.max(2.5, 2 / zoom);
+
+  // Progressive enhancement: as zoom shrinks, tint cards with type color
+  // and boost border opacity so cards remain clearly visible.
+  const lowZoom = zoom < 0.3;
+  const zoomT = lowZoom ? Math.min(1, (0.3 - zoom) / 0.25) : 0;
 
   for (const card of sorted) {
     const isSelected = selectedIds.has(card.id);
     const r = 10;
 
-    // White/dark solid background — same as DOM CardShell bg-card
     ctx.save();
     if (isSelected) {
       ctx.shadowColor = "rgba(129, 140, 248, 0.45)";
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = Math.max(12, 8 / zoom);
     }
     roundRect(ctx, card.x, card.y, card.width, card.height, r);
     ctx.fillStyle = bg;
     ctx.fill();
     ctx.restore();
 
-    // Draw image on top of background if available
     const imgUrl = imageCache ? extractCardImageUrl(card) : null;
     if (imgUrl && imageCache) {
       const img = imageCache.get(imgUrl);
@@ -146,10 +151,28 @@ export function drawCards(
       }
     }
 
-    // Border — matches DOM CardShell border appearance
+    if (lowZoom) {
+      const typeColor = card.color || TYPE_COLORS[card.type] || "#6B7280";
+      ctx.save();
+      roundRect(ctx, card.x, card.y, card.width, card.height, r);
+      ctx.globalAlpha = 0.15 + zoomT * 0.35;
+      ctx.fillStyle = typeColor;
+      ctx.fill();
+      ctx.restore();
+    }
+
     roundRect(ctx, card.x, card.y, card.width, card.height, r);
-    ctx.strokeStyle = isSelected ? "#818cf8" : border;
-    ctx.lineWidth = isSelected ? 2.5 : 1;
+    if (isSelected) {
+      ctx.strokeStyle = "#818cf8";
+    } else if (lowZoom) {
+      const a = dark ? 0.12 + zoomT * 0.48 : 0.1 + zoomT * 0.4;
+      ctx.strokeStyle = dark
+        ? `rgba(255,255,255,${a})`
+        : `rgba(0,0,0,${a})`;
+    } else {
+      ctx.strokeStyle = cardBorder();
+    }
+    ctx.lineWidth = isSelected ? minSelectedBorder : minBorder;
     ctx.stroke();
   }
 }
@@ -176,7 +199,12 @@ export function drawConnections(
   cards: Map<string, CanvasCard>,
   projectId: string,
   selectedConnectionId: string | null,
+  zoom: number = 1,
 ) {
+  const minLine = Math.max(2, 1.5 / zoom);
+  const minSelectedLine = Math.max(3, 2 / zoom);
+  const alphaHex = zoom < 0.3 ? "b0" : "73";
+
   for (const conn of connections.values()) {
     if (conn.projectId !== projectId) continue;
     const src = cards.get(conn.sourceCardId);
@@ -192,8 +220,8 @@ export function drawConnections(
     const isSelected = conn.id === selectedConnectionId;
 
     bezierPath(ctx, x1, y1, x2, y2);
-    ctx.strokeStyle = isSelected ? "#818cf8" : srcColor + "73";
-    ctx.lineWidth = isSelected ? 3 : 2;
+    ctx.strokeStyle = isSelected ? "#818cf8" : srcColor + alphaHex;
+    ctx.lineWidth = isSelected ? minSelectedLine : minLine;
     ctx.stroke();
   }
 }

@@ -79,18 +79,20 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         type: "ai_image",
         title: "商品原图",
         relativeX: 0,
-        relativeY: (PROMPT_CARD.height - SQUARE.height) / 2,
+        relativeY: 0,
         ...SQUARE,
         data: { content: "", size: "1:1" },
       },
       {
-        type: "text",
+        type: "ai_chat",
         title: "白底精修提示词",
         relativeX: SQUARE.width + 80,
-        relativeY: 0,
-        ...PROMPT_CARD,
+        relativeY: SQUARE.height / 2 - CARD_DEFAULTS.ai_chat.height - 40,
+        width: CARD_DEFAULTS.ai_chat.width,
+        height: CARD_DEFAULTS.ai_chat.height,
         data: {
-          content: [
+          content: "",
+          result: [
             "产品精修，将图片中的[颜色][服装品类]完整提取并转换成3D立体形状，置于纯净的纯白背景上。正面视图，背面视图，两个平视角，精准还原[服装品类]的颜色、[关键特征1]、[关键特征2]与[面料纹理质感]，去除多余褶皱，使衣身轮廓平整顺滑，边缘干净无杂色。清除灰尘、瑕疵，让[服装品类]看起来挺括、崭新、洁净，光线均匀无杂乱阴影，符合电商主图标准，主体突出。",
             "",
             "示例（浅蓝色破洞牛仔外套）：",
@@ -101,19 +103,21 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         type: "ai_image",
         title: "白底精修图",
-        relativeX: SQUARE.width + 80 + PROMPT_CARD.width + 80,
-        relativeY: (PROMPT_CARD.height - SQUARE.height) / 2,
+        relativeX: SQUARE.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
+        relativeY: 0,
         ...SQUARE,
         data: { content: "", size: "1:1" },
       },
       {
-        type: "text",
+        type: "ai_chat",
         title: "多角度提示词",
-        relativeX: SQUARE.width + 80 + PROMPT_CARD.width + 80 + SQUARE.width + 80,
-        relativeY: 0,
-        ...PROMPT_CARD,
+        relativeX: SQUARE.width + 80 + CARD_DEFAULTS.ai_chat.width + 80 + SQUARE.width + 80,
+        relativeY: SQUARE.height / 2 - CARD_DEFAULTS.ai_chat.height - 40,
+        width: CARD_DEFAULTS.ai_chat.width,
+        height: CARD_DEFAULTS.ai_chat.height,
         data: {
-          content: [
+          content: "",
+          result: [
             "基于我提供的这件[颜色][服装品类]原图，生成一组8张产品细节特征展示图，在2×4的网格里，采用16:9的比例展示不同的角度，不要有重复的角度呈现。要求保持[服装品类]的款式、[颜色]、[关键纹理/设计]、[版型/细节]等所有细节完全不变，仅从不同角度（正面、侧面、背面、45度角、[关键部位特写1]、[关键部位特写2]、[细节特写1]、[细节特写2]等）进行拍摄式呈现，整体风格为简洁的白底商业产品图，光线均匀柔和，清晰展现[面料质感]与版型细节。",
             "",
             "示例（米白色带刺绣翻领衬衫）：",
@@ -124,8 +128,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         type: "ai_image",
         title: "多角度展示图",
-        relativeX: SQUARE.width + 80 + PROMPT_CARD.width + 80 + SQUARE.width + 80 + PROMPT_CARD.width + 80,
-        relativeY: (PROMPT_CARD.height - LANDSCAPE.height) / 2,
+        relativeX: SQUARE.width + 80 + CARD_DEFAULTS.ai_chat.width + 80 + SQUARE.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
+        relativeY: (SQUARE.height - LANDSCAPE.height) / 2,
         ...LANDSCAPE,
         data: { content: "", size: "16:9" },
       },
