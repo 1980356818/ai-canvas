@@ -5,7 +5,6 @@ import {
   ScanFace,
   Plus,
   Layers,
-  Shirt,
   User,
   PersonStanding,
   Mountain,
