@@ -12,6 +12,7 @@ import {
   PersonStanding,
   Mountain,
   Combine,
+  Camera,
   type LucideIcon,
 } from "lucide-react";
 import { createProject, updateProjectMeta, loadCards } from "@/platform";
@@ -165,6 +166,22 @@ const TEMPLATE_OPTIONS: {
     accent: "text-sky-500",
     gradient: "from-sky-500/10 via-blue-500/5 to-cyan-500/10",
   },
+  {
+    id: "wf-multimodal-fusion-6",
+    name: "服装多模态融合6",
+    desc: "模特+服装+影调+环境，AI 解构生成多组商业写真",
+    icon: Combine,
+    accent: "text-emerald-500",
+    gradient: "from-emerald-500/10 via-green-500/5 to-teal-500/10",
+  },
+  {
+    id: "wf-studio-look",
+    name: "一键棚拍Look图",
+    desc: "模特+服装+场景，AI 生成专业棚拍 Lookbook",
+    icon: Camera,
+    accent: "text-fuchsia-500",
+    gradient: "from-fuchsia-500/10 via-purple-500/5 to-pink-500/10",
+  },
 ];
 
 const FEATURE_ICONS: Record<string, { icon2: LucideIcon }> = {
@@ -175,6 +192,8 @@ const FEATURE_ICONS: Record<string, { icon2: LucideIcon }> = {
   "wf-face-merge": { icon2: ScanFace },
   "wf-look-fission": { icon2: ImageIcon },
   "wf-multimodal-fusion": { icon2: ImageIcon },
+  "wf-multimodal-fusion-6": { icon2: ImageIcon },
+  "wf-studio-look": { icon2: ImageIcon },
 };
 
 function NameProjectDialog({

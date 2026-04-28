@@ -22,6 +22,19 @@ import multimodalFusionGarment from "@/assets/templates/multimodal-fusion/garmen
 import multimodalFusionScene from "@/assets/templates/multimodal-fusion/scene.jpg";
 import multimodalFusionPose from "@/assets/templates/multimodal-fusion/pose.jpg";
 import multimodalFusionResult from "@/assets/templates/multimodal-fusion/result.jpg";
+import mf6Person from "@/assets/templates/multimodal-fusion-6/person.jpg";
+import mf6Garment from "@/assets/templates/multimodal-fusion-6/garment.jpg";
+import mf6Scene from "@/assets/templates/multimodal-fusion-6/scene.jpg";
+import mf6Pose from "@/assets/templates/multimodal-fusion-6/pose.jpg";
+import mf6Result1 from "@/assets/templates/multimodal-fusion-6/result-1.jpg";
+import mf6Result2 from "@/assets/templates/multimodal-fusion-6/result-2.jpg";
+import mf6Result3 from "@/assets/templates/multimodal-fusion-6/result-3.jpg";
+import mf6Result4 from "@/assets/templates/multimodal-fusion-6/result-4.jpg";
+import mf6Result5 from "@/assets/templates/multimodal-fusion-6/result-5.jpg";
+import studioLookPerson from "@/assets/templates/studio-look/person.jpg";
+import studioLookGarment from "@/assets/templates/studio-look/garment.png";
+import studioLookScene from "@/assets/templates/studio-look/scene.jpg";
+import studioLookResult from "@/assets/templates/studio-look/result.jpg";
 
 const SQUARE = sizeFromRatio(1);
 const PORTRAIT = sizeFromRatio(3 / 4);
@@ -426,8 +439,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         width: CARD_DEFAULTS.ai_chat.width,
         height: CARD_DEFAULTS.ai_chat.height,
         data: {
-          content: "",
-          result: [
+          content: [
             "基于参考图，生成 5 组不同姿势的全身写真。",
             "",
             "【强制锁定规则】",
@@ -443,6 +455,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
             "【整体风格】",
             "真实商业摄影 / 电商模特 / Lookbook 风格，自然、克制、专业。",
           ].join("\n"),
+          result: "",
         },
       },
       {
@@ -559,6 +572,269 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       { sourceIndex: 2, targetIndex: 5 },
       { sourceIndex: 3, targetIndex: 5 },
       { sourceIndex: 4, targetIndex: 5 },
+    ],
+  },
+  {
+    id: "wf-multimodal-fusion-6",
+    name: "服装多模态融合6",
+    description:
+      "上传模特、服装、影调与环境参考图，AI 解构服装细节并生成多组差异化商业写真",
+    icon: "Combine",
+    category: "composite",
+    cards: (() => {
+      const GAP = 60;
+      const CHAT_W = CARD_DEFAULTS.ai_chat.width;
+      const CHAT_H = SQUARE.height * 2 + GAP;
+      const CHAT_X = SQUARE.width * 2 + GAP * 2;
+      const RESULT_X = CHAT_X + CHAT_W + GAP;
+      const ROW_STEP = PORTRAIT.width + GAP;
+      const TOP_ROW_W = PORTRAIT.width * 3 + GAP * 2;
+      const BTM_ROW_W = PORTRAIT.width * 2 + GAP;
+      const BTM_OFFSET = Math.round((TOP_ROW_W - BTM_ROW_W) / 2);
+
+      const fusionPrompt = [
+        '你是一位拥有 10 年资深摄影经验、精通面料工业与人体解剖的顶级导演。请执行"白底测绘 + 面料全扫描 + 动态构图补全"的终极任务。',
+        "",
+        "第一步：全维度像素级解构 (Strict Physical Scan)",
+        "",
+        "【层 1：服装长度与比例锁死 (图 2 专属 - 核心判定)】",
+        "实穿优先：若有模特，100% 像素级镜像服装边缘相对于人体关节（如：膝盖上方 5cm、踝骨）的精确位置。",
+        "白底测绘：若无模特，必须以人体比例为基准，测算领口到腰线的单位，强制锁定下装落点，严禁脑补。",
+        "比例保护：强制黄金比例，严禁任何镜头畸变导致的人物比例失调。",
+        "",
+        "【层 2：7 点全量细节扫描 (执行 7 位一体点名)】",
+        "头部妆发 (图 1)：扫描妆容，发型，脸部特征",
+        "肩颈领口 (图 2)：领型、肩部剪裁。",
+        "胸腹面料 (图 2)：面料属性（如：罗纹、翻毛皮、丝绸）、纹理、褶皱、金属扣件、材质颜色等。",
+        "腰胯塞入 (图 2)：衣服层叠逻辑、腰位。",
+        "下摆边缘 (图 2)：物理落点、走线细节、材质颜色，纹理的材质，纹理的工艺。",
+        "足部构造 (图 2)：精控识别（如：米色翻毛皮露趾短靴/Beige Suede Open-toe Booties），锁死材质与露趾结构。",
+        "袜套层叠 (图 2)：长度、织纹、堆叠感。",
+        "",
+        "【层 3：影调与环境】",
+        "影调（图 3）：第一步：彻底清空之前场景。第二步：分析影调必须按照从明暗基调+色彩倾向+质感+光线+情绪风格+色彩细节，6 个纬度分析，强制 1:1 像素级镜像图 3 的影调，100% 复刻图 3 色温、对比度、图片的色调。",
+        "环境（图 4）：彻底清空之前场景，仅依据图 4 环境描述，严禁提取光色。",
+        "",
+        "第二步：多维构图生成逻辑 (Composition Logic)",
+        "",
+        "【参考图判定机制】：",
+        "若提供图 4、图 5、图 6、图 7、图 8 等：强制分析图片的构图，模特的表情、动作，提取其中的镜头语言（仰拍/俯拍/遮挡等）进行定向组合创作。",
+        "若不提供：禁止重复或忽略！必须基于图 4 空间的物理特性，自动生成 [特写]、[全身]、[对角线俯视]、[动态广角] 等 6 组高审美差异化构图。",
+        "",
+        "第三步：输出 6 个差异化灵感方案 (中文输出)",
+        "要求：所有方案必须统一在（图 3）影调分析后的色调下，采用以下固定结构：",
+        "[场景描述]：严禁残留设定，基于图 4 物理材质重新定义拍摄空间。",
+        "[人物五官表情动作]：锁定图 1 妆发、五官等特征。",
+        "[细致的服装搭配描述]：执行第一步的 7 点扫描结果。从领口开始，经由面料纹理、下装长度，直到足部的鞋履材质与露趾构造。",
+        "[图片的色调质感描述]：执行第一步层 2 的影调分析，必须 100% 复刻图三的影调。",
+        "[摄影构图]：执行第二步的多维构图逻辑。",
+        "",
+        "输出格式要求 确保英文提示词包含：商业摄影术语）：",
+        "【灵感 X：[灵感主题名]】",
+        "商业级中文提示词：[人物、妆容描述+服装穿搭描述+人物动作描述+场景描述+相机构图描述+影调描述]",
+        "输出必须是一个连贯的段落，不要使用列表。",
+      ].join("\n");
+
+      return [
+        {
+          type: "ai_image" as const,
+          title: "模特图（图1）",
+          relativeX: 0,
+          relativeY: 0,
+          ...SQUARE,
+          data: { content: "", size: "1:1", imageUrl: mf6Person },
+        },
+        {
+          type: "ai_image" as const,
+          title: "服装图（图2）",
+          relativeX: SQUARE.width + GAP,
+          relativeY: 0,
+          ...SQUARE,
+          data: { content: "", size: "1:1", imageUrl: mf6Garment },
+        },
+        {
+          type: "ai_image" as const,
+          title: "影调参考（图3）",
+          relativeX: 0,
+          relativeY: SQUARE.height + GAP,
+          ...SQUARE,
+          data: { content: "", size: "1:1", imageUrl: mf6Scene },
+        },
+        {
+          type: "ai_image" as const,
+          title: "环境参考（图4）",
+          relativeX: SQUARE.width + GAP,
+          relativeY: SQUARE.height + GAP,
+          ...SQUARE,
+          data: { content: "", size: "1:1", imageUrl: mf6Pose },
+        },
+        {
+          type: "ai_chat" as const,
+          title: "融合提示词",
+          relativeX: CHAT_X,
+          relativeY: 0,
+          width: CHAT_W,
+          height: CHAT_H,
+          data: {
+            content: fusionPrompt,
+            result: "",
+          },
+        },
+        {
+          type: "ai_image" as const,
+          title: "效果图1",
+          relativeX: RESULT_X,
+          relativeY: 0,
+          ...PORTRAIT,
+          data: { content: "", size: "3:4", imageUrl: mf6Result1 },
+        },
+        {
+          type: "ai_image" as const,
+          title: "效果图2",
+          relativeX: RESULT_X + ROW_STEP,
+          relativeY: 0,
+          ...PORTRAIT,
+          data: { content: "", size: "3:4", imageUrl: mf6Result2 },
+        },
+        {
+          type: "ai_image" as const,
+          title: "效果图3",
+          relativeX: RESULT_X + ROW_STEP * 2,
+          relativeY: 0,
+          ...PORTRAIT,
+          data: { content: "", size: "3:4", imageUrl: mf6Result3 },
+        },
+        {
+          type: "ai_image" as const,
+          title: "效果图4",
+          relativeX: RESULT_X + BTM_OFFSET,
+          relativeY: SQUARE.height + GAP,
+          ...PORTRAIT,
+          data: { content: "", size: "3:4", imageUrl: mf6Result4 },
+        },
+        {
+          type: "ai_image" as const,
+          title: "效果图5",
+          relativeX: RESULT_X + BTM_OFFSET + ROW_STEP,
+          relativeY: SQUARE.height + GAP,
+          ...PORTRAIT,
+          data: { content: "", size: "3:4", imageUrl: mf6Result5 },
+        },
+      ];
+    })(),
+    connections: [
+      { sourceIndex: 0, targetIndex: 4 },
+      { sourceIndex: 1, targetIndex: 4 },
+      { sourceIndex: 2, targetIndex: 4 },
+      { sourceIndex: 3, targetIndex: 4 },
+      { sourceIndex: 0, targetIndex: 5 },
+      { sourceIndex: 1, targetIndex: 5 },
+      { sourceIndex: 2, targetIndex: 5 },
+      { sourceIndex: 3, targetIndex: 5 },
+      { sourceIndex: 4, targetIndex: 5 },
+      { sourceIndex: 0, targetIndex: 6 },
+      { sourceIndex: 1, targetIndex: 6 },
+      { sourceIndex: 2, targetIndex: 6 },
+      { sourceIndex: 3, targetIndex: 6 },
+      { sourceIndex: 4, targetIndex: 6 },
+      { sourceIndex: 0, targetIndex: 7 },
+      { sourceIndex: 1, targetIndex: 7 },
+      { sourceIndex: 2, targetIndex: 7 },
+      { sourceIndex: 3, targetIndex: 7 },
+      { sourceIndex: 4, targetIndex: 7 },
+      { sourceIndex: 0, targetIndex: 8 },
+      { sourceIndex: 1, targetIndex: 8 },
+      { sourceIndex: 2, targetIndex: 8 },
+      { sourceIndex: 3, targetIndex: 8 },
+      { sourceIndex: 4, targetIndex: 8 },
+      { sourceIndex: 0, targetIndex: 9 },
+      { sourceIndex: 1, targetIndex: 9 },
+      { sourceIndex: 2, targetIndex: 9 },
+      { sourceIndex: 3, targetIndex: 9 },
+      { sourceIndex: 4, targetIndex: 9 },
+    ],
+  },
+  {
+    id: "wf-studio-look",
+    name: "一键棚拍Look图",
+    description:
+      "上传模特、服装与场景图，AI 生成专业棚拍 Lookbook 写真",
+    icon: "Camera",
+    category: "composite",
+    cards: (() => {
+      const GAP = 60;
+      const COL_H = SQUARE.height * 3 + GAP * 2;
+      const CHAT_W = CARD_DEFAULTS.ai_chat.width;
+      const CHAT_H = CARD_DEFAULTS.ai_chat.height;
+      const CHAT_X = SQUARE.width + GAP + 20;
+      const RESULT_X = CHAT_X + CHAT_W + GAP + 20;
+
+      const lookbookPrompt = [
+        "生成 4 个专业时装 lookbook 摄影的提示词方案",
+        "",
+        "要求：专业时装 lookbook 摄影，一位[模特描述：分析图1]穿着[服装描述：分析图2]。",
+        "服装要清晰展示，面料纹理真实，褶皱自然，版型准确，上身效果真实，不夸张变形。",
+        "模特自然淡妆，表情冷静，姿态松弛高级，符合品牌服装大片气质。",
+        "拍摄场景为[场景描述：分析图3]，背景干净高级，和服装风格统一。",
+        "柔和自然光，细腻阴影，低饱和色调，高端杂志编辑片风格，真实皮肤质感，85mm 人像镜头，浅景深。",
+        "包含全身站姿、半身图、坐姿图、服装细节图，超写实，高细节，lookbook 质感。",
+      ].join("\n");
+
+      return [
+        {
+          type: "ai_image" as const,
+          title: "模特图（图1）",
+          relativeX: 0,
+          relativeY: 0,
+          ...SQUARE,
+          data: { content: "", size: "1:1", imageUrl: studioLookPerson },
+        },
+        {
+          type: "ai_image" as const,
+          title: "服装图（图2）",
+          relativeX: 0,
+          relativeY: SQUARE.height + GAP,
+          ...SQUARE,
+          data: { content: "", size: "1:1", imageUrl: studioLookGarment },
+        },
+        {
+          type: "ai_image" as const,
+          title: "场景图（图3）",
+          relativeX: 0,
+          relativeY: (SQUARE.height + GAP) * 2,
+          ...SQUARE,
+          data: { content: "", size: "1:1", imageUrl: studioLookScene },
+        },
+        {
+          type: "ai_chat" as const,
+          title: "Lookbook 提示词",
+          relativeX: CHAT_X,
+          relativeY: (COL_H - CHAT_H) / 2,
+          width: CHAT_W,
+          height: CHAT_H,
+          data: {
+            content: lookbookPrompt,
+            result: "",
+          },
+        },
+        {
+          type: "ai_image" as const,
+          title: "棚拍 Look 图",
+          relativeX: RESULT_X,
+          relativeY: (COL_H - SQUARE.height) / 2,
+          ...SQUARE,
+          data: { content: "", size: "1:1", imageUrl: studioLookResult },
+        },
+      ];
+    })(),
+    connections: [
+      { sourceIndex: 0, targetIndex: 3 },
+      { sourceIndex: 1, targetIndex: 3 },
+      { sourceIndex: 2, targetIndex: 3 },
+      { sourceIndex: 0, targetIndex: 4 },
+      { sourceIndex: 1, targetIndex: 4 },
+      { sourceIndex: 2, targetIndex: 4 },
+      { sourceIndex: 3, targetIndex: 4 },
     ],
   },
 ];
