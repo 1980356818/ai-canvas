@@ -36,9 +36,22 @@ import studioLookGarment from "@/assets/templates/studio-look/garment.png";
 import studioLookScene from "@/assets/templates/studio-look/scene.jpg";
 import studioLookResult from "@/assets/templates/studio-look/result.jpg";
 
-const SQUARE = sizeFromRatio(1);
-const PORTRAIT = sizeFromRatio(3 / 4);
-const LANDSCAPE = sizeFromRatio(16 / 9);
+// ── card sizes derived from actual template-image pixel ratios ──
+const sz = (w: number, h: number) => sizeFromRatio(w / h);
+
+const I_1792x2400  = sz(1792, 2400);   // 254×340  person / result (大量复用)
+const I_1278x1644  = sz(1278, 1644);   // 264×340  tryon model/garment, pose person
+const I_1080x1440  = sz(1080, 1440);   // 255×340  3:4 exact
+const I_720x900    = sz(720, 900);      // 272×340  4:5
+const I_1536x2752  = sz(1536, 2752);   // 190×340  tall portrait
+const I_1080x1621  = sz(1080, 1621);   // 227×340  ≈2:3
+const I_624x1690   = sz(624, 1690);    // 126×340  garment cutout
+const I_736x1308   = sz(736, 1308);    // 191×340  studio scene
+const I_5760x3840  = sz(5760, 3840);   // 340×227  3:2
+const I_3314x3072  = sz(3314, 3072);   // 340×315  refined
+const I_5504x3072  = sz(5504, 3072);   // 340×190  multi-angle
+const I_1970x2626  = sz(1970, 2626);   // 255×340  ≈3:4
+const I_4936x6581  = sz(4936, 6581);   // 255×340  mf6 garment (3:4 exact)
 
 export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
@@ -112,15 +125,15 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         type: "ai_image",
         title: "商品原图",
         relativeX: 0,
-        relativeY: 0,
-        ...SQUARE,
-        data: { content: "", size: "1:1", imageUrl: whiteBgSource },
+        relativeY: (I_3314x3072.height - I_5760x3840.height) / 2,
+        ...I_5760x3840,
+        data: { content: "", size: "3:2", imageUrl: whiteBgSource },
       },
       {
         type: "ai_chat",
         title: "白底精修提示词",
-        relativeX: SQUARE.width + 80,
-        relativeY: SQUARE.height / 2 - CARD_DEFAULTS.ai_chat.height - 40,
+        relativeX: I_5760x3840.width + 80,
+        relativeY: I_3314x3072.height / 2 - CARD_DEFAULTS.ai_chat.height - 40,
         width: CARD_DEFAULTS.ai_chat.width,
         height: CARD_DEFAULTS.ai_chat.height,
         data: {
@@ -136,16 +149,16 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         type: "ai_image",
         title: "白底精修图",
-        relativeX: SQUARE.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
+        relativeX: I_3314x3072.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
         relativeY: 0,
-        ...SQUARE,
+        ...I_3314x3072,
         data: { content: "", size: "1:1", imageUrl: whiteBgRefined },
       },
       {
         type: "ai_chat",
         title: "多角度提示词",
-        relativeX: SQUARE.width + 80 + CARD_DEFAULTS.ai_chat.width + 80 + SQUARE.width + 80,
-        relativeY: SQUARE.height / 2 - CARD_DEFAULTS.ai_chat.height - 40,
+        relativeX: I_3314x3072.width + 80 + CARD_DEFAULTS.ai_chat.width + 80 + I_3314x3072.width + 80,
+        relativeY: I_3314x3072.height / 2 - CARD_DEFAULTS.ai_chat.height - 40,
         width: CARD_DEFAULTS.ai_chat.width,
         height: CARD_DEFAULTS.ai_chat.height,
         data: {
@@ -161,9 +174,9 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         type: "ai_image",
         title: "多角度展示图",
-        relativeX: SQUARE.width + 80 + CARD_DEFAULTS.ai_chat.width + 80 + SQUARE.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
-        relativeY: (SQUARE.height - LANDSCAPE.height) / 2,
-        ...LANDSCAPE,
+        relativeX: I_3314x3072.width + 80 + CARD_DEFAULTS.ai_chat.width + 80 + I_3314x3072.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
+        relativeY: (I_3314x3072.height - I_5504x3072.height) / 2,
+        ...I_5504x3072,
         data: { content: "", size: "16:9", imageUrl: whiteBgMultiAngle },
       },
     ],
@@ -186,22 +199,22 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         title: "模特图",
         relativeX: 0,
         relativeY: 0,
-        ...SQUARE,
-        data: { content: "", size: "1:1", imageUrl: tryonModel },
+        ...I_1278x1644,
+        data: { content: "", size: "3:4", imageUrl: tryonModel },
       },
       {
         type: "ai_image",
         title: "服装图",
         relativeX: 0,
-        relativeY: SQUARE.height + 60,
-        ...SQUARE,
-        data: { content: "", size: "1:1", imageUrl: tryonGarment },
+        relativeY: I_1278x1644.height + 60,
+        ...I_1278x1644,
+        data: { content: "", size: "3:4", imageUrl: tryonGarment },
       },
       {
         type: "ai_chat",
         title: "换装提示词",
-        relativeX: SQUARE.width + 80,
-        relativeY: (SQUARE.height * 2 + 60 - CARD_DEFAULTS.ai_chat.height) / 2,
+        relativeX: I_1278x1644.width + 80,
+        relativeY: (I_1278x1644.height * 2 + 60 - CARD_DEFAULTS.ai_chat.height) / 2,
         width: CARD_DEFAULTS.ai_chat.width,
         height: CARD_DEFAULTS.ai_chat.height,
         data: {
@@ -218,9 +231,9 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         type: "ai_image",
         title: "模特换装",
-        relativeX: SQUARE.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
-        relativeY: (SQUARE.height * 2 + 60 - PORTRAIT.height) / 2,
-        ...PORTRAIT,
+        relativeX: I_1278x1644.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
+        relativeY: (I_1278x1644.height * 2 + 60 - I_1792x2400.height) / 2,
+        ...I_1792x2400,
         data: {
           content: "",
           size: "3:4",
@@ -246,22 +259,22 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         title: "人物图",
         relativeX: 0,
         relativeY: 0,
-        ...SQUARE,
-        data: { content: "", size: "1:1", imageUrl: sceneReplacePerson },
+        ...I_1792x2400,
+        data: { content: "", size: "3:4", imageUrl: sceneReplacePerson },
       },
       {
         type: "ai_image",
         title: "场景图",
         relativeX: 0,
-        relativeY: SQUARE.height + 60,
-        ...SQUARE,
-        data: { content: "", size: "1:1", imageUrl: sceneReplaceScene },
+        relativeY: I_1792x2400.height + 60,
+        ...I_1080x1621,
+        data: { content: "", size: "2:3", imageUrl: sceneReplaceScene },
       },
       {
         type: "ai_chat",
         title: "场景融合提示词",
-        relativeX: SQUARE.width + 80,
-        relativeY: (SQUARE.height * 2 + 60 - CARD_DEFAULTS.ai_chat.height) / 2,
+        relativeX: I_1792x2400.width + 80,
+        relativeY: (I_1792x2400.height + 60 + I_1080x1621.height - CARD_DEFAULTS.ai_chat.height) / 2,
         width: CARD_DEFAULTS.ai_chat.width,
         height: CARD_DEFAULTS.ai_chat.height,
         data: {
@@ -281,9 +294,9 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         type: "ai_image",
         title: "场景替换",
-        relativeX: SQUARE.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
-        relativeY: (SQUARE.height * 2 + 60 - PORTRAIT.height) / 2,
-        ...PORTRAIT,
+        relativeX: I_1792x2400.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
+        relativeY: (I_1792x2400.height + 60 + I_1080x1621.height - I_1792x2400.height) / 2,
+        ...I_1792x2400,
         data: { content: "", size: "3:4", imageUrl: sceneReplaceResult },
       },
     ],
@@ -304,14 +317,14 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         type: "ai_image",
         title: "人物图",
         relativeX: 0,
-        relativeY: (CARD_DEFAULTS.ai_chat.height - PORTRAIT.height) / 2,
-        ...PORTRAIT,
+        relativeY: (CARD_DEFAULTS.ai_chat.height - I_1278x1644.height) / 2,
+        ...I_1278x1644,
         data: { content: "", size: "3:4", imageUrl: poseFissionPerson },
       },
       {
         type: "ai_chat",
         title: "姿态裂变提示词",
-        relativeX: PORTRAIT.width + 80,
+        relativeX: I_1278x1644.width + 80,
         relativeY: 0,
         width: CARD_DEFAULTS.ai_chat.width,
         height: CARD_DEFAULTS.ai_chat.height,
@@ -333,13 +346,13 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         type: "ai_image",
         title: "姿态裂变",
-        relativeX: PORTRAIT.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
-        relativeY: (CARD_DEFAULTS.ai_chat.height - LANDSCAPE.height) / 2,
-        ...LANDSCAPE,
+        relativeX: I_1278x1644.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
+        relativeY: (CARD_DEFAULTS.ai_chat.height - I_1792x2400.height) / 2,
+        ...I_1792x2400,
         data: {
           imageUrl: poseFissionResult,
           content: "",
-          size: "16:9",
+          size: "3:4",
         },
       },
     ],
@@ -360,22 +373,22 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         title: "人物1",
         relativeX: 0,
         relativeY: 0,
-        ...SQUARE,
-        data: { content: "", size: "1:1", imageUrl: faceMergePerson1 },
+        ...I_1792x2400,
+        data: { content: "", size: "3:4", imageUrl: faceMergePerson1 },
       },
       {
         type: "ai_image",
         title: "人物2",
         relativeX: 0,
-        relativeY: SQUARE.height + 60,
-        ...SQUARE,
-        data: { content: "", size: "1:1", imageUrl: faceMergePerson2 },
+        relativeY: I_1792x2400.height + 60,
+        ...I_1536x2752,
+        data: { content: "", size: "9:16", imageUrl: faceMergePerson2 },
       },
       {
         type: "ai_chat",
         title: "人脸合成提示词",
-        relativeX: SQUARE.width + 80,
-        relativeY: (SQUARE.height * 2 + 60 - CARD_DEFAULTS.ai_chat.height) / 2,
+        relativeX: I_1792x2400.width + 80,
+        relativeY: (I_1792x2400.height + 60 + I_1536x2752.height - CARD_DEFAULTS.ai_chat.height) / 2,
         width: CARD_DEFAULTS.ai_chat.width,
         height: CARD_DEFAULTS.ai_chat.height,
         data: {
@@ -400,12 +413,12 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         type: "ai_image",
         title: "人脸合成",
-        relativeX: SQUARE.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
-        relativeY: (SQUARE.height * 2 + 60 - SQUARE.height) / 2,
-        ...SQUARE,
+        relativeX: I_1792x2400.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
+        relativeY: (I_1792x2400.height + 60 + I_1536x2752.height - I_1792x2400.height) / 2,
+        ...I_1792x2400,
         data: {
           content: "",
-          size: "1:1",
+          size: "3:4",
           imageUrl: faceMergeResult,
         },
       },
@@ -427,14 +440,14 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         type: "ai_image",
         title: "人物图",
         relativeX: 0,
-        relativeY: (CARD_DEFAULTS.ai_chat.height - PORTRAIT.height) / 2,
-        ...PORTRAIT,
+        relativeY: (CARD_DEFAULTS.ai_chat.height - I_1970x2626.height) / 2,
+        ...I_1970x2626,
         data: { content: "", size: "3:4", imageUrl: lookFissionPerson },
       },
       {
         type: "ai_chat",
         title: "全身裂变提示词",
-        relativeX: PORTRAIT.width + 80,
+        relativeX: I_1970x2626.width + 80,
         relativeY: 0,
         width: CARD_DEFAULTS.ai_chat.width,
         height: CARD_DEFAULTS.ai_chat.height,
@@ -461,13 +474,13 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         type: "ai_image",
         title: "全身裂变",
-        relativeX: PORTRAIT.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
-        relativeY: (CARD_DEFAULTS.ai_chat.height - PORTRAIT.height) / 2,
-        ...PORTRAIT,
+        relativeX: I_1970x2626.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
+        relativeY: (CARD_DEFAULTS.ai_chat.height - I_1536x2752.height) / 2,
+        ...I_1536x2752,
         data: {
           imageUrl: lookFissionResult,
           content: "",
-          size: "3:4",
+          size: "9:16",
         },
       },
     ],
@@ -484,9 +497,12 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     category: "composite",
     cards: (() => {
       const GAP = 60;
+      const IMG_L = I_1792x2400;
+      const IMG_R = I_1080x1440;
+      const COL_W = Math.max(IMG_L.width, IMG_R.width);
       const CHAT_W = CARD_DEFAULTS.ai_chat.width;
-      const CHAT_H = SQUARE.height * 2 + GAP;
-      const CHAT_X = SQUARE.width * 2 + GAP * 2;
+      const CHAT_H = IMG_L.height * 2 + GAP;
+      const CHAT_X = COL_W * 2 + GAP * 2;
       const RESULT_X = CHAT_X + CHAT_W + GAP;
       const fusionPrompt = [
         "你是一个专业的商业时尚摄影师和服装提示词架构师。你的任务是将以下分散的元素，整合成一句逻辑清晰、细节丰富、视觉一致的中文提示词。",
@@ -509,32 +525,32 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           title: "模特图（输入1）",
           relativeX: 0,
           relativeY: 0,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: multimodalFusionPerson },
+          ...IMG_L,
+          data: { content: "", size: "3:4", imageUrl: multimodalFusionPerson },
         },
         {
           type: "ai_image" as const,
           title: "服装图（输入2）",
-          relativeX: SQUARE.width + GAP,
+          relativeX: COL_W + GAP,
           relativeY: 0,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: multimodalFusionGarment },
+          ...IMG_R,
+          data: { content: "", size: "3:4", imageUrl: multimodalFusionGarment },
         },
         {
           type: "ai_image" as const,
           title: "场景图（输入3）",
           relativeX: 0,
-          relativeY: SQUARE.height + GAP,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: multimodalFusionScene },
+          relativeY: IMG_L.height + GAP,
+          ...IMG_R,
+          data: { content: "", size: "3:4", imageUrl: multimodalFusionScene },
         },
         {
           type: "ai_image" as const,
           title: "拍摄角度图（输入4）",
-          relativeX: SQUARE.width + GAP,
-          relativeY: SQUARE.height + GAP,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: multimodalFusionPose },
+          relativeX: COL_W + GAP,
+          relativeY: IMG_L.height + GAP,
+          ...IMG_R,
+          data: { content: "", size: "3:4", imageUrl: multimodalFusionPose },
         },
         {
           type: "ai_chat" as const,
@@ -552,11 +568,11 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           type: "ai_image" as const,
           title: "多模态融合",
           relativeX: RESULT_X,
-          relativeY: (CHAT_H - SQUARE.height) / 2,
-          ...SQUARE,
+          relativeY: (CHAT_H - IMG_L.height) / 2,
+          ...IMG_L,
           data: {
             content: "合成出来的图，要求 人物@图1   100%一致，高权重，图二衣服@图二  100%一致，高权重。",
-            size: "1:1",
+            size: "3:4",
             imageUrl: multimodalFusionResult,
           },
         },
@@ -583,13 +599,18 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     category: "composite",
     cards: (() => {
       const GAP = 60;
+      const IMG_P = I_1792x2400;
+      const IMG_G = I_4936x6581;
+      const IMG_REF = I_720x900;
+      const IMG_RES = I_1792x2400;
+      const COL_W = Math.max(IMG_P.width, IMG_REF.width);
       const CHAT_W = CARD_DEFAULTS.ai_chat.width;
-      const CHAT_H = SQUARE.height * 2 + GAP;
-      const CHAT_X = SQUARE.width * 2 + GAP * 2;
+      const CHAT_H = IMG_P.height * 2 + GAP;
+      const CHAT_X = COL_W * 2 + GAP * 2;
       const RESULT_X = CHAT_X + CHAT_W + GAP;
-      const ROW_STEP = PORTRAIT.width + GAP;
-      const TOP_ROW_W = PORTRAIT.width * 3 + GAP * 2;
-      const BTM_ROW_W = PORTRAIT.width * 2 + GAP;
+      const ROW_STEP = IMG_RES.width + GAP;
+      const TOP_ROW_W = IMG_RES.width * 3 + GAP * 2;
+      const BTM_ROW_W = IMG_RES.width * 2 + GAP;
       const BTM_OFFSET = Math.round((TOP_ROW_W - BTM_ROW_W) / 2);
 
       const fusionPrompt = [
@@ -641,32 +662,32 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           title: "模特图（图1）",
           relativeX: 0,
           relativeY: 0,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: mf6Person },
+          ...IMG_P,
+          data: { content: "", size: "3:4", imageUrl: mf6Person },
         },
         {
           type: "ai_image" as const,
           title: "服装图（图2）",
-          relativeX: SQUARE.width + GAP,
+          relativeX: COL_W + GAP,
           relativeY: 0,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: mf6Garment },
+          ...IMG_G,
+          data: { content: "", size: "3:4", imageUrl: mf6Garment },
         },
         {
           type: "ai_image" as const,
           title: "影调参考（图3）",
           relativeX: 0,
-          relativeY: SQUARE.height + GAP,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: mf6Scene },
+          relativeY: IMG_P.height + GAP,
+          ...IMG_REF,
+          data: { content: "", size: "3:4", imageUrl: mf6Scene },
         },
         {
           type: "ai_image" as const,
           title: "环境参考（图4）",
-          relativeX: SQUARE.width + GAP,
-          relativeY: SQUARE.height + GAP,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: mf6Pose },
+          relativeX: COL_W + GAP,
+          relativeY: IMG_P.height + GAP,
+          ...IMG_REF,
+          data: { content: "", size: "3:4", imageUrl: mf6Pose },
         },
         {
           type: "ai_chat" as const,
@@ -685,7 +706,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           title: "效果图1",
           relativeX: RESULT_X,
           relativeY: 0,
-          ...PORTRAIT,
+          ...IMG_RES,
           data: { content: "", size: "3:4", imageUrl: mf6Result1 },
         },
         {
@@ -693,7 +714,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           title: "效果图2",
           relativeX: RESULT_X + ROW_STEP,
           relativeY: 0,
-          ...PORTRAIT,
+          ...IMG_RES,
           data: { content: "", size: "3:4", imageUrl: mf6Result2 },
         },
         {
@@ -701,23 +722,23 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           title: "效果图3",
           relativeX: RESULT_X + ROW_STEP * 2,
           relativeY: 0,
-          ...PORTRAIT,
+          ...IMG_RES,
           data: { content: "", size: "3:4", imageUrl: mf6Result3 },
         },
         {
           type: "ai_image" as const,
           title: "效果图4",
           relativeX: RESULT_X + BTM_OFFSET,
-          relativeY: SQUARE.height + GAP,
-          ...PORTRAIT,
+          relativeY: IMG_RES.height + GAP,
+          ...IMG_RES,
           data: { content: "", size: "3:4", imageUrl: mf6Result4 },
         },
         {
           type: "ai_image" as const,
           title: "效果图5",
           relativeX: RESULT_X + BTM_OFFSET + ROW_STEP,
-          relativeY: SQUARE.height + GAP,
-          ...PORTRAIT,
+          relativeY: IMG_RES.height + GAP,
+          ...IMG_RES,
           data: { content: "", size: "3:4", imageUrl: mf6Result5 },
         },
       ];
@@ -763,10 +784,15 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     category: "composite",
     cards: (() => {
       const GAP = 60;
-      const COL_H = SQUARE.height * 3 + GAP * 2;
+      const IMG_PERSON = I_1792x2400;
+      const IMG_GARMENT = I_624x1690;
+      const IMG_SCENE = I_736x1308;
+      const IMG_RESULT = I_1792x2400;
+      const COL_W = Math.max(IMG_PERSON.width, IMG_GARMENT.width, IMG_SCENE.width);
+      const COL_H = IMG_PERSON.height + GAP + IMG_GARMENT.height + GAP + IMG_SCENE.height;
       const CHAT_W = CARD_DEFAULTS.ai_chat.width;
       const CHAT_H = CARD_DEFAULTS.ai_chat.height;
-      const CHAT_X = SQUARE.width + GAP + 20;
+      const CHAT_X = COL_W + GAP + 20;
       const RESULT_X = CHAT_X + CHAT_W + GAP + 20;
 
       const lookbookPrompt = [
@@ -786,24 +812,24 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           title: "模特图（图1）",
           relativeX: 0,
           relativeY: 0,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: studioLookPerson },
+          ...IMG_PERSON,
+          data: { content: "", size: "3:4", imageUrl: studioLookPerson },
         },
         {
           type: "ai_image" as const,
           title: "服装图（图2）",
           relativeX: 0,
-          relativeY: SQUARE.height + GAP,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: studioLookGarment },
+          relativeY: IMG_PERSON.height + GAP,
+          ...IMG_GARMENT,
+          data: { content: "", size: "9:16", imageUrl: studioLookGarment },
         },
         {
           type: "ai_image" as const,
           title: "场景图（图3）",
           relativeX: 0,
-          relativeY: (SQUARE.height + GAP) * 2,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: studioLookScene },
+          relativeY: IMG_PERSON.height + GAP + IMG_GARMENT.height + GAP,
+          ...IMG_SCENE,
+          data: { content: "", size: "9:16", imageUrl: studioLookScene },
         },
         {
           type: "ai_chat" as const,
@@ -821,9 +847,99 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           type: "ai_image" as const,
           title: "棚拍 Look 图",
           relativeX: RESULT_X,
-          relativeY: (COL_H - SQUARE.height) / 2,
+          relativeY: (COL_H - IMG_RESULT.height) / 2,
+          ...IMG_RESULT,
+          data: {
+            content:
+              "生成方案1-4在2×2的宫格里全部展示。要求人物跟图1 100%一致，服装跟图2 100%一致。",
+            size: "3:4",
+            imageUrl: studioLookResult,
+          },
+        },
+      ];
+    })(),
+    connections: [
+      { sourceIndex: 0, targetIndex: 3 },
+      { sourceIndex: 1, targetIndex: 3 },
+      { sourceIndex: 2, targetIndex: 3 },
+      { sourceIndex: 0, targetIndex: 4 },
+      { sourceIndex: 1, targetIndex: 4 },
+      { sourceIndex: 2, targetIndex: 4 },
+      { sourceIndex: 3, targetIndex: 4 },
+    ],
+  },
+  {
+    id: "wf-mirror-selfie",
+    name: "对镜自拍",
+    description:
+      "上传模特、服装与场景参考图，AI 生成电商对镜自拍穿搭图",
+    icon: "Smartphone",
+    category: "composite",
+    cards: (() => {
+      const GAP = 60;
+      const COL_H = SQUARE.height * 3 + GAP * 2;
+      const CHAT_W = CARD_DEFAULTS.ai_chat.width;
+      const CHAT_H = CARD_DEFAULTS.ai_chat.height;
+      const CHAT_X = SQUARE.width + GAP + 20;
+      const RESULT_X = CHAT_X + CHAT_W + GAP + 20;
+
+      const selfiePrompt = [
+        "把图1、图2、图3这三张图组合成一张电商对镜自拍图。",
+        "",
+        "人物保持图1的五官长相，穿上图2的服装，背景换成图3的场景。人物正对镜子，一手举手机自拍，手机挡住脸部，展示全身穿搭。光线和色调参考图3。人物脸部要有明显的真实质感，不要磨皮，写实风格，高质量电商图片。",
+        "",
+        "最终生成4个提示词方案，分别为一张全身正面，一张全身侧面，一张半身侧面，一张半身正面，要求人物状态自然，悠闲。不要有任何的废话。",
+      ].join("\n");
+
+      return [
+        {
+          type: "ai_image" as const,
+          title: "模特图（图1）",
+          relativeX: 0,
+          relativeY: 0,
           ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: studioLookResult },
+          data: { content: "", size: "1:1", imageUrl: mirrorSelfiePerson },
+        },
+        {
+          type: "ai_image" as const,
+          title: "服装图（图2）",
+          relativeX: 0,
+          relativeY: SQUARE.height + GAP,
+          ...SQUARE,
+          data: { content: "", size: "1:1", imageUrl: mirrorSelfieGarment },
+        },
+        {
+          type: "ai_image" as const,
+          title: "场景图（图3）",
+          relativeX: 0,
+          relativeY: (SQUARE.height + GAP) * 2,
+          ...SQUARE,
+          data: { content: "", size: "1:1", imageUrl: mirrorSelfieScene },
+        },
+        {
+          type: "ai_chat" as const,
+          title: "对镜自拍提示词",
+          relativeX: CHAT_X,
+          relativeY: (COL_H - CHAT_H) / 2,
+          width: CHAT_W,
+          height: CHAT_H,
+          data: {
+            content: selfiePrompt,
+            result: "",
+          },
+        },
+        {
+          type: "ai_image" as const,
+          title: "对镜自拍图",
+          relativeX: RESULT_X,
+          relativeY: (COL_H - PORTRAIT.height) / 2,
+          ...PORTRAIT,
+          data: {
+            content:
+              "生成方案1-4，在3:4的尺寸里，呈现2×2的宫格画面，人物跟图1保持100%一致，衣服跟图2保持100%一致，场景跟图3保持100%一致。",
+            size: "3:4",
+            imageUrl: mirrorSelfieResult,
+          },
         },
       ];
     })(),

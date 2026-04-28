@@ -13,6 +13,7 @@ import {
   Mountain,
   Combine,
   Camera,
+  Smartphone,
   type LucideIcon,
 } from "lucide-react";
 import { createProject, updateProjectMeta, loadCards } from "@/platform";
@@ -182,6 +183,14 @@ const TEMPLATE_OPTIONS: {
     accent: "text-fuchsia-500",
     gradient: "from-fuchsia-500/10 via-purple-500/5 to-pink-500/10",
   },
+  {
+    id: "wf-mirror-selfie",
+    name: "对镜自拍",
+    desc: "模特+服装+场景，AI 生成电商对镜自拍图",
+    icon: Smartphone,
+    accent: "text-orange-500",
+    gradient: "from-orange-500/10 via-red-500/5 to-amber-500/10",
+  },
 ];
 
 const FEATURE_ICONS: Record<string, { icon2: LucideIcon }> = {
@@ -194,6 +203,7 @@ const FEATURE_ICONS: Record<string, { icon2: LucideIcon }> = {
   "wf-multimodal-fusion": { icon2: ImageIcon },
   "wf-multimodal-fusion-6": { icon2: ImageIcon },
   "wf-studio-look": { icon2: ImageIcon },
+  "wf-mirror-selfie": { icon2: ImageIcon },
 };
 
 function NameProjectDialog({

@@ -9,6 +9,7 @@ import {
   Mountain,
   Combine,
   Camera,
+  Smartphone,
   type LucideIcon,
 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
@@ -19,7 +20,7 @@ import { scheduleFitCardsToViewport } from "@/lib/viewport";
 import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import type { WorkflowTemplate } from "@/shared/constants";
 
-const FEATURED_IDS = ["wf-white-bg", "wf-tryon", "wf-pose-fission", "wf-scene-replace", "wf-face-merge", "wf-look-fission", "wf-multimodal-fusion", "wf-multimodal-fusion-6", "wf-studio-look"];
+const FEATURED_IDS = ["wf-white-bg", "wf-tryon", "wf-pose-fission", "wf-scene-replace", "wf-face-merge", "wf-look-fission", "wf-multimodal-fusion", "wf-multimodal-fusion-6", "wf-studio-look", "wf-mirror-selfie"];
 
 const CARD_STYLES: Record<
   string,
@@ -78,6 +79,12 @@ const CARD_STYLES: Record<
     icon: Camera,
     iconRight: ImageIcon,
     accent: "text-fuchsia-500",
+  },
+  "wf-mirror-selfie": {
+    gradient: "from-orange-500/10 via-red-500/5 to-amber-500/10",
+    icon: Smartphone,
+    iconRight: ImageIcon,
+    accent: "text-orange-500",
   },
 };
 
