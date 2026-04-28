@@ -1,4 +1,4 @@
-import { memo, useRef, useCallback, useEffect } from "react";
+import { memo, useRef, useCallback, useEffect, useLayoutEffect } from "react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
@@ -11,6 +11,7 @@ export default memo(function StickyNoteCard({ card }: { card: CanvasCard }) {
   const updateCard = useCardStore((s) => s.updateCard);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const cursorRef = useRef<{ start: number; end: number } | null>(null);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -20,8 +21,18 @@ export default memo(function StickyNoteCard({ card }: { card: CanvasCard }) {
     }
   }, [isEditing]);
 
+  useLayoutEffect(() => {
+    const pos = cursorRef.current;
+    if (pos && textareaRef.current) {
+      textareaRef.current.selectionStart = pos.start;
+      textareaRef.current.selectionEnd = pos.end;
+      cursorRef.current = null;
+    }
+  });
+
   const onChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      cursorRef.current = { start: e.target.selectionStart, end: e.target.selectionEnd };
       const val = e.target.value;
       updateCard(card.id, { data: { ...data, content: val } });
       if (timer.current) clearTimeout(timer.current);

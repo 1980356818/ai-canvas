@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useEffect } from "react";
+import { memo, useCallback, useRef, useEffect, useLayoutEffect } from "react";
 import { Loader2, AlertTriangle, MessageSquareText } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -14,6 +14,7 @@ export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
   const updateCard = useCardStore((s) => s.updateCard);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const cursorRef = useRef<{ start: number; end: number } | null>(null);
 
   useEffect(() => {
     if (isEditing && !genProgress && promptRef.current) {
@@ -23,8 +24,18 @@ export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
     }
   }, [isEditing, genProgress]);
 
+  useLayoutEffect(() => {
+    const pos = cursorRef.current;
+    if (pos && promptRef.current) {
+      promptRef.current.selectionStart = pos.start;
+      promptRef.current.selectionEnd = pos.end;
+      cursorRef.current = null;
+    }
+  });
+
   const onResultChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      cursorRef.current = { start: e.target.selectionStart, end: e.target.selectionEnd };
       const result = e.target.value;
       updateCard(card.id, { data: { ...data, result } });
       if (timerRef.current) clearTimeout(timerRef.current);

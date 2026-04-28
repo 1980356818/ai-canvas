@@ -5,8 +5,6 @@ import {
   ScanFace,
   Plus,
   Layers,
-  ArrowRight,
-  Sparkles,
   Shirt,
   User,
   PersonStanding,
@@ -52,7 +50,7 @@ function ImageCollage({ images }: { images: string[] }) {
 
   if (count === 0) {
     return (
-      <div className="flex h-full items-center justify-center bg-gradient-to-br from-muted to-muted/60">
+      <div className="flex aspect-[3/2] items-center justify-center bg-gradient-to-br from-muted to-muted/60">
         <Layers className="h-7 w-7 text-muted-foreground/25" />
       </div>
     );
@@ -60,15 +58,15 @@ function ImageCollage({ images }: { images: string[] }) {
 
   if (count === 1) {
     return (
-      <img src={images[0]} alt="" className="h-full w-full object-cover" />
+      <img src={images[0]} alt="" className="block w-full" />
     );
   }
 
   if (count === 2) {
     return (
-      <div className="grid h-full grid-cols-2 gap-px bg-border/40">
+      <div className="grid grid-cols-2 gap-px bg-border/40">
         {images.slice(0, 2).map((src, i) => (
-          <img key={i} src={src} alt="" className="h-full w-full object-cover" />
+          <img key={i} src={src} alt="" className="block w-full object-cover" />
         ))}
       </div>
     );
@@ -76,20 +74,20 @@ function ImageCollage({ images }: { images: string[] }) {
 
   if (count === 3) {
     return (
-      <div className="grid h-full grid-cols-2 gap-px bg-border/40">
+      <div className="grid grid-cols-2 gap-px bg-border/40">
         <img src={images[0]} alt="" className="row-span-2 h-full w-full object-cover" />
         <div className="grid grid-rows-2 gap-px bg-border/40">
-          <img src={images[1]} alt="" className="h-full w-full object-cover" />
-          <img src={images[2]} alt="" className="h-full w-full object-cover" />
+          <img src={images[1]} alt="" className="block w-full object-cover" />
+          <img src={images[2]} alt="" className="block w-full object-cover" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="grid h-full grid-cols-2 grid-rows-2 gap-px bg-border/40">
+    <div className="grid grid-cols-2 grid-rows-2 gap-px bg-border/40">
       {images.slice(0, 4).map((src, i) => (
-        <img key={i} src={src} alt="" className="h-full w-full object-cover" />
+        <img key={i} src={src} alt="" className="block w-full object-cover" />
       ))}
     </div>
   );
@@ -193,18 +191,6 @@ const TEMPLATE_OPTIONS: {
   },
 ];
 
-const FEATURE_ICONS: Record<string, { icon2: LucideIcon }> = {
-  "wf-white-bg": { icon2: ImageIcon },
-  "wf-tryon": { icon2: Shirt },
-  "wf-pose-fission": { icon2: ImageIcon },
-  "wf-scene-replace": { icon2: ImageIcon },
-  "wf-face-merge": { icon2: ScanFace },
-  "wf-look-fission": { icon2: ImageIcon },
-  "wf-multimodal-fusion": { icon2: ImageIcon },
-  "wf-multimodal-fusion-6": { icon2: ImageIcon },
-  "wf-studio-look": { icon2: ImageIcon },
-  "wf-mirror-selfie": { icon2: ImageIcon },
-};
 
 function NameProjectDialog({
   open,
@@ -458,7 +444,7 @@ export function NewProjectDialog({
                   className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-md border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
                   style={{ animationDelay: `${i * 60}ms` }}
                 >
-                  <div className="image-collage aspect-[3/2] w-full">
+                  <div className="image-collage w-full">
                     <ImageCollage images={projectImages[p.id] ?? []} />
                   </div>
                   <div className="flex items-start gap-1 px-2 py-1.5">
@@ -484,9 +470,9 @@ export function NewProjectDialog({
           </h3>
           <div className="grid grid-cols-5 gap-2">
             {TEMPLATE_OPTIONS.map((tpl) => {
-              const Icon = tpl.icon;
               const isBlank = tpl.id === "blank";
-              const feat = FEATURE_ICONS[tpl.id];
+              const workflow = WORKFLOW_TEMPLATES.find((w) => w.id === tpl.id);
+              const cover = workflow?.coverImage;
 
               return (
                 <button
@@ -507,28 +493,21 @@ export function NewProjectDialog({
                       : "border border-border/60 bg-card",
                   )}
                 >
-                  <div
-                    className={cn(
-                      "flex aspect-[3/2] w-full items-center justify-center gap-2",
-                      isBlank
-                        ? "bg-gradient-to-br from-muted/60 to-muted/30"
-                        : `bg-gradient-to-br ${tpl.gradient}`,
-                    )}
-                  >
+                  <div className="w-full overflow-hidden">
                     {isBlank ? (
-                      <Plus className="h-6 w-6 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
+                      <div className="flex aspect-[3/2] items-center justify-center bg-gradient-to-br from-muted/60 to-muted/30">
+                        <Plus className="h-6 w-6 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
+                      </div>
+                    ) : cover ? (
+                      <img
+                        src={cover}
+                        alt={tpl.name}
+                        className="block w-full transition-transform duration-300 group-hover:scale-105"
+                      />
                     ) : (
-                      <>
-                        <Icon className={cn("h-5 w-5 opacity-60", tpl.accent)} />
-                        <ArrowRight className="h-3 w-3 text-muted-foreground/40" />
-                        <Sparkles className={cn("h-4.5 w-4.5 opacity-40", tpl.accent)} />
-                        <ArrowRight className="h-3 w-3 text-muted-foreground/40" />
-                        {feat ? (
-                          <feat.icon2 className={cn("h-5 w-5 opacity-60", tpl.accent)} />
-                        ) : (
-                          <ImageIcon className={cn("h-5 w-5 opacity-60", tpl.accent)} />
-                        )}
-                      </>
+                      <div className={cn("flex aspect-[3/2] items-center justify-center bg-gradient-to-br", tpl.gradient)}>
+                        <span className="text-xs text-muted-foreground/40">{tpl.name}</span>
+                      </div>
                     )}
                   </div>
                   <div className="flex flex-1 flex-col gap-0.5 px-2 py-1.5">

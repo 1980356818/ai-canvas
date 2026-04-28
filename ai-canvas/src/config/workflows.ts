@@ -35,6 +35,21 @@ import studioLookPerson from "@/assets/templates/studio-look/person.jpg";
 import studioLookGarment from "@/assets/templates/studio-look/garment.png";
 import studioLookScene from "@/assets/templates/studio-look/scene.jpg";
 import studioLookResult from "@/assets/templates/studio-look/result.jpg";
+import mirrorSelfiePerson from "@/assets/templates/mirror-selfie/person.jpg";
+import mirrorSelfieGarment from "@/assets/templates/mirror-selfie/garment.jpg";
+import mirrorSelfieScene from "@/assets/templates/mirror-selfie/scene.jpg";
+import mirrorSelfieResult from "@/assets/templates/mirror-selfie/result.jpg";
+
+import coverWhiteBg from "@/assets/templates/covers/white-bg.jpg";
+import coverTryon from "@/assets/templates/covers/tryon.jpg";
+import coverPoseFission from "@/assets/templates/covers/pose-fission.jpg";
+import coverSceneReplace from "@/assets/templates/covers/scene-replace.jpg";
+import coverFaceMerge from "@/assets/templates/covers/face-merge.jpg";
+import coverLookFission from "@/assets/templates/covers/look-fission.jpg";
+import coverMultimodalFusion from "@/assets/templates/covers/multimodal-fusion.jpg";
+import coverMultimodalFusion6 from "@/assets/templates/covers/multimodal-fusion-6.jpg";
+import coverStudioLook from "@/assets/templates/covers/studio-look.jpg";
+import coverMirrorSelfie from "@/assets/templates/covers/mirror-selfie.jpg";
 
 // ── card sizes derived from actual template-image pixel ratios ──
 const sz = (w: number, h: number) => sizeFromRatio(w / h);
@@ -52,6 +67,8 @@ const I_3314x3072  = sz(3314, 3072);   // 340×315  refined
 const I_5504x3072  = sz(5504, 3072);   // 340×190  multi-angle
 const I_1970x2626  = sz(1970, 2626);   // 255×340  ≈3:4
 const I_4936x6581  = sz(4936, 6581);   // 255×340  mf6 garment (3:4 exact)
+const SQUARE       = sz(1, 1);          // 340×340  1:1
+const PORTRAIT     = sz(3, 4);          // 255×340  3:4
 
 export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
@@ -120,6 +137,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: "上传商品图，配合预填的精修与多角度提示词，生成白底图与多角度展示图",
     icon: "ImageIcon",
     category: "composite",
+    coverImage: coverWhiteBg,
     cards: [
       {
         type: "ai_image",
@@ -193,6 +211,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: "上传模特图与服装图，配合预填换装提示词，AI 自动将服装穿在模特身上",
     icon: "Shirt",
     category: "composite",
+    coverImage: coverTryon,
     cards: [
       {
         type: "ai_image",
@@ -253,6 +272,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: "上传人物图与场景图，配合预填融合提示词，AI 将人物完美融入新场景",
     icon: "Mountain",
     category: "composite",
+    coverImage: coverSceneReplace,
     cards: [
       {
         type: "ai_image",
@@ -312,6 +332,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: "上传模特图，配合预填裂变提示词，生成多种姿态变体（面部与服装保持不变）",
     icon: "PersonStanding",
     category: "composite",
+    coverImage: coverPoseFission,
     cards: [
       {
         type: "ai_image",
@@ -367,6 +388,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: "上传两张人物照片，AI 融合面部特征生成全新写实人像",
     icon: "ScanFace",
     category: "composite",
+    coverImage: coverFaceMerge,
     cards: [
       {
         type: "ai_image",
@@ -435,6 +457,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: "上传模特图，配合预填锁定机位提示词，生成多组 Lookbook 风格姿态变体",
     icon: "PersonStanding",
     category: "composite",
+    coverImage: coverLookFission,
     cards: [
       {
         type: "ai_image",
@@ -495,6 +518,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: "上传模特、服装、场景与拍摄角度参考图，AI 综合融合生成商业写真",
     icon: "Combine",
     category: "composite",
+    coverImage: coverMultimodalFusion,
     cards: (() => {
       const GAP = 60;
       const IMG_L = I_1792x2400;
@@ -597,6 +621,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       "上传模特、服装、影调与环境参考图，AI 解构服装细节并生成多组差异化商业写真",
     icon: "Combine",
     category: "composite",
+    coverImage: coverMultimodalFusion6,
     cards: (() => {
       const GAP = 60;
       const IMG_P = I_1792x2400;
@@ -782,6 +807,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       "上传模特、服装与场景图，AI 生成专业棚拍 Lookbook 写真",
     icon: "Camera",
     category: "composite",
+    coverImage: coverStudioLook,
     cards: (() => {
       const GAP = 60;
       const IMG_PERSON = I_1792x2400;
@@ -875,6 +901,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       "上传模特、服装与场景参考图，AI 生成电商对镜自拍穿搭图",
     icon: "Smartphone",
     category: "composite",
+    coverImage: coverMirrorSelfie,
     cards: (() => {
       const GAP = 60;
       const COL_H = SQUARE.height * 3 + GAP * 2;

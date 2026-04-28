@@ -20,7 +20,8 @@ import { modelService } from "@/services/models";
 import { providerService } from "@/services/provider.service";
 import { useProviderStore, parseModelRef } from "@/stores/providerStore";
 import { getAccumulatedToolCalls } from "@/providers/openai-compat/formatter";
-import { getBase64ForApi } from "@/lib/media";
+import { getBase64ForApi, persistImage } from "@/lib/media";
+import { useProjectStore } from "@/stores/projectStore";
 import { getAllowedSizesForModel, coerceToAllowedSize } from "@/shared/constants";
 import type { StreamEvent, UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 
@@ -85,6 +86,17 @@ function pickImageModelRefForChat(chatProviderId: string, chatModelId: string): 
     return "comfly:gemini-3.1-flash-image-preview";
   }
   return useProviderStore.getState().activeImageRef;
+}
+
+async function persistGeneratedMedia(url: string, prompt?: string): Promise<string> {
+  try {
+    const pid = useProjectStore.getState().currentProjectId ?? undefined;
+    const { localPath } = await persistImage(url, prompt, pid);
+    return localPath;
+  } catch (e) {
+    console.warn("[chatStore] Failed to persist generated media:", e);
+    return url;
+  }
 }
 
 async function historyToUnified(history: ChatHistoryMessage[]): Promise<UnifiedMessage[]> {
@@ -376,13 +388,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
               set({ generatingProgress: p.percent, generatingStatus: p.label }),
             signal: _abortController!.signal,
           });
+          const savedUrl = await persistGeneratedMedia(result.url, cleanPrompt);
           set((s) => ({
             messages: s.messages.map((m) =>
               m.id === assistantId
                 ? {
                     ...m,
                     content: [
-                      { type: "image", url: result.url, prompt: cleanPrompt },
+                      { type: "image", url: savedUrl, prompt: cleanPrompt },
                     ],
                   }
                 : m,
@@ -602,13 +615,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   set({ generatingProgress: p.percent, generatingStatus: p.label }),
                 signal: _abortController!.signal,
               });
+              const savedUrl = await persistGeneratedMedia(result.url, job.prompt);
               set((s) => ({
                 messages: s.messages.map((m) => {
                   if (m.id !== assistantId) return m;
                   const newContent = [...m.content];
                   newContent[partIdx] = {
                     type: "image",
-                    url: result.url,
+                    url: savedUrl,
                     prompt: job.prompt,
                   };
                   return { ...m, content: newContent };
@@ -715,12 +729,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           set({ generatingProgress: p.percent, generatingStatus: p.label }),
         signal: _abortController!.signal,
       });
+      const savedUrl = await persistGeneratedMedia(result.url, prompt);
 
       set((s) => ({
         messages: s.messages.map((m) => {
           if (m.id !== messageId) return m;
           const newContent = [...m.content];
-          newContent[partIndex] = { type: "image", url: result.url, prompt };
+          newContent[partIndex] = { type: "image", url: savedUrl, prompt };
           return { ...m, content: newContent, metadata: { ...m.metadata, model: modelId, intent: "image" as const } };
         }),
         generating: false,
@@ -791,12 +806,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           set({ generatingProgress: p.percent, generatingStatus: p.label }),
         signal: _abortController!.signal,
       });
+      const savedUrl = await persistGeneratedMedia(result.url, prompt);
 
       set((s) => ({
         messages: s.messages.map((m) => {
           if (m.id !== messageId) return m;
           const newContent = [...m.content];
-          newContent[partIndex] = { type: "video", url: result.url, prompt };
+          newContent[partIndex] = { type: "video", url: savedUrl, prompt };
           return { ...m, content: newContent, metadata: { ...m.metadata, model: modelId, intent: "video" as const } };
         }),
         generating: false,

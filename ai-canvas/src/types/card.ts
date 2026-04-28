@@ -78,6 +78,7 @@ export interface WorkflowTemplate {
   description: string;
   icon: string;
   category: "chat" | "image" | "composite";
+  coverImage?: string;
   cards: WorkflowCardPreset[];
   connections?: WorkflowConnectionPreset[];
 }
