@@ -11,6 +11,7 @@ import {
   User,
   PersonStanding,
   Mountain,
+  Combine,
   type LucideIcon,
 } from "lucide-react";
 import { createProject, updateProjectMeta, loadCards } from "@/platform";
@@ -21,7 +22,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { useChatStore } from "@/stores/chatStore";
 import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
-import { autoSave } from "@/lib/autoSave";
+import { scheduleFitCardsToViewport } from "@/lib/viewport";
 import { cn } from "@/lib/utils";
 
 function formatRelativeTime(iso: string): string {
@@ -156,6 +157,14 @@ const TEMPLATE_OPTIONS: {
     accent: "text-rose-500",
     gradient: "from-rose-500/10 via-pink-500/5 to-red-500/10",
   },
+  {
+    id: "wf-multimodal-fusion",
+    name: "多模态融合1",
+    desc: "模特+服装+场景+角度，AI 综合融合生成",
+    icon: Combine,
+    accent: "text-sky-500",
+    gradient: "from-sky-500/10 via-blue-500/5 to-cyan-500/10",
+  },
 ];
 
 const FEATURE_ICONS: Record<string, { icon2: LucideIcon }> = {
@@ -165,6 +174,7 @@ const FEATURE_ICONS: Record<string, { icon2: LucideIcon }> = {
   "wf-scene-replace": { icon2: ImageIcon },
   "wf-face-merge": { icon2: ScanFace },
   "wf-look-fission": { icon2: ImageIcon },
+  "wf-multimodal-fusion": { icon2: ImageIcon },
 };
 
 function NameProjectDialog({
@@ -366,13 +376,13 @@ export function NewProjectDialog({
       const workflow = WORKFLOW_TEMPLATES.find((w) => w.id === templateId);
       if (workflow) {
         useProjectStore.getState().addProject(project);
-        useProjectStore.getState().openProject(project.id);
-        instantiateWorkflowTemplate(workflow, project.id, 320, 80);
-        await autoSave.forceSave();
+        await instantiateWorkflowTemplate(workflow, project.id, 320, 80);
         const meta = { nodeCount: workflow.cards.length };
         useProjectStore.getState().updateProject(project.id, meta);
         await updateProjectMeta(project.id, meta);
+        useProjectStore.getState().openProject(project.id);
         setAppView("canvas");
+        scheduleFitCardsToViewport(project.id);
         onClose();
         return;
       }

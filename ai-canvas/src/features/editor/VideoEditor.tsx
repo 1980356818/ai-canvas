@@ -19,7 +19,7 @@ import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
 import SizeCombo from "./SizeCombo";
 import PromptTextarea, { type PromptTextareaHandle } from "./PromptTextarea";
-import { normalizeImageSize } from "@/shared/constants";
+import { normalizeImageSize, IMAGE_SIZE_OPTIONS, sizeFromRatio } from "@/shared/constants";
 import { isSeedanceModel } from "@/providers/comfly/models";
 
 interface VideoFrameRef {
@@ -369,7 +369,12 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const handleSizeChange = useCallback(
     (size: string) => {
       setCurrentSize(size);
-      updateCard(card.id, { data: { ...data, size } });
+      const updates: Parameters<typeof updateCard>[1] = { data: { ...data, size } };
+      if (!data.videoUrl) {
+        const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === size);
+        if (opt) Object.assign(updates, sizeFromRatio(opt.ratio));
+      }
+      updateCard(card.id, updates);
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
@@ -545,7 +550,9 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         },
       });
 
-      updateCard(card.id, { data: { ...data, videoUrl: result.url } });
+      const sizeOpt = IMAGE_SIZE_OPTIONS.find((o) => o.value === currentSize);
+      const cardSize = sizeOpt ? sizeFromRatio(sizeOpt.ratio) : {};
+      updateCard(card.id, { data: { ...data, videoUrl: result.url }, ...cardSize });
       autoSave.markDirty(card.id);
 
       const isRemote = result.url.startsWith("http://") || result.url.startsWith("https://");

@@ -7,17 +7,18 @@ import {
   Shirt,
   PersonStanding,
   Mountain,
+  Combine,
   type LucideIcon,
 } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { createProject, updateProjectMeta } from "@/platform";
-import { autoSave } from "@/lib/autoSave";
 import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
+import { scheduleFitCardsToViewport } from "@/lib/viewport";
 import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import type { WorkflowTemplate } from "@/shared/constants";
 
-const FEATURED_IDS = ["wf-white-bg", "wf-tryon", "wf-pose-fission", "wf-scene-replace", "wf-face-merge", "wf-look-fission"];
+const FEATURED_IDS = ["wf-white-bg", "wf-tryon", "wf-pose-fission", "wf-scene-replace", "wf-face-merge", "wf-look-fission", "wf-multimodal-fusion"];
 
 const CARD_STYLES: Record<
   string,
@@ -59,6 +60,12 @@ const CARD_STYLES: Record<
     iconRight: ImageIcon,
     accent: "text-rose-500",
   },
+  "wf-multimodal-fusion": {
+    gradient: "from-sky-500/10 via-blue-500/5 to-cyan-500/10",
+    icon: Combine,
+    iconRight: ImageIcon,
+    accent: "text-sky-500",
+  },
 };
 
 function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
@@ -70,15 +77,16 @@ function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
     try {
       const project = await createProject(workflow.name);
       useProjectStore.getState().addProject(project);
-      useProjectStore.getState().openProject(project.id);
 
-      instantiateWorkflowTemplate(workflow, project.id, 320, 80);
+      await instantiateWorkflowTemplate(workflow, project.id, 320, 80);
 
-      await autoSave.forceSave();
       const meta = { nodeCount: workflow.cards.length };
       useProjectStore.getState().updateProject(project.id, meta);
       await updateProjectMeta(project.id, meta);
+
+      useProjectStore.getState().openProject(project.id);
       useUIStore.getState().setAppView("canvas");
+      scheduleFitCardsToViewport(project.id);
     } catch (err) {
       useUIStore.getState().addToast({
         type: "error",

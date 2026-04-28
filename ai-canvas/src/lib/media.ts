@@ -65,7 +65,8 @@ export function getDisplayUrl(storedPath: string): string {
     storedPath.startsWith("blob:") ||
     storedPath.startsWith("http://") ||
     storedPath.startsWith("https://") ||
-    storedPath.startsWith("data:")
+    storedPath.startsWith("data:") ||
+    storedPath.startsWith("/")
   ) {
     return storedPath;
   }

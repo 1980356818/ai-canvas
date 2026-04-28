@@ -1,23 +1,25 @@
 import { useCardStore } from "@/stores/cardStore";
 import { useConnectionStore } from "@/stores/connectionStore";
-import type { Connection } from "@/types";
-import { autoSave } from "@/lib/autoSave";
+import type { CanvasCard, Connection } from "@/types";
+import { saveCardsBatch, saveConnections } from "@/platform";
+import { cardToRow, connectionToRow } from "@/lib/mappers";
 import { CARD_DEFAULTS, type WorkflowTemplate } from "@/shared/constants";
 
-export function instantiateWorkflowTemplate(
+export async function instantiateWorkflowTemplate(
   template: WorkflowTemplate,
   projectId: string,
   anchorX: number,
   anchorY: number,
-): string[] {
+): Promise<string[]> {
   const now = new Date().toISOString();
   const cardStore = useCardStore.getState();
   const connStore = useConnectionStore.getState();
   const cardIds: string[] = [];
+  const cards: CanvasCard[] = [];
 
   for (const preset of template.cards) {
     const defaults = CARD_DEFAULTS[preset.type];
-    const card = {
+    const card: CanvasCard = {
       id: crypto.randomUUID(),
       projectId,
       type: preset.type,
@@ -34,10 +36,11 @@ export function instantiateWorkflowTemplate(
       updatedAt: now,
     };
     cardStore.addCard(card);
-    autoSave.markDirty(card.id);
+    cards.push(card);
     cardIds.push(card.id);
   }
 
+  const connections: Connection[] = [];
   if (template.connections) {
     for (const preset of template.connections) {
       const sourceId = cardIds[preset.sourceIndex];
@@ -51,9 +54,16 @@ export function instantiateWorkflowTemplate(
           createdAt: now,
         };
         connStore.addConnection(conn);
+        connections.push(conn);
       }
     }
-    autoSave.markDirty();
+  }
+
+  if (cards.length > 0) {
+    await saveCardsBatch(cards.map(cardToRow));
+  }
+  if (connections.length > 0) {
+    await saveConnections(projectId, connections.map(connectionToRow));
   }
 
   return cardIds;
