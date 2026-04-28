@@ -165,10 +165,10 @@ jobs:
           name: macos-intel-app
           path: artifacts
 
-      - name: Read version from tauri.conf.json
+      - name: Read version from package.json (single source of truth)
         id: version
         run: |
-          VERSION=$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
+          VERSION=$(node -p "require('./package.json').version")
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Detected version: $VERSION"
 

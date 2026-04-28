@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "version:sync": "node scripts/sync-version.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",

@@ -4,9 +4,9 @@
   "version": "0.1.2",
   "identifier": "com.ai-canvas.desktop",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run version:sync && npm run dev",
     "devUrl": "http://127.0.0.1:1620",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run version:sync && npm run build",
     "frontendDist": "../dist"
   },
   "app": {

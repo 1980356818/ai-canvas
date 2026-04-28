@@ -9,17 +9,29 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
+      window.__APP_ERROR__ = null;
+      window.addEventListener("error", function (e) {
+        window.__APP_ERROR__ = e.message + (e.filename ? " (" + e.filename + ":" + e.lineno + ")" : "");
+      });
+      window.addEventListener("unhandledrejection", function (e) {
+        window.__APP_ERROR__ = String(e.reason);
+      });
       setTimeout(function () {
         var el = document.getElementById("root");
         if (el && !el.hasChildNodes()) {
+          var err = window.__APP_ERROR__;
+          var detail = err
+            ? '<p style="font-size:11px;max-width:420px;text-align:left;background:#f5f5f5;border-radius:6px;padding:8px 12px;word-break:break-all;color:#c00;margin-top:4px">' + err + "</p>"
+            : "";
           el.innerHTML =
             '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:#888;gap:12px">' +
             '<p style="font-size:16px;font-weight:600">应用加载失败</p>' +
-            '<p style="font-size:13px;max-width:360px;text-align:center">您的系统版本可能过低，AI猫需要 macOS 12 或 Windows 10 及以上版本。<br>请升级系统后重试。</p>' +
+            '<p style="font-size:13px;max-width:360px;text-align:center">请尝试重新加载，或重启开发服务器。</p>' +
+            detail +
             '<button onclick="location.reload()" style="margin-top:8px;padding:6px 20px;border-radius:8px;border:1px solid #ccc;background:#f5f5f5;cursor:pointer;font-size:13px">重新加载</button>' +
             "</div>";
         }
-      }, 8000);
+      }, 10000);
     </script>
   </body>
 </html>
