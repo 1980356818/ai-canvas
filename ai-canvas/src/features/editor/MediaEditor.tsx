@@ -591,10 +591,10 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       const params = { ...data._params, [key]: value };
       let content = data.content ?? "";
       if (data._promptTemplate) {
-        content = data._promptTemplate.replace(
-          new RegExp(`\\{\\{${key}\\}\\}`, "g"),
-          value,
-        );
+        content = data._promptTemplate;
+        for (const [k, v] of Object.entries(params)) {
+          content = content.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v);
+        }
       }
       updateCard(card.id, { data: { ...data, _params: params, content } });
       autoSave.markDirty(card.id);
@@ -647,25 +647,31 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           {data._params && (
             <div className="flex shrink-0 items-center gap-2">
               {Object.entries(data._params).map(([key, value]) => {
-                const options = key === "gender" ? ["女", "男"] : [value];
+                const genderOptions = [
+                  { label: "女", value: "female" },
+                  { label: "男", value: "male" },
+                ];
+                const options = key === "gender"
+                  ? genderOptions
+                  : [{ label: value, value }];
                 return (
                   <div key={key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <span>{key === "gender" ? "性别" : key}</span>
                     <div className="flex items-center rounded-md border border-input">
                       {options.map((opt) => (
                         <button
-                          key={opt}
-                          onClick={() => handleParamChange(key, opt)}
+                          key={opt.value}
+                          onClick={() => handleParamChange(key, opt.value)}
                           disabled={generating}
                           className={cn(
                             "px-2.5 py-1 text-xs font-medium transition-colors",
                             "first:rounded-l-[5px] last:rounded-r-[5px]",
-                            value === opt
+                            value === opt.value
                               ? "bg-primary text-primary-foreground"
                               : "text-muted-foreground hover:bg-muted hover:text-foreground",
                           )}
                         >
-                          {opt}
+                          {opt.label}
                         </button>
                       ))}
                     </div>
@@ -761,7 +767,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           onChange={handleModelChange}
           filter={modelFilter}
         />
-        {!enhancer && !isLocked && (
+        {!enhancer && (
           <SizeCombo
             value={currentSize}
             resolution={supportsResolution ? currentResolution : undefined}

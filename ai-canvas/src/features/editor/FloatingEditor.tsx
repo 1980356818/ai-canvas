@@ -15,6 +15,8 @@ const EDITOR_SIZES: Record<string, { height: number; minWidth: number }> = {
   ai_video: { height: 150, minWidth: 560 },
   ai_tryon: { height: 150, minWidth: 560 },
   ai_multiangle: { height: 88, minWidth: 400 },
+  text: { height: 200, minWidth: 400 },
+  sticky_note: { height: 160, minWidth: 360 },
 };
 const DEFAULT_SIZE = { height: 120, minWidth: 400 };
 
@@ -152,7 +154,6 @@ export default function FloatingEditor() {
   }, [editingCardId, userSize]);
 
   if (!card) return null;
-  if (card.type === "text" || card.type === "sticky_note") return null;
 
   const { height: baseHeight, minWidth } = EDITOR_SIZES[card.type] ?? DEFAULT_SIZE;
 
@@ -170,7 +171,7 @@ export default function FloatingEditor() {
   const refVideos = data?.refVideos as unknown[] | undefined;
   const hasRefVideos = refVideos && refVideos.length > 0;
   const isLocked = !!(data?._locked);
-  let autoHeight = isEnhancer ? 70 : isLocked ? 120 : baseHeight;
+  let autoHeight = isEnhancer ? 70 : baseHeight;
   if (card.type === "ai_multiangle" || card.type === "ai_tryon") {
     if (hasError) autoHeight += 48;
   } else {
