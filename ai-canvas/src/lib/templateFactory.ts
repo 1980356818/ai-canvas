@@ -90,6 +90,8 @@ export async function instantiateWorkflowTemplate(
   }
 
   for (const card of cards) cardStore.addCard(card);
+  // addConnection 会触发 onConnectionsAdded 钩子，自动把上游已有输出
+  // （图片/文字）注入到下游卡片对应字段，无需在此处手动调 injectOnConnect。
   for (const conn of connections) connStore.addConnection(conn);
 
   if (persistError) {

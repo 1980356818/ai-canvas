@@ -63,8 +63,16 @@ export default function CanvasContainer() {
   const [spaceDown, setSpaceDown] = useState(false);
 
   useEffect(() => {
+    const isFocusOnInput = () => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+    };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space" && !e.repeat) {
+        // IME 合成中（中文输入法靠 Space 上屏）或焦点在输入框时，不拦截 Space。
+        if (e.isComposing || e.keyCode === 229 || isFocusOnInput()) return;
         e.preventDefault();
         spaceHeld.current = true;
         setSpaceDown(true);

@@ -1,4 +1,4 @@
-﻿import type { WorkflowTemplate } from "@/types";
+import type { WorkflowTemplate } from "@/types";
 import { CARD_DEFAULTS, sizeFromRatio } from "@/shared/constants";
 
 import whiteBgSource from "@/assets/templates/white-bg/source-photo.jpg";
@@ -199,15 +199,17 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       },
     ],
     connections: [
+      { sourceIndex: 0, targetIndex: 1 },
       { sourceIndex: 0, targetIndex: 2 },
       { sourceIndex: 1, targetIndex: 2 },
+      { sourceIndex: 2, targetIndex: 3 },
       { sourceIndex: 2, targetIndex: 4 },
       { sourceIndex: 3, targetIndex: 4 },
     ],
   },
   {
     id: "wf-tryon",
-    name: "模特换装",
+    name: "一键换衣",
     description: "上传模特图与服装图，AI 自动将服装穿在模特身上",
     icon: "Shirt",
     category: "composite",
@@ -302,6 +304,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       },
     ],
     connections: [
+      { sourceIndex: 0, targetIndex: 2 },
+      { sourceIndex: 1, targetIndex: 2 },
       { sourceIndex: 0, targetIndex: 3 },
       { sourceIndex: 1, targetIndex: 3 },
       { sourceIndex: 2, targetIndex: 3 },
@@ -310,7 +314,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
     id: "wf-pose-fission",
     name: "模特姿态裂变",
-    description: "上传模特图，配合预填裂变提示词，生成多种姿态变体（面部与服装保持不变）",
+    description: "上传模特图，AI 生成多种姿态变体（面部与服装保持不变）",
     icon: "PersonStanding",
     category: "composite",
     coverImage: coverPoseFission,
@@ -319,48 +323,25 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         type: "ai_image",
         title: "人物图",
         relativeX: 0,
-        relativeY: (CARD_DEFAULTS.ai_chat.height - I_1278x1644.height) / 2,
+        relativeY: (I_1792x2400.height - I_1278x1644.height) / 2,
         ...I_1278x1644,
         data: { content: "", size: "3:4", imageUrl: poseFissionPerson },
       },
       {
-        type: "ai_chat",
-        title: "姿态裂变提示词",
-        relativeX: I_1278x1644.width + 80,
-        relativeY: 0,
-        width: CARD_DEFAULTS.ai_chat.width,
-        height: CARD_DEFAULTS.ai_chat.height,
-        data: {
-          content: "",
-          result: [
-            "保持参考图中人物面部和服装不变，环境不变。",
-            "",
-            "生成 4 张不同的人物姿态图：",
-            "- 第一张：全身站立",
-            "- 第二张：半身特写",
-            "- 第三张：坐在路边长椅",
-            "- 第四张：服装特写",
-            "",
-            "保持服装细节，超写实，高细节，lookbook 质感，不要出现人物黑边。",
-          ].join("\n"),
-        },
-      },
-      {
         type: "ai_image",
         title: "姿态裂变",
-        relativeX: I_1278x1644.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
-        relativeY: (CARD_DEFAULTS.ai_chat.height - I_1792x2400.height) / 2,
+        relativeX: I_1278x1644.width + 80,
+        relativeY: 0,
         ...I_1792x2400,
         data: {
-          imageUrl: poseFissionResult,
-          content: "",
+          content: "保持@图1人物面部和服装不变，环境不变。生成4张不同的人物姿态图：第一张全身站立，第二张半身特写，第三张坐在路边长椅，第四张服装特写。保持服装细节，超写实，高细节，lookbook质感，不要出现人物黑边。",
           size: "3:4",
+          imageUrl: poseFissionResult,
         },
       },
     ],
     connections: [
-      { sourceIndex: 0, targetIndex: 2 },
-      { sourceIndex: 1, targetIndex: 2 },
+      { sourceIndex: 0, targetIndex: 1 },
     ],
   },
   {
@@ -453,20 +434,34 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         height: CARD_DEFAULTS.ai_chat.height,
         data: {
           content: [
-            "基于参考图，生成 5 组不同姿势的全身写真。",
-            "",
-            "【强制锁定规则】",
-            "1. 机位完全锁定：拍摄角度不变、镜头视角不变、相机高度不变",
-            "2. 构图完全一致：模特在画面中的位置不变、人物大小比例不变、头身比例/腿长比例完全一致",
-            "3. 严禁扩图：画布尺寸不变、不新增画面内容、不补边/不拉伸/不裁切",
-            "4. 模特身份必须一致：面部/发型/体型/气质保持完全一致、服装保持 100% 一致（颜色/版型/材质/褶皱逻辑）",
-            "",
-            "【仅允许变化】",
-            "- 角色姿态：5 组全新的、符合商业摄影美感的人体姿势",
+            "【任务目标】",
+            "基于我上传的模特图像，在【不改变机位、不改变构图、不改变比例、不扩图】的前提下，",
+            "仅对模特姿势进行【小幅度、合理、真实】的动作变化，",
+            "生成5张看起来像\"同一场景下，模特动了一下\"的真实照片。",
+            "【最高优先级 · 强制锁定规则】",
+            "1. 机位必须完全锁定：",
+            "- 拍摄角度不变",
+            "- 镜头视角不变",
+            "- 相机高度不变",
+            "2. 构图必须完全一致：",
+            "- 模特在画面中的位置不变",
+            "- 人物大小比例不变",
+            "- 头身比例、腿长比例完全一致",
+            "3. 严禁扩图：",
+            "- 画布尺寸不变",
+            "- 不新增画面内容",
+            "- 不补边、不拉伸、不裁切",
+            "4. 模特身份必须一致：",
+            "- 面部、发型、体型、气质保持完全一致",
+            "- 服装保持 100% 一致（颜色、版型、材质、褶皱逻辑）",
+            "【唯一允许变化的内容：动作（小幅度）】",
+            "- 角色姿态：请随机设计全新的、符合商业摄影美感的人体姿势",
+            "【真实感要求】",
             "- 动作变化必须符合真实人体力学",
-            "",
             "【整体风格】",
-            "真实商业摄影 / 电商模特 / Lookbook 风格，自然、克制、专业。",
+            "真实商业摄影 / 电商模特 / Lookbook 风格",
+            "自然、克制、专业",
+            "最终只生成适合banana出图的中文提示词，按灵感1、灵感2、灵感3的格式输出，不解释",
           ].join("\n"),
           result: "",
         },
@@ -485,6 +480,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       },
     ],
     connections: [
+      { sourceIndex: 0, targetIndex: 1 },
       { sourceIndex: 0, targetIndex: 2 },
       { sourceIndex: 1, targetIndex: 2 },
     ],
@@ -881,10 +877,10 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     coverImage: coverMirrorSelfie,
     cards: (() => {
       const GAP = 60;
-      const COL_H = SQUARE.height * 3 + GAP * 2;
+      const COL_H = PORTRAIT.height * 3 + GAP * 2;
       const CHAT_W = CARD_DEFAULTS.ai_chat.width;
       const CHAT_H = CARD_DEFAULTS.ai_chat.height;
-      const CHAT_X = SQUARE.width + GAP + 20;
+      const CHAT_X = PORTRAIT.width + GAP + 20;
       const RESULT_X = CHAT_X + CHAT_W + GAP + 20;
 
       const selfiePrompt = [
@@ -901,24 +897,24 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           title: "模特图（图1）",
           relativeX: 0,
           relativeY: 0,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: mirrorSelfiePerson },
+          ...PORTRAIT,
+          data: { content: "", size: "3:4", imageUrl: mirrorSelfiePerson },
         },
         {
           type: "ai_image" as const,
           title: "服装图（图2）",
           relativeX: 0,
-          relativeY: SQUARE.height + GAP,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: mirrorSelfieGarment },
+          relativeY: PORTRAIT.height + GAP,
+          ...PORTRAIT,
+          data: { content: "", size: "3:4", imageUrl: mirrorSelfieGarment },
         },
         {
           type: "ai_image" as const,
           title: "场景图（图3）",
           relativeX: 0,
-          relativeY: (SQUARE.height + GAP) * 2,
-          ...SQUARE,
-          data: { content: "", size: "1:1", imageUrl: mirrorSelfieScene },
+          relativeY: (PORTRAIT.height + GAP) * 2,
+          ...PORTRAIT,
+          data: { content: "", size: "3:4", imageUrl: mirrorSelfieScene },
         },
         {
           type: "ai_chat" as const,

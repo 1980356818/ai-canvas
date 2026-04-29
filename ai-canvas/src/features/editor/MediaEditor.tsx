@@ -372,6 +372,13 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     }
 
     setCardProgress(card.id, { percent: 0, label: "正在提交请求…" });
+    const totalStart = performance.now();
+    const logElapsed = (label: string, extra?: Record<string, unknown>) => {
+      console.log(`[MediaEditor] ${label}`, {
+        elapsedMs: Math.round(performance.now() - totalStart),
+        ...extra,
+      });
+    };
     setError(null);
     useUIStore.getState().setCardError(card.id, null);
 
@@ -427,10 +434,23 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       }
 
       const referenceImages: Array<{ url: string; role: string }> = [];
+      const refPrepareStart = performance.now();
       for (const ref of rawRefImages) {
+        const oneStart = performance.now();
         const dataUrl = await getBase64ForApi(ref.url);
+        console.log("[MediaEditor] 参考图准备完成", {
+          role: ref.role,
+          elapsedMs: Math.round(performance.now() - oneStart),
+          inputPrefix: ref.url.slice(0, 40),
+          outputType: dataUrl.startsWith("data:") ? "base64" : dataUrl.startsWith("http") ? "http" : "local",
+          outputLength: dataUrl.length,
+        });
         referenceImages.push({ ...ref, url: dataUrl });
       }
+      logElapsed("全部参考图准备完成", {
+        refImageCount: referenceImages.length,
+        refPrepareElapsedMs: Math.round(performance.now() - refPrepareStart),
+      });
 
       console.log("[MediaEditor] 最终 referenceImages:", referenceImages.map((r) => ({
         role: r.role,
@@ -455,6 +475,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       let results: ImageResult[];
 
       if (count === 1) {
+        const generateStart = performance.now();
         const r = await provider.generateImage!({
           prompt: prompt || undefined,
           size: isEnhancer ? undefined : currentSize,
@@ -462,7 +483,14 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           model: resolvedModel,
           quality: isEnhancer ? undefined : "standard",
           referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
-          onProgress: (p) => setCardProgress(card.id, { percent: p.percent, label: p.label }),
+          onProgress: (p) => {
+            logElapsed("generateImage progress", { percent: p.percent, phase: p.phase, label: p.label });
+            setCardProgress(card.id, { percent: p.percent, label: p.label });
+          },
+        });
+        logElapsed("generateImage 返回", {
+          generateElapsedMs: Math.round(performance.now() - generateStart),
+          resultUrlType: r.url.startsWith("http") ? "remote" : r.url.startsWith("data:") ? "data-url" : "local",
         });
         console.groupEnd();
         results = [{ url: r.url, revisedPrompt: r.revisedPrompt }];
@@ -495,6 +523,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
               quality: isEnhancer ? undefined : "standard",
               referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
               onProgress: (p) => {
+                logElapsed("generateImage progress", { index: i, percent: p.percent, phase: p.phase, label: p.label });
                 perProgress[i] = p.percent;
                 syncProgress();
               },

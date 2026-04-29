@@ -782,3 +782,17 @@ export function injectOnConnect(
     cardStore.getCard(targetCardId)?.data,
   ));
 }
+
+/**
+ * 批量注入。被 `connectionStore` 的 `onConnectionsAdded` 钩子调用，
+ * 让"建立连接 → 上游数据自动写入下游对应字段"成为连线生命周期的一部分，
+ * 调用方不再需要手动调 `injectOnConnect`（CardShell / ImageToolbar /
+ * clipboard / WireDropMenu / templateFactory 等）。
+ */
+export function injectOnConnections(
+  added: Iterable<{ sourceCardId: string; targetCardId: string }>,
+): void {
+  for (const conn of added) {
+    injectOnConnect(conn.sourceCardId, conn.targetCardId);
+  }
+}

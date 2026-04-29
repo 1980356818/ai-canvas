@@ -8,7 +8,6 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import { clipboardWriteText, clipboardReadText, updateProjectMeta } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
-import { injectOnConnect } from "@/lib/dataFlow";
 import { recordBatchCreate } from "@/lib/history";
 
 const CLIPBOARD_KIND = "ai-canvas-card/v2";
@@ -228,7 +227,6 @@ function materialize(
       createdAt: now,
     };
     useConnectionStore.getState().addConnection(conn);
-    injectOnConnect(newSourceId, newTargetId);
   }
 
   syncNodeCount(projectId);

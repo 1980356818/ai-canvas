@@ -18,7 +18,6 @@ import {
 } from "@/config/model-ref-images";
 import {
   canAcceptImageConnection,
-  injectOnConnect,
 } from "@/lib/dataFlow";
 import CardLabel from "./CardLabel";
 
@@ -148,7 +147,6 @@ const Port = memo(function Port({
             };
             useConnectionStore.getState().addConnection(conn);
             autoSave.markDirty();
-            injectOnConnect(cardId, targetCardId);
           }
         } else if (wire) {
           const vp = useCanvasStore.getState().viewport;

@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useEffect, useLayoutEffect } from "react";
+import { memo, useCallback, useRef, useEffect } from "react";
 import { Loader2, AlertTriangle, MessageSquareText } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -8,40 +8,71 @@ import { autoSave } from "@/lib/autoSave";
 
 export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
   const data = card.data as { content?: string; result?: string; _resultStale?: boolean };
+  const dataRef = useRef(data);
+  dataRef.current = data;
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
   const cardError = useUIStore((s) => s.cardErrors.get(card.id));
   const isEditing = useCanvasStore((s) => s.editingCardId === card.id);
   const updateCard = useCardStore((s) => s.updateCard);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const promptRef = useRef<HTMLTextAreaElement>(null);
-  const cursorRef = useRef<{ start: number; end: number } | null>(null);
+  const focusedOnceRef = useRef(false);
+  const isComposingRef = useRef(false);
+  // 非受控：textarea 自己管 value，store 只在外部 result 真正变化时（如 AI 生成完成）才同步进来，
+  // 避免受控模式下每次按键都重渲染破坏光标 / IME 合成。
+  const lastSyncedResultRef = useRef<string | undefined>(data.result);
 
   useEffect(() => {
-    if (isEditing && !genProgress && promptRef.current) {
+    if (isEditing && !genProgress && promptRef.current && !focusedOnceRef.current) {
       const ta = promptRef.current;
       ta.focus();
       ta.selectionStart = ta.selectionEnd = ta.value.length;
+      focusedOnceRef.current = true;
     }
+    if (!isEditing) focusedOnceRef.current = false;
   }, [isEditing, genProgress]);
 
-  useLayoutEffect(() => {
-    const pos = cursorRef.current;
-    if (pos && promptRef.current) {
-      promptRef.current.selectionStart = pos.start;
-      promptRef.current.selectionEnd = pos.end;
-      cursorRef.current = null;
-    }
-  });
+  // 外部数据变化时（AI 生成 / 撤销重做 / 跨卡片注入）才覆盖到 textarea。
+  // 用户自己输入引发的更新通过 lastSyncedResultRef 过滤掉，避免覆盖光标。
+  useEffect(() => {
+    const ta = promptRef.current;
+    if (!ta) return;
+    const next = data.result ?? "";
+    if (next === lastSyncedResultRef.current) return;
+    if (isComposingRef.current) return;
+    lastSyncedResultRef.current = next;
+    if (ta.value !== next) ta.value = next;
+  }, [data.result]);
 
-  const onResultChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      cursorRef.current = { start: e.target.selectionStart, end: e.target.selectionEnd };
-      const result = e.target.value;
-      updateCard(card.id, { data: { ...data, result } });
+  const commitResult = useCallback(
+    (result: string) => {
+      lastSyncedResultRef.current = result;
+      updateCard(card.id, { data: { ...dataRef.current, result } });
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => autoSave.markDirty(card.id), 400);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCard],
+  );
+
+  const onResultChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      // IME 合成中不写 store。读 nativeEvent.isComposing 更稳。
+      if ((e.nativeEvent as InputEvent).isComposing || isComposingRef.current) return;
+      commitResult(e.target.value);
+    },
+    [commitResult],
+  );
+
+  const onCompositionStart = useCallback(() => {
+    isComposingRef.current = true;
+  }, []);
+
+  const onCompositionEnd = useCallback(
+    (e: React.CompositionEvent<HTMLTextAreaElement>) => {
+      isComposingRef.current = false;
+      commitResult((e.target as HTMLTextAreaElement).value);
+    },
+    [commitResult],
   );
 
   const stopDrag = useCallback((e: React.PointerEvent | React.MouseEvent) => {
@@ -101,9 +132,11 @@ export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
         data-card-result
         className="min-h-0 flex-1 resize-none rounded-lg border border-input bg-transparent px-3 py-2 text-sm leading-relaxed text-card-foreground outline-none ring-ring placeholder:text-muted-foreground/50 focus:ring-1"
         style={{ pointerEvents: isEditing ? "auto" : "none" }}
-        value={data.result ?? ""}
+        defaultValue={data.result ?? ""}
         readOnly={!isEditing}
         onChange={onResultChange}
+        onCompositionStart={onCompositionStart}
+        onCompositionEnd={onCompositionEnd}
         placeholder="点击输入文本..."
         onPointerDown={stopDrag}
         onMouseDown={stopDrag}

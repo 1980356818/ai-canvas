@@ -6,7 +6,6 @@ import { useCardStore } from "@/stores/cardStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { autoSave } from "@/lib/autoSave";
-import { injectOnConnect } from "@/lib/dataFlow";
 import { cn } from "@/lib/utils";
 import { CARD_DEFAULTS } from "@/shared/constants";
 import { HIDDEN_FEATURES } from "@/config/platforms";
@@ -89,7 +88,6 @@ export default function WireDropMenu() {
       useCanvasStore.getState().setEditingCardId(card.id);
 
       autoSave.markDirty(card.id);
-      injectOnConnect(pendingDrop.sourceCardId, card.id);
       close();
     },
     [pendingDrop, close],

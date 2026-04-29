@@ -6,6 +6,7 @@ use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager, State};
 use chrono::Local;
 
@@ -24,6 +25,51 @@ fn root_cause_chain(err: &dyn StdError) -> String {
     chain.join(" → ")
 }
 
+#[derive(Default)]
+struct InlineLocalStats {
+    files: usize,
+    total_bytes: usize,
+}
+
+fn debug_request_id(body: &serde_json::Value) -> Option<String> {
+    body.get("_debug_request_id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
+fn scrub_debug_fields(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(obj) => {
+            obj.remove("_debug_request_id");
+            for (_, v) in obj.iter_mut() {
+                scrub_debug_fields(v);
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for item in arr.iter_mut() {
+                scrub_debug_fields(item);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn approx_json_bytes(value: &serde_json::Value) -> usize {
+    match value {
+        serde_json::Value::Null => 4,
+        serde_json::Value::Bool(v) => v.to_string().len(),
+        serde_json::Value::Number(v) => v.to_string().len(),
+        serde_json::Value::String(v) => v.len() + 2,
+        serde_json::Value::Array(arr) => {
+            2 + arr.len().saturating_sub(1) + arr.iter().map(approx_json_bytes).sum::<usize>()
+        }
+        serde_json::Value::Object(obj) => {
+            2 + obj.len().saturating_sub(1)
+                + obj.iter().map(|(k, v)| k.len() + 3 + approx_json_bytes(v)).sum::<usize>()
+        }
+    }
+}
+
 // ── local:// inlining ───────────────────────────────────────
 //
 // Frontend sends image/audio/video references as `local://media/...` strings
@@ -39,6 +85,7 @@ fn root_cause_chain(err: &dyn StdError) -> String {
 fn inline_local_files(
     value: &mut serde_json::Value,
     data_dir: &Path,
+    stats: &mut InlineLocalStats,
 ) -> Result<(), String> {
     match value {
         serde_json::Value::String(s) => {
@@ -48,6 +95,8 @@ fn inline_local_files(
                     .map_err(|e| format!("读取本地文件失败 '{}': {}", rel, e))?;
                 let mime = mime_from_path(&abs);
                 let b64 = BASE64_ENGINE.encode(&bytes);
+                stats.files += 1;
+                stats.total_bytes += bytes.len();
                 tracing::debug!(
                     "[ai_proxy] inlined local file '{}' ({} bytes, mime={})",
                     rel, bytes.len(), mime
@@ -57,12 +106,12 @@ fn inline_local_files(
         }
         serde_json::Value::Array(arr) => {
             for item in arr.iter_mut() {
-                inline_local_files(item, data_dir)?;
+                inline_local_files(item, data_dir, stats)?;
             }
         }
         serde_json::Value::Object(obj) => {
             for (_k, v) in obj.iter_mut() {
-                inline_local_files(v, data_dir)?;
+                inline_local_files(v, data_dir, stats)?;
             }
         }
         _ => {}
@@ -174,11 +223,41 @@ pub async fn ai_proxy(
     endpoint: String,
     mut body: serde_json::Value,
 ) -> Result<AiProxyResponse, String> {
-    inline_local_files(&mut body, &state.data_dir)?;
+    let request_id = debug_request_id(&body).unwrap_or_else(|| "-".to_string());
+    let total_start = Instant::now();
+    let original_body_bytes = approx_json_bytes(&body);
+    tracing::info!(
+        "[ai_proxy:{}] start provider={}, endpoint={}, incoming_body≈{} bytes",
+        request_id,
+        provider,
+        endpoint,
+        original_body_bytes
+    );
+
+    scrub_debug_fields(&mut body);
+
+    let inline_start = Instant::now();
+    let mut inline_stats = InlineLocalStats::default();
+    inline_local_files(&mut body, &state.data_dir, &mut inline_stats)?;
+    tracing::info!(
+        "[ai_proxy:{}] local inline finished: files={}, source_bytes={}, elapsed_ms={}, outgoing_body≈{} bytes",
+        request_id,
+        inline_stats.files,
+        inline_stats.total_bytes,
+        inline_start.elapsed().as_millis(),
+        approx_json_bytes(&body)
+    );
 
     let full_config = {
+        let db_start = Instant::now();
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        read_full_api_config(&db, &provider)?
+        let config = read_full_api_config(&db, &provider)?;
+        tracing::debug!(
+            "[ai_proxy:{}] read_full_api_config elapsed_ms={}",
+            request_id,
+            db_start.elapsed().as_millis()
+        );
+        config
     };
 
     if full_config.keys.is_empty() {
@@ -186,7 +265,21 @@ pub async fn ai_proxy(
             let db = state.db.lock().map_err(|e| e.to_string())?;
             read_api_config(&db, &provider)?
         };
-        return ai_proxy_single(state.http_client(), &provider, &endpoint, &body, &config.api_key, &config.base_url).await;
+        let result = ai_proxy_single(
+            state.http_client(),
+            &provider,
+            &endpoint,
+            &body,
+            &config.api_key,
+            &config.base_url,
+            &request_id,
+        ).await;
+        tracing::info!(
+            "[ai_proxy:{}] finished total_elapsed_ms={}",
+            request_id,
+            total_start.elapsed().as_millis()
+        );
+        return result;
     }
 
     if full_config.base_url.is_empty() {
@@ -217,17 +310,43 @@ pub async fn ai_proxy(
 
         let request = build_auth_request(client, &url, &provider, &key_entry.key, &body);
 
+        let send_start = Instant::now();
+        tracing::info!(
+            "[ai_proxy:{}] upstream request sending: url={}, key_index={}/{}",
+            request_id,
+            url,
+            i + 1,
+            keys.len()
+        );
         let resp = match request.send().await {
-            Ok(r) => r,
+            Ok(r) => {
+                tracing::info!(
+                    "[ai_proxy:{}] upstream headers received: status={}, elapsed_ms={}",
+                    request_id,
+                    r.status().as_u16(),
+                    send_start.elapsed().as_millis()
+                );
+                r
+            }
             Err(e) => {
                 let root = root_cause_chain(&e);
-                tracing::error!("[ai_proxy] 请求发送失败: url={}, {}", url, root);
+                tracing::error!("[ai_proxy:{}] 请求发送失败: url={}, elapsed_ms={}, {}", request_id, url, send_start.elapsed().as_millis(), root);
                 return Err(format!("请求失败: url={}, {}", url, root));
             }
         };
 
         let status = resp.status().as_u16();
+        let text_start = Instant::now();
         let resp_body = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+        tracing::info!(
+            "[ai_proxy:{}] upstream body read: status={}, body_bytes={}, read_elapsed_ms={}, request_elapsed_ms={}, total_elapsed_ms={}",
+            request_id,
+            status,
+            resp_body.len(),
+            text_start.elapsed().as_millis(),
+            send_start.elapsed().as_millis(),
+            total_start.elapsed().as_millis()
+        );
 
         if status < 400 || !can_rotate || !is_retryable_status(status) {
             let rotated = if i > 0 {
@@ -242,6 +361,11 @@ pub async fn ai_proxy(
             } else {
                 None
             };
+            tracing::info!(
+                "[ai_proxy:{}] finished total_elapsed_ms={}",
+                request_id,
+                total_start.elapsed().as_millis()
+            );
             return Ok(AiProxyResponse {
                 body: resp_body,
                 status,
@@ -258,6 +382,11 @@ pub async fn ai_proxy(
         last_status = status;
     }
 
+    tracing::info!(
+        "[ai_proxy:{}] finished after rotating all keys total_elapsed_ms={}",
+        request_id,
+        total_start.elapsed().as_millis()
+    );
     Ok(AiProxyResponse {
         body: last_body,
         status: last_status,
@@ -273,21 +402,52 @@ async fn ai_proxy_single(
     body: &serde_json::Value,
     api_key: &str,
     base_url: &str,
+    request_id: &str,
 ) -> Result<AiProxyResponse, String> {
     if base_url.is_empty() {
         return Err(format!("Provider '{}' 的 API 地址未配置", provider));
     }
     let url = format!("{}{}", base_url.trim_end_matches('/'), endpoint);
     let request = build_auth_request(client, &url, provider, api_key, body);
+    let send_start = Instant::now();
+    tracing::info!(
+        "[ai_proxy:{}] upstream request sending: url={}, single_key=true",
+        request_id,
+        url
+    );
     let resp = match request.send().await {
-        Ok(r) => r,
+        Ok(r) => {
+            tracing::info!(
+                "[ai_proxy:{}] upstream headers received: status={}, elapsed_ms={}",
+                request_id,
+                r.status().as_u16(),
+                send_start.elapsed().as_millis()
+            );
+            r
+        }
         Err(e) => {
             let root = root_cause_chain(&e);
+            tracing::error!(
+                "[ai_proxy:{}] 请求发送失败: url={}, elapsed_ms={}, {}",
+                request_id,
+                url,
+                send_start.elapsed().as_millis(),
+                root
+            );
             return Err(format!("请求失败: url={}, {}", url, root));
         }
     };
     let status = resp.status().as_u16();
+    let text_start = Instant::now();
     let resp_body = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+    tracing::info!(
+        "[ai_proxy:{}] upstream body read: status={}, body_bytes={}, read_elapsed_ms={}, request_elapsed_ms={}",
+        request_id,
+        status,
+        resp_body.len(),
+        text_start.elapsed().as_millis(),
+        send_start.elapsed().as_millis()
+    );
     Ok(AiProxyResponse { body: resp_body, status, rotated_key_name: None, tried_count: 1 })
 }
 
@@ -309,7 +469,17 @@ pub async fn ai_proxy_stream(
     mut body: serde_json::Value,
     stream_id: String,
 ) -> Result<(), String> {
-    inline_local_files(&mut body, &state.data_dir)?;
+    let request_id = debug_request_id(&body).unwrap_or_else(|| stream_id.chars().take(8).collect());
+    scrub_debug_fields(&mut body);
+    let mut inline_stats = InlineLocalStats::default();
+    inline_local_files(&mut body, &state.data_dir, &mut inline_stats)?;
+    tracing::info!(
+        "[ai_proxy_stream:{}] local inline finished: files={}, source_bytes={}, outgoing_body≈{} bytes",
+        request_id,
+        inline_stats.files,
+        inline_stats.total_bytes,
+        approx_json_bytes(&body)
+    );
 
     let full_config = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
@@ -626,6 +796,20 @@ pub async fn save_media(
     project_id: Option<String>,
 ) -> Result<SaveMediaResult, String> {
     let data_dir = &state.data_dir;
+    let total_start = Instant::now();
+    let source_kind = if source.starts_with("data:") {
+        "data-url"
+    } else if source.starts_with("http://") || source.starts_with("https://") {
+        "remote-url"
+    } else {
+        "local-file"
+    };
+    tracing::info!(
+        "[save_media] start source_kind={}, source_len={}, project_id={:?}",
+        source_kind,
+        source.len(),
+        project_id
+    );
     let media_dir = data_dir.join("media/images");
     std::fs::create_dir_all(&media_dir)
         .map_err(|e| format!("创建媒体目录失败: {}", e))?;
@@ -654,6 +838,8 @@ pub async fn save_media(
                 tokio::time::sleep(delay).await;
             }
 
+            let download_start = Instant::now();
+            tracing::info!("[save_media] 下载开始 attempt={}/{}", attempt + 1, max_retries);
             match client
                 .get(&source)
                 .header("User-Agent", "AI-Canvas/1.0")
@@ -661,6 +847,11 @@ pub async fn save_media(
                 .await
             {
                 Ok(resp) => {
+                    tracing::info!(
+                        "[save_media] 下载响应头: status={}, elapsed_ms={}",
+                        resp.status(),
+                        download_start.elapsed().as_millis()
+                    );
                     if !resp.status().is_success() {
                         last_err = format!("HTTP {}", resp.status());
                         tracing::warn!("[save_media] 下载返回非成功状态: {}", last_err);
@@ -670,9 +861,15 @@ pub async fn save_media(
                         tracing::info!("[save_media] Content-Type 检测到扩展名: {}", ct_ext);
                         ext = ct_ext;
                     }
+                    let bytes_start = Instant::now();
                     match resp.bytes().await {
                         Ok(b) => {
-                            tracing::info!("[save_media] 下载成功, {} 字节", b.len());
+                            tracing::info!(
+                                "[save_media] 下载成功, {} 字节, body_elapsed_ms={}, total_download_elapsed_ms={}",
+                                b.len(),
+                                bytes_start.elapsed().as_millis(),
+                                download_start.elapsed().as_millis()
+                            );
                             downloaded = Some(b.to_vec());
                             break;
                         }
@@ -684,7 +881,7 @@ pub async fn save_media(
                 }
                 Err(e) => {
                     last_err = format!("{}", e);
-                    tracing::warn!("[save_media] 下载请求失败 (attempt {}): {}", attempt + 1, last_err);
+                    tracing::warn!("[save_media] 下载请求失败 (attempt {}): {}, elapsed_ms={}", attempt + 1, last_err, download_start.elapsed().as_millis());
                 }
             }
         }
@@ -696,7 +893,14 @@ pub async fn save_media(
 
     let dest = media_dir.join(format!("{}.{}", file_id, ext));
 
+    let write_start = Instant::now();
     std::fs::write(&dest, &bytes).map_err(|e| format!("写入文件失败: {}", e))?;
+    tracing::info!(
+        "[save_media] 写入内部媒体文件完成: bytes={}, elapsed_ms={}, path={:?}",
+        bytes.len(),
+        write_start.elapsed().as_millis(),
+        dest
+    );
 
     let auto_save_base = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
@@ -734,15 +938,33 @@ pub async fn save_media(
 
     if let Err(e) = std::fs::create_dir_all(&target_dir) {
         tracing::warn!("创建自动保存目录失败: {}", e);
-    } else if let Err(e) = std::fs::copy(&dest, &user_dest) {
-        tracing::warn!("复制文件到自动保存目录失败: {}", e);
     } else {
-        tracing::info!("文件已自动保存: {:?}", user_dest);
+        let copy_start = Instant::now();
+        if let Err(e) = std::fs::copy(&dest, &user_dest) {
+            tracing::warn!("复制文件到自动保存目录失败: {}", e);
+        } else {
+            tracing::info!(
+                "文件已自动保存: {:?}, copy_elapsed_ms={}",
+                user_dest,
+                copy_start.elapsed().as_millis()
+            );
+        }
     }
 
+    let dims_start = Instant::now();
     let dims = detect_image_dimensions(&bytes);
+    tracing::info!(
+        "[save_media] 尺寸检测完成: dims={:?}, elapsed_ms={}",
+        dims,
+        dims_start.elapsed().as_millis()
+    );
 
     let relative_path = format!("media/images/{}.{}", file_id, ext);
+    tracing::info!(
+        "[save_media] finished total_elapsed_ms={}, local_path={}",
+        total_start.elapsed().as_millis(),
+        relative_path
+    );
     Ok(SaveMediaResult {
         local_path: relative_path,
         width: dims.map(|(w, _)| w),

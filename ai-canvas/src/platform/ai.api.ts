@@ -56,8 +56,23 @@ export async function aiProxy(
   body: Record<string, unknown>,
 ): Promise<AiProxyResponse> {
   if (isTauri) {
+    console.log("[platform.aiProxy] invoke ai_proxy start", {
+      provider,
+      endpoint,
+      bodyKeys: Object.keys(body),
+      debugRequestId: typeof body._debug_request_id === "string" ? body._debug_request_id : undefined,
+    });
+    const started = performance.now();
     await ensureTauriAPIs();
     const result = await getInvoke()<AiProxyResponse>("ai_proxy", { provider, endpoint, body });
+    console.log("[platform.aiProxy] invoke ai_proxy returned", {
+      provider,
+      endpoint,
+      status: result.status,
+      elapsedMs: Math.round(performance.now() - started),
+      bodyBytes: result.body.length,
+      debugRequestId: typeof body._debug_request_id === "string" ? body._debug_request_id : undefined,
+    });
     notifyKeyRotation(result.rotated_key_name);
     return result;
   }

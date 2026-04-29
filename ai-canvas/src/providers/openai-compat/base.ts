@@ -17,7 +17,7 @@ import {
   resetStreamState,
   getAccumulatedToolCalls,
 } from "./formatter";
-import { aiProxy, aiProxyStream, listModels as platformListModels, saveMedia } from "@/platform";
+import { aiProxy, aiProxyStream, isTauri, listModels as platformListModels, saveMedia } from "@/platform";
 import { waitForTask } from "@/services/tasks";
 import { useProjectStore } from "@/stores/projectStore";
 import { compressDataUrlForApi } from "@/lib/imageCompression";
@@ -44,6 +44,8 @@ const GPT_IMAGE_2_SIZE_MAP: Record<string, Record<string, string>> = {
     "1:1": "2048x2048",
     "3:2": "1920x1280",
     "2:3": "1280x1920",
+    "4:3": "2048x1536",
+    "3:4": "1536x2048",
     "16:9": "2560x1440",
     "9:16": "1440x2560",
   },
@@ -51,6 +53,8 @@ const GPT_IMAGE_2_SIZE_MAP: Record<string, Record<string, string>> = {
     "1:1": "2880x2880",
     "3:2": "3072x2048",
     "2:3": "2048x3072",
+    "4:3": "3072x2304",
+    "3:4": "2304x3072",
     "16:9": "3840x2160",
     "9:16": "2160x3840",
   },
@@ -249,19 +253,26 @@ export abstract class OpenAICompatProvider implements AIProvider {
       model: req.model ?? this.defaultImageModel(),
       n: 1,
       response_format: "url",
-      _debug_request_id: requestId,
     };
+    if (isTauri) body._debug_request_id = requestId;
 
     if (req.prompt) {
       body.prompt = req.prompt;
       const baseSize = req.size || "1024x1024";
       const modelId = (req.model ?? this.defaultImageModel()).toLowerCase();
-      const isGptImage2 = modelId.startsWith("gpt-image-2");
+      const isGptImage2 = modelId.startsWith("gpt-image-2") || modelId.startsWith("gpt-image-1");
       const pixelSize = isGptImage2 && req.resolution
         ? toGptImage2Size(baseSize, req.resolution)
         : undefined;
       body.size = pixelSize ?? toAspectRatio(baseSize);
-      body.quality = req.quality || "standard";
+      // gpt-image-* 只接受 low/medium/high/auto；DALL-E 用 standard/hd。做一次映射兜底。
+      if (isGptImage2) {
+        const q = (req.quality || "medium").toLowerCase();
+        const map: Record<string, string> = { standard: "medium", hd: "high" };
+        body.quality = map[q] ?? (["low", "medium", "high", "auto"].includes(q) ? q : "medium");
+      } else {
+        body.quality = req.quality || "standard";
+      }
     }
 
     if (req.referenceImages?.length) {

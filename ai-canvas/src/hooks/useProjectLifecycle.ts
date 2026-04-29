@@ -57,6 +57,8 @@ export function useProjectLifecycle() {
     }
     prevProjectIdRef.current = currentProjectId;
 
+    useCanvasStore.getState().setEditingCardId(null);
+
     if (!currentProjectId) {
       useCardStore.getState().clear();
       useConnectionStore.getState().clear();

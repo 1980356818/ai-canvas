@@ -4,6 +4,7 @@ import type { InlineImageRef } from "@/lib/promptSerializer";
 import { useCardStore } from "@/stores/cardStore";
 import { useConnectionStore, setConnectionLifecycleHooks } from "@/stores/connectionStore";
 import { autoSave } from "@/lib/autoSave";
+import { injectOnConnections } from "@/lib/dataFlow";
 
 interface SourceRef {
   sourceCardId?: string;
@@ -464,12 +465,15 @@ setConnectionLifecycleHooks({
     cleanupDanglingReferencesInStore({ cardIds: affectedTargets });
   },
   onConnectionsAdded: (added) => {
-    // Re-audit affected targets so any stale refs (created by direct data
-    // writes that bypassed the connection lifecycle) cannot piggy-back on a
-    // newly added connection.
+    if (added.length === 0) return;
+    // 1. 把上游已有输出写入下游对应字段（参考图、上游文字等），
+    //    这样所有调用方（手动连线 / 模板创建 / 粘贴 / WireDrop / ImageToolbar）
+    //    无需手动调 injectOnConnect，连线生命周期保证一致。
+    injectOnConnections(added);
+    // 2. 兜底：审计目标卡片，移除任何不再有效连接的残留引用，
+    //    防止旧的脏数据搭新连线"复活"。
     const affectedTargets = new Set<string>();
     for (const conn of added) affectedTargets.add(conn.targetCardId);
-    if (affectedTargets.size === 0) return;
     cleanupDanglingReferencesInStore({ cardIds: affectedTargets });
   },
 });

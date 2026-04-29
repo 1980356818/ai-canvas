@@ -10,7 +10,6 @@ import { useConnectionStore } from "@/stores/connectionStore";
 import { persistImage, getDisplayUrl, exportFile } from "@/lib/media";
 import { cropImageCell } from "@/lib/cropImage";
 import { autoSave } from "@/lib/autoSave";
-import { injectOnConnect } from "@/lib/dataFlow";
 import { sizeFromRatio } from "@/shared/constants";
 import { updateProjectMeta } from "@/platform";
 import { HIDDEN_FEATURES } from "@/config/platforms";
@@ -490,8 +489,6 @@ export default function ImageToolbar() {
     };
     useConnectionStore.getState().addConnection(conn);
 
-    injectOnConnect(card.id, newCard.id);
-
     useCanvasStore.getState().setSelectedCardIds([newCard.id]);
     useCanvasStore.getState().setEditingCardId(newCard.id);
 
@@ -546,8 +543,6 @@ export default function ImageToolbar() {
       createdAt: now,
     };
     useConnectionStore.getState().addConnection(conn);
-
-    injectOnConnect(card.id, newCard.id);
 
     useCanvasStore.getState().setSelectedCardIds([newCard.id]);
     useCanvasStore.getState().setEditingCardId(newCard.id);

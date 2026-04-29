@@ -71,9 +71,16 @@ export default function SizeCombo({
   allowedSizes,
   resolutionOptions,
 }: SizeComboProps) {
-  const filteredOptions = allowedSizes
+  const baseOptions = allowedSizes
     ? IMAGE_SIZE_OPTIONS.filter((o) => allowedSizes.includes(o.value))
     : IMAGE_SIZE_OPTIONS;
+  // 当前 value 不在模型允许列表里（如模板预设 3:4 但用户上次选的模型只支持 1:1/16:9 等）。
+  // 把当前值附加进选项里并标记“不支持”，避免静默 fallback 误导用户以为比例自动变了。
+  const valueOption = IMAGE_SIZE_OPTIONS.find((o) => o.value === value);
+  const valueUnsupported = !!allowedSizes && !!valueOption && !allowedSizes.includes(value);
+  const filteredOptions = valueUnsupported && valueOption
+    ? [...baseOptions, valueOption]
+    : baseOptions;
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -112,6 +119,7 @@ export default function SizeCombo({
   const current =
     filteredOptions.find((o) => o.value === value) ?? filteredOptions[0]!;
   const isAuto = current.value === "auto";
+  const currentUnsupported = valueUnsupported && current.value === value;
 
   const zoom = triggerRef.current ? getEditorZoom(triggerRef.current) : 1;
 
@@ -122,9 +130,12 @@ export default function SizeCombo({
         type="button"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
+        title={currentUnsupported ? "当前模型不支持此比例，请切换比例或更换模型" : undefined}
         className={cn(
-          "flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-sm font-medium transition-colors",
-          "text-muted-foreground hover:bg-muted hover:text-foreground",
+          "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm font-medium transition-colors",
+          currentUnsupported
+            ? "border-amber-500/50 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+            : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
           disabled && "cursor-not-allowed opacity-40",
         )}
       >
@@ -132,6 +143,7 @@ export default function SizeCombo({
         <span>
           {current.label}
           {resolution && ` · ${resolution}`}
+          {currentUnsupported && " ⚠"}
         </span>
         <ChevronUp className={cn("h-3 w-3 transition-transform", open && "rotate-180")} />
       </button>
@@ -187,6 +199,7 @@ export default function SizeCombo({
               {filteredOptions.map((opt) => {
                 const active = value === opt.value;
                 const optIsAuto = opt.value === "auto";
+                const optUnsupported = !!allowedSizes && !allowedSizes.includes(opt.value);
                 return (
                   <button
                     key={opt.value}
@@ -195,12 +208,16 @@ export default function SizeCombo({
                       setOpen(false);
                     }}
                     disabled={disabled}
-                    title={opt.value}
+                    title={optUnsupported ? `${opt.value}（当前模型不支持）` : opt.value}
                     className={cn(
                       "flex flex-col items-center rounded-lg px-1 py-2 transition-colors",
                       active
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                        ? optUnsupported
+                          ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                          : "bg-primary text-primary-foreground"
+                        : optUnsupported
+                          ? "text-amber-600/70 hover:bg-amber-500/10 dark:text-amber-400/80"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground",
                       disabled && "cursor-not-allowed opacity-40",
                     )}
                   >
@@ -214,6 +231,7 @@ export default function SizeCombo({
                     </span>
                     <span className="mt-1 text-[10px] font-medium leading-tight">
                       {opt.label}
+                      {optUnsupported && " ⚠"}
                     </span>
                   </button>
                 );

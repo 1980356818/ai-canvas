@@ -96,8 +96,7 @@ export default function FloatingEditor() {
   // left / top / transform，避免重渲染整个编辑器面板。
   useLayoutEffect(() => {
     if (!editingCardId) return;
-    const panel = panelRef.current;
-    if (!panel) return;
+    if (!panelRef.current) return;
 
     let rafId = 0;
     let scheduled = false;
@@ -105,6 +104,8 @@ export default function FloatingEditor() {
 
     const sync = () => {
       scheduled = false;
+      const panel = panelRef.current;
+      if (!panel) return;
       const c = useCardStore.getState().cards.get(editingCardId);
       if (!c) return;
       const vp = liveViewport;

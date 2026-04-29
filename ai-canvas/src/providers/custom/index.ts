@@ -121,11 +121,21 @@ export class CustomProvider implements AIProvider {
   }
 
   async generateImage(req: ImageGenRequest): Promise<ImageGenResponse> {
+    const modelId = (req.model ?? "dall-e-3").toLowerCase();
+    const isGptImage = modelId.startsWith("gpt-image-");
+    let quality: string;
+    if (isGptImage) {
+      const q = (req.quality || "medium").toLowerCase();
+      const map: Record<string, string> = { standard: "medium", hd: "high" };
+      quality = map[q] ?? (["low", "medium", "high", "auto"].includes(q) ? q : "medium");
+    } else {
+      quality = req.quality || "standard";
+    }
     const body: Record<string, unknown> = {
       model: req.model ?? "dall-e-3",
       prompt: req.prompt,
       size: req.size || "1024x1024",
-      quality: req.quality || "standard",
+      quality,
       n: 1,
       response_format: "url",
     };
