@@ -36,7 +36,7 @@ import studioLookGarment from "@/assets/templates/studio-look/garment.png";
 import studioLookScene from "@/assets/templates/studio-look/scene.jpg";
 import studioLookResult from "@/assets/templates/studio-look/result.jpg";
 import mirrorSelfiePerson from "@/assets/templates/mirror-selfie/person.jpg";
-import mirrorSelfieGarment from "@/assets/templates/mirror-selfie/garment.jpg";
+import mirrorSelfieGarment from "@/assets/templates/mirror-selfie/garment-cut.png";
 import mirrorSelfieScene from "@/assets/templates/mirror-selfie/scene.jpg";
 import mirrorSelfieResult from "@/assets/templates/mirror-selfie/result.jpg";
 
@@ -67,6 +67,7 @@ const I_3314x3072  = sz(3314, 3072);   // 340×315  refined
 const I_5504x3072  = sz(5504, 3072);   // 340×190  multi-angle
 const I_1970x2626  = sz(1970, 2626);   // 255×340  ≈3:4
 const I_4936x6581  = sz(4936, 6581);   // 255×340  mf6 garment (3:4 exact)
+// @ts-expect-error reserved for future use
 const SQUARE       = sz(1, 1);          // 340×340  1:1
 const PORTRAIT     = sz(3, 4);          // 255×340  3:4
 
@@ -905,7 +906,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           title: "服装图（图2）",
           relativeX: 0,
           relativeY: PORTRAIT.height + GAP,
-          ...PORTRAIT,
+          ...I_624x1690,
           data: { content: "", size: "3:4", imageUrl: mirrorSelfieGarment },
         },
         {
