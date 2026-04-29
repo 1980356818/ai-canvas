@@ -10,7 +10,7 @@ import { updateProjectMeta, onTauriFileDrop, isTauri } from "@/platform";
 import { persistImage, getDisplayUrl, type PersistImageResult } from "@/lib/media";
 import { ensureDisplayableImage, isHeicFile, convertHeicPath } from "@/lib/heicConverter";
 
-// ── Utility helpers ─────────────────────────────────────────
+// Utility helpers
 
 function cardSizeFromPersist(
   saved: PersistImageResult,
@@ -84,7 +84,7 @@ function canCardAcceptFileDrop(cardId: string): boolean {
   if (!card) return false;
   if (useUIStore.getState().generatingCards.has(cardId)) return false;
   if (card.type === "ai_image" || card.type === "ai_multiangle") {
-    return !(card.data as { imageUrl?: string }).imageUrl;
+    return true;
   }
   if (card.type === "ai_tryon") {
     const d = card.data as { personImageUrl?: string; garmentImageUrl?: string };
@@ -189,7 +189,7 @@ function updateNodeCount(projectId: string) {
   void updateProjectMeta(projectId, { nodeCount: count });
 }
 
-// ── Hook ────────────────────────────────────────────────────
+// Hook
 
 export function useFileDrop(
   containerRef: RefObject<HTMLDivElement | null>,

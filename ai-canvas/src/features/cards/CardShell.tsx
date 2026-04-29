@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, memo } from "react";
+﻿import { useRef, useCallback, useState, memo } from "react";
 import { GripVertical } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
@@ -310,11 +310,9 @@ export default memo(
             useUIStore.getState().generatingCards.has(belowId)
           )
             return null;
-          if (
-            (belowCard.type === "ai_image" || belowCard.type === "ai_multiangle") &&
-            !(belowCard.data as { imageUrl?: string }).imageUrl
-          )
+          if (belowCard.type === "ai_image" || belowCard.type === "ai_multiangle") {
             return cardBelow;
+          }
           if (belowCard.type === "ai_tryon") {
             const d = belowCard.data as {
               personImageUrl?: string;

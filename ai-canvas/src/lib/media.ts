@@ -53,6 +53,72 @@ export async function persistImage(
   };
 }
 
+function stripQueryAndHash(path: string): string {
+  return path.split(/[?#]/, 1)[0] ?? path;
+}
+
+function getSameOriginAssetPath(source: string): string | null {
+  const value = source.trim();
+  if (!value) return null;
+
+  if (value.startsWith("/")) return stripQueryAndHash(value);
+  if (value.startsWith("./assets/")) return stripQueryAndHash(value.slice(1));
+  if (value.startsWith("assets/")) return `/${stripQueryAndHash(value)}`;
+
+  if (typeof window === "undefined") return null;
+
+  try {
+    const url = new URL(value, window.location.href);
+    return url.origin === window.location.origin ? url.pathname : null;
+  } catch {
+    return null;
+  }
+}
+
+function getFrontendAssetFetchUrl(source: string): string {
+  const value = source.trim();
+  if (value.startsWith("./assets/")) return value.slice(1);
+  if (value.startsWith("assets/")) return `/${value}`;
+  return source;
+}
+
+/**
+ * Vite-imported assets are displayable by the WebView (e.g. `/src/assets/...`
+ * in dev or `/assets/...` after build), but they are not filesystem paths that
+ * the Tauri backend can read directly.
+ */
+export function isFrontendAssetUrl(source: string): boolean {
+  const pathname = getSameOriginAssetPath(source);
+  return !!pathname && (pathname.startsWith("/src/assets/") || pathname.startsWith("/assets/"));
+}
+
+export async function urlToDataUrl(source: string): Promise<string> {
+  const fetchUrl = getFrontendAssetFetchUrl(source);
+  const resp = await fetch(fetchUrl);
+  if (!resp.ok) {
+    throw new Error(`读取模板资源失败 '${source}': HTTP ${resp.status}`);
+  }
+
+  const blob = await resp.blob();
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error(`读取模板资源失败 '${source}'`));
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function persistFrontendAsset(
+  source: string,
+  title?: string,
+  projectId?: string,
+): Promise<PersistImageResult> {
+  if (!isTauri) return { localPath: source };
+
+  const dataUrl = await urlToDataUrl(source);
+  return persistImage(dataUrl, title, projectId);
+}
+
 /**
  * Convert a stored relative path to a URL that `<img src>` can display.
  * Uses Tauri's asset protocol for zero-copy file loading.
@@ -85,11 +151,17 @@ export function getDisplayUrl(storedPath: string): string {
  * Only call this when you actually need to send image data over the network.
  */
 export async function getBase64ForApi(storedPath: string): Promise<string> {
-  if (
-    storedPath.startsWith("data:") ||
-    storedPath.startsWith("http://") ||
-    storedPath.startsWith("https://")
-  ) {
+  if (!storedPath) return "";
+
+  if (storedPath.startsWith("data:")) {
+    return storedPath;
+  }
+
+  if (isFrontendAssetUrl(storedPath)) {
+    return urlToDataUrl(storedPath);
+  }
+
+  if (storedPath.startsWith("http://") || storedPath.startsWith("https://")) {
     return storedPath;
   }
 

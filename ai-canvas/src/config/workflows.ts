@@ -1,11 +1,11 @@
-import type { WorkflowTemplate } from "@/types";
+﻿import type { WorkflowTemplate } from "@/types";
 import { CARD_DEFAULTS, sizeFromRatio } from "@/shared/constants";
 
 import whiteBgSource from "@/assets/templates/white-bg/source-photo.jpg";
 import whiteBgRefined from "@/assets/templates/white-bg/refined-3d.jpg";
 import whiteBgMultiAngle from "@/assets/templates/white-bg/multi-angle.jpg";
 import tryonModel from "@/assets/templates/tryon/model.jpg";
-import tryonGarment from "@/assets/templates/tryon/garment.jpg";
+import tryonGarment from "@/assets/templates/tryon/garment.png";
 import tryonResult from "@/assets/templates/tryon/result.jpg";
 import sceneReplacePerson from "@/assets/templates/scene-replace/person.jpg";
 import sceneReplaceScene from "@/assets/templates/scene-replace/scene.jpg";
@@ -55,7 +55,7 @@ import coverMirrorSelfie from "@/assets/templates/covers/mirror-selfie.jpg";
 const sz = (w: number, h: number) => sizeFromRatio(w / h);
 
 const I_1792x2400  = sz(1792, 2400);   // 254×340  person / result (大量复用)
-const I_1278x1644  = sz(1278, 1644);   // 264×340  tryon model/garment, pose person
+const I_1278x1644  = sz(1278, 1644);   // 264×340  tryon model, pose person
 const I_1080x1440  = sz(1080, 1440);   // 255×340  3:4 exact
 const I_720x900    = sz(720, 900);      // 272×340  4:5
 const I_1536x2752  = sz(1536, 2752);   // 190×340  tall portrait
@@ -208,7 +208,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
     id: "wf-tryon",
     name: "模特换装",
-    description: "上传模特图与服装图，配合预填换装提示词，AI 自动将服装穿在模特身上",
+    description: "上传模特图与服装图，AI 自动将服装穿在模特身上",
     icon: "Shirt",
     category: "composite",
     coverImage: coverTryon,
@@ -224,46 +224,27 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       {
         type: "ai_image",
         title: "服装图",
-        relativeX: 0,
+        relativeX: (I_1278x1644.width - I_624x1690.width) / 2,
         relativeY: I_1278x1644.height + 60,
-        ...I_1278x1644,
-        data: { content: "", size: "3:4", imageUrl: tryonGarment },
-      },
-      {
-        type: "ai_chat",
-        title: "换装提示词",
-        relativeX: I_1278x1644.width + 80,
-        relativeY: (I_1278x1644.height * 2 + 60 - CARD_DEFAULTS.ai_chat.height) / 2,
-        width: CARD_DEFAULTS.ai_chat.width,
-        height: CARD_DEFAULTS.ai_chat.height,
-        data: {
-          content: "",
-          result: [
-            "请将第一张参考图（模特图）中的人物穿上第二张参考图（服装图）展示的服装。",
-            "",
-            "严格保持人物的姿态、面部特征、肤色、发型与原始背景完全不变；",
-            "仅替换身上的服装，确保新服装的款式、颜色、图案、纹理细节与版型与服装图完全一致；",
-            "服装的穿着效果要符合人体结构与透视，光影自然过渡，整体真实协调。",
-          ].join("\n"),
-        },
+        ...I_624x1690,
+        data: { content: "", size: "9:16", imageUrl: tryonGarment },
       },
       {
         type: "ai_image",
         title: "模特换装",
-        relativeX: I_1278x1644.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
+        relativeX: I_1278x1644.width + 80,
         relativeY: (I_1278x1644.height * 2 + 60 - I_1792x2400.height) / 2,
         ...I_1792x2400,
         data: {
-          content: "",
+          content: "给@图一的人物，穿上@图二的服装",
           size: "3:4",
           imageUrl: tryonResult,
         },
       },
     ],
     connections: [
-      { sourceIndex: 0, targetIndex: 3 },
-      { sourceIndex: 1, targetIndex: 3 },
-      { sourceIndex: 2, targetIndex: 3 },
+      { sourceIndex: 0, targetIndex: 2 },
+      { sourceIndex: 1, targetIndex: 2 },
     ],
   },
   {
@@ -389,66 +370,62 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     icon: "ScanFace",
     category: "composite",
     coverImage: coverFaceMerge,
-    cards: [
-      {
-        type: "ai_image",
-        title: "人物1",
-        relativeX: 0,
-        relativeY: 0,
-        ...I_1792x2400,
-        data: { content: "", size: "3:4", imageUrl: faceMergePerson1 },
-      },
-      {
-        type: "ai_image",
-        title: "人物2",
-        relativeX: 0,
-        relativeY: I_1792x2400.height + 60,
-        ...I_1536x2752,
-        data: { content: "", size: "9:16", imageUrl: faceMergePerson2 },
-      },
-      {
-        type: "ai_chat",
-        title: "人脸合成提示词",
-        relativeX: I_1792x2400.width + 80,
-        relativeY: (I_1792x2400.height + 60 + I_1536x2752.height - CARD_DEFAULTS.ai_chat.height) / 2,
-        width: CARD_DEFAULTS.ai_chat.width,
-        height: CARD_DEFAULTS.ai_chat.height,
-        data: {
-          content: "",
-          result: [
-            "A photorealistic portrait of a distinct individual who looks like the biological offspring of the people in the provided reference photos.",
-            "The face should be a natural, organic blend of the input features, creating a unique new identity that bears a strong family resemblance to both inputs without being a direct copy of either.",
-            "Capture the subtle genetic traits from the references.",
-            "",
-            "Character Description:",
-            "Subject: An Asian female model with flawless, pore-level skin texture.",
-            "Expression: Neutral and candid, with a high-quality photo realism aesthetic — soft, cinematic lighting that highlights facial contours.",
-            "Vibe: High-fashion, sophisticated, and authentic.",
-            "Setting: white background, eye-level front face.",
-            "",
-            "Technical Constraints:",
-            "Maintain consistent lighting across the blended features.",
-            "Output in 4k resolution, raw photography style.",
-          ].join("\n"),
+    cards: (() => {
+      const faceMergePromptTemplate = [
+        "A photorealistic portrait of a distinct individual who looks like the biological offspring of the people in the provided reference photos.",
+        "The face should be a natural, organic blend of the input features, creating a unique new identity that bears a strong family resemblance to both inputs without being a direct copy of either.",
+        "Capture the subtle genetic traits from the references.",
+        "",
+        "Character Description:",
+        "Subject: An Asian {{gender}} model with flawless, pore-level skin texture.",
+        "Expression: Neutral and candid, with a high-quality photo realism aesthetic — soft, cinematic lighting that highlights facial contours.",
+        "Vibe: High-fashion, sophisticated, and authentic.",
+        "Setting: white background, eye-level front face.",
+        "",
+        "Technical Constraints:",
+        "Maintain consistent lighting across the blended features.",
+        "Output in 4k resolution, raw photography style.",
+      ].join("\n");
+
+      return [
+        {
+          type: "ai_image" as const,
+          title: "人物1",
+          relativeX: 0,
+          relativeY: 0,
+          ...I_1792x2400,
+          data: { content: "", size: "3:4", imageUrl: faceMergePerson1 },
         },
-      },
-      {
-        type: "ai_image",
-        title: "人脸合成",
-        relativeX: I_1792x2400.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
-        relativeY: (I_1792x2400.height + 60 + I_1536x2752.height - I_1792x2400.height) / 2,
-        ...I_1792x2400,
-        data: {
-          content: "",
-          size: "3:4",
-          imageUrl: faceMergeResult,
+        {
+          type: "ai_image" as const,
+          title: "人物2",
+          relativeX: 0,
+          relativeY: I_1792x2400.height + 60,
+          ...I_1536x2752,
+          data: { content: "", size: "9:16", imageUrl: faceMergePerson2 },
         },
-      },
-    ],
+        {
+          type: "ai_image" as const,
+          title: "人脸合成",
+          relativeX: I_1792x2400.width + 80,
+          relativeY: (I_1792x2400.height + 60 + I_1536x2752.height - I_1792x2400.height) / 2,
+          ...I_1792x2400,
+          data: {
+            content: faceMergePromptTemplate.replaceAll("{{gender}}", "female"),
+            _promptTemplate: faceMergePromptTemplate,
+            _params: { gender: "female" },
+            _locked: true,
+            _label: "人脸合成",
+            _description: "选择生成性别，提示词会自动封装到该图片节点中",
+            size: "3:4",
+            imageUrl: faceMergeResult,
+          },
+        },
+      ];
+    })(),
     connections: [
-      { sourceIndex: 0, targetIndex: 3 },
-      { sourceIndex: 1, targetIndex: 3 },
-      { sourceIndex: 2, targetIndex: 3 },
+      { sourceIndex: 0, targetIndex: 2 },
+      { sourceIndex: 1, targetIndex: 2 },
     ],
   },
   {
