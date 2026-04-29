@@ -11,10 +11,10 @@ import { scheduleBackgroundSave, getBase64ForApi, getDisplayUrl } from "@/lib/me
 import { useProjectStore } from "@/stores/projectStore";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
-import { useConnectionStore } from "@/stores/connectionStore";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
 import { type InlineImageRef, toDisplayText } from "@/lib/promptSerializer";
 import { getRefSlotsForVideoModel, compactRefImages, type RefImageEntry } from "@/config/model-ref-images";
+import { disconnectCardPairAndCleanup } from "@/lib/referenceConsistency";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
 import SizeCombo from "./SizeCombo";
@@ -119,6 +119,7 @@ function getCardTitle(cardId: string): string {
 
 export default function VideoEditor({ card }: { card: CanvasCard }) {
   const updateCard = useCardStore((s) => s.updateCard);
+  const updateCardData = useCardStore((s) => s.updateCardData);
   const setCardProgress = useUIStore((s) => s.setCardProgress);
   const generating = useUIStore((s) => s.generatingCards.has(card.id));
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -194,35 +195,28 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     (slotKey: string) => {
       const entry = data.refImages?.[slotKey];
       if (entry?.sourceCardId) {
-        const { connections, removeConnection } = useConnectionStore.getState();
-        for (const [id, c] of connections) {
-          if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
-            removeConnection(id);
-            break;
-          }
-        }
+        // The lifecycle hook removes refImages[slotKey] from the store
+        // synchronously as soon as the connection is gone.
+        disconnectCardPairAndCleanup(entry.sourceCardId, card.id, { markDirty: false });
       }
-      const refImages = { ...data.refImages };
+      const latest = useCardStore.getState().getCard(card.id)?.data as VideoData | undefined;
+      const refImages = { ...(latest?.refImages ?? {}) };
       delete refImages[slotKey];
       const compacted = compactRefImages(refImages, refSlots);
-      updateCard(card.id, { data: { ...data, refImages: compacted } });
+      updateCardData(card.id, {
+        refImages: Object.keys(compacted).length > 0 ? compacted : undefined,
+      });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, refSlots, updateCard],
+    [card.id, data.refImages, refSlots, updateCardData],
   );
 
   const disconnectCards = useCallback(
     (sourceCardIds: string[]) => {
       if (sourceCardIds.length === 0) return;
-      const { connections, removeConnection } = useConnectionStore.getState();
       for (const sid of sourceCardIds) {
         if (!sid) continue;
-        for (const [id, c] of connections) {
-          if (c.sourceCardId === sid && c.targetCardId === card.id) {
-            removeConnection(id);
-            break;
-          }
-        }
+        disconnectCardPairAndCleanup(sid, card.id, { markDirty: false });
       }
     },
     [card.id],
@@ -246,14 +240,14 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const handleImageModeChange = useCallback(
     (newMode: VideoImageMode) => {
       if (imageMode === newMode) return;
-      const newData: Record<string, unknown> = { ...data, imageMode: newMode };
+      const patch: Record<string, unknown> = { imageMode: newMode };
 
       if (newMode === "text") {
         disconnectCards(collectAllSourceCardIds());
-        newData.refFrames = undefined;
-        newData.refImages = undefined;
-        newData.refAudios = undefined;
-        newData.refVideos = undefined;
+        patch.refFrames = undefined;
+        patch.refImages = undefined;
+        patch.refAudios = undefined;
+        patch.refVideos = undefined;
       } else if (newMode === "firstFrame") {
         const firstImage = frames[0] ?? (data.refImages && Object.values(data.refImages)[0]);
         const droppedIds = collectAllSourceCardIds();
@@ -265,10 +259,10 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
           if (idx >= 0) droppedIds.splice(idx, 1);
         }
         disconnectCards(droppedIds);
-        newData.refFrames = keptFrame ? [keptFrame] : undefined;
-        newData.refImages = undefined;
-        newData.refAudios = undefined;
-        newData.refVideos = undefined;
+        patch.refFrames = keptFrame ? [keptFrame] : undefined;
+        patch.refImages = undefined;
+        patch.refAudios = undefined;
+        patch.refVideos = undefined;
       } else if (newMode === "firstLastFrame") {
         const keptFrames: VideoFrameRef[] = [];
         if (frames.length > 0) {
@@ -283,36 +277,30 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         const keptIds = new Set(keptFrames.map((f) => f.sourceCardId).filter(Boolean));
         const droppedIds = collectAllSourceCardIds().filter((id) => !keptIds.has(id));
         disconnectCards(droppedIds);
-        newData.refFrames = keptFrames.length > 0 ? keptFrames : undefined;
-        newData.refImages = undefined;
-        newData.refAudios = undefined;
-        newData.refVideos = undefined;
+        patch.refFrames = keptFrames.length > 0 ? keptFrames : undefined;
+        patch.refImages = undefined;
+        patch.refAudios = undefined;
+        patch.refVideos = undefined;
       } else {
         const refImages: Record<string, RefImageEntry> = {};
         (frames ?? []).forEach((f, i) => {
           refImages[`refImage${i}`] = { url: f.url, sourceCardId: f.sourceCardId, sourceType: "card" };
         });
-        newData.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
-        newData.refFrames = undefined;
+        patch.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
+        patch.refFrames = undefined;
       }
 
-      updateCard(card.id, { data: newData });
+      updateCardData(card.id, patch);
       autoSave.markDirty(card.id);
     },
-    [imageMode, data, frames, currentModel, card.id, updateCard, disconnectCards, collectAllSourceCardIds],
+    [imageMode, data.refImages, frames, currentModel, card.id, updateCardData, disconnectCards, collectAllSourceCardIds],
   );
 
   const disconnectAudio = useCallback(
     (index: number) => {
       const entry = (data.refAudios as AudioRefWithSource[] | undefined)?.[index];
       if (entry?.sourceCardId) {
-        const { connections, removeConnection } = useConnectionStore.getState();
-        for (const [id, c] of connections) {
-          if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
-            removeConnection(id);
-            break;
-          }
-        }
+        disconnectCardPairAndCleanup(entry.sourceCardId, card.id);
       }
     },
     [data.refAudios, card.id],
@@ -322,13 +310,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     (index: number) => {
       const entry = data.refVideos?.[index];
       if (entry?.sourceCardId) {
-        const { connections, removeConnection } = useConnectionStore.getState();
-        for (const [id, c] of connections) {
-          if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
-            removeConnection(id);
-            break;
-          }
-        }
+        disconnectCardPairAndCleanup(entry.sourceCardId, card.id);
       }
     },
     [data.refVideos, card.id],
@@ -417,13 +399,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
 
   const removeUpstreamEntry = useCallback(
     (sourceCardId: string) => {
-      const { connections, removeConnection } = useConnectionStore.getState();
-      for (const [id, c] of connections) {
-        if (c.sourceCardId === sourceCardId && c.targetCardId === card.id) {
-          removeConnection(id);
-          break;
-        }
-      }
+      disconnectCardPairAndCleanup(sourceCardId, card.id);
     },
     [card.id],
   );
@@ -434,26 +410,23 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       if (!frame) return;
 
       if (frame.sourceCardId) {
-        const { connections, removeConnection } = useConnectionStore.getState();
-        for (const [id, c] of connections) {
-          if (c.sourceCardId === frame.sourceCardId && c.targetCardId === card.id) {
-            removeConnection(id);
-            break;
-          }
-        }
+        disconnectCardPairAndCleanup(frame.sourceCardId, card.id, { markDirty: false });
       }
 
-      const newFrames = frames.filter((_, i) => i !== index);
-      updateCard(card.id, {
-        data: {
-          ...data,
-          refFrames: newFrames.length > 0 ? newFrames : undefined,
-          upstreamImageUrl: undefined,
-        },
+      const latest = useCardStore.getState().getCard(card.id)?.data as VideoData | undefined;
+      const liveFrames = (latest?.refFrames ?? []) as VideoFrameRef[];
+      const newFrames = liveFrames.filter((f, i) =>
+        frame.sourceCardId
+          ? f.sourceCardId !== frame.sourceCardId
+          : i !== index,
+      );
+      updateCardData(card.id, {
+        refFrames: newFrames.length > 0 ? newFrames : undefined,
+        upstreamImageUrl: undefined,
       });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, frames, updateCard],
+    [card.id, frames, updateCardData],
   );
 
   const handleGenerate = useCallback(async () => {

@@ -12,6 +12,13 @@ interface CardState {
   addCard: (card: CanvasCard) => void;
   removeCard: (id: string) => void;
   updateCard: (id: string, partial: Partial<CanvasCard>) => void;
+  /**
+   * Atomically shallow-merge `dataPatch` into the LATEST card.data in the
+   * store. Use this in editors instead of `updateCard({ data: { ...data, ...patch } })`
+   * to avoid stale-closure overwrites (e.g. when reference-cleanup runs between
+   * render and click). Fields whose value is `undefined` are removed.
+   */
+  updateCardData: (id: string, dataPatch: Record<string, unknown>) => void;
   bringToFront: (id: string) => void;
   sendToBack: (id: string) => void;
   getCard: (id: string) => CanvasCard | undefined;
@@ -68,6 +75,31 @@ export const useCardStore = create<CardState>((set, get) => ({
         cards: next,
         layoutVersion: layoutChanged ? s.layoutVersion + 1 : s.layoutVersion,
       };
+    }),
+
+  updateCardData: (id, dataPatch) =>
+    set((s) => {
+      const card = s.cards.get(id);
+      if (!card) return s;
+      const currentData = (card.data ?? {}) as Record<string, unknown>;
+      const merged: Record<string, unknown> = { ...currentData };
+      let changed = false;
+      for (const key of Object.keys(dataPatch)) {
+        const next = dataPatch[key];
+        if (next === undefined) {
+          if (key in merged) {
+            delete merged[key];
+            changed = true;
+          }
+        } else if (merged[key] !== next) {
+          merged[key] = next;
+          changed = true;
+        }
+      }
+      if (!changed) return s;
+      const nextCards = new Map(s.cards);
+      nextCards.set(id, { ...card, data: merged, updatedAt: new Date().toISOString() });
+      return { cards: nextCards };
     }),
 
   bringToFront: (id) =>

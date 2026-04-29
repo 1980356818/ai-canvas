@@ -20,6 +20,7 @@ import {
 import { aiProxy, aiProxyStream, listModels as platformListModels, saveMedia } from "@/platform";
 import { waitForTask } from "@/services/tasks";
 import { useProjectStore } from "@/stores/projectStore";
+import { compressDataUrlForApi } from "@/lib/imageCompression";
 import type { ModelInfo } from "@/types";
 
 function gcd(a: number, b: number): number {
@@ -200,7 +201,12 @@ export abstract class OpenAICompatProvider implements AIProvider {
     }
 
     if (req.referenceImages?.length) {
-      body[this.imageRefField()] = req.referenceImages.map((ref) => ref.url);
+      // 在送往 API 前对参考图统一做"过大才压缩"，单点维护、不污染 UI 链路。
+      // 详见 lib/imageCompression.ts。
+      const compressed = await Promise.all(
+        req.referenceImages.map((ref) => compressDataUrlForApi(ref.url)),
+      );
+      body[this.imageRefField()] = compressed;
     }
 
     const raw = await aiProxy(this.providerId, "/v1/images/generations", body);

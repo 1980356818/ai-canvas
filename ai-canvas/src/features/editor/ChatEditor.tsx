@@ -31,6 +31,7 @@ import {
   remapInlineRefs,
   reorderInlineRefs,
 } from "@/lib/promptSerializer";
+import { disconnectCardPairAndCleanup } from "@/lib/referenceConsistency";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
 import PromptTextarea, { type PromptTextareaHandle } from "./PromptTextarea";
@@ -71,6 +72,7 @@ interface ChatData {
 
 export default function ChatEditor({ card }: { card: CanvasCard }) {
   const updateCard = useCardStore((s) => s.updateCard);
+  const updateCardData = useCardStore((s) => s.updateCardData);
   const setCardProgress = useUIStore((s) => s.setCardProgress);
   const generating = useUIStore((s) => s.generatingCards.has(card.id));
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -219,13 +221,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     (index: number) => {
       const entry = data.refVideos?.[index];
       if (entry?.sourceCardId) {
-        const { connections, removeConnection } = useConnectionStore.getState();
-        for (const [id, c] of connections) {
-          if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
-            removeConnection(id);
-            break;
-          }
-        }
+        disconnectCardPairAndCleanup(entry.sourceCardId, card.id);
       }
     },
     [data.refVideos, card.id],
@@ -307,32 +303,31 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     (slotKey: string) => {
       const entry = data.refImages?.[slotKey];
       if (entry?.sourceCardId) {
-        const { connections, removeConnection } = useConnectionStore.getState();
-        for (const [id, c] of connections) {
-          if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
-            removeConnection(id);
-            break;
-          }
-        }
+        // Removing the connection synchronously triggers reference cleanup
+        // for the disconnected source via the connection-store lifecycle hook.
+        disconnectCardPairAndCleanup(entry.sourceCardId, card.id, { markDirty: false });
       }
-      const refImages = { ...data.refImages };
+      const latest = useCardStore.getState().getCard(card.id)?.data as ChatData | undefined;
+      const refImages = { ...(latest?.refImages ?? {}) };
       delete refImages[slotKey];
       const keyMap = buildCompactKeyMap(refImages, refSlots);
       const compacted = compactRefImages(refImages, refSlots);
 
       const { content: newContent, inlineRefs: newInlineRefs } = remapInlineRefs(
-        data.content ?? "",
-        data.inlineRefs ?? [],
+        latest?.content ?? "",
+        latest?.inlineRefs ?? [],
         keyMap,
         slotKey,
       );
 
-      updateCard(card.id, {
-        data: { ...data, refImages: compacted, content: newContent, inlineRefs: newInlineRefs },
+      updateCardData(card.id, {
+        refImages: Object.keys(compacted).length > 0 ? compacted : undefined,
+        content: newContent,
+        inlineRefs: newInlineRefs.length > 0 ? newInlineRefs : undefined,
       });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard, refSlots],
+    [card.id, data.refImages, updateCardData, refSlots],
   );
 
   const handleReorder = useCallback(
@@ -668,15 +663,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
                   {` (${txt.length}字)`}
                 </span>
                 <button
-                  onClick={() => {
-                    const { connections, removeConnection } = useConnectionStore.getState();
-                    for (const [cid, c] of connections) {
-                      if (c.sourceCardId === srcId && c.targetCardId === card.id) {
-                        removeConnection(cid);
-                        break;
-                      }
-                    }
-                  }}
+                  onClick={() => disconnectCardPairAndCleanup(srcId, card.id)}
                   className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />

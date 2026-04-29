@@ -5,13 +5,22 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import type { Connection } from "@/types";
-import { loadCards, loadConnections, saveConnections, saveProjectViewport, loadProjectViewport, migrateApiConfig } from "@/platform";
+import {
+  loadCards,
+  loadConnections,
+  saveCardsBatch,
+  saveConnections,
+  saveProjectViewport,
+  loadProjectViewport,
+  migrateApiConfig,
+} from "@/platform";
 import { rebuildMissingConnections } from "@/lib/connectionRecovery";
+import { cleanupDanglingReferencesInCards } from "@/lib/referenceConsistency";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
 import { startDataFlowWatcher } from "@/lib/dataFlow";
 import { initMediaService } from "@/lib/media";
-import { rowToCard, connectionToRow, rowToConnection } from "@/lib/mappers";
+import { cardToRow, rowToCard, connectionToRow, rowToConnection } from "@/lib/mappers";
 
 export function useProjectLifecycle() {
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
@@ -64,15 +73,32 @@ export function useProjectLifecycle() {
     }
 
     (async () => {
+      console.log("[生命周期诊断] 切换项目，开始 loadCards", { projectId: currentProjectId });
       const rows = await loadCards(currentProjectId);
-      const cards = rows.map(rowToCard);
-      useCardStore.getState().setCards(cards);
+      const loadedCards = rows.map(rowToCard);
+      console.log("[生命周期诊断] loadCards 返回", { count: loadedCards.length, projectId: currentProjectId });
 
       const connRows = await loadConnections(currentProjectId);
-      const conns: Connection[] = connRows.map(rowToConnection);
+      const persistedConnections: Connection[] = connRows.map(rowToConnection);
 
-      const rebuilt = rebuildMissingConnections(currentProjectId, cards, conns);
-      useConnectionStore.getState().setConnections(rebuilt);
+      const validConnections = rebuildMissingConnections(currentProjectId, loadedCards, persistedConnections);
+      const { cards, changedCardIds } = cleanupDanglingReferencesInCards(loadedCards, validConnections);
+      console.log("[生命周期诊断] setCards", { final: cards.length, dropped: loadedCards.length - cards.length });
+
+      useCardStore.getState().setCards(cards);
+      useConnectionStore.getState().setConnections(validConnections);
+
+      const persistenceTasks: Promise<unknown>[] = [];
+      if (validConnections.length !== persistedConnections.length) {
+        persistenceTasks.push(saveConnections(currentProjectId, validConnections.map(connectionToRow)));
+      }
+      if (changedCardIds.length > 0) {
+        const changedCards = cards.filter((card) => changedCardIds.includes(card.id));
+        persistenceTasks.push(saveCardsBatch(changedCards.map(cardToRow)));
+      }
+      if (persistenceTasks.length > 0) {
+        await Promise.all(persistenceTasks);
+      }
 
       dataFlowCleanup.current?.();
       dataFlowCleanup.current = startDataFlowWatcher();

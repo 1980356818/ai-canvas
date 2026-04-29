@@ -1,7 +1,7 @@
-import { useRef, useCallback, useEffect, type RefObject } from "react";
+﻿import { useRef, useCallback, useEffect, type RefObject } from "react";
 import { useCardStore } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
-import { useCanvasStore } from "@/stores/canvasStore";
+import { liveViewport } from "@/stores/canvasStore";
 import { useUIStore } from "@/stores/uiStore";
 import type { CanvasCard } from "@/types";
 import { CARD_DEFAULTS, sizeFromRatio } from "@/shared/constants";
@@ -21,8 +21,13 @@ function cardSizeFromPersist(
   return { width: CARD_DEFAULTS.ai_image.width, height: CARD_DEFAULTS.ai_image.height };
 }
 
+const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|bmp|svg|avif|tiff?|heic|heif)$/i;
 const VIDEO_EXTENSIONS = /\.(mp4|webm|mov|avi|mkv)$/i;
 const AUDIO_EXTENSIONS = /\.(wav|mp3)$/i;
+
+function isImageFile(file: File): boolean {
+  return file.type.startsWith("image/") || IMAGE_EXTENSIONS.test(file.name) || isHeicFile(file);
+}
 
 function isVideoFile(file: File): boolean {
   return file.type.startsWith("video/") || VIDEO_EXTENSIONS.test(file.name);
@@ -91,6 +96,62 @@ function canCardAcceptFileDrop(cardId: string): boolean {
     return !d.personImageUrl || !d.garmentImageUrl;
   }
   return false;
+}
+
+function findAcceptingCardIdAt(clientX: number, clientY: number): string | null {
+  const els = document.elementsFromPoint(clientX, clientY);
+  for (const el of els) {
+    const cardEl = el.closest("[data-card-id]") as HTMLElement | null;
+    const candidateId = cardEl?.dataset.cardId ?? null;
+    if (candidateId && canCardAcceptFileDrop(candidateId)) return candidateId;
+  }
+  return null;
+}
+
+function findAcceptingCardIdAtCanvasPoint(
+  projectId: string,
+  worldX: number,
+  worldY: number,
+): string | null {
+  const cards = useCardStore
+    .getState()
+    .getCardsByProject(projectId)
+    .filter(
+      (card) =>
+        worldX >= card.x &&
+        worldX <= card.x + card.width &&
+        worldY >= card.y &&
+        worldY <= card.y + card.height,
+    )
+    .sort((a, b) => b.zIndex - a.zIndex);
+
+  return cards.find((card) => canCardAcceptFileDrop(card.id))?.id ?? null;
+}
+
+function findAcceptingCardIdAtClientPoint(
+  projectId: string,
+  clientX: number,
+  clientY: number,
+  screenToCanvas: (x: number, y: number) => { x: number; y: number },
+): string | null {
+  const domHit = findAcceptingCardIdAt(clientX, clientY);
+  if (domHit) return domHit;
+  const world = screenToCanvas(clientX, clientY);
+  return findAcceptingCardIdAtCanvasPoint(projectId, world.x, world.y);
+}
+
+function clientPointToCanvas(
+  container: HTMLElement | null,
+  clientX: number,
+  clientY: number,
+): { x: number; y: number } {
+  const rect = container?.getBoundingClientRect();
+  const localX = rect ? clientX - rect.left : clientX;
+  const localY = rect ? clientY - rect.top : clientY;
+  return {
+    x: (localX - liveViewport.x) / liveViewport.zoom,
+    y: (localY - liveViewport.y) / liveViewport.zoom,
+  };
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -211,11 +272,12 @@ export function useFileDrop(
         return;
       }
 
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      const cardEl = el?.closest("[data-card-id]") as HTMLElement | null;
-      const candidateId = cardEl?.dataset.cardId ?? null;
-      const newTargetId =
-        candidateId && canCardAcceptFileDrop(candidateId) ? candidateId : null;
+      const newTargetId = findAcceptingCardIdAtClientPoint(
+        currentProjectId,
+        e.clientX,
+        e.clientY,
+        screenToCanvas,
+      );
 
       if (newTargetId !== fileDragTargetRef.current) {
         if (fileDragTargetRef.current) {
@@ -232,7 +294,7 @@ export function useFileDrop(
       }
       e.dataTransfer.dropEffect = newTargetId ? "move" : "copy";
     },
-    [currentProjectId],
+    [currentProjectId, screenToCanvas],
   );
 
   const handleDragLeave = useCallback(
@@ -291,13 +353,20 @@ export function useFileDrop(
       }
 
       const rawFiles = Array.from(e.dataTransfer.files).filter(
-        (f) => f.type.startsWith("image/") || isVideoFile(f) || isHeicFile(f) || isAudioFile(f),
+        (f) => isImageFile(f) || isVideoFile(f) || isAudioFile(f),
       );
       if (rawFiles.length === 0) return;
 
       dropHandledAt.current = Date.now();
 
-      const targetCardId = fileDragTargetRef.current;
+      const targetCardId =
+        fileDragTargetRef.current ??
+        findAcceptingCardIdAtClientPoint(
+          currentProjectId,
+          e.clientX,
+          e.clientY,
+          screenToCanvas,
+        );
       if (fileDragTargetRef.current) {
         document
           .querySelector(`[data-card-id="${fileDragTargetRef.current}"]`)
@@ -392,20 +461,31 @@ export function useFileDrop(
       if (!pid) return;
 
       const dpr = window.devicePixelRatio || 1;
-      const cssx = sx / dpr;
-      const cssy = sy / dpr;
-      const rect = containerRef.current?.getBoundingClientRect();
-      const cx = rect ? cssx - rect.left : cssx;
-      const cy = rect ? cssy - rect.top : cssy;
-      const vp = useCanvasStore.getState().viewport;
-      const dropX = (cx - vp.x) / vp.zoom;
-      const dropY = (cy - vp.y) / vp.zoom;
+      const pointCandidates = dpr === 1
+        ? [{ x: sx, y: sy }]
+        : [{ x: sx / dpr, y: sy / dpr }, { x: sx, y: sy }];
+      let cssx = pointCandidates[0]!.x;
+      let cssy = pointCandidates[0]!.y;
+      let dropPoint = clientPointToCanvas(containerRef.current, cssx, cssy);
+      let targetCardId: string | null = null;
+      for (const point of pointCandidates) {
+        const world = clientPointToCanvas(containerRef.current, point.x, point.y);
+        const candidateId =
+          findAcceptingCardIdAt(point.x, point.y) ??
+          findAcceptingCardIdAtCanvasPoint(pid, world.x, world.y);
+        if (candidateId) {
+          cssx = point.x;
+          cssy = point.y;
+          dropPoint = world;
+          targetCardId = candidateId;
+          break;
+        }
+      }
+      const dropX = dropPoint.x;
+      const dropY = dropPoint.y;
       const GAP = 20;
 
       let startIdx = 0;
-      const el = document.elementFromPoint(cssx, cssy);
-      const cardEl = el?.closest("[data-card-id]") as HTMLElement | null;
-      const targetCardId = cardEl?.dataset.cardId ?? null;
 
       const audioPaths = paths.filter(isAudioPath);
       if (audioPaths.length > 0) {
@@ -476,3 +556,4 @@ export function useFileDrop(
 
   return { handleDragOver, handleDragLeave, handleDrop };
 }
+

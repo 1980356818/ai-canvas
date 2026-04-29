@@ -1,4 +1,4 @@
-﻿import { useRef, useCallback, useState, memo } from "react";
+import { useRef, useCallback, useState, memo } from "react";
 import { GripVertical } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
@@ -245,6 +245,19 @@ export default memo(
         if (card.locked || e.button !== 0) return;
         e.stopPropagation();
         e.preventDefault();
+
+        // 边距点击退出 textarea 编辑：textarea 内部的 pointerdown 已 stopPropagation，
+        // 所以这里收到的全是"边距/卡片其他区域"事件，主动 blur 让 Delete 等键的语义
+        // 切换到"操作卡片"。
+        const active = document.activeElement;
+        if (
+          active instanceof HTMLElement &&
+          (active.tagName === "INPUT" ||
+            active.tagName === "TEXTAREA" ||
+            active.isContentEditable)
+        ) {
+          active.blur();
+        }
 
         const el = cardRef.current;
         if (!el) return;

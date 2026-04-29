@@ -11,10 +11,13 @@ const FEATURED_IDS = ["wf-white-bg", "wf-tryon", "wf-pose-fission", "wf-scene-re
 function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
   const handleClick = async () => {
     try {
+      console.log("[诊断] 1.开始创建", { id: workflow.id, name: workflow.name, cardCount: workflow.cards.length });
       const project = await createProject(workflow.name);
+      console.log("[诊断] 2.项目创建成功", { projectId: project.id });
       useProjectStore.getState().addProject(project);
 
-      await instantiateWorkflowTemplate(workflow, project.id, 320, 80);
+      const cardIds = await instantiateWorkflowTemplate(workflow, project.id, 320, 80);
+      console.log("[诊断] 3.模板实例化完成", { cardIds, expected: workflow.cards.length });
 
       const meta = { nodeCount: workflow.cards.length };
       useProjectStore.getState().updateProject(project.id, meta);
@@ -23,7 +26,9 @@ function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
       useProjectStore.getState().openProject(project.id);
       useUIStore.getState().setAppView("canvas");
       scheduleFitCardsToViewport(project.id);
+      console.log("[诊断] 4.已切换到画布", { projectId: project.id });
     } catch (err) {
+      console.error("[诊断] X.创建失败", err);
       useUIStore.getState().addToast({
         type: "error",
         title: "创建项目失败",

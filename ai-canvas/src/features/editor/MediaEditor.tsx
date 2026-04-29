@@ -22,6 +22,7 @@ import {
 } from "@/config/model-ref-images";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { disconnectCardPairAndCleanup } from "@/lib/referenceConsistency";
 import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize, getAllowedSizesForModel, coerceToAllowedSize } from "@/shared/constants";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
 import { type InlineImageRef, toDisplayText, remapInlineRefs, reorderInlineRefs } from "@/lib/promptSerializer";
@@ -87,6 +88,7 @@ interface MediaEditorProps {
 
 export default function MediaEditor({ card }: MediaEditorProps) {
   const updateCard = useCardStore((s) => s.updateCard);
+  const updateCardData = useCardStore((s) => s.updateCardData);
   const setCardProgress = useUIStore((s) => s.setCardProgress);
   const generating = useUIStore((s) => s.generatingCards.has(card.id));
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -226,13 +228,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
   const removeUpstreamEntry = useCallback(
     (sourceCardId: string) => {
-      const { connections, removeConnection } = useConnectionStore.getState();
-      for (const [id, c] of connections) {
-        if (c.sourceCardId === sourceCardId && c.targetCardId === card.id) {
-          removeConnection(id);
-          break;
-        }
-      }
+      disconnectCardPairAndCleanup(sourceCardId, card.id);
     },
     [card.id],
   );
@@ -268,32 +264,31 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     (slotKey: string) => {
       const entry = data.refImages?.[slotKey];
       if (entry?.sourceCardId) {
-        const { connections, removeConnection } = useConnectionStore.getState();
-        for (const [id, c] of connections) {
-          if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
-            removeConnection(id);
-            break;
-          }
-        }
+        // Lifecycle hook strips the slot synchronously when the connection
+        // disappears, so any subsequent reads see consistent state.
+        disconnectCardPairAndCleanup(entry.sourceCardId, card.id, { markDirty: false });
       }
-      const refImages = { ...data.refImages };
+      const latest = useCardStore.getState().getCard(card.id)?.data as MediaData | undefined;
+      const refImages = { ...(latest?.refImages ?? {}) };
       delete refImages[slotKey];
       const keyMap = buildCompactKeyMap(refImages, refSlots);
       const compacted = compactRefImages(refImages, refSlots);
 
       const { content: newContent, inlineRefs: newInlineRefs } = remapInlineRefs(
-        data.content ?? "",
-        data.inlineRefs ?? [],
+        latest?.content ?? "",
+        latest?.inlineRefs ?? [],
         keyMap,
         slotKey,
       );
 
-      updateCard(card.id, {
-        data: { ...data, refImages: compacted, content: newContent, inlineRefs: newInlineRefs },
+      updateCardData(card.id, {
+        refImages: Object.keys(compacted).length > 0 ? compacted : undefined,
+        content: newContent,
+        inlineRefs: newInlineRefs.length > 0 ? newInlineRefs : undefined,
       });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard, refSlots],
+    [card.id, data.refImages, updateCardData, refSlots],
   );
 
   const handleReorder = useCallback(

@@ -3,6 +3,7 @@ import { useConnectionStore, type Connection } from "@/stores/connectionStore";
 import { useUIStore } from "@/stores/uiStore";
 import { deleteCard as deleteCardFromDb } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
+import { disconnectConnectionsForCardAndCleanup } from "@/lib/referenceConsistency";
 
 export type UndoAction =
   | { type: "delete"; card: CanvasCard; connections: Connection[] }
@@ -98,8 +99,8 @@ class HistoryManager {
         const card = store.getCard(action.cardId);
         if (!card) return null;
         const savedConns = collectConnectionsForCard(action.cardId);
+        disconnectConnectionsForCardAndCleanup(action.cardId);
         store.removeCard(action.cardId);
-        useConnectionStore.getState().removeConnectionsForCard(action.cardId);
         void deleteCardFromDb(action.cardId).catch(() => {});
         autoSave.markDirty();
         return { type: "delete", card, connections: savedConns };

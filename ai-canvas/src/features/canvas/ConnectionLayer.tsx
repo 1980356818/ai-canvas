@@ -4,6 +4,7 @@ import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { TYPE_COLORS } from "@/shared/constants";
+import { disconnectConnectionAndCleanup } from "@/lib/referenceConsistency";
 
 const CURVE_OFFSET = 80;
 
@@ -272,14 +273,9 @@ export default memo(function ConnectionLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connections, layoutVersion, projectId, dragOffsets]);
 
-  const removeConnection = useConnectionStore((s) => s.removeConnection);
-
-  const handleDelete = useCallback(
-    (id: string) => {
-      removeConnection(id);
-    },
-    [removeConnection],
-  );
+  const handleDelete = useCallback((id: string) => {
+    disconnectConnectionAndCleanup(id);
+  }, []);
   const handleHoverIn = useCallback((id: string) => setHovered(id), [setHovered]);
   const handleHoverOut = useCallback(() => setHovered(null), [setHovered]);
   const handleContextMenu = useCallback(

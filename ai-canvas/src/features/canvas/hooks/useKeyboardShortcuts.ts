@@ -9,6 +9,10 @@ import { deleteCard, updateProjectMeta } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
 import { history, recordBatchDelete } from "@/lib/history";
 import { copyCards, pasteCards } from "@/lib/clipboard";
+import {
+  disconnectConnectionAndCleanup,
+  removeConnectionsForCardIdsAndCleanup,
+} from "@/lib/referenceConsistency";
 
 function syncNodeCount(projectId: string) {
   const count = useCardStore.getState().getCardsByProject(projectId).length;
@@ -53,9 +57,9 @@ async function deleteSelected() {
     if (c) cards.push({ ...c });
   }
   recordBatchDelete(cards);
+  removeConnectionsForCardIdsAndCleanup(ids);
   for (const id of ids) {
     useCardStore.getState().removeCard(id);
-    useConnectionStore.getState().removeConnectionsForCard(id);
     try {
       await deleteCard(id);
     } catch {
@@ -160,25 +164,19 @@ export function useKeyboardShortcuts() {
       }
 
       // ── Delete / Backspace: delete selected cards or connections ──
+      // 语义：以"DOM 焦点是否在输入元素"为唯一判据。
+      //  - 焦点在 textarea/input：用户在编辑，让浏览器删字符（不管框里是否还有字）
+      //  - 焦点不在：选中态，直接删卡片或连线
+      // CardShell 在边距点击时会主动 blur 输入元素，保证状态过渡正确。
       if ((e.key === "Delete" || e.key === "Backspace") && !mod) {
-        if (isFocusOnInput()) {
-          const el = document.activeElement as HTMLElement | null;
-          if (el) {
-            const inputEl = el as HTMLInputElement | HTMLTextAreaElement;
-            const hasText = "value" in el
-              ? inputEl.value.length > 0
-              : (el.textContent ?? "").length > 0;
-            if (hasText) return;
-          }
-        }
+        if (isFocusOnInput()) return;
 
         e.preventDefault();
 
         if (selectedCardIds.size === 0) {
           const connId = useConnectionStore.getState().selectedConnectionId;
           if (!connId) return;
-          useConnectionStore.getState().removeConnection(connId);
-          autoSave.markDirty();
+          disconnectConnectionAndCleanup(connId);
           return;
         }
 

@@ -17,6 +17,7 @@ import {
 } from "@/config/model-ref-images";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { disconnectCardPairAndCleanup } from "@/lib/referenceConsistency";
 import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize } from "@/shared/constants";
 import ModelSelector from "./ModelSelector";
 import SizeCombo from "./SizeCombo";
@@ -52,6 +53,7 @@ function buildPrompt(h: number, v: number, z: number): string {
 
 export default function MultiangleEditor({ card }: { card: CanvasCard }) {
   const updateCard = useCardStore((s) => s.updateCard);
+  const updateCardData = useCardStore((s) => s.updateCardData);
   const setCardProgress = useUIStore((s) => s.setCardProgress);
   const generating = useUIStore((s) => s.generatingCards.has(card.id));
   const [error, setError] = useState<string | null>(null);
@@ -174,21 +176,20 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
     (slotKey: string) => {
       const entry = data.refImages?.[slotKey];
       if (entry?.sourceCardId) {
-        const { connections, removeConnection } = useConnectionStore.getState();
-        for (const [id, c] of connections) {
-          if (c.sourceCardId === entry.sourceCardId && c.targetCardId === card.id) {
-            removeConnection(id);
-            break;
-          }
-        }
+        // The lifecycle hook strips the slot synchronously when the
+        // connection is removed. We then read the latest data and compact.
+        disconnectCardPairAndCleanup(entry.sourceCardId, card.id, { markDirty: false });
       }
-      const refImages = { ...data.refImages };
+      const latest = useCardStore.getState().getCard(card.id)?.data as MultiangleData | undefined;
+      const refImages = { ...(latest?.refImages ?? {}) };
       delete refImages[slotKey];
       const compacted = compactRefImages(refImages, REF_SLOTS);
-      updateCard(card.id, { data: { ...data, refImages: compacted } });
+      updateCardData(card.id, {
+        refImages: Object.keys(compacted).length > 0 ? compacted : undefined,
+      });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, data.refImages, updateCardData],
   );
 
   const handleGenerate = useCallback(async () => {

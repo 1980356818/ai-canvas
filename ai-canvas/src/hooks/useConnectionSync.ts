@@ -2,28 +2,21 @@ import { useEffect } from "react";
 import { useProjectStore } from "@/stores/projectStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { saveConnections } from "@/platform";
-import { removeRefImageForSource, removeUpstreamTextForSource, removeVideoFrameForSource, removeAudioForSource, removeVideoRefForSource } from "@/lib/dataFlow";
 import { connectionToRow } from "@/lib/mappers";
 
+/**
+ * Persists connection changes to the backend. Reference consistency (cleaning
+ * up dangling refImages / upstreamTexts / refFrames / refAudios / refVideos /
+ * directMedia / inlineRefs when a connection disappears) is handled
+ * synchronously via the connection-store lifecycle hooks registered in
+ * `referenceConsistency.ts`. Doing it there means we cannot lose the cleanup
+ * to a stale-closure overwrite from any editor.
+ */
 export function useConnectionSync() {
   useEffect(() => {
     const unsub = useConnectionStore.subscribe((state, prev) => {
       if (state.connections === prev.connections) return;
-
       const pid = useProjectStore.getState().currentProjectId;
-
-      if (state.connections.size > 0 || pid) {
-        for (const [id, conn] of prev.connections) {
-          if (!state.connections.has(id)) {
-            removeRefImageForSource(conn.targetCardId, conn.sourceCardId);
-            removeUpstreamTextForSource(conn.targetCardId, conn.sourceCardId);
-            removeVideoFrameForSource(conn.targetCardId, conn.sourceCardId);
-            removeAudioForSource(conn.targetCardId, conn.sourceCardId);
-            removeVideoRefForSource(conn.targetCardId, conn.sourceCardId);
-          }
-        }
-      }
-
       if (!pid) return;
       const rows = Array.from(state.connections.values())
         .filter((c) => c.projectId === pid)

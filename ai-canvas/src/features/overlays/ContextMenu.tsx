@@ -3,7 +3,6 @@ import { useUIStore } from "@/stores/uiStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, CardType } from "@/types";
-import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { deleteCard, updateProjectMeta } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
@@ -16,6 +15,10 @@ import { extractCardMedia } from "@/config/model-ref-images";
 import { exportFile, revealInExplorer, batchExportFiles } from "@/lib/media";
 import { copyCards, pasteCards } from "@/lib/clipboard";
 import { HIDDEN_FEATURES } from "@/config/platforms";
+import {
+  disconnectConnectionAndCleanup,
+  removeConnectionsForCardIdsAndCleanup,
+} from "@/lib/referenceConsistency";
 
 function syncNodeCount(projectId: string) {
   const count = useCardStore.getState().getCardsByProject(projectId).length;
@@ -342,9 +345,9 @@ function ContextMenuPanel({
       if (c) cards.push({ ...c });
     }
     recordBatchDelete(cards);
+    removeConnectionsForCardIdsAndCleanup(ids);
     for (const id of ids) {
       useCardStore.getState().removeCard(id);
-      useConnectionStore.getState().removeConnectionsForCard(id);
       try {
         await deleteCard(id);
       } catch {
@@ -596,8 +599,7 @@ function ContextMenuPanel({
         disabled: !connId,
         onSelect: () => {
           if (connId) {
-            useConnectionStore.getState().removeConnection(connId);
-            autoSave.markDirty();
+            disconnectConnectionAndCleanup(connId);
           }
           hide();
         },
