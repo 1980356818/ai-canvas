@@ -3,6 +3,7 @@ use super::config::{read_api_config, read_full_api_config, set_active_key, is_re
 use base64::Engine as _;
 use serde::Serialize;
 use std::error::Error as StdError;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -21,6 +22,120 @@ fn root_cause_chain(err: &dyn StdError) -> String {
         current = e.source();
     }
     chain.join(" → ")
+}
+
+// ── local:// inlining ───────────────────────────────────────
+//
+// Frontend sends image/audio/video references as `local://media/...` strings
+// inside the JSON body to avoid shipping multi-megabyte base64 payloads
+// across Tauri IPC (the IPC channel becomes unreliable above ~10MB on
+// Windows/WebView2). Right before the HTTP request leaves the host, we walk
+// the JSON tree and rewrite each `local://...` placeholder into a real
+// `data:<mime>;base64,...` URL that the upstream AI service can consume
+// unchanged.
+
+/// Recursively rewrite every string value of the form `local://<relpath>` to
+/// a base64 data URL by reading the file from `data_dir`.
+fn inline_local_files(
+    value: &mut serde_json::Value,
+    data_dir: &Path,
+) -> Result<(), String> {
+    match value {
+        serde_json::Value::String(s) => {
+            if let Some(rel) = s.strip_prefix("local://") {
+                let abs = resolve_local_path(rel, data_dir)?;
+                let bytes = std::fs::read(&abs)
+                    .map_err(|e| format!("读取本地文件失败 '{}': {}", rel, e))?;
+                let mime = mime_from_path(&abs);
+                let b64 = BASE64_ENGINE.encode(&bytes);
+                tracing::debug!(
+                    "[ai_proxy] inlined local file '{}' ({} bytes, mime={})",
+                    rel, bytes.len(), mime
+                );
+                *s = format!("data:{};base64,{}", mime, b64);
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for item in arr.iter_mut() {
+                inline_local_files(item, data_dir)?;
+            }
+        }
+        serde_json::Value::Object(obj) => {
+            for (_k, v) in obj.iter_mut() {
+                inline_local_files(v, data_dir)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Validate and resolve a `local://` relative path against the app data dir.
+///
+/// Restrictions:
+/// - Must start with `media/` (only the media subtree is exposed)
+/// - No `..` traversal, no empty segments
+/// - No drive letters / leading slashes (no absolute path injection)
+/// - File must exist
+/// - After `canonicalize()`, the resolved path must still live inside data_dir
+fn resolve_local_path(rel: &str, data_dir: &Path) -> Result<PathBuf, String> {
+    if !rel.starts_with("media/") {
+        return Err(format!("local:// 路径必须以 media/ 开头: {}", rel));
+    }
+    if rel.contains(':') || rel.starts_with('/') || rel.starts_with('\\') {
+        return Err(format!("local:// 路径不能是绝对路径: {}", rel));
+    }
+    for seg in rel.split('/') {
+        if seg.is_empty() || seg == ".." {
+            return Err(format!("local:// 路径包含非法段: {}", rel));
+        }
+    }
+
+    // `Path::join` accepts forward slashes on every platform we ship
+    // (Windows API understands '/' as a separator).
+    let candidate = data_dir.join(rel);
+    if !candidate.is_file() {
+        return Err(format!("local:// 文件不存在: {}", rel));
+    }
+
+    let canonical = candidate
+        .canonicalize()
+        .map_err(|e| format!("路径解析失败 '{}': {}", rel, e))?;
+    let dir_canonical = data_dir
+        .canonicalize()
+        .map_err(|e| format!("data_dir 解析失败: {}", e))?;
+    if !canonical.starts_with(&dir_canonical) {
+        return Err(format!("local:// 路径越权: {}", rel));
+    }
+    Ok(canonical)
+}
+
+fn mime_from_path(path: &Path) -> &'static str {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "heic" => "image/heic",
+        "heif" => "image/heif",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mov" => "video/quicktime",
+        "avi" => "video/x-msvideo",
+        "mkv" => "video/x-matroska",
+        "wav" => "audio/wav",
+        "mp3" => "audio/mpeg",
+        "m4a" => "audio/mp4",
+        "ogg" => "audio/ogg",
+        "flac" => "audio/flac",
+        _ => "application/octet-stream",
+    }
 }
 
 fn build_auth_request(
@@ -57,8 +172,10 @@ pub async fn ai_proxy(
     state: State<'_, AppState>,
     provider: String,
     endpoint: String,
-    body: serde_json::Value,
+    mut body: serde_json::Value,
 ) -> Result<AiProxyResponse, String> {
+    inline_local_files(&mut body, &state.data_dir)?;
+
     let full_config = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         read_full_api_config(&db, &provider)?
@@ -189,9 +306,11 @@ pub async fn ai_proxy_stream(
     state: State<'_, AppState>,
     provider: String,
     endpoint: String,
-    body: serde_json::Value,
+    mut body: serde_json::Value,
     stream_id: String,
 ) -> Result<(), String> {
+    inline_local_files(&mut body, &state.data_dir)?;
+
     let full_config = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
         read_full_api_config(&db, &provider)?

@@ -23,6 +23,14 @@ export interface CompressOptions {
   maxBytes?: number;
   /** JPEG 输出质量。默认 0.85 */
   jpegQuality?: number;
+  /**
+   * 强制输出 JPEG（丢失透明通道）。
+   *
+   * 用于必须把图压缩到固定大小才能安全传输的场景，例如：
+   * 把 dataUrl 通过 Tauri IPC 送给 Rust 落盘时，过大 payload 会
+   * 拉断 WebView2 IPC 通道。透明 PNG 没法靠 quality 压，必须强制 JPEG。
+   */
+  forceJpeg?: boolean;
 }
 
 interface DecodedDataUrl {
@@ -153,6 +161,7 @@ export async function compressDataUrlForApi(
   const maxDim = opts?.maxDim ?? DEFAULT_MAX_DIM;
   const maxBytes = opts?.maxBytes ?? DEFAULT_MAX_BYTES;
   const jpegQuality = opts?.jpegQuality ?? DEFAULT_JPEG_QUALITY;
+  const forceJpeg = !!opts?.forceJpeg;
 
   const meta = parseDataUrl(dataUrl);
   if (!meta) return dataUrl;
@@ -165,7 +174,7 @@ export async function compressDataUrlForApi(
     const longEdge = Math.max(width, height);
     const needsResize = longEdge > maxDim;
     const needsRecompress = meta.binarySize > maxBytes;
-    if (!needsResize && !needsRecompress) {
+    if (!needsResize && !needsRecompress && !forceJpeg) {
       return dataUrl;
     }
 
@@ -178,7 +187,9 @@ export async function compressDataUrlForApi(
     if (!ctx) return dataUrl;
     ctx.drawImage(img as CanvasImageSource, 0, 0, targetW, targetH);
 
-    const transparent = maybeTransparent(meta.mime) && hasAlpha(ctx, targetW, targetH);
+    const transparent = !forceJpeg
+      && maybeTransparent(meta.mime)
+      && hasAlpha(ctx, targetW, targetH);
     const outType = transparent ? "image/png" : "image/jpeg";
 
     let blob = await canvasToBlob(canvas, outType, jpegQuality);
@@ -190,7 +201,8 @@ export async function compressDataUrlForApi(
 
     if (img instanceof ImageBitmap) img.close();
 
-    if (out.length >= dataUrl.length) {
+    // 强制 JPEG 模式下哪怕输出更大也要输出（调用方就是为了"必须压"才传 forceJpeg）
+    if (!forceJpeg && out.length >= dataUrl.length) {
       return dataUrl;
     }
     return out;

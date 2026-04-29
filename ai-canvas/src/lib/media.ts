@@ -33,10 +33,49 @@ export interface PersistImageResult {
   height?: number;
 }
 
+// Tauri 2 在 Windows/WebView2 上的 IPC 通道（ipc.localhost custom protocol +
+// postMessage fallback）对单次 invoke 的 payload 大小没有官方上限，但 dev 模式
+// 下实测 3-4MB 就开始随机 ERR_CONNECTION_REFUSED / "Failed to fetch"。
+// 阈值留足余量，超过就先在前端压到 IPC 能扛得住的大小。
+const SAFE_IPC_PAYLOAD_LIMIT = 3 * 1024 * 1024;
+
+/**
+ * 把 dataUrl 压到 IPC 安全大小。返回的 dataUrl 总长度保证 ≤ `SAFE_IPC_PAYLOAD_LIMIT`。
+ * 用于所有"前端构造 dataUrl 后必须送给 Rust"的场景。
+ */
+async function ensureIpcSafeDataUrl(dataUrl: string): Promise<string> {
+  if (dataUrl.length <= SAFE_IPC_PAYLOAD_LIMIT) return dataUrl;
+
+  const { compressDataUrlForApi } = await import("@/lib/imageCompression");
+
+  let safe = await compressDataUrlForApi(dataUrl, {
+    maxDim: 2048,
+    maxBytes: 1.5 * 1024 * 1024,
+    jpegQuality: 0.82,
+    forceJpeg: true,
+  });
+
+  if (safe.length > SAFE_IPC_PAYLOAD_LIMIT) {
+    safe = await compressDataUrlForApi(safe, {
+      maxDim: 1280,
+      maxBytes: 1 * 1024 * 1024,
+      jpegQuality: 0.7,
+      forceJpeg: true,
+    });
+  }
+
+  return safe;
+}
+
 /**
  * Save any image source (data URL, HTTP URL, local path) to local storage.
  * When `projectId` is provided, auto-saved copies are organized into
  * a project-specific subfolder: `{title}_{short_id}/`.
+ *
+ * Large data-URL inputs are transparently downsized before being shipped
+ * over IPC; this prevents `invoke("save_media")` from killing the IPC
+ * channel when the user drops a multi-megabyte camera photo. AI models
+ * downsample reference images internally, so the visual loss is moot.
  */
 export async function persistImage(
   source: string,
@@ -45,7 +84,11 @@ export async function persistImage(
 ): Promise<PersistImageResult> {
   if (!isTauri) return { localPath: source };
 
-  const result = await saveMedia(source, undefined, title, projectId);
+  const safeSource = source.startsWith("data:")
+    ? await ensureIpcSafeDataUrl(source)
+    : source;
+
+  const result = await saveMedia(safeSource, undefined, title, projectId);
   return {
     localPath: result.localPath,
     width: result.width,
@@ -147,24 +190,53 @@ export function getDisplayUrl(storedPath: string): string {
 }
 
 /**
- * Read a stored image as a base64 data URL, for sending to AI APIs.
- * Only call this when you actually need to send image data over the network.
+ * Returns a value that can be embedded in an AI API request body.
+ *
+ * In Tauri mode this avoids shuttling base64 over IPC (which has a strict
+ * payload ceiling that breaks at ~10MB and silently kills `invoke()`).
+ * Instead it returns a `local://<relative_path>` placeholder; the Rust side's
+ * `ai_proxy` walks the JSON body and inlines the file as a base64 data URL
+ * just before the HTTP request is sent. The AI service still receives a
+ * normal data URL, so this is fully transparent to providers.
+ *
+ * In browser mode it falls back to base64 (no IPC to worry about).
  */
 export async function getBase64ForApi(storedPath: string): Promise<string> {
   if (!storedPath) return "";
 
-  if (storedPath.startsWith("data:")) {
+  if (storedPath.startsWith("local://")) {
     return storedPath;
-  }
-
-  if (isFrontendAssetUrl(storedPath)) {
-    return urlToDataUrl(storedPath);
   }
 
   if (storedPath.startsWith("http://") || storedPath.startsWith("https://")) {
     return storedPath;
   }
 
+  if (storedPath.startsWith("data:")) {
+    if (!isTauri) return storedPath;
+    // 大 dataUrl 仍会撑爆 IPC，统一在 persistImage 入口压一次再落盘
+    const { localPath } = await persistImage(storedPath);
+    return `local://${localPath}`;
+  }
+
+  if (isFrontendAssetUrl(storedPath)) {
+    // Vite 打包的前端 asset（模板预设图、UI 内置素材）。
+    //
+    // 历史上这里走 `persistFrontendAsset` 把 asset fetch 成 dataUrl 再 IPC 落盘，
+    // 但落盘那一步会撑爆 `save_media` IPC（asset 经常 1-3MB，base64 后膨胀更大）。
+    // Rust 端也读不到 vite dev server 或打包后的 asset 路径，没法走 local:// 协议。
+    //
+    // 务实做法：webview 内 fetch 拿 dataUrl（这一步走的是 Chromium 内部 fetch，
+    // 不走 IPC），然后 ensureIpcSafeDataUrl 保证 < SAFE_IPC_PAYLOAD_LIMIT 再返回。
+    // 这个 dataUrl 后续会进入 `ai_proxy` 的 body，走 IPC 但大小可控。
+    const dataUrl = await urlToDataUrl(storedPath);
+    if (!isTauri) return dataUrl;
+    return ensureIpcSafeDataUrl(dataUrl);
+  }
+
+  if (isTauri) {
+    return `local://${storedPath}`;
+  }
   return readMediaBase64(storedPath);
 }
 

@@ -61,6 +61,57 @@ function toGptImage2Size(size: string, resolution: string): string | undefined {
   return GPT_IMAGE_2_SIZE_MAP[resolution]?.[ratio];
 }
 
+const IMAGE_GEN_DEBUG = import.meta.env.DEV;
+
+function nowMs(): number {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function elapsedMs(start: number): number {
+  return Math.round(nowMs() - start);
+}
+
+function makeRequestId(): string {
+  return globalThis.crypto?.randomUUID?.().slice(0, 8)
+    ?? Math.random().toString(36).slice(2, 10);
+}
+
+function estimateJsonBytes(value: unknown): number {
+  if (value == null) return 4;
+  if (typeof value === "string") return value.length + 2;
+  if (typeof value === "number" || typeof value === "boolean") return String(value).length;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return 2;
+    return 2 + value.length - 1 + value.reduce((sum, item) => sum + estimateJsonBytes(item), 0);
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) return 2;
+    return 2 + entries.length - 1 + entries.reduce(
+      (sum, [key, item]) => sum + key.length + 3 + estimateJsonBytes(item),
+      0,
+    );
+  }
+  return 0;
+}
+
+function describeMediaValue(value: string): { type: string; length: number; approxBytes?: number } {
+  if (value.startsWith("data:")) {
+    const comma = value.indexOf(",");
+    const payloadLength = comma >= 0 ? value.length - comma - 1 : value.length;
+    return { type: "data-url", length: value.length, approxBytes: Math.round(payloadLength * 0.75) };
+  }
+  if (value.startsWith("local://")) return { type: "local", length: value.length };
+  if (value.startsWith("http://") || value.startsWith("https://")) return { type: "remote-url", length: value.length };
+  return { type: "other", length: value.length };
+}
+
+function logImageGen(requestId: string, message: string, payload?: Record<string, unknown>) {
+  if (!IMAGE_GEN_DEBUG) return;
+  if (payload) console.log(`[ImageGen:${requestId}] ${message}`, payload);
+  else console.log(`[ImageGen:${requestId}] ${message}`);
+}
+
 /**
  * Base class for providers using the OpenAI-compatible API protocol.
  * Subclasses only need to provide `descriptor` and optionally override
@@ -180,12 +231,25 @@ export abstract class OpenAICompatProvider implements AIProvider {
 
   async generateImage(req: ImageGenRequest): Promise<ImageGenResponse> {
     const emit = req.onProgress;
+    const requestId = makeRequestId();
+    const totalStart = nowMs();
+    const imageField = this.imageRefField();
     emit?.({ percent: 0, phase: "submitting", label: "正在提交请求…" });
+    logImageGen(requestId, "start", {
+      provider: this.providerId,
+      model: req.model ?? this.defaultImageModel(),
+      promptLength: req.prompt?.length ?? 0,
+      size: req.size,
+      resolution: req.resolution,
+      referenceCount: req.referenceImages?.length ?? 0,
+      references: req.referenceImages?.map((ref) => ({ role: ref.role, ...describeMediaValue(ref.url) })) ?? [],
+    });
 
     const body: Record<string, unknown> = {
       model: req.model ?? this.defaultImageModel(),
       n: 1,
       response_format: "url",
+      _debug_request_id: requestId,
     };
 
     if (req.prompt) {
@@ -203,22 +267,51 @@ export abstract class OpenAICompatProvider implements AIProvider {
     if (req.referenceImages?.length) {
       // 在送往 API 前对参考图统一做"过大才压缩"，单点维护、不污染 UI 链路。
       // 详见 lib/imageCompression.ts。
+      const compressStart = nowMs();
       const compressed = await Promise.all(
         req.referenceImages.map((ref) => compressDataUrlForApi(ref.url)),
       );
-      body[this.imageRefField()] = compressed;
+      logImageGen(requestId, "reference compression finished", {
+        elapsedMs: elapsedMs(compressStart),
+        before: req.referenceImages.map((ref) => describeMediaValue(ref.url)),
+        after: compressed.map((url) => describeMediaValue(url)),
+      });
+      body[imageField] = compressed;
     }
 
+    logImageGen(requestId, "calling aiProxy", {
+      endpoint: "/v1/images/generations",
+      approximateBodyBytes: estimateJsonBytes(body),
+      imageField,
+      referenceCount: Array.isArray(body[imageField]) ? (body[imageField] as unknown[]).length : 0,
+    });
+    const proxyStart = nowMs();
     const raw = await aiProxy(this.providerId, "/v1/images/generations", body);
+    logImageGen(requestId, "aiProxy returned", {
+      elapsedMs: elapsedMs(proxyStart),
+      totalElapsedMs: elapsedMs(totalStart),
+      status: raw.status,
+      responseBytes: raw.body.length,
+      triedCount: raw.tried_count,
+      rotatedKey: raw.rotated_key_name,
+    });
     throwIfError(raw.status, raw.body);
 
+    const parseStart = nowMs();
     const data = JSON.parse(raw.body);
     const taskIdMatch = raw.body.match(/"task_id"\s*:\s*(\d+)/);
+    logImageGen(requestId, "response parsed", {
+      elapsedMs: elapsedMs(parseStart),
+      hasTaskId: Boolean(data.task_id || taskIdMatch),
+      hasDirectUrl: Boolean(data.data?.[0]?.url),
+    });
 
     if (data.task_id || taskIdMatch) {
       const taskId = taskIdMatch ? taskIdMatch[1]! : String(data.task_id);
       emit?.({ percent: 5, phase: "queued", label: "已提交，排队中…" });
+      logImageGen(requestId, "task polling started", { taskId });
 
+      const pollStart = nowMs();
       const result = await waitForTask(
         taskId,
         (progress, status) => {
@@ -233,6 +326,12 @@ export abstract class OpenAICompatProvider implements AIProvider {
         undefined,
         this.providerId,
       );
+      logImageGen(requestId, "task polling finished", {
+        elapsedMs: elapsedMs(pollStart),
+        totalElapsedMs: elapsedMs(totalStart),
+        status: result.status,
+        hasResultUrl: Boolean(result.resultUrl),
+      });
 
       const failed = result.status.toLowerCase();
       if (failed === "failed" || failed === "error" || failed === "cancelled") {
@@ -243,10 +342,23 @@ export abstract class OpenAICompatProvider implements AIProvider {
       emit?.({ percent: 92, phase: "saving", label: "正在保存图片…" });
       const pid = useProjectStore.getState().currentProjectId ?? undefined;
       try {
+        const saveStart = nowMs();
+        logImageGen(requestId, "saveMedia started", { source: describeMediaValue(result.resultUrl), projectId: pid });
         const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
+        logImageGen(requestId, "saveMedia finished", {
+          elapsedMs: elapsedMs(saveStart),
+          totalElapsedMs: elapsedMs(totalStart),
+          localPath: saved.localPath,
+          width: saved.width,
+          height: saved.height,
+        });
         emit?.({ percent: 100, phase: "saving", label: "完成" });
         return { url: saved.localPath };
-      } catch {
+      } catch (e) {
+        logImageGen(requestId, "saveMedia failed, using remote url", {
+          totalElapsedMs: elapsedMs(totalStart),
+          error: e instanceof Error ? e.message : String(e),
+        });
         emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
         return { url: result.resultUrl };
       }
@@ -257,10 +369,23 @@ export abstract class OpenAICompatProvider implements AIProvider {
     if (!img?.url) throw new Error("No image returned");
     const pid = useProjectStore.getState().currentProjectId ?? undefined;
     try {
+      const saveStart = nowMs();
+      logImageGen(requestId, "saveMedia started", { source: describeMediaValue(img.url), projectId: pid });
       const saved = await saveMedia(img.url, undefined, undefined, pid);
+      logImageGen(requestId, "saveMedia finished", {
+        elapsedMs: elapsedMs(saveStart),
+        totalElapsedMs: elapsedMs(totalStart),
+        localPath: saved.localPath,
+        width: saved.width,
+        height: saved.height,
+      });
       emit?.({ percent: 100, phase: "saving", label: "完成" });
       return { url: saved.localPath, revisedPrompt: img.revised_prompt };
-    } catch {
+    } catch (e) {
+      logImageGen(requestId, "saveMedia failed, using remote url", {
+        totalElapsedMs: elapsedMs(totalStart),
+        error: e instanceof Error ? e.message : String(e),
+      });
       emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
       return { url: img.url, revisedPrompt: img.revised_prompt };
     }
