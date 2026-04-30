@@ -22,9 +22,6 @@ export type {
 
 export type {
   ChatContentPart,
-  Intent,
-  IntentResult,
-  ChatServiceCallbacks,
   ChatHistoryMessage,
   ChatSession,
   ChatMessage,

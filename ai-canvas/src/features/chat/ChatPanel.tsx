@@ -2,6 +2,7 @@ import { useEffect, useCallback, useState, useRef } from "react";
 import { MessageSquare, X, PanelLeftClose, PanelLeftOpen, ImagePlus } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 import { useUIStore } from "@/stores/uiStore";
+import { useProjectStore } from "@/stores/projectStore";
 import { CARD_REF_MIME, type CardRefPayload } from "@/config/model-ref-images";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,8 @@ const isImageFile = (f: File) => f.type.startsWith("image/") || IMAGE_EXTENSIONS
 export default function ChatPanel() {
   const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
   const loadSessions = useChatStore((s) => s.loadSessions);
+  const resetForProject = useChatStore((s) => s.resetForProject);
+  const currentProjectId = useProjectStore((s) => s.currentProjectId);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   const sessions = useChatStore((s) => s.sessions);
   const currentTitle =
@@ -28,9 +31,13 @@ export default function ChatPanel() {
 
   const panelRef = useRef<HTMLElement>(null);
 
+  // 项目切换时清空内存中的会话/消息/草稿，再加载当前项目的会话；
+  // 避免不同项目的聊天内容混在一起（数据库已按 project_id 隔离）
   useEffect(() => {
-    loadSessions();
-  }, [loadSessions]);
+    if (!currentProjectId) return;
+    resetForProject();
+    loadSessions(currentProjectId);
+  }, [currentProjectId, loadSessions, resetForProject]);
 
   useEffect(() => {
     const el = panelRef.current;

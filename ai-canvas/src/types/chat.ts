@@ -8,21 +8,6 @@ export type ChatContentPart =
   | { type: "image_pending"; prompt: string; suggestedSize?: string }
   | { type: "video_pending"; prompt: string };
 
-export type Intent = "chat" | "image" | "video";
-
-export interface IntentResult {
-  intent: Intent;
-  prompt: string;
-}
-
-export interface ChatServiceCallbacks {
-  onStreamChunk?: (text: string) => void;
-  onStreamDone?: () => void;
-  onIntentDetected?: (intent: Intent) => void;
-  onMediaGenerating?: (mediaType: "image" | "video") => void;
-  onMediaProgress?: (progress: number, status: string) => void;
-}
-
 export interface ChatHistoryMessage {
   role: "user" | "assistant" | "system";
   content: ChatContentPart[];
@@ -43,7 +28,6 @@ export interface ChatMessage {
   content: ChatContentPart[];
   metadata?: {
     model?: string;
-    intent?: Intent;
   };
   createdAt: string;
 }

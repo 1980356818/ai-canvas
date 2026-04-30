@@ -26,25 +26,48 @@ pub struct ChatMessageRow {
 // ── Session CRUD ────────────────────────────────────────────
 
 #[tauri::command]
-pub fn list_chat_sessions(state: State<'_, AppState>) -> Result<Vec<ChatSessionRow>, String> {
+pub fn list_chat_sessions(
+    state: State<'_, AppState>,
+    project_id: Option<String>,
+) -> Result<Vec<ChatSessionRow>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    let mut stmt = db
-        .prepare("SELECT id, project_id, title, created_at, updated_at FROM chat_sessions ORDER BY updated_at DESC")
-        .map_err(|e| e.to_string())?;
 
-    let rows = stmt
-        .query_map([], |row| {
-            Ok(ChatSessionRow {
-                id: row.get(0)?,
-                project_id: row.get(1)?,
-                title: row.get(2)?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
-            })
+    let map_row = |row: &rusqlite::Row| {
+        Ok(ChatSessionRow {
+            id: row.get(0)?,
+            project_id: row.get(1)?,
+            title: row.get(2)?,
+            created_at: row.get(3)?,
+            updated_at: row.get(4)?,
         })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+    };
+
+    // 传入 project_id 时仅返回该项目的会话；否则返回全部（用于历史/管理场景）
+    let rows = if let Some(pid) = project_id {
+        let mut stmt = db
+            .prepare(
+                "SELECT id, project_id, title, created_at, updated_at FROM chat_sessions \
+                 WHERE project_id = ?1 ORDER BY updated_at DESC",
+            )
+            .map_err(|e| e.to_string())?;
+        let iter = stmt
+            .query_map(rusqlite::params![pid], map_row)
+            .map_err(|e| e.to_string())?;
+        iter.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+    } else {
+        let mut stmt = db
+            .prepare(
+                "SELECT id, project_id, title, created_at, updated_at FROM chat_sessions \
+                 ORDER BY updated_at DESC",
+            )
+            .map_err(|e| e.to_string())?;
+        let iter = stmt
+            .query_map([], map_row)
+            .map_err(|e| e.to_string())?;
+        iter.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+    };
 
     Ok(rows)
 }

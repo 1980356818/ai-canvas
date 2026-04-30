@@ -256,7 +256,7 @@ export default function AIPromptInput() {
         useUIStore.getState().toggleChatPanel();
       }
 
-      const chatText = mode === "image" ? `/image ${trimmed}` : trimmed;
+      const chatText = trimmed;
       const chatImages = media.filter((m) => m.kind === "image").map((m) => m.url);
       const chatVideos = media.filter((m) => m.kind === "video").map((m) => m.url);
 

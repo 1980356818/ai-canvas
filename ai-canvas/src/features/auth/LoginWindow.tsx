@@ -7,7 +7,6 @@ import {
   saveCredentials,
   getAutoLogin,
   setAutoLogin as persistAutoLogin,
-  apiUnbindDevice,
 } from "@/platform/auth.api";
 import { isTauri } from "@/platform/runtime";
 import { cn } from "@/lib/utils";
@@ -128,16 +127,14 @@ export default function LoginWindow() {
     try {
       const mc = await getMachineCode();
       if (!mc) {
-        useAuthStore.setState({ error: "无法获取设备标识" });
+        useAuthStore.setState({ error: "无法获取设备标识", errorCode: null });
         return;
       }
-      await apiUnbindDevice(mc, navigator.userAgent);
-      clearError();
-      await login(username, password, mc);
+      await login(username, password, mc, true);
       saveCredentials(username, password);
       persistAutoLogin(true);
-    } catch (e: any) {
-      useAuthStore.setState({ error: e.message || "解绑失败" });
+    } catch {
+      // error already set by authStore.login
     } finally {
       setUnbinding(false);
     }

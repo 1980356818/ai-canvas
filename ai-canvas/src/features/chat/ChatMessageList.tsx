@@ -69,17 +69,7 @@ export default function ChatMessageList() {
         <div className="flex flex-col items-center justify-center gap-3 pt-20 text-muted-foreground/40">
           <MessageSquare className="h-10 w-10" />
           <p className="text-sm">开始一段对话</p>
-          <div className="flex flex-col items-center gap-1 text-xs">
-            <span>直接聊天，或使用指令</span>
-            <div className="flex gap-2">
-              <code className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                /image prompt
-              </code>
-              <code className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                /video prompt
-              </code>
-            </div>
-          </div>
+          <p className="text-xs">直接聊天，支持图片和视频生成</p>
         </div>
       )}
 

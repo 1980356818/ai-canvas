@@ -261,8 +261,9 @@ export abstract class OpenAICompatProvider implements AIProvider {
       const baseSize = req.size || "1024x1024";
       const modelId = (req.model ?? this.defaultImageModel()).toLowerCase();
       const isGptImage2 = modelId.startsWith("gpt-image-2") || modelId.startsWith("gpt-image-1");
-      const pixelSize = isGptImage2 && req.resolution
-        ? toGptImage2Size(baseSize, req.resolution)
+      const resolution = isGptImage2 ? (req.resolution || "2K") : req.resolution;
+      const pixelSize = resolution
+        ? toGptImage2Size(baseSize, resolution)
         : undefined;
       body.size = pixelSize ?? toAspectRatio(baseSize);
       // gpt-image-* 只接受 low/medium/high/auto；DALL-E 用 standard/hd。做一次映射兜底。

@@ -27,7 +27,7 @@ interface AuthState {
 
   initialize: () => void;
   setAuthView: (view: AuthView) => void;
-  login: (username: string, password: string, machineCode?: string) => Promise<void>;
+  login: (username: string, password: string, machineCode?: string, forceRebind?: boolean) => Promise<void>;
   register: (username: string, password: string, email?: string) => Promise<void>;
   redeem: (code: string) => Promise<void>;
   resetPassword: (username: string, email: string, newPassword: string) => Promise<void>;
@@ -67,10 +67,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setAuthView: (view) => set({ authView: view, error: null }),
 
-  login: async (username, password, machineCode) => {
+  login: async (username, password, machineCode, forceRebind) => {
     set({ loading: true, error: null, errorCode: null });
     try {
-      const result = await apiLogin(username, password, machineCode);
+      const result = await apiLogin(username, password, machineCode, forceRebind);
       set({
         authenticated: true,
         restricted: result.restricted,

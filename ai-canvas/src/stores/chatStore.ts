@@ -8,14 +8,8 @@ import {
   saveChatMessage,
   clearChatMessages,
 } from "@/platform";
-import type { ChatSessionRow, ChatMessageRow, ChatHistoryMessage } from "@/types";
-import {
-  type ChatContentPart,
-  type Intent,
-  parseIntent,
-  generateTitle,
-  extractSizeFromPrompt,
-} from "@/lib/chatService";
+import type { ChatSessionRow, ChatMessageRow, ChatHistoryMessage, ChatContentPart } from "@/types";
+import { generateTitle } from "@/lib/chatService";
 import { modelService } from "@/services/models";
 import { providerService } from "@/services/provider.service";
 import { useProviderStore, parseModelRef } from "@/stores/providerStore";
@@ -76,7 +70,11 @@ const CHAT_TOOLS = [
 //  - GPT 系列 → gpt-image-2（同 provider 优先）
 //  - Gemini 系列 → nanobanana 2（jijing 用 nano-banana-2，否则 comfly 的 gemini-3.1-flash-image-preview）
 //  - 其他 → 沿用 activeImageRef
-function pickImageModelRefForChat(chatProviderId: string, chatModelId: string): string {
+function pickImageModelRefForChat(
+  chatProviderId: string,
+  chatModelId: string,
+  fallbackImageRef: string,
+): string {
   const id = (chatModelId || "").toLowerCase();
   if (id.includes("gpt")) {
     return `${chatProviderId}:gpt-image-2`;
@@ -85,13 +83,18 @@ function pickImageModelRefForChat(chatProviderId: string, chatModelId: string): 
     if (chatProviderId === "jijing") return "jijing:nano-banana-2";
     return "comfly:gemini-3.1-flash-image-preview";
   }
-  return useProviderStore.getState().activeImageRef;
+  return fallbackImageRef;
 }
 
-async function persistGeneratedMedia(url: string, prompt?: string): Promise<string> {
+// 注意：projectId 必须由调用方在任务"发起时刻"锁定后传入，
+// 否则当用户在生成中途切换项目时，结果会被错误地写到新项目目录下。
+async function persistGeneratedMedia(
+  url: string,
+  prompt: string | undefined,
+  projectId: string | undefined,
+): Promise<string> {
   try {
-    const pid = useProjectStore.getState().currentProjectId ?? undefined;
-    const { localPath } = await persistImage(url, prompt, pid);
+    const { localPath } = await persistImage(url, prompt, projectId);
     return localPath;
   } catch (e) {
     console.warn("[chatStore] Failed to persist generated media:", e);
@@ -120,15 +123,79 @@ async function historyToUnified(history: ChatHistoryMessage[]): Promise<UnifiedM
   return result;
 }
 
+// ── Generation 状态（按会话隔离） ───────────────────────────
+
+export interface GenerationState {
+  generating: boolean;
+  generatingType: "image" | "video" | null;
+  generatingProgress: number;
+  generatingStatus: string;
+  generatingStartedAt: number;
+  streamingText: string;
+}
+
+const DEFAULT_GENERATION: GenerationState = {
+  generating: false,
+  generatingType: null,
+  generatingProgress: 0,
+  generatingStatus: "",
+  generatingStartedAt: 0,
+  streamingText: "",
+};
+
+// ── 输入草稿（含未发送的文本与参考图，按会话隔离） ─────────
+//
+// 提升到 store 是为了避免：
+//  - 切换项目时 ChatPanel 整体卸载，本地 useState 丢失参考图
+//  - 切换会话后再切回时输入残稿丢失
+
+export interface ChatInputMedia {
+  url: string;
+  displayUrl: string;
+  kind: "image" | "video";
+}
+
+export interface ChatInputDraft {
+  text: string;
+  media: ChatInputMedia[];
+}
+
+export const EMPTY_INPUT_DRAFT: ChatInputDraft = { text: "", media: [] };
+
+// currentSessionId 为 null 时（尚未创建会话）使用的占位 key，
+// 发送后会在 sendMessage 中迁移到真正的 sessionId。
+// 具体草稿 key 需要再拼上 projectId，避免无会话项目之间共享草稿。
+export const PENDING_DRAFT_KEY = "__pending__";
+const GLOBAL_PROJECT_KEY = "__global__";
+
+function projectKey(projectId: string | null | undefined): string {
+  return projectId ?? GLOBAL_PROJECT_KEY;
+}
+
+export function getPendingDraftKey(projectId: string | null | undefined): string {
+  return `${PENDING_DRAFT_KEY}:${projectKey(projectId)}`;
+}
+
 // ── Store ───────────────────────────────────────────────────
 
 interface ChatState {
   sessions: ChatSession[];
   currentSessionId: string | null;
-  messages: ChatMessage[];
 
+  // 当前正在展示的项目；会话列表与 currentSessionId 仅代表该项目。
+  // 其他项目的消息 / 生成态保留在下面的全局 map 中，切换项目不再中断后台任务。
+  currentProjectId: string | null;
+
+  // 主存储：按 sessionId 索引（避免跨会话污染）
+  messagesBySession: Record<string, ChatMessage[]>;
+  generationBySession: Record<string, GenerationState>;
+  // 输入草稿：按 sessionId（或 PENDING_DRAFT_KEY）索引
+  inputDraftBySession: Record<string, ChatInputDraft>;
+
+  // 派生字段（始终指向当前 sessionId 的状态，由 applyDerived 自动同步，请勿直接修改）
+  messages: ChatMessage[];
   generating: boolean;
-  generatingType: Intent | null;
+  generatingType: "image" | "video" | null;
   generatingProgress: number;
   generatingStatus: string;
   generatingStartedAt: number;
@@ -138,17 +205,25 @@ interface ChatState {
   imageModel: string;
   videoModel: string;
 
-  loadSessions: () => Promise<void>;
-  createSession: () => Promise<string>;
+  loadSessions: (projectId?: string) => Promise<void>;
+  createSession: (projectId?: string) => Promise<string>;
   switchSession: (id: string) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
   renameSession: (id: string, title: string) => Promise<void>;
+  // 项目切换前清空可见会话/消息，为 loadSessions 做准备；不取消后台生成。
+  resetForProject: () => void;
+  // 切换展示项目：只切换可见会话/消息，不取消其他项目后台生成。
+  switchProject: (projectId: string | null) => void;
+
+  // 输入草稿管理
+  setInputDraft: (key: string, patch: Partial<ChatInputDraft>) => void;
+  clearInputDraft: (key: string) => void;
 
   sendMessage: (text: string, imageUrls?: string[], videoUrls?: string[]) => Promise<void>;
   confirmImageGeneration: (messageId: string, partIndex: number, prompt: string, modelRef: string, size: string) => Promise<void>;
   confirmVideoGeneration: (messageId: string, partIndex: number, prompt: string, modelRef: string) => Promise<void>;
   updatePendingPrompt: (messageId: string, partIndex: number, prompt: string) => void;
-  stopGenerating: () => void;
+  stopGenerating: (sessionId?: string) => void;
   clearMessages: () => Promise<void>;
 }
 
@@ -184,13 +259,109 @@ function messageToRow(m: ChatMessage): ChatMessageRow {
   };
 }
 
-let _abortController: AbortController | null = null;
+// 根据嵌套主存储计算派生字段（保证 messages/generating/... 始终对应当前 sessionId）
+function applyDerived<S extends Pick<ChatState, "currentSessionId" | "messagesBySession" | "generationBySession">>(
+  next: S,
+): {
+  messages: ChatMessage[];
+  generating: boolean;
+  generatingType: "image" | "video" | null;
+  generatingProgress: number;
+  generatingStatus: string;
+  generatingStartedAt: number;
+  streamingText: string;
+} {
+  const sid = next.currentSessionId;
+  const msgs = sid ? next.messagesBySession[sid] ?? [] : [];
+  const gen = sid ? next.generationBySession[sid] ?? DEFAULT_GENERATION : DEFAULT_GENERATION;
+  return {
+    messages: msgs,
+    generating: gen.generating,
+    generatingType: gen.generatingType,
+    generatingProgress: gen.generatingProgress,
+    generatingStatus: gen.generatingStatus,
+    generatingStartedAt: gen.generatingStartedAt,
+    streamingText: gen.streamingText,
+  };
+}
+
+function getSessionsForProject(state: ChatState, projectId: string | null): ChatSession[] {
+  return state.sessions.filter((session) => (session.projectId ?? null) === projectId);
+}
+
+function getFirstSessionIdForProject(state: ChatState, projectId: string | null): string | null {
+  return getSessionsForProject(state, projectId)[0]?.id ?? null;
+}
+
+function sessionBelongsToCurrentProject(state: ChatState, sessionId: string | null): boolean {
+  if (!sessionId) return false;
+  return state.sessions.some(
+    (session) => session.id === sessionId && (session.projectId ?? null) === state.currentProjectId,
+  );
+}
+
+function visibleState(
+  state: ChatState,
+  currentSessionId: string | null,
+): Pick<ChatState, "currentSessionId" | "messages" | "generating" | "generatingType" | "generatingProgress" | "generatingStatus" | "generatingStartedAt" | "streamingText"> {
+  return {
+    currentSessionId,
+    ...applyDerived({ ...state, currentSessionId }),
+  };
+}
+
+// ── 内部 helper：scope 到指定 sessionId 更新嵌套主存储 ──
+
+function patchSessionMessagesIfVisible(
+  state: ChatState,
+  sid: string,
+  updater: (prev: ChatMessage[]) => ChatMessage[],
+): Partial<ChatState> {
+  const prev = state.messagesBySession[sid] ?? [];
+  const nextMessagesBySession = {
+    ...state.messagesBySession,
+    [sid]: updater(prev),
+  };
+  const patch: Partial<ChatState> = { messagesBySession: nextMessagesBySession };
+  if (state.currentSessionId === sid) {
+    const next = { ...state, messagesBySession: nextMessagesBySession };
+    Object.assign(patch, applyDerived(next));
+  }
+  return patch;
+}
+
+function patchSessionGenerationIfVisible(
+  state: ChatState,
+  sid: string,
+  patch: Partial<GenerationState>,
+): Partial<ChatState> {
+  const prev = state.generationBySession[sid] ?? DEFAULT_GENERATION;
+  const nextGen = { ...prev, ...patch };
+  const nextGenerationBySession = {
+    ...state.generationBySession,
+    [sid]: nextGen,
+  };
+  const result: Partial<ChatState> = { generationBySession: nextGenerationBySession };
+  if (state.currentSessionId === sid) {
+    const next = { ...state, generationBySession: nextGenerationBySession };
+    Object.assign(result, applyDerived(next));
+  }
+  return result;
+}
+
+// AbortController 按会话隔离，避免互相终止
+const abortControllers = new Map<string, AbortController>();
 
 export const useChatStore = create<ChatState>((set, get) => ({
   sessions: [],
   currentSessionId: null,
-  messages: [],
+  currentProjectId: null,
 
+  messagesBySession: {},
+  generationBySession: {},
+  inputDraftBySession: {},
+
+  messages: [],
   generating: false,
   generatingType: null,
   generatingProgress: 0,
@@ -202,21 +373,38 @@ export const useChatStore = create<ChatState>((set, get) => ({
   imageModel: "",
   videoModel: "",
 
-  async loadSessions() {
-    const rows = await listChatSessions();
-    const sessions = rows.map(rowToSession);
-    set({ sessions });
+  async loadSessions(projectId) {
+    // 只刷新目标项目的会话列表；其他项目的会话、消息和生成态继续留在内存中，
+    // 因此切换项目不会中断后台聊天 / 生图任务。
+    const pid = projectId ?? useProjectStore.getState().currentProjectId ?? null;
+    const rows = await listChatSessions(pid ?? undefined);
+    const loadedSessions = rows.map(rowToSession);
 
-    let sid = get().currentSessionId;
+    set((s) => {
+      const sessions = [
+        ...s.sessions.filter((session) => (session.projectId ?? null) !== pid),
+        ...loadedSessions,
+      ];
+      // 异步加载可能乱序返回：如果用户已经切到别的项目，只更新缓存，不抢回当前视图。
+      if (s.currentProjectId !== pid) {
+        return { sessions };
+      }
+      const base = { ...s, sessions } as ChatState;
+      const currentStillVisible = sessionBelongsToCurrentProject(base, s.currentSessionId);
+      const currentSessionId = currentStillVisible
+        ? s.currentSessionId
+        : getFirstSessionIdForProject(base, pid);
+      return {
+        sessions,
+        ...visibleState(base, currentSessionId),
+      };
+    });
 
-    if (!sid && sessions.length > 0) {
-      sid = sessions[0]!.id;
-      set({ currentSessionId: sid });
-    }
-
-    if (sid && get().messages.length === 0) {
+    const sid = get().currentProjectId === pid ? get().currentSessionId : null;
+    if (sid && get().messagesBySession[sid] === undefined) {
       const msgRows = await loadChatMessages(sid);
-      set({ messages: msgRows.map(rowToMessage) });
+      const msgs = msgRows.map(rowToMessage);
+      set((s) => patchSessionMessagesIfVisible(s, sid, () => msgs));
     }
 
     if (!get().chatModel) {
@@ -229,49 +417,151 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  async createSession() {
+  async createSession(projectId) {
     const id = crypto.randomUUID();
-    const row = await createChatSession(id, "新对话");
+    const pid = projectId ?? get().currentProjectId ?? useProjectStore.getState().currentProjectId ?? undefined;
+    const row = await createChatSession(id, "新对话", pid);
     const session = rowToSession(row);
-    set((s) => ({
-      sessions: [session, ...s.sessions],
-      currentSessionId: id,
-      messages: [],
-      streamingText: "",
-    }));
+    set((s) => {
+      const messagesBySession = { ...s.messagesBySession, [id]: [] };
+      const generationBySession = { ...s.generationBySession, [id]: { ...DEFAULT_GENERATION } };
+      // 把对应项目的临时 pending 草稿（如果有）迁移到新建会话，保留用户已输入的内容
+      const pendingDraftKey = getPendingDraftKey(pid);
+      const pendingDraft = s.inputDraftBySession[pendingDraftKey];
+      const inputDraftBySession = { ...s.inputDraftBySession };
+      delete inputDraftBySession[pendingDraftKey];
+      if (pendingDraft && (pendingDraft.text || pendingDraft.media.length > 0)) {
+        inputDraftBySession[id] = pendingDraft;
+      }
+      const sessions = [session, ...s.sessions];
+      const shouldShow = (session.projectId ?? null) === s.currentProjectId;
+      const currentSessionId = shouldShow ? id : s.currentSessionId;
+      const next = { ...s, sessions, currentSessionId, messagesBySession, generationBySession, inputDraftBySession };
+      return {
+        sessions,
+        currentSessionId,
+        messagesBySession,
+        generationBySession,
+        inputDraftBySession,
+        ...applyDerived(next),
+      };
+    });
     return id;
   },
 
+  resetForProject() {
+    set((s) => ({
+      sessions: [],
+      currentSessionId: null,
+      ...applyDerived({ ...s, currentSessionId: null, messagesBySession: {}, generationBySession: s.generationBySession }),
+    }));
+  },
+
+  switchProject(projectId) {
+    set((s) => {
+      const pid = projectId ?? null;
+      const base = { ...s, currentProjectId: pid } as ChatState;
+      const currentSessionId = getFirstSessionIdForProject(base, pid);
+      return {
+        currentProjectId: pid,
+        ...visibleState(base, currentSessionId),
+      };
+    });
+  },
+
+  setInputDraft(key, patch) {
+    set((s) => {
+      const prev = s.inputDraftBySession[key] ?? EMPTY_INPUT_DRAFT;
+      const merged: ChatInputDraft = {
+        text: patch.text !== undefined ? patch.text : prev.text,
+        media: patch.media !== undefined ? patch.media : prev.media,
+      };
+      return {
+        inputDraftBySession: { ...s.inputDraftBySession, [key]: merged },
+      };
+    });
+  },
+
+  clearInputDraft(key) {
+    set((s) => {
+      if (!(key in s.inputDraftBySession)) return s;
+      const next = { ...s.inputDraftBySession };
+      delete next[key];
+      return { inputDraftBySession: next };
+    });
+  },
+
   async switchSession(id) {
-    const rows = await loadChatMessages(id);
-    set({
-      currentSessionId: id,
-      messages: rows.map(rowToMessage),
-      streamingText: "",
+    const cached = get().messagesBySession[id];
+    let msgs: ChatMessage[];
+    if (cached !== undefined) {
+      // 已加载过（含空数组），直接使用内存缓存，避免覆盖进行中任务的实时更新
+      msgs = cached;
+    } else {
+      const rows = await loadChatMessages(id);
+      msgs = rows.map(rowToMessage);
+    }
+    set((s) => {
+      const messagesBySession = { ...s.messagesBySession, [id]: msgs };
+      const session = s.sessions.find((item) => item.id === id);
+      const currentProjectId = session ? session.projectId ?? null : s.currentProjectId;
+      const next = { ...s, currentProjectId, currentSessionId: id, messagesBySession };
+      return {
+        currentProjectId,
+        currentSessionId: id,
+        messagesBySession,
+        ...applyDerived(next),
+      };
     });
   },
 
   async deleteSession(id) {
     await deleteChatSession(id);
+
+    // 同步终止该会话可能存在的进行中生成
+    const ac = abortControllers.get(id);
+    if (ac) {
+      ac.abort();
+      abortControllers.delete(id);
+    }
+
     set((s) => {
       const sessions = s.sessions.filter((x) => x.id !== id);
       const isCurrent = s.currentSessionId === id;
+      const messagesBySession = { ...s.messagesBySession };
+      delete messagesBySession[id];
+      const generationBySession = { ...s.generationBySession };
+      delete generationBySession[id];
+      const inputDraftBySession = { ...s.inputDraftBySession };
+      delete inputDraftBySession[id];
+
+      const nextSid = isCurrent ? getFirstSessionIdForProject({ ...s, sessions } as ChatState, s.currentProjectId) : s.currentSessionId;
+      const next = {
+        ...s,
+        sessions,
+        currentSessionId: nextSid,
+        messagesBySession,
+        generationBySession,
+        inputDraftBySession,
+      };
       return {
         sessions,
-        currentSessionId: isCurrent
-          ? sessions[0]?.id ?? null
-          : s.currentSessionId,
-        messages: isCurrent
-          ? []
-          : s.messages,
-        streamingText: isCurrent ? "" : s.streamingText,
+        currentSessionId: nextSid,
+        messagesBySession,
+        generationBySession,
+        inputDraftBySession,
+        ...applyDerived(next),
       };
     });
 
     const state = get();
     if (state.currentSessionId && state.currentSessionId !== id) {
-      const rows = await loadChatMessages(state.currentSessionId);
-      set({ messages: rows.map(rowToMessage) });
+      const cur = state.currentSessionId;
+      if (state.messagesBySession[cur] === undefined) {
+        const rows = await loadChatMessages(cur);
+        const msgs = rows.map(rowToMessage);
+        set((s) => patchSessionMessagesIfVisible(s, cur, () => msgs));
+      }
     }
   },
 
@@ -286,15 +576,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   async sendMessage(text, imageUrls, videoUrls) {
     const state = get();
-    if (state.generating) return;
+    const lockedProjectId = state.currentProjectId ?? useProjectStore.getState().currentProjectId ?? null;
+    const lockedPid = lockedProjectId ?? undefined;
+    const lockedChatRef = useProviderStore.getState().activeChatRef;
+    const lockedImageRef = useProviderStore.getState().activeImageRef;
 
     const hasImages = imageUrls && imageUrls.length > 0;
     const hasVideos = videoUrls && videoUrls.length > 0;
     const hasMedia = hasImages || hasVideos;
-    const parsed = parseIntent(text);
-    const intent = hasMedia ? "chat" as Intent : parsed.intent;
-    const prompt = parsed.prompt;
-    if (!prompt && !hasMedia) return;
+    if (!text.trim() && !hasMedia) return;
 
     if (!state.chatModel || !state.imageModel || !state.videoModel) {
       const [chatRef, imageRef, videoRef] = await Promise.all([
@@ -309,19 +599,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
     }
 
-    set({
+    // 锁定本次任务的 sessionId / projectId（一旦确定就不再受项目切换影响）
+    let sessionId = get().currentSessionId;
+    const existingSession = sessionId
+      ? get().sessions.find((session) => session.id === sessionId)
+      : undefined;
+    if (existingSession && (existingSession.projectId ?? null) !== lockedProjectId) {
+      sessionId = getFirstSessionIdForProject(get(), lockedProjectId);
+    }
+    if (!sessionId) {
+      sessionId = await get().createSession(lockedPid);
+    }
+    const sid = sessionId;
+
+    // 仅检查【该会话】是否已有进行中的生成；不影响其他会话
+    if ((get().generationBySession[sid] ?? DEFAULT_GENERATION).generating) return;
+
+    set((s) => patchSessionGenerationIfVisible(s, sid, {
       generating: true,
-      generatingType: intent,
+      generatingType: null,
       generatingProgress: 0,
       generatingStatus: "",
       generatingStartedAt: Date.now(),
       streamingText: "",
-    });
-
-    let sessionId = state.currentSessionId;
-    if (!sessionId) {
-      sessionId = await get().createSession();
-    }
+    }));
 
     const userContent: ChatContentPart[] = [];
     if (text) userContent.push({ type: "text", text });
@@ -338,110 +639,152 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
-      sessionId,
+      sessionId: sid,
       role: "user",
       content: userContent,
-      metadata: { intent },
       createdAt: new Date().toISOString(),
     };
 
-    set((s) => ({
-      messages: [...s.messages, userMsg],
-    }));
+    set((s) => patchSessionMessagesIfVisible(s, sid, (prev) => [...prev, userMsg]));
+
+    // 用户消息已入消息列表，清掉该会话与 pending 草稿（避免下次切回还残留）
+    set((s) => {
+      const next = { ...s.inputDraftBySession };
+      delete next[sid];
+      delete next[getPendingDraftKey(lockedPid)];
+      return { inputDraftBySession: next };
+    });
 
     await saveChatMessage(messageToRow(userMsg));
 
-    const isFirstMessage = get().messages.length === 1;
+    const isFirstMessage = (get().messagesBySession[sid] ?? []).length === 1;
 
-    _abortController = new AbortController();
+    const ac = new AbortController();
+    abortControllers.set(sid, ac);
 
     try {
-      if (intent === "image") {
-        // /image：直接根据当前对话模型选择对应图片模型并出图，不再生成确认卡片
-        const { cleanPrompt, size } = extractSizeFromPrompt(prompt);
-        const chatRef = useProviderStore.getState().activeChatRef;
-        const { providerId: chatProvId, modelId: chatModId } = parseModelRef(chatRef);
-        const imageRef = pickImageModelRefForChat(chatProvId, chatModId);
-        const { providerId: imgProvId, modelId: imgModId } = parseModelRef(imageRef);
-        useProviderStore.getState().setActiveRef("image", imageRef);
+      const history: ChatHistoryMessage[] = (get().messagesBySession[sid] ?? []).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+      const { providerId, modelId } = parseModelRef(lockedChatRef);
 
-        const allowedSizes = getAllowedSizesForModel(imgModId);
-        const finalSize = coerceToAllowedSize(size || "1:1", allowedSizes);
-
-        const assistantId = crypto.randomUUID();
-        const placeholder: ChatMessage = {
-          id: assistantId,
-          sessionId,
-          role: "assistant",
-          content: [{ type: "loading", mediaType: "image" }],
-          metadata: { intent: "image", model: imgModId },
-          createdAt: new Date().toISOString(),
+      let fullText = "";
+      const unifiedMessages = await historyToUnified(history);
+      const streamResult = await new Promise<{
+        textParts: ChatContentPart[];
+        imageJobs: { prompt: string; size?: string }[];
+        videoJobs: { prompt: string }[];
+      }>((resolve, reject) => {
+        let settled = false;
+        const settle = (fn: () => void) => {
+          if (settled) return;
+          settled = true;
+          ac.signal.removeEventListener("abort", onAbort);
+          fn();
         };
-        set((s) => ({ messages: [...s.messages, placeholder] }));
-
-        try {
-          const result = await providerService.generateImage(imgProvId, {
-            prompt: cleanPrompt,
-            model: imgModId,
-            size: finalSize,
-            onProgress: (p) =>
-              set({ generatingProgress: p.percent, generatingStatus: p.label }),
-            signal: _abortController!.signal,
-          });
-          const savedUrl = await persistGeneratedMedia(result.url, cleanPrompt);
-          set((s) => ({
-            messages: s.messages.map((m) =>
-              m.id === assistantId
-                ? {
-                    ...m,
-                    content: [
-                      { type: "image", url: savedUrl, prompt: cleanPrompt },
-                    ],
-                  }
-                : m,
-            ),
-          }));
-        } catch (e) {
-          const errorText = e instanceof Error ? e.message : String(e);
-          set((s) => ({
-            messages: s.messages.map((m) =>
-              m.id === assistantId
-                ? {
-                    ...m,
-                    content: [
-                      { type: "text", text: `图片生成失败: ${errorText}` },
-                    ],
-                  }
-                : m,
-            ),
-          }));
-        }
-
-        set({
-          generating: false,
-          generatingType: null,
-          generatingProgress: 0,
-          generatingStatus: "",
-          generatingStartedAt: 0,
-          streamingText: "",
-        });
-        const finalMsg = get().messages.find((m) => m.id === assistantId);
-        if (finalMsg) await saveChatMessage(messageToRow(finalMsg));
-      } else if (intent === "video") {
-        // 视频暂保留确认卡片（本次仅改造图片生成）
-        const assistantMsg: ChatMessage = {
-          id: crypto.randomUUID(),
-          sessionId,
-          role: "assistant",
-          content: [{ type: "video_pending", prompt }],
-          metadata: {
-            model: parseModelRef(useProviderStore.getState().activeVideoRef).modelId,
-            intent,
-          },
-          createdAt: new Date().toISOString(),
+        const onAbort = () => {
+          settle(() => reject(new Error("Generation stopped")));
         };
-        set((s) => ({
-          messages: [...s.messages, assistantMsg],
+        ac.signal.addEventListener("abort", onAbort, { once: true });
+
+        void providerService
+          .streamChat(
+            providerId,
+            {
+              model: modelId,
+              systemPrompt:
+                "You are a helpful AI assistant. You can have conversations, and when the user asks you to generate images or videos, use the provided tools. Always respond in the user's language.",
+              messages: unifiedMessages,
+              tools: CHAT_TOOLS,
+              signal: ac.signal,
+            },
+            (event: StreamEvent) => {
+              if (import.meta.env.DEV) {
+                console.debug("[chatStore] stream event:", event.type, event.type === "text" ? event.text.slice(0, 50) : event);
+              }
+              switch (event.type) {
+                case "text":
+                  fullText += event.text;
+                  set((s) => patchSessionGenerationIfVisible(s, sid, {
+                    streamingText: (s.generationBySession[sid]?.streamingText ?? "") + event.text,
+                  }));
+                  break;
+                case "error":
+                  settle(() => reject(new Error(event.message)));
+                  break;
+                case "done": {
+                  const textParts: ChatContentPart[] = [];
+                  if (fullText) textParts.push({ type: "text", text: fullText });
+
+                  const imageJobs: { prompt: string; size?: string }[] = [];
+                  const videoJobs: { prompt: string }[] = [];
+                  const toolCalls = getAccumulatedToolCalls();
+                  for (const tc of toolCalls) {
+                    try {
+                      const args = JSON.parse(tc.arguments || "{}");
+                      if (tc.name === "generate_image") {
+                        imageJobs.push({
+                          prompt: String(args.prompt ?? ""),
+                          size: args.size as string | undefined,
+                        });
+                      } else if (tc.name === "generate_video") {
+                        videoJobs.push({ prompt: String(args.prompt ?? "") });
+                      }
+                    } catch (e) {
+                      textParts.push({
+                        type: "text",
+                        text: `\n\n> Generation failed: ${e instanceof Error ? e.message : String(e)}`,
+                      });
+                    }
+                  }
+                  if (
+                    textParts.length === 0 &&
+                    imageJobs.length === 0 &&
+                    videoJobs.length === 0
+                  ) {
+                    textParts.push({
+                      type: "text",
+                      text: "（模型未返回有效内容，请尝试重新发送或切换模型）",
+                    });
+                  }
+                  set((s) => patchSessionGenerationIfVisible(s, sid, { streamingText: "" }));
+                  settle(() => resolve({ textParts, imageJobs, videoJobs }));
+                  break;
+                }
+                default:
+                  break;
+              }
+            },
+          )
+          .catch((e) => settle(() => reject(e instanceof Error ? e : new Error(String(e)))));
+      });
+
+      const initialContent: ChatContentPart[] = [...streamResult.textParts];
+      const imageLoadingIndices: number[] = [];
+      for (let i = 0; i < streamResult.imageJobs.length; i++) {
+        imageLoadingIndices.push(initialContent.length);
+        initialContent.push({ type: "loading", mediaType: "image" });
+      }
+      for (const job of streamResult.videoJobs) {
+        initialContent.push({ type: "video_pending", prompt: job.prompt });
+      }
+
+      const assistantId = crypto.randomUUID();
+      const assistantMsg: ChatMessage = {
+        id: assistantId,
+        sessionId: sid,
+        role: "assistant",
+        content: initialContent,
+        metadata: {
+          model: modelId,
+        },
+        createdAt: new Date().toISOString(),
+      };
+      set((s) => patchSessionMessagesIfVisible(s, sid, (prev) => [...prev, assistantMsg]));
+
+      if (streamResult.imageJobs.length === 0) {
+        set((s) => patchSessionGenerationIfVisible(s, sid, {
           generating: false,
           generatingType: null,
           generatingProgress: 0,
@@ -451,220 +794,97 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }));
         await saveChatMessage(messageToRow(assistantMsg));
       } else {
-        // 普通对话：流式获取，遇到 generate_image tool_call 直接出图
-        const history: ChatHistoryMessage[] = get().messages.map((m) => ({
-          role: m.role,
-          content: m.content,
+        set((s) => patchSessionGenerationIfVisible(s, sid, {
+          generatingType: "image",
+          generatingProgress: 0,
+          generatingStatus: "",
+          generatingStartedAt: Date.now(),
+          streamingText: "",
         }));
-        const { providerId, modelId } = parseModelRef(
-          useProviderStore.getState().activeChatRef,
-        );
 
-        let fullText = "";
-        const unifiedMessages = await historyToUnified(history);
-        const streamResult = await new Promise<{
-          textParts: ChatContentPart[];
-          imageJobs: { prompt: string; size?: string }[];
-          videoJobs: { prompt: string }[];
-        }>((resolve, reject) => {
-          const ac = _abortController!;
-          let settled = false;
-          const settle = (fn: () => void) => {
-            if (settled) return;
-            settled = true;
-            ac.signal.removeEventListener("abort", onAbort);
-            fn();
-          };
-          const onAbort = () => {
-            settle(() => reject(new Error("Generation stopped")));
-          };
-          ac.signal.addEventListener("abort", onAbort, { once: true });
+        const { providerId: chatProvId, modelId: chatModId } = parseModelRef(lockedChatRef);
+        const imageRef = pickImageModelRefForChat(chatProvId, chatModId, lockedImageRef);
+        const { providerId: imgProvId, modelId: imgModId } = parseModelRef(imageRef);
+        useProviderStore.getState().setActiveRef("image", imageRef);
+        const allowedSizes = getAllowedSizesForModel(imgModId);
 
-          void providerService
-            .streamChat(
-              providerId,
-              {
-                model: modelId,
-                systemPrompt:
-                  "You are a helpful AI assistant. You can have conversations, and when the user asks you to generate images or videos, use the provided tools. Always respond in the user's language.",
-                messages: unifiedMessages,
-                tools: CHAT_TOOLS,
-                signal: ac.signal,
-              },
-              (event: StreamEvent) => {
-                if (import.meta.env.DEV) {
-                  console.debug("[chatStore] stream event:", event.type, event.type === "text" ? event.text.slice(0, 50) : event);
-                }
-                switch (event.type) {
-                  case "text":
-                    fullText += event.text;
-                    set((s) => ({
-                      streamingText: s.streamingText + event.text,
-                    }));
-                    break;
-                  case "error":
-                    settle(() => reject(new Error(event.message)));
-                    break;
-                  case "done": {
-                    const textParts: ChatContentPart[] = [];
-                    if (fullText) textParts.push({ type: "text", text: fullText });
-
-                    const imageJobs: { prompt: string; size?: string }[] = [];
-                    const videoJobs: { prompt: string }[] = [];
-                    const toolCalls = getAccumulatedToolCalls();
-                    for (const tc of toolCalls) {
-                      try {
-                        const args = JSON.parse(tc.arguments || "{}");
-                        if (tc.name === "generate_image") {
-                          imageJobs.push({
-                            prompt: String(args.prompt ?? ""),
-                            size: args.size as string | undefined,
-                          });
-                        } else if (tc.name === "generate_video") {
-                          videoJobs.push({ prompt: String(args.prompt ?? "") });
-                        }
-                      } catch (e) {
-                        textParts.push({
-                          type: "text",
-                          text: `\n\n> Generation failed: ${e instanceof Error ? e.message : String(e)}`,
-                        });
-                      }
-                    }
-                    if (
-                      textParts.length === 0 &&
-                      imageJobs.length === 0 &&
-                      videoJobs.length === 0
-                    ) {
-                      textParts.push({
-                        type: "text",
-                        text: "（模型未返回有效内容，请尝试重新发送或切换模型）",
-                      });
-                    }
-                    set({ streamingText: "" });
-                    settle(() => resolve({ textParts, imageJobs, videoJobs }));
-                    break;
-                  }
-                  default:
-                    break;
-                }
-              },
+        // 把当前用户消息附带的图片转成 referenceImages，传给生图模型；
+        // 否则 chat 模型虽然"看过"图，但生图阶段只拿到文字 prompt，会丢失视觉特征
+        const refImages = hasImages
+          ? await Promise.all(
+              imageUrls!.map(async (url, i) => ({
+                url: await getBase64ForApi(url),
+                role: `refImage${i}`,
+              })),
             )
-            .catch((e) => settle(() => reject(e instanceof Error ? e : new Error(String(e)))));
-        });
+          : undefined;
 
-        const initialContent: ChatContentPart[] = [...streamResult.textParts];
-        const imageLoadingIndices: number[] = [];
         for (let i = 0; i < streamResult.imageJobs.length; i++) {
-          imageLoadingIndices.push(initialContent.length);
-          initialContent.push({ type: "loading", mediaType: "image" });
-        }
-        for (const job of streamResult.videoJobs) {
-          initialContent.push({ type: "video_pending", prompt: job.prompt });
-        }
-
-        const assistantId = crypto.randomUUID();
-        const assistantMsg: ChatMessage = {
-          id: assistantId,
-          sessionId,
-          role: "assistant",
-          content: initialContent,
-          metadata: {
-            model: parseModelRef(useProviderStore.getState().activeChatRef).modelId,
-            intent,
-          },
-          createdAt: new Date().toISOString(),
-        };
-        set((s) => ({ messages: [...s.messages, assistantMsg] }));
-
-        if (streamResult.imageJobs.length === 0) {
-          set({
-            generating: false,
-            generatingType: null,
-            generatingProgress: 0,
-            generatingStatus: "",
-            generatingStartedAt: 0,
-            streamingText: "",
-          });
-          await saveChatMessage(messageToRow(assistantMsg));
-        } else {
-          set({
-            generatingType: "image",
-            generatingProgress: 0,
-            generatingStatus: "",
-            generatingStartedAt: Date.now(),
-            streamingText: "",
-          });
-
-          const chatRef = useProviderStore.getState().activeChatRef;
-          const { providerId: chatProvId, modelId: chatModId } = parseModelRef(chatRef);
-          const imageRef = pickImageModelRefForChat(chatProvId, chatModId);
-          const { providerId: imgProvId, modelId: imgModId } = parseModelRef(imageRef);
-          useProviderStore.getState().setActiveRef("image", imageRef);
-          const allowedSizes = getAllowedSizesForModel(imgModId);
-
-          for (let i = 0; i < streamResult.imageJobs.length; i++) {
-            const job = streamResult.imageJobs[i]!;
-            const partIdx = imageLoadingIndices[i]!;
-            const finalSize = coerceToAllowedSize(job.size || "1:1", allowedSizes);
-            try {
-              const result = await providerService.generateImage(imgProvId, {
-                prompt: job.prompt,
-                model: imgModId,
-                size: finalSize,
-                onProgress: (p) =>
-                  set({ generatingProgress: p.percent, generatingStatus: p.label }),
-                signal: _abortController!.signal,
-              });
-              const savedUrl = await persistGeneratedMedia(result.url, job.prompt);
-              set((s) => ({
-                messages: s.messages.map((m) => {
-                  if (m.id !== assistantId) return m;
-                  const newContent = [...m.content];
-                  newContent[partIdx] = {
-                    type: "image",
-                    url: savedUrl,
-                    prompt: job.prompt,
-                  };
-                  return { ...m, content: newContent };
-                }),
-              }));
-            } catch (e) {
-              const errorText = e instanceof Error ? e.message : String(e);
-              set((s) => ({
-                messages: s.messages.map((m) => {
-                  if (m.id !== assistantId) return m;
-                  const newContent = [...m.content];
-                  newContent[partIdx] = {
-                    type: "text",
-                    text: `\n图片生成失败: ${errorText}`,
-                  };
-                  return { ...m, content: newContent };
-                }),
-              }));
-            }
+          const job = streamResult.imageJobs[i]!;
+          const partIdx = imageLoadingIndices[i]!;
+          const finalSize = coerceToAllowedSize(job.size || "1:1", allowedSizes);
+          try {
+            const result = await providerService.generateImage(imgProvId, {
+              prompt: job.prompt,
+              model: imgModId,
+              size: finalSize,
+              referenceImages: refImages && refImages.length > 0 ? refImages : undefined,
+              onProgress: (p) =>
+                set((s) => patchSessionGenerationIfVisible(s, sid, {
+                  generatingProgress: p.percent,
+                  generatingStatus: p.label,
+                })),
+              signal: ac.signal,
+            });
+            const savedUrl = await persistGeneratedMedia(result.url, job.prompt, lockedPid);
+            set((s) => patchSessionMessagesIfVisible(s, sid, (prev) =>
+              prev.map((m) => {
+                if (m.id !== assistantId) return m;
+                const newContent = [...m.content];
+                newContent[partIdx] = {
+                  type: "image",
+                  url: savedUrl,
+                  prompt: job.prompt,
+                };
+                return { ...m, content: newContent };
+              }),
+            ));
+          } catch (e) {
+            const errorText = e instanceof Error ? e.message : String(e);
+            set((s) => patchSessionMessagesIfVisible(s, sid, (prev) =>
+              prev.map((m) => {
+                if (m.id !== assistantId) return m;
+                const newContent = [...m.content];
+                newContent[partIdx] = {
+                  type: "text",
+                  text: `\n图片生成失败: ${errorText}`,
+                };
+                return { ...m, content: newContent };
+              }),
+            ));
           }
-
-          set({
-            generating: false,
-            generatingType: null,
-            generatingProgress: 0,
-            generatingStatus: "",
-            generatingStartedAt: 0,
-          });
-          const finalMsg = get().messages.find((m) => m.id === assistantId);
-          if (finalMsg) await saveChatMessage(messageToRow(finalMsg));
         }
+
+        set((s) => patchSessionGenerationIfVisible(s, sid, {
+          generating: false,
+          generatingType: null,
+          generatingProgress: 0,
+          generatingStatus: "",
+          generatingStartedAt: 0,
+        }));
+        const finalMsg = (get().messagesBySession[sid] ?? []).find((m) => m.id === assistantId);
+        if (finalMsg) await saveChatMessage(messageToRow(finalMsg));
       }
 
-      if (isFirstMessage && sessionId) {
+      if (isFirstMessage && sid) {
         const firstText = text.slice(0, 200);
         const titleModel =
           get().chatModel ||
-          parseModelRef(useProviderStore.getState().activeChatRef).modelId;
+          parseModelRef(lockedChatRef).modelId;
         if (titleModel) {
           generateTitle(firstText, titleModel).then((title) => {
             if (title && title !== "新对话") {
-              get().renameSession(sessionId, title);
+              get().renameSession(sid, title);
             }
           }).catch(() => {});
         }
@@ -675,49 +895,58 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const errorMsg: ChatMessage = {
         id: crypto.randomUUID(),
-        sessionId,
+        sessionId: sid,
         role: "assistant",
         content: [{ type: "text", text: `Error: ${errorText}` }],
         createdAt: new Date().toISOString(),
       };
 
-      set((s) => ({
-        messages: [...s.messages, errorMsg],
-        generating: false,
-        generatingType: null,
-        generatingProgress: 0,
-        generatingStatus: "",
-        generatingStartedAt: 0,
-        streamingText: "",
-      }));
+      set((s) => {
+        const partA = patchSessionMessagesIfVisible(s, sid, (prev) => [...prev, errorMsg]);
+        const merged = { ...s, ...partA } as ChatState;
+        const partB = patchSessionGenerationIfVisible(merged, sid, {
+          generating: false,
+          generatingType: null,
+          generatingProgress: 0,
+          generatingStatus: "",
+          generatingStartedAt: 0,
+          streamingText: "",
+        });
+        return { ...partA, ...partB };
+      });
 
       await saveChatMessage(messageToRow(errorMsg));
     }
 
-    _abortController = null;
+    abortControllers.delete(sid);
   },
 
   async confirmImageGeneration(messageId, partIndex, prompt, modelRef, size) {
-    if (get().generating) return;
+    const sid = get().currentSessionId;
+    if (!sid) return;
+    if ((get().generationBySession[sid] ?? DEFAULT_GENERATION).generating) return;
+    // 入口锁定 pid，避免生成中途切项目导致结果落到错误目录
+    const lockedPid = get().currentProjectId ?? useProjectStore.getState().currentProjectId ?? undefined;
 
-    set({
+    set((s) => patchSessionGenerationIfVisible(s, sid, {
       generating: true,
       generatingType: "image",
       generatingProgress: 0,
       generatingStatus: "",
       generatingStartedAt: Date.now(),
-    });
+    }));
 
-    set((s) => ({
-      messages: s.messages.map((m) => {
+    set((s) => patchSessionMessagesIfVisible(s, sid, (prev) =>
+      prev.map((m) => {
         if (m.id !== messageId) return m;
         const newContent = [...m.content];
         newContent[partIndex] = { type: "loading", mediaType: "image" as const };
         return { ...m, content: newContent };
       }),
-    }));
+    ));
 
-    _abortController = new AbortController();
+    const ac = new AbortController();
+    abortControllers.set(sid, ac);
 
     try {
       const { providerId, modelId } = parseModelRef(modelRef);
@@ -726,76 +955,96 @@ export const useChatStore = create<ChatState>((set, get) => ({
         model: modelId,
         size: size || undefined,
         onProgress: (p) =>
-          set({ generatingProgress: p.percent, generatingStatus: p.label }),
-        signal: _abortController!.signal,
+          set((s) => patchSessionGenerationIfVisible(s, sid, {
+            generatingProgress: p.percent,
+            generatingStatus: p.label,
+          })),
+        signal: ac.signal,
       });
-      const savedUrl = await persistGeneratedMedia(result.url, prompt);
+      const savedUrl = await persistGeneratedMedia(result.url, prompt, lockedPid);
 
-      set((s) => ({
-        messages: s.messages.map((m) => {
-          if (m.id !== messageId) return m;
-          const newContent = [...m.content];
-          newContent[partIndex] = { type: "image", url: savedUrl, prompt };
-          return { ...m, content: newContent, metadata: { ...m.metadata, model: modelId, intent: "image" as const } };
-        }),
-        generating: false,
-        generatingType: null,
-        generatingProgress: 0,
-        generatingStatus: "",
-        generatingStartedAt: 0,
-      }));
+      set((s) => {
+        const partA = patchSessionMessagesIfVisible(s, sid, (prev) =>
+          prev.map((m) => {
+            if (m.id !== messageId) return m;
+            const newContent = [...m.content];
+            newContent[partIndex] = { type: "image", url: savedUrl, prompt };
+            return { ...m, content: newContent, metadata: { ...m.metadata, model: modelId } };
+          }),
+        );
+        const merged = { ...s, ...partA } as ChatState;
+        const partB = patchSessionGenerationIfVisible(merged, sid, {
+          generating: false,
+          generatingType: null,
+          generatingProgress: 0,
+          generatingStatus: "",
+          generatingStartedAt: 0,
+        });
+        return { ...partA, ...partB };
+      });
 
-      const msg = get().messages.find((m) => m.id === messageId);
+      const msg = (get().messagesBySession[sid] ?? []).find((m) => m.id === messageId);
       if (msg) {
         await saveChatMessage(messageToRow(msg));
       }
     } catch (e) {
       const errorText = e instanceof Error ? e.message : String(e);
-      set((s) => ({
-        messages: s.messages.map((m) => {
-          if (m.id !== messageId) return m;
-          const newContent = [...m.content];
-          newContent[partIndex] = { type: "image_pending", prompt, suggestedSize: size };
-          return { ...m, content: newContent };
-        }),
-        generating: false,
-        generatingType: null,
-        generatingProgress: 0,
-        generatingStatus: "",
-        generatingStartedAt: 0,
-      }));
+      set((s) => {
+        const partA = patchSessionMessagesIfVisible(s, sid, (prev) =>
+          prev.map((m) => {
+            if (m.id !== messageId) return m;
+            const newContent = [...m.content];
+            newContent[partIndex] = { type: "image_pending", prompt, suggestedSize: size };
+            return { ...m, content: newContent };
+          }),
+        );
+        const merged = { ...s, ...partA } as ChatState;
+        const partB = patchSessionGenerationIfVisible(merged, sid, {
+          generating: false,
+          generatingType: null,
+          generatingProgress: 0,
+          generatingStatus: "",
+          generatingStartedAt: 0,
+        });
+        return { ...partA, ...partB };
+      });
 
-      const msg = get().messages.find((m) => m.id === messageId);
+      const msg = (get().messagesBySession[sid] ?? []).find((m) => m.id === messageId);
       if (msg) await saveChatMessage(messageToRow(msg));
 
       const { addToast } = await import("@/stores/uiStore").then((m) => m.useUIStore.getState());
       addToast({ type: "error", title: `图片生成失败: ${errorText}`, duration: 5000 });
     }
 
-    _abortController = null;
+    abortControllers.delete(sid);
   },
 
   async confirmVideoGeneration(messageId, partIndex, prompt, modelRef) {
-    if (get().generating) return;
+    const sid = get().currentSessionId;
+    if (!sid) return;
+    if ((get().generationBySession[sid] ?? DEFAULT_GENERATION).generating) return;
+    // 入口锁定 pid，避免生成中途切项目导致结果落到错误目录
+    const lockedPid = get().currentProjectId ?? useProjectStore.getState().currentProjectId ?? undefined;
 
-    set({
+    set((s) => patchSessionGenerationIfVisible(s, sid, {
       generating: true,
       generatingType: "video",
       generatingProgress: 0,
       generatingStatus: "",
       generatingStartedAt: Date.now(),
-    });
+    }));
 
-    set((s) => ({
-      messages: s.messages.map((m) => {
+    set((s) => patchSessionMessagesIfVisible(s, sid, (prev) =>
+      prev.map((m) => {
         if (m.id !== messageId) return m;
         const newContent = [...m.content];
         newContent[partIndex] = { type: "loading", mediaType: "video" as const };
         return { ...m, content: newContent };
       }),
-    }));
+    ));
 
-    _abortController = new AbortController();
+    const ac = new AbortController();
+    abortControllers.set(sid, ac);
 
     try {
       const { providerId, modelId } = parseModelRef(modelRef);
@@ -803,58 +1052,75 @@ export const useChatStore = create<ChatState>((set, get) => ({
         prompt,
         model: modelId,
         onProgress: (p) =>
-          set({ generatingProgress: p.percent, generatingStatus: p.label }),
-        signal: _abortController!.signal,
+          set((s) => patchSessionGenerationIfVisible(s, sid, {
+            generatingProgress: p.percent,
+            generatingStatus: p.label,
+          })),
+        signal: ac.signal,
       });
-      const savedUrl = await persistGeneratedMedia(result.url, prompt);
+      const savedUrl = await persistGeneratedMedia(result.url, prompt, lockedPid);
 
-      set((s) => ({
-        messages: s.messages.map((m) => {
-          if (m.id !== messageId) return m;
-          const newContent = [...m.content];
-          newContent[partIndex] = { type: "video", url: savedUrl, prompt };
-          return { ...m, content: newContent, metadata: { ...m.metadata, model: modelId, intent: "video" as const } };
-        }),
-        generating: false,
-        generatingType: null,
-        generatingProgress: 0,
-        generatingStatus: "",
-        generatingStartedAt: 0,
-      }));
+      set((s) => {
+        const partA = patchSessionMessagesIfVisible(s, sid, (prev) =>
+          prev.map((m) => {
+            if (m.id !== messageId) return m;
+            const newContent = [...m.content];
+            newContent[partIndex] = { type: "video", url: savedUrl, prompt };
+            return { ...m, content: newContent, metadata: { ...m.metadata, model: modelId } };
+          }),
+        );
+        const merged = { ...s, ...partA } as ChatState;
+        const partB = patchSessionGenerationIfVisible(merged, sid, {
+          generating: false,
+          generatingType: null,
+          generatingProgress: 0,
+          generatingStatus: "",
+          generatingStartedAt: 0,
+        });
+        return { ...partA, ...partB };
+      });
 
-      const msg = get().messages.find((m) => m.id === messageId);
+      const msg = (get().messagesBySession[sid] ?? []).find((m) => m.id === messageId);
       if (msg) {
         await saveChatMessage(messageToRow(msg));
       }
     } catch (e) {
       const errorText = e instanceof Error ? e.message : String(e);
-      set((s) => ({
-        messages: s.messages.map((m) => {
-          if (m.id !== messageId) return m;
-          const newContent = [...m.content];
-          newContent[partIndex] = { type: "video_pending", prompt };
-          return { ...m, content: newContent };
-        }),
-        generating: false,
-        generatingType: null,
-        generatingProgress: 0,
-        generatingStatus: "",
-        generatingStartedAt: 0,
-      }));
+      set((s) => {
+        const partA = patchSessionMessagesIfVisible(s, sid, (prev) =>
+          prev.map((m) => {
+            if (m.id !== messageId) return m;
+            const newContent = [...m.content];
+            newContent[partIndex] = { type: "video_pending", prompt };
+            return { ...m, content: newContent };
+          }),
+        );
+        const merged = { ...s, ...partA } as ChatState;
+        const partB = patchSessionGenerationIfVisible(merged, sid, {
+          generating: false,
+          generatingType: null,
+          generatingProgress: 0,
+          generatingStatus: "",
+          generatingStartedAt: 0,
+        });
+        return { ...partA, ...partB };
+      });
 
-      const msg = get().messages.find((m) => m.id === messageId);
+      const msg = (get().messagesBySession[sid] ?? []).find((m) => m.id === messageId);
       if (msg) await saveChatMessage(messageToRow(msg));
 
       const { addToast } = await import("@/stores/uiStore").then((m) => m.useUIStore.getState());
       addToast({ type: "error", title: `视频生成失败: ${errorText}`, duration: 5000 });
     }
 
-    _abortController = null;
+    abortControllers.delete(sid);
   },
 
   updatePendingPrompt(messageId, partIndex, prompt) {
-    set((s) => ({
-      messages: s.messages.map((m) => {
+    const sid = get().currentSessionId;
+    if (!sid) return;
+    set((s) => patchSessionMessagesIfVisible(s, sid, (prev) =>
+      prev.map((m) => {
         if (m.id !== messageId) return m;
         const part = m.content[partIndex];
         if (!part || (part.type !== "image_pending" && part.type !== "video_pending")) return m;
@@ -862,21 +1128,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
         newContent[partIndex] = { ...part, prompt };
         return { ...m, content: newContent };
       }),
-    }));
-    const msg = get().messages.find((m) => m.id === messageId);
+    ));
+    const msg = (get().messagesBySession[sid] ?? []).find((m) => m.id === messageId);
     if (msg) saveChatMessage(messageToRow(msg));
   },
 
-  stopGenerating() {
-    _abortController?.abort();
-    set({ generating: false, generatingType: null, generatingProgress: 0, generatingStatus: "", generatingStartedAt: 0, streamingText: "" });
+  stopGenerating(sessionId) {
+    const sid = typeof sessionId === "string" ? sessionId : get().currentSessionId;
+    if (!sid) return;
+    const ac = abortControllers.get(sid);
+    if (import.meta.env.DEV && ac) {
+      console.trace("[chatStore] stopGenerating called for session:", sid);
+    }
+    ac?.abort();
+    abortControllers.delete(sid);
+    set((s) => patchSessionGenerationIfVisible(s, sid, {
+      generating: false,
+      generatingType: null,
+      generatingProgress: 0,
+      generatingStatus: "",
+      generatingStartedAt: 0,
+      streamingText: "",
+    }));
   },
 
   async clearMessages() {
     const sid = get().currentSessionId;
     if (!sid) return;
     await clearChatMessages(sid);
-    set({ messages: [], streamingText: "" });
+    set((s) => {
+      const partA = patchSessionMessagesIfVisible(s, sid, () => []);
+      const merged = { ...s, ...partA } as ChatState;
+      const partB = patchSessionGenerationIfVisible(merged, sid, { streamingText: "" });
+      return { ...partA, ...partB };
+    });
   },
 
 }));

@@ -2,12 +2,16 @@ import type { ChatSessionRow, ChatMessageRow } from "@/types";
 import { isTauri, ensureTauriAPIs, getInvoke } from "./runtime";
 import { lsGet, lsSet } from "./storage";
 
-export async function listChatSessions(): Promise<ChatSessionRow[]> {
+export async function listChatSessions(projectId?: string): Promise<ChatSessionRow[]> {
   if (isTauri) {
     await ensureTauriAPIs();
-    return getInvoke()<ChatSessionRow[]>("list_chat_sessions");
+    return getInvoke()<ChatSessionRow[]>("list_chat_sessions", {
+      projectId: projectId ?? null,
+    });
   }
-  return lsGet<ChatSessionRow[]>("chat_sessions", []);
+  const rows = lsGet<ChatSessionRow[]>("chat_sessions", []);
+  if (projectId === undefined) return rows;
+  return rows.filter((r) => r.project_id === projectId);
 }
 
 export async function createChatSession(

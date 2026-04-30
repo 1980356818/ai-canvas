@@ -37,32 +37,20 @@ fn fallback_machine_id(data_dir: &std::path::Path) -> Result<String, String> {
 
 #[cfg(target_os = "windows")]
 fn platform_machine_id() -> Result<String, String> {
-    let output = std::process::Command::new("reg")
-        .args([
-            "query",
-            r"HKLM\SOFTWARE\Microsoft\Cryptography",
-            "/v",
-            "MachineGuid",
-        ])
-        .output()
-        .map_err(|e| format!("reg query failed: {}", e))?;
+    use winreg::enums::HKEY_LOCAL_MACHINE;
+    use winreg::RegKey;
 
-    if !output.status.success() {
-        return Err("reg query returned non-zero".into());
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let key = hklm
+        .open_subkey(r"SOFTWARE\Microsoft\Cryptography")
+        .map_err(|e| format!("failed to open registry key: {}", e))?;
+    let guid: String = key
+        .get_value("MachineGuid")
+        .map_err(|e| format!("failed to read MachineGuid: {}", e))?;
+    if guid.is_empty() {
+        return Err("MachineGuid is empty".into());
     }
-
-    let text = String::from_utf8_lossy(&output.stdout);
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("MachineGuid") {
-            if let Some(guid) = trimmed.split_whitespace().last() {
-                if !guid.is_empty() {
-                    return Ok(guid.to_string());
-                }
-            }
-        }
-    }
-    Err("MachineGuid not found in registry output".into())
+    Ok(guid)
 }
 
 #[cfg(target_os = "macos")]
@@ -76,18 +64,19 @@ fn platform_machine_id() -> Result<String, String> {
         return Err("ioreg returned non-zero".into());
     }
 
+    // Line format: "IOPlatformUUID" = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
     let text = String::from_utf8_lossy(&output.stdout);
     for line in text.lines() {
         if line.contains("IOPlatformUUID") {
-            if let Some(start) = line.find('"') {
-                let rest = &line[start + 1..];
-                if let Some(end) = rest.find('"') {
-                    let uuid_str = &rest[..end];
-                    if let Some(start2) = uuid_str.rfind('"') {
-                        return Ok(uuid_str[start2 + 1..].to_string());
-                    }
-                    if !uuid_str.is_empty() {
-                        return Ok(uuid_str.to_string());
+            if let Some(eq_pos) = line.find('=') {
+                let after_eq = &line[eq_pos + 1..];
+                if let Some(q1) = after_eq.find('"') {
+                    let value_start = &after_eq[q1 + 1..];
+                    if let Some(q2) = value_start.find('"') {
+                        let uuid = &value_start[..q2];
+                        if !uuid.is_empty() {
+                            return Ok(uuid.to_string());
+                        }
                     }
                 }
             }

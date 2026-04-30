@@ -135,6 +135,14 @@ pub fn restore_project(state: State<AppState>, id: String) -> Result<(), String>
 #[tauri::command]
 pub fn permanently_delete_project(state: State<AppState>, id: String) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
+    // chat_sessions.project_id 是普通列（v6 schema 未声明 FK 级联），
+    // 因此这里必须显式清理，否则项目永久删除后聊天记录会成为孤儿。
+    // chat_messages 通过 session_id 已有 ON DELETE CASCADE，会自动跟随。
+    db.execute(
+        "DELETE FROM chat_sessions WHERE project_id = ?1",
+        rusqlite::params![id],
+    )
+    .map_err(|e| e.to_string())?;
     db.execute("DELETE FROM projects WHERE id = ?1", rusqlite::params![id])
         .map_err(|e| e.to_string())?;
     Ok(())

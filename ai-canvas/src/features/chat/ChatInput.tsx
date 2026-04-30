@@ -1,14 +1,18 @@
-import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from "react";
+import { useState, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import {
   SendHorizonal,
   Square,
-  Image as ImageIcon,
   Video,
   Paperclip,
   X,
   ImagePlus,
 } from "lucide-react";
-import { useChatStore } from "@/stores/chatStore";
+import {
+  useChatStore,
+  EMPTY_INPUT_DRAFT,
+  getPendingDraftKey,
+  type ChatInputMedia,
+} from "@/stores/chatStore";
 import { useProviderStore, parseModelRef } from "@/stores/providerStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { persistImage, getDisplayUrl } from "@/lib/media";
@@ -31,16 +35,7 @@ const isTauri =
   typeof window !== "undefined" &&
   ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
 
-const SLASH_COMMANDS = [
-  { command: "/image ", label: "生成图片", icon: ImageIcon, description: "输入 prompt 生成图片" },
-  { command: "/video ", label: "生成视频", icon: Video, description: "输入 prompt 生成视频" },
-];
-
-interface MediaAttachment {
-  url: string;
-  displayUrl: string;
-  kind: "image" | "video";
-}
+type MediaAttachment = ChatInputMedia;
 
 export interface ChatInputHandle {
   addImage: (src: string) => Promise<void>;
@@ -48,10 +43,37 @@ export interface ChatInputHandle {
 }
 
 const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
-  const [input, setInput] = useState("");
-  const [media, setMedia] = useState<MediaAttachment[]>([]);
-  const [showSlashMenu, setShowSlashMenu] = useState(false);
-  const [selectedSlashIdx, setSelectedSlashIdx] = useState(0);
+  // 输入草稿（含文本与参考图）持久化到 chatStore，按 sessionId 索引；
+  // 这样切换会话/项目导致组件卸载或重建时不会丢失用户尚未发送的内容
+  const currentSessionId = useChatStore((s) => s.currentSessionId);
+  const currentProjectId = useChatStore((s) => s.currentProjectId);
+  const draftKey = currentSessionId ?? getPendingDraftKey(currentProjectId);
+  const draft = useChatStore(
+    (s) => s.inputDraftBySession[draftKey] ?? EMPTY_INPUT_DRAFT,
+  );
+  const input = draft.text;
+  const media = draft.media;
+
+  // 用 ref 跟随最新 draftKey，让 setter 维持稳定引用，
+  // 下游所有 useCallback 不必把 setter 加入依赖列表
+  const draftKeyRef = useRef(draftKey);
+  draftKeyRef.current = draftKey;
+
+  const setInput = useCallback((text: string) => {
+    useChatStore.getState().setInputDraft(draftKeyRef.current, { text });
+  }, []);
+
+  const setMedia = useCallback(
+    (updater: MediaAttachment[] | ((prev: MediaAttachment[]) => MediaAttachment[])) => {
+      const key = draftKeyRef.current;
+      const prev =
+        useChatStore.getState().inputDraftBySession[key]?.media ?? [];
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      useChatStore.getState().setInputDraft(key, { media: next });
+    },
+    [],
+  );
+
   const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -64,21 +86,6 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
   const activeChatRef = useProviderStore((s) => s.activeChatRef);
   const chatModelId = parseModelRef(activeChatRef).modelId;
   const chatProviderId = parseModelRef(activeChatRef).providerId;
-
-  const filteredCommands = input.startsWith("/")
-    ? SLASH_COMMANDS.filter((c) =>
-        c.command.startsWith(input.split(" ")[0]!),
-      )
-    : SLASH_COMMANDS;
-
-  useEffect(() => {
-    if (input.startsWith("/") && !input.includes(" ")) {
-      setShowSlashMenu(true);
-      setSelectedSlashIdx(0);
-    } else {
-      setShowSlashMenu(false);
-    }
-  }, [input]);
 
   const isAlreadyPersisted = useCallback((src: string) => {
     return (
@@ -100,7 +107,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
         ]);
         return;
       }
-      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const pid = useChatStore.getState().currentProjectId ?? useProjectStore.getState().currentProjectId ?? undefined;
       const { localPath } = await persistImage(src, undefined, pid);
       setMedia((prev) => [
         ...prev,
@@ -135,7 +142,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
         });
         if (!selected) return;
         const paths = Array.isArray(selected) ? selected : [selected];
-        const pid = useProjectStore.getState().currentProjectId ?? undefined;
+        const pid = useChatStore.getState().currentProjectId ?? useProjectStore.getState().currentProjectId ?? undefined;
         for (const sel of paths) {
           const filePath = typeof sel === "string" ? sel : (sel as { path: string }).path;
           const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
@@ -306,40 +313,12 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (showSlashMenu) {
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          setSelectedSlashIdx((i) => (i + 1) % filteredCommands.length);
-          return;
-        }
-        if (e.key === "ArrowUp") {
-          e.preventDefault();
-          setSelectedSlashIdx(
-            (i) => (i - 1 + filteredCommands.length) % filteredCommands.length,
-          );
-          return;
-        }
-        if (e.key === "Enter" || e.key === "Tab") {
-          e.preventDefault();
-          const cmd = filteredCommands[selectedSlashIdx];
-          if (cmd) {
-            setInput(cmd.command);
-            setShowSlashMenu(false);
-          }
-          return;
-        }
-        if (e.key === "Escape") {
-          setShowSlashMenu(false);
-          return;
-        }
-      }
-
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSend();
       }
     },
-    [handleSend, showSlashMenu, filteredCommands, selectedSlashIdx],
+    [handleSend],
   );
 
   const handleTextareaInput = useCallback(
@@ -353,12 +332,6 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
     },
     [],
   );
-
-  const intentHint = input.startsWith("/image ")
-    ? "image"
-    : input.startsWith("/video ")
-      ? "video"
-      : null;
 
   return (
     <div
@@ -380,34 +353,6 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
             <ImagePlus className="h-4 w-4 text-primary/60" />
             <span className="text-sm font-medium text-primary/80">松开添加图片/视频</span>
           </div>
-        </div>
-      )}
-
-      {/* Slash command menu */}
-      {showSlashMenu && (
-        <div className="mb-2 overflow-hidden rounded-lg border border-border bg-popover shadow-md">
-          {filteredCommands.map((cmd, idx) => (
-            <button
-              key={cmd.command}
-              className={cn(
-                "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors",
-                idx === selectedSlashIdx
-                  ? "bg-accent text-foreground"
-                  : "text-muted-foreground hover:bg-accent",
-              )}
-              onClick={() => {
-                setInput(cmd.command);
-                setShowSlashMenu(false);
-                textareaRef.current?.focus();
-              }}
-            >
-              <cmd.icon className="h-4 w-4 shrink-0" />
-              <span className="font-medium">{cmd.label}</span>
-              <span className="text-xs text-muted-foreground/70">
-                {cmd.description}
-              </span>
-            </button>
-          ))}
         </div>
       )}
 
@@ -443,27 +388,6 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
               </button>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Intent badge */}
-      {intentHint && (
-        <div className="mb-1.5 flex items-center gap-1.5">
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-              intentHint === "image"
-                ? "bg-blue-500/10 text-blue-500"
-                : "bg-purple-500/10 text-purple-500",
-            )}
-          >
-            {intentHint === "image" ? (
-              <ImageIcon className="h-3 w-3" />
-            ) : (
-              <Video className="h-3 w-3" />
-            )}
-            {intentHint === "image" ? "图片生成模式" : "视频生成模式"}
-          </span>
         </div>
       )}
 
@@ -508,7 +432,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
           value={input}
           onChange={handleTextareaInput}
           onKeyDown={handleKeyDown}
-          placeholder="发送消息，输入 / 查看指令..."
+          placeholder="发送消息..."
           disabled={generating}
         />
         {generating ? (

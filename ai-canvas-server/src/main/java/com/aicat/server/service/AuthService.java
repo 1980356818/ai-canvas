@@ -4,6 +4,7 @@ import com.aicat.server.common.BizException;
 import com.aicat.server.common.ErrorCode;
 import com.aicat.server.entity.LoginLog;
 import com.aicat.server.entity.User;
+import com.aicat.server.entity.UserDevice;
 import com.aicat.server.mapper.LoginLogMapper;
 import com.aicat.server.mapper.UserMapper;
 import com.aicat.server.util.JwtUtil;
@@ -58,6 +59,11 @@ public class AuthService {
 
     @Transactional
     public Map<String, Object> login(String username, String password, String machineCode, String deviceInfo, String ip) {
+        return login(username, password, machineCode, deviceInfo, ip, false);
+    }
+
+    @Transactional
+    public Map<String, Object> login(String username, String password, String machineCode, String deviceInfo, String ip, boolean forceRebind) {
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
         if (user == null || !passwordEncoder.matches(password, user.getPassword())) {
             logLogin(user, ip, deviceInfo, "wrong_password");
@@ -68,9 +74,17 @@ public class AuthService {
             throw new BizException(ErrorCode.ACCOUNT_DISABLED);
         }
 
-        // 机器码绑定校验
         if (machineCode != null && !machineCode.isBlank()) {
-            deviceBindService.checkOrBind(user.getId(), machineCode, deviceInfo, ip);
+            if (forceRebind) {
+                UserDevice existing = deviceBindService.getBound(user.getId());
+                if (existing != null && !existing.getMachineCode().equals(machineCode)) {
+                    deviceBindService.unbindAndRebind(user.getId(), machineCode, deviceInfo, ip, "user");
+                } else {
+                    deviceBindService.checkOrBind(user.getId(), machineCode, deviceInfo, ip);
+                }
+            } else {
+                deviceBindService.checkOrBind(user.getId(), machineCode, deviceInfo, ip);
+            }
         }
 
         boolean memberActive = user.getMemberExpireAt() != null

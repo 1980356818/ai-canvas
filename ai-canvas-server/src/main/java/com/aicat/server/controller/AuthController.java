@@ -30,7 +30,8 @@ public class AuthController {
     public Result<Map<String, Object>> login(@Valid @RequestBody LoginReq req, HttpServletRequest request) {
         String ip = IpUtil.getClientIp(request);
         Map<String, Object> data = authService.login(
-                req.getUsername(), req.getPassword(), req.getMachineCode(), req.getDeviceInfo(), ip);
+                req.getUsername(), req.getPassword(), req.getMachineCode(), req.getDeviceInfo(), ip,
+                Boolean.TRUE.equals(req.getForceRebind()));
         boolean restricted = (boolean) data.get("restricted");
         String msg = restricted ? (data.get("user") instanceof Map<?,?> u && "inactive".equals(u.get("status"))
                 ? "请兑换会员码激活账号" : "会员已过期，请兑换续费") : "登录成功";
@@ -66,5 +67,6 @@ public class AuthController {
         @NotBlank(message = "密码不能为空") private String password;
         private String machineCode;
         private String deviceInfo;
+        private Boolean forceRebind;
     }
 }
