@@ -437,7 +437,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
         />
         {generating ? (
           <button
-            onClick={stopGenerating}
+            onClick={() => stopGenerating()}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive text-destructive-foreground transition-colors hover:bg-destructive/90"
             title="停止生成"
           >

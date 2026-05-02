@@ -78,9 +78,11 @@ function formatContentParts(parts: UnifiedContentPart[]): string | OpenAIContent
         return { type: "image_url", image_url: { url: p.url } };
       case "file":
         return { type: "text", text: `[file: ${p.name}]` };
-      case "reasoning":
-        // 已被上面 filter 排除，这里仅为穷尽 switch
+      default: {
+        const _exhaustive: never = p;
+        void _exhaustive;
         return { type: "text", text: "" };
+      }
     }
   });
 }

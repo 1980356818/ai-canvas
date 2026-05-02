@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import type { ChatMessage } from "@/stores/chatStore";
 import { useChatStore } from "@/stores/chatStore";
-import type { ChatContentPart } from "@/lib/chatService";
+import type { ChatContentPart } from "@/types/chat";
 import { getDisplayUrl } from "@/lib/media";
 import { useProviderStore, parseModelRef } from "@/stores/providerStore";
 import { modelService } from "@/services/models";
