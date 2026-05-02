@@ -19,18 +19,60 @@ export async function setSetting(key: string, value: string): Promise<void> {
   lsSet("setting_" + key, value);
 }
 
+// ── Provider key helpers ────────────────────────────────────
+
+interface KeyEntry {
+  id: string;
+  name: string;
+  key: string;
+}
+
+/**
+ * Check whether a provider has at least one non-empty API key configured.
+ * Checks the multi-key JSON array first, then falls back to legacy single-key.
+ */
+async function providerHasKey(providerId: string): Promise<boolean> {
+  const keysJson = await getSetting(`${providerId}_api_keys`);
+  if (keysJson) {
+    try {
+      const keys: KeyEntry[] = JSON.parse(keysJson);
+      if (keys.some((k) => k.key.trim())) return true;
+    } catch { /* ignore */ }
+  }
+  const legacyKey = providerId === "comfly"
+    ? await getSetting("openai_api_key")
+    : await getSetting(`${providerId}_api_key`);
+  return !!legacyKey?.trim();
+}
+
+/**
+ * Resolve the first usable API key for a provider (browser-side).
+ * Same precedence as Rust `read_full_api_config`: JSON array → legacy single key.
+ */
+export async function getProviderFirstKey(providerId: string): Promise<string> {
+  const keysJson = await getSetting(`${providerId}_api_keys`);
+  if (keysJson) {
+    try {
+      const keys: KeyEntry[] = JSON.parse(keysJson);
+      const first = keys.find((k) => k.key.trim());
+      if (first) return first.key.trim();
+    } catch { /* ignore */ }
+  }
+  const legacyKey = providerId === "comfly"
+    ? await getSetting("openai_api_key")
+    : await getSetting(`${providerId}_api_key`);
+  return legacyKey?.trim() ?? "";
+}
+
+// ── hasApiKey (cached) ──────────────────────────────────────
+
 let _apiKeyCache: boolean | undefined;
 
 export async function hasApiKey(): Promise<boolean> {
   if (_apiKeyCache === undefined) {
-    const checks = [
-      getSetting("comfly_api_key"),
-      getSetting("openai_api_key"),
-    ];
-    if (isPlatformVisible("jijing")) {
-      checks.push(getSetting("jijing_api_key"));
-    }
-    const results = await Promise.all(checks);
+    const providers = ["comfly"];
+    if (isPlatformVisible("jijing")) providers.push("jijing");
+    const results = await Promise.all(providers.map(providerHasKey));
     _apiKeyCache = results.some(Boolean);
   }
   return _apiKeyCache;

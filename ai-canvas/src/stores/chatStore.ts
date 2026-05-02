@@ -93,6 +93,9 @@ async function persistGeneratedMedia(
   prompt: string | undefined,
   projectId: string | undefined,
 ): Promise<string> {
+  // provider 已经在内部调用过 saveMedia 时返回的就是 media/... 相对路径，
+  // 这种情况下文件已落盘，没必要再走一次 IPC 重存（重存会触发 std::fs::read 拿相对路径报错）。
+  if (url.startsWith("media/")) return url;
   try {
     const { localPath } = await persistImage(url, prompt, projectId);
     return localPath;
@@ -205,15 +208,14 @@ interface ChatState {
   imageModel: string;
   videoModel: string;
 
+  // 统一入口：切换聊天面板到指定项目。
+  // 同步设置 currentProjectId，按需 reset 可见状态，然后异步加载该项目的会话。
+  openProjectChat: (projectId: string) => Promise<void>;
   loadSessions: (projectId?: string) => Promise<void>;
   createSession: (projectId?: string) => Promise<string>;
   switchSession: (id: string) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
   renameSession: (id: string, title: string) => Promise<void>;
-  // 项目切换前清空可见会话/消息，为 loadSessions 做准备；不取消后台生成。
-  resetForProject: () => void;
-  // 切换展示项目：只切换可见会话/消息，不取消其他项目后台生成。
-  switchProject: (projectId: string | null) => void;
 
   // 输入草稿管理
   setInputDraft: (key: string, patch: Partial<ChatInputDraft>) => void;
@@ -373,9 +375,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
   imageModel: "",
   videoModel: "",
 
+  async openProjectChat(projectId) {
+    const pid = projectId;
+    const prev = get().currentProjectId;
+
+    // 1. 同步设置 currentProjectId；后续 createSession / sendMessage 的 shouldShow 依赖此值。
+    if (prev !== pid) {
+      set((s) => ({
+        currentProjectId: pid,
+        sessions: [],
+        currentSessionId: null,
+        ...applyDerived({ ...s, currentSessionId: null, messagesBySession: {}, generationBySession: s.generationBySession }),
+      }));
+    } else {
+      set({ currentProjectId: pid });
+    }
+
+    // 2. 异步加载该项目的会话列表
+    await get().loadSessions(pid);
+  },
+
   async loadSessions(projectId) {
-    // 只刷新目标项目的会话列表；其他项目的会话、消息和生成态继续留在内存中，
-    // 因此切换项目不会中断后台聊天 / 生图任务。
     const pid = projectId ?? useProjectStore.getState().currentProjectId ?? null;
     const rows = await listChatSessions(pid ?? undefined);
     const loadedSessions = rows.map(rowToSession);
@@ -385,7 +405,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ...s.sessions.filter((session) => (session.projectId ?? null) !== pid),
         ...loadedSessions,
       ];
-      // 异步加载可能乱序返回：如果用户已经切到别的项目，只更新缓存，不抢回当前视图。
       if (s.currentProjectId !== pid) {
         return { sessions };
       }
@@ -449,25 +468,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return id;
   },
 
-  resetForProject() {
-    set((s) => ({
-      sessions: [],
-      currentSessionId: null,
-      ...applyDerived({ ...s, currentSessionId: null, messagesBySession: {}, generationBySession: s.generationBySession }),
-    }));
-  },
-
-  switchProject(projectId) {
-    set((s) => {
-      const pid = projectId ?? null;
-      const base = { ...s, currentProjectId: pid } as ChatState;
-      const currentSessionId = getFirstSessionIdForProject(base, pid);
-      return {
-        currentProjectId: pid,
-        ...visibleState(base, currentSessionId),
-      };
-    });
-  },
 
   setInputDraft(key, patch) {
     set((s) => {

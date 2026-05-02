@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { MessageSquare, ImageIcon, SendHorizonal, X, ImagePlus, Video } from "lucide-react";
+import { SendHorizonal, X, ImagePlus, Video } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useChatStore } from "@/stores/chatStore";
@@ -10,8 +10,6 @@ import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
 import ModelSelector from "@/features/editor/ModelSelector";
-
-type InputMode = "chat" | "image";
 
 interface UploadedMedia {
   url: string;
@@ -40,29 +38,9 @@ function isMediaFile(file: File): boolean {
     || isVideoFile(file);
 }
 
-const MODE_CONFIG: Record<
-  InputMode,
-  {
-    label: string;
-    icon: typeof MessageSquare;
-    placeholder: string;
-  }
-> = {
-  chat: {
-    label: "文字",
-    icon: MessageSquare,
-    placeholder: "描述你的需求，AI 将为你解答...",
-  },
-  image: {
-    label: "图片",
-    icon: ImageIcon,
-    placeholder:
-      "描述你想生成的图片，例如「户外运动风格的模特穿搭图，蓝色系背景」...",
-  },
-};
+const UNIFIED_PLACEHOLDER = "描述你的需求，AI 将自动处理文字与图片...";
 
 export default function AIPromptInput() {
-  const [mode, setMode] = useState<InputMode>("chat");
   const [prompt, setPrompt] = useState("");
   const [sending, setSending] = useState(false);
   const [selectedModel, setSelectedModel] = useState("");
@@ -71,28 +49,21 @@ export default function AIPromptInput() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
-  const config = MODE_CONFIG[mode];
 
   const activeChatRef = useProviderStore((s) => s.activeChatRef);
-  const activeImageRef = useProviderStore((s) => s.activeImageRef);
   const providerReady = useProviderStore((s) => s.initialized);
 
   useEffect(() => {
-    const existingRef = mode === "chat" ? activeChatRef : activeImageRef;
-    const parsed = parseModelRef(existingRef);
+    const parsed = parseModelRef(activeChatRef);
     if (parsed.modelId) {
       setSelectedModel(parsed.modelId);
       return;
     }
-    const loadDefault = mode === "chat"
-      ? modelService.getDefaultChatModel()
-      : modelService.getDefaultImageModel();
-    loadDefault.then((ref) => {
+    modelService.getDefaultChatModel().then((ref) => {
       setSelectedModel(ref.modelId);
-      const scene = mode === "chat" ? "chat" : "image";
-      useProviderStore.getState().setActiveRef(scene, `${ref.providerId}:${ref.modelId}`);
+      useProviderStore.getState().setActiveRef("chat", `${ref.providerId}:${ref.modelId}`);
     });
-  }, [mode, activeChatRef, activeImageRef, providerReady]);
+  }, [activeChatRef, providerReady]);
 
   const addMedia = useCallback(async (files: File[]) => {
     const remaining = MAX_MEDIA - media.length;
@@ -256,6 +227,8 @@ export default function AIPromptInput() {
         useUIStore.getState().toggleChatPanel();
       }
 
+      await useChatStore.getState().openProjectChat(project.id);
+
       const chatText = trimmed;
       const chatImages = media.filter((m) => m.kind === "image").map((m) => m.url);
       const chatVideos = media.filter((m) => m.kind === "video").map((m) => m.url);
@@ -278,7 +251,7 @@ export default function AIPromptInput() {
     } finally {
       setSending(false);
     }
-  }, [prompt, sending, mode, media, clearInput]);
+  }, [prompt, sending, media, clearInput]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -327,7 +300,7 @@ export default function AIPromptInput() {
           value={prompt}
           onChange={handleTextareaInput}
           onKeyDown={handleKeyDown}
-          placeholder={config.placeholder}
+          placeholder={UNIFIED_PLACEHOLDER}
           rows={3}
           className="w-full resize-none rounded-t-2xl bg-transparent px-5 pb-2 pt-5 text-base text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
           style={{ minHeight: "180px", maxHeight: "320px" }}
@@ -388,34 +361,12 @@ export default function AIPromptInput() {
         )}
 
         <div className="flex items-center gap-1 border-t border-border/40 px-4 py-2.5">
-          {(Object.keys(MODE_CONFIG) as InputMode[]).map((m) => {
-            const { label, icon: Icon } = MODE_CONFIG[m];
-            return (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200",
-                  mode === m
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            );
-          })}
-
-          <div className="mx-1.5 h-4 w-px bg-border/40" />
-
           <ModelSelector
-            capability={mode === "chat" ? "CHAT" : "IMAGE"}
+            capability="CHAT"
             value={selectedModel}
             onChange={(modelId, providerId) => {
               setSelectedModel(modelId);
-              const scene = mode === "chat" ? "chat" : "image";
-              useProviderStore.getState().setActiveRef(scene, `${providerId}:${modelId}`);
+              useProviderStore.getState().setActiveRef("chat", `${providerId}:${modelId}`);
             }}
           />
 

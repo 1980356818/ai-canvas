@@ -1,6 +1,6 @@
 use crate::AppState;
-use super::config::{read_api_config, read_full_api_config};
-use std::error::Error as StdError;
+use super::config::{read_api_config, read_full_api_config, apply_auth_headers};
+use super::http_util::send_with_retry;
 use tauri::State;
 
 fn resolve_provider(provider: Option<String>) -> String {
@@ -23,29 +23,6 @@ fn resolve_base_url(state: &State<'_, AppState>, provider: &str) -> Result<Strin
     Ok(full.base_url)
 }
 
-fn format_reqwest_error(e: &reqwest::Error) -> String {
-    let mut parts = Vec::new();
-    if e.is_connect() { parts.push("connection"); }
-    if e.is_timeout() { parts.push("timeout"); }
-
-    let mut cause_chain = String::new();
-    let mut current: Option<&dyn StdError> = Some(e);
-    while let Some(c) = current {
-        let msg = c.to_string();
-        if !cause_chain.contains(&msg) {
-            if !cause_chain.is_empty() { cause_chain.push_str(" → "); }
-            cause_chain.push_str(&msg);
-        }
-        current = c.source();
-    }
-
-    if parts.is_empty() {
-        cause_chain
-    } else {
-        format!("[{}] {}", parts.join("+"), cause_chain)
-    }
-}
-
 /// Fetch available models from the gateway's /v1/models endpoint.
 #[tauri::command]
 pub async fn list_models(
@@ -57,13 +34,13 @@ pub async fn list_models(
     let base_url = resolve_base_url(&state, &p)?;
 
     let url = format!("{}/v1/models", base_url.trim_end_matches('/'));
-    let resp = state
-        .http_client()
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .send()
-        .await
-        .map_err(|e| format!("请求模型列表失败: {}", e))?;
+    let client = state.http_client();
+    let resp = send_with_retry(
+        || apply_auth_headers(client.get(&url), &p, &api_key),
+        "gateway:list_models",
+        &url,
+    )
+    .await?;
 
     if !resp.status().is_success() {
         let status = resp.status().as_u16();
@@ -97,13 +74,13 @@ pub async fn poll_task(
         base_url.trim_end_matches('/'),
         path
     );
-    let resp = state
-        .http_client()
-        .get(&url)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .send()
-        .await
-        .map_err(|e| format!("查询任务状态失败: {}", e))?;
+    let client = state.http_client();
+    let resp = send_with_retry(
+        || apply_auth_headers(client.get(&url), &p, &api_key),
+        "gateway:poll_task",
+        &url,
+    )
+    .await?;
 
     if !resp.status().is_success() {
         let status = resp.status().as_u16();
@@ -149,14 +126,16 @@ pub async fn validate_connection(
 
     tracing::info!("validate_connection [{}]: base_url={}, key_len={}, key_preview={}", p, base, key_len, key_preview);
 
+    let client = state.http_client();
+
     // Try /v1/models first
     let models_url = format!("{}/v1/models", base);
-    let models_status = match state
-        .http_client()
-        .get(&models_url)
-        .header("Authorization", format!("Bearer {}", key))
-        .send()
-        .await
+    let models_status = match send_with_retry(
+        || apply_auth_headers(client.get(&models_url), &p, &key),
+        "gateway:validate_models",
+        &models_url,
+    )
+    .await
     {
         Ok(resp) => {
             let st = resp.status().as_u16();
@@ -180,19 +159,22 @@ pub async fn validate_connection(
         "max_tokens": 1,
     });
 
-    let chat_resp = state
-        .http_client()
-        .post(&chat_url)
-        .header("Authorization", format!("Bearer {}", key))
-        .header("Content-Type", "application/json")
-        .json(&chat_body)
-        .send()
-        .await
-        .map_err(|e| {
-            let detail = format_reqwest_error(&e);
-            tracing::error!("validate_connection [{}]: connect failed: {}", p, detail);
-            format!("连接失败: url={}, {}", chat_url, detail)
-        })?;
+    let chat_resp = send_with_retry(
+        || apply_auth_headers(
+            client.post(&chat_url)
+                .header("Content-Type", "application/json")
+                .json(&chat_body),
+            &p,
+            &key,
+        ),
+        "gateway:validate_chat",
+        &chat_url,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("validate_connection [{}]: connect failed: {}", p, e);
+        e
+    })?;
 
     let chat_status = chat_resp.status().as_u16();
     let chat_body_text = chat_resp.text().await.unwrap_or_default();

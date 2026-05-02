@@ -108,62 +108,66 @@ export default function SettingsDialog() {
     if (!visible) return;
 
     (async () => {
-      const [autoSave, exp] = await Promise.all([
-        getSetting("file_auto_save_path"),
-        getSetting("file_export_path"),
-      ]);
-      setAutoSavePath(autoSave || "");
-      setExportPath(exp || "");
+      try {
+        const [autoSave, exp] = await Promise.all([
+          getSetting("file_auto_save_path"),
+          getSetting("file_export_path"),
+        ]);
+        setAutoSavePath(autoSave || "");
+        setExportPath(exp || "");
 
-      const states: PlatformState[] = [];
-      for (const p of PLATFORMS) {
-        const [keysJson, activeId, legacyKey, url, legacyUrl, enabledStr, autoRotateStr] =
-          await Promise.all([
-            getSetting(`${p.id}_api_keys`),
-            getSetting(`${p.id}_active_key_id`),
-            p.id === "comfly"
-              ? getSetting("openai_api_key")
-              : getSetting(`${p.id}_api_key`),
-            getSetting(`${p.id}_base_url`),
-            p.id === "comfly" ? getSetting("openai_base_url") : null,
-            getSetting(`${p.id}_enabled`),
-            getSetting(`${p.id}_auto_rotate`),
-          ]);
+        const states: PlatformState[] = [];
+        for (const p of PLATFORMS) {
+          const [keysJson, activeId, legacyKey, url, legacyUrl, enabledStr, autoRotateStr] =
+            await Promise.all([
+              getSetting(`${p.id}_api_keys`),
+              getSetting(`${p.id}_active_key_id`),
+              p.id === "comfly"
+                ? getSetting("openai_api_key")
+                : getSetting(`${p.id}_api_key`),
+              getSetting(`${p.id}_base_url`),
+              p.id === "comfly" ? getSetting("openai_base_url") : null,
+              getSetting(`${p.id}_enabled`),
+              getSetting(`${p.id}_auto_rotate`),
+            ]);
 
-        let keys: KeyEntry[] = [];
-        let active = activeId ?? "";
+          let keys: KeyEntry[] = [];
+          let active = activeId ?? "";
 
-        if (keysJson) {
-          try {
-            keys = JSON.parse(keysJson);
-          } catch {
-            keys = [];
+          if (keysJson) {
+            try {
+              keys = JSON.parse(keysJson);
+            } catch {
+              keys = [];
+            }
           }
-        }
 
-        if (keys.length === 0 && legacyKey) {
-          const entry: KeyEntry = { id: genId(), name: "默认", key: legacyKey };
-          keys = [entry];
-          active = entry.id;
-        }
+          if (keys.length === 0 && legacyKey) {
+            const entry: KeyEntry = { id: genId(), name: "默认", key: legacyKey };
+            keys = [entry];
+            active = entry.id;
+          }
 
-        states.push({
-          id: p.id,
-          name: p.name,
-          defaultBaseUrl: p.defaultBaseUrl,
-          keys,
-          activeKeyId: active || (keys.length > 0 ? keys[0]!.id : ""),
-          baseUrl: url || legacyUrl || "",
-          enabled: enabledStr !== "false",
-          expanded: false,
-          editingKeyId: null,
-          showKeyIds: new Set(),
-          connStatus: "idle",
-          connError: "",
-          autoRotate: autoRotateStr !== "false",
-        });
+          states.push({
+            id: p.id,
+            name: p.name,
+            defaultBaseUrl: p.defaultBaseUrl,
+            keys,
+            activeKeyId: active || (keys.length > 0 ? keys[0]!.id : ""),
+            baseUrl: url || legacyUrl || "",
+            enabled: enabledStr !== "false",
+            expanded: false,
+            editingKeyId: null,
+            showKeyIds: new Set(),
+            connStatus: "idle",
+            connError: "",
+            autoRotate: autoRotateStr !== "false",
+          });
+        }
+        setPlatforms(states);
+      } catch (err) {
+        console.error("[Settings] failed to load platform config:", err);
       }
-      setPlatforms(states);
     })();
   }, [visible]);
 
@@ -230,11 +234,12 @@ export default function SettingsDialog() {
           if (trimmedUrl) await setSetting("openai_base_url", trimmedUrl);
         }
 
+        const existingExtra = registry.getConfig(p.id)?.extra ?? {};
         registry.setConfig(p.id, {
           id: p.id,
           apiKey: activeKey,
           baseUrl: trimmedUrl || p.defaultBaseUrl,
-          extra: {},
+          extra: existingExtra,
           enabled: p.enabled,
         });
       }
@@ -250,6 +255,14 @@ export default function SettingsDialog() {
         type: "info",
         title: "设置已保存",
         duration: 2000,
+      });
+    } catch (err) {
+      console.error("[Settings] save failed:", err);
+      useUIStore.getState().addToast({
+        type: "error",
+        title: "保存失败",
+        description: err instanceof Error ? err.message : String(err),
+        duration: 4000,
       });
     } finally {
       setSaving(false);

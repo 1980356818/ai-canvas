@@ -142,6 +142,21 @@ pub fn is_retryable_status(status: u16) -> bool {
     status >= 400
 }
 
+/// Apply provider-appropriate auth headers to a request builder.
+/// Anthropic uses `x-api-key`; all others use `Authorization: Bearer`.
+pub fn apply_auth_headers(
+    builder: reqwest::RequestBuilder,
+    provider: &str,
+    api_key: &str,
+) -> reqwest::RequestBuilder {
+    match provider {
+        "anthropic" => builder
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01"),
+        _ => builder.header("Authorization", format!("Bearer {}", api_key)),
+    }
+}
+
 fn default_base_url(provider: &str) -> String {
     match provider {
         "openai" | "comfly" => "https://ai.comfly.chat".to_string(),

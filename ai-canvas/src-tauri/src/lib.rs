@@ -52,7 +52,10 @@ impl AppState {
                 .timeout(std::time::Duration::from_secs(600))
                 .connect_timeout(std::time::Duration::from_secs(120))
                 .tcp_keepalive(std::time::Duration::from_secs(30))
-                .pool_idle_timeout(std::time::Duration::from_secs(60))
+                // 反代/边缘节点常在 ~30s 主动关闭 idle 连接；
+                // 我们把客户端 idle 超时设得短一些，避免拿到一个对端已 RST 的"僵尸连接"复用，
+                // 否则下次请求会以 "unexpected EOF during handshake" / "broken pipe" 报错。
+                .pool_idle_timeout(std::time::Duration::from_secs(15))
                 .pool_max_idle_per_host(4)
                 .tcp_nodelay(true)
                 .build()
@@ -66,7 +69,8 @@ impl AppState {
                 .timeout(std::time::Duration::from_secs(300))
                 .connect_timeout(std::time::Duration::from_secs(120))
                 .tcp_keepalive(std::time::Duration::from_secs(30))
-                .pool_idle_timeout(std::time::Duration::from_secs(60))
+                // 同 http_client：避免复用对端已关闭的连接
+                .pool_idle_timeout(std::time::Duration::from_secs(10))
                 .pool_max_idle_per_host(2)
                 .tcp_nodelay(true)
                 .http1_only()

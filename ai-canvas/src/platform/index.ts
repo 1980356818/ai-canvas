@@ -1,5 +1,5 @@
 export { isTauri } from "./runtime";
-export { lsGet, lsSet, lsRemove, getBrowserApiConfig, buildProxyUrl, getAuthHeaders } from "./storage";
+export { lsGet, lsSet, lsRemove, getBrowserApiConfig, buildProxyUrl, getAuthHeaders, getProviderAuthHeaders, getBrowserFirstKey } from "./storage";
 export { apiLogin, apiRegister, apiRedeem, apiGetUserStatus, getToken, clearAuth } from "./auth.api";
 export type { AuthUser, LoginResult } from "./auth.api";
 
@@ -49,6 +49,7 @@ export {
   hasApiKey,
   invalidateApiKeyCache,
   migrateApiConfig,
+  getProviderFirstKey,
 } from "./settings.api";
 
 export {

@@ -1,6 +1,6 @@
 import type { AiProxyResponse, StreamCallbacks, ModelInfo, TaskInfo } from "@/types";
 import { isTauri, ensureTauriAPIs, getInvoke, getListen } from "./runtime";
-import { buildProxyUrl, getAuthHeaders, lsGet, lsSet } from "./storage";
+import { buildProxyUrl, getProviderAuthHeaders, lsGet, lsSet } from "./storage";
 
 const DEBUG = import.meta.env.DEV;
 
@@ -84,7 +84,7 @@ export async function aiProxy(
   if (keys.length === 0) {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      ...getAuthHeaders(),
+      ...getProviderAuthHeaders(provider),
     };
     const resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
     const text = await resp.text();
@@ -246,10 +246,8 @@ export async function aiProxyStream(
 
     try {
       if (keys.length === 0) {
-        const { apiKey } = (() => {
-          const h = getAuthHeaders();
-          return { apiKey: h.Authorization?.replace("Bearer ", "") ?? "" };
-        })();
+        const h = getProviderAuthHeaders(provider);
+        const apiKey = h.Authorization?.replace("Bearer ", "") ?? "";
         await tryStreamWithKey(apiKey);
         return;
       }
@@ -301,7 +299,7 @@ export async function listModels(provider?: string): Promise<ModelInfo[]> {
   }
 
   const url = buildProxyUrl("/v1/models", provider);
-  const resp = await fetch(url, { headers: getAuthHeaders() });
+  const resp = await fetch(url, { headers: getProviderAuthHeaders(provider) });
   if (!resp.ok) throw new Error(`Failed to list models: ${resp.status}`);
   const data = await resp.json();
   return data.data ?? [];
@@ -362,7 +360,7 @@ export async function pollTask(taskId: string, endpoint?: string, provider?: str
     ? endpoint.replace("{task_id}", taskId)
     : `/v1/tasks/${taskId}`;
   const url = buildProxyUrl(path, provider);
-  const resp = await fetch(url, { headers: getAuthHeaders() });
+  const resp = await fetch(url, { headers: getProviderAuthHeaders(provider) });
   if (!resp.ok) throw new Error(`Failed to poll task: ${resp.status}`);
   const raw = await resp.json();
   return normalizeTaskInfo(raw);
@@ -375,7 +373,7 @@ export async function validateConnection(provider?: string): Promise<boolean> {
   }
 
   const url = buildProxyUrl("/v1/models", provider);
-  const resp = await fetch(url, { headers: getAuthHeaders() });
+  const resp = await fetch(url, { headers: getProviderAuthHeaders(provider) });
   if (!resp.ok)
     throw new Error(`连接失败: HTTP ${resp.status}`);
   return true;

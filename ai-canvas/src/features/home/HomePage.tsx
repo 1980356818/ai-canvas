@@ -291,6 +291,7 @@ function RecentProjects() {
         setAppView("canvas");
         const ui = useUIStore.getState();
         if (!ui.chatPanelVisible) ui.toggleChatPanel();
+        await useChatStore.getState().openProjectChat(project.id);
         void useChatStore.getState().createSession();
       } catch (err) {
         addToast({

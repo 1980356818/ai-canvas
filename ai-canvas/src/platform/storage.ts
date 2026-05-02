@@ -34,8 +34,41 @@ export function buildProxyUrl(endpoint: string, provider?: string): string {
   return prefix + endpoint;
 }
 
-export function getAuthHeaders(): Record<string, string> {
-  const { apiKey } = getBrowserApiConfig();
+interface BrowserKeyEntry {
+  id: string;
+  name: string;
+  key: string;
+}
+
+/**
+ * Resolve the first usable API key for a provider from localStorage.
+ * Checks JSON array (new format) → legacy single key → empty string.
+ */
+export function getBrowserFirstKey(provider: string): string {
+  const json = lsGet<string | null>(`setting_${provider}_api_keys`, null);
+  if (json) {
+    try {
+      const parsed: BrowserKeyEntry[] = JSON.parse(json);
+      const first = parsed.find((k) => k.key.trim());
+      if (first) return first.key.trim();
+    } catch { /* ignore */ }
+  }
+  const legacyPrefix = provider === "comfly" ? "openai" : provider;
+  const legacy = lsGet<string | null>(`setting_${legacyPrefix}_api_key`, null);
+  return legacy?.trim() ?? "";
+}
+
+/**
+ * Build Authorization headers using the first key of the given provider.
+ * Falls back to comfly when no provider is specified.
+ */
+export function getProviderAuthHeaders(provider?: string): Record<string, string> {
+  const apiKey = getBrowserFirstKey(provider ?? "comfly");
   if (!apiKey) return {};
   return { Authorization: `Bearer ${apiKey}` };
+}
+
+/** @deprecated Use getProviderAuthHeaders(provider) instead. */
+export function getAuthHeaders(): Record<string, string> {
+  return getProviderAuthHeaders("comfly");
 }

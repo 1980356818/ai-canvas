@@ -16,8 +16,7 @@ const isImageFile = (f: File) => f.type.startsWith("image/") || IMAGE_EXTENSIONS
 
 export default function ChatPanel() {
   const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);
-  const loadSessions = useChatStore((s) => s.loadSessions);
-  const resetForProject = useChatStore((s) => s.resetForProject);
+  const openProjectChat = useChatStore((s) => s.openProjectChat);
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   const sessions = useChatStore((s) => s.sessions);
@@ -31,13 +30,10 @@ export default function ChatPanel() {
 
   const panelRef = useRef<HTMLElement>(null);
 
-  // 项目切换时清空内存中的会话/消息/草稿，再加载当前项目的会话；
-  // 避免不同项目的聊天内容混在一起（数据库已按 project_id 隔离）
   useEffect(() => {
     if (!currentProjectId) return;
-    resetForProject();
-    loadSessions(currentProjectId);
-  }, [currentProjectId, loadSessions, resetForProject]);
+    openProjectChat(currentProjectId);
+  }, [currentProjectId, openProjectChat]);
 
   useEffect(() => {
     const el = panelRef.current;

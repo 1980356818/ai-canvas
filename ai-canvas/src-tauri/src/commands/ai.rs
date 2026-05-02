@@ -1,8 +1,8 @@
 use crate::AppState;
-use super::config::{read_api_config, read_full_api_config, set_active_key, is_retryable_status};
+use super::config::{read_api_config, read_full_api_config, set_active_key, is_retryable_status, apply_auth_headers};
+use super::http_util::{root_cause_chain, send_with_retry};
 use base64::Engine as _;
 use serde::Serialize;
-use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -11,19 +11,6 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use chrono::Local;
 
 const BASE64_ENGINE: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
-
-fn root_cause_chain(err: &dyn StdError) -> String {
-    let mut chain = Vec::new();
-    let mut current: Option<&dyn StdError> = Some(err);
-    while let Some(e) = current {
-        let msg = e.to_string();
-        if chain.last().map_or(true, |prev: &String| prev != &msg) {
-            chain.push(msg);
-        }
-        current = e.source();
-    }
-    chain.join(" → ")
-}
 
 #[derive(Default)]
 struct InlineLocalStats {
@@ -194,17 +181,11 @@ fn build_auth_request(
     api_key: &str,
     body: &serde_json::Value,
 ) -> reqwest::RequestBuilder {
-    let mut request = client
+    let request = client
         .post(url)
         .header("Content-Type", "application/json")
         .json(body);
-    request = match provider {
-        "anthropic" => request
-            .header("x-api-key", api_key)
-            .header("anthropic-version", "2023-06-01"),
-        _ => request.header("Authorization", format!("Bearer {}", api_key)),
-    };
-    request
+    apply_auth_headers(request, provider, api_key)
 }
 
 #[derive(Serialize)]
@@ -308,32 +289,28 @@ pub async fn ai_proxy(
             provider, key_entry.name, key_preview, i + 1, keys.len()
         );
 
-        let request = build_auth_request(client, &url, &provider, &key_entry.key, &body);
-
         let send_start = Instant::now();
         tracing::info!(
             "[ai_proxy:{}] upstream request sending: url={}, key_index={}/{}",
-            request_id,
-            url,
-            i + 1,
-            keys.len()
+            request_id, url, i + 1, keys.len()
         );
-        let resp = match request.send().await {
-            Ok(r) => {
-                tracing::info!(
-                    "[ai_proxy:{}] upstream headers received: status={}, elapsed_ms={}",
-                    request_id,
-                    r.status().as_u16(),
-                    send_start.elapsed().as_millis()
-                );
-                r
-            }
-            Err(e) => {
-                let root = root_cause_chain(&e);
-                tracing::error!("[ai_proxy:{}] 请求发送失败: url={}, elapsed_ms={}, {}", request_id, url, send_start.elapsed().as_millis(), root);
-                return Err(format!("请求失败: url={}, {}", url, root));
-            }
-        };
+        let log_tag = format!("ai_proxy:{}", request_id);
+        let resp = send_with_retry(
+            || build_auth_request(client, &url, &provider, &key_entry.key, &body),
+            &log_tag,
+            &url,
+        )
+        .await
+        .inspect_err(|e| {
+            tracing::error!(
+                "[ai_proxy:{}] 请求发送失败: url={}, elapsed_ms={}, {}",
+                request_id, url, send_start.elapsed().as_millis(), e
+            );
+        })?;
+        tracing::info!(
+            "[ai_proxy:{}] upstream headers received: status={}, elapsed_ms={}",
+            request_id, resp.status().as_u16(), send_start.elapsed().as_millis()
+        );
 
         let status = resp.status().as_u16();
         let text_start = Instant::now();
@@ -408,35 +385,28 @@ async fn ai_proxy_single(
         return Err(format!("Provider '{}' 的 API 地址未配置", provider));
     }
     let url = format!("{}{}", base_url.trim_end_matches('/'), endpoint);
-    let request = build_auth_request(client, &url, provider, api_key, body);
     let send_start = Instant::now();
     tracing::info!(
         "[ai_proxy:{}] upstream request sending: url={}, single_key=true",
-        request_id,
-        url
+        request_id, url
     );
-    let resp = match request.send().await {
-        Ok(r) => {
-            tracing::info!(
-                "[ai_proxy:{}] upstream headers received: status={}, elapsed_ms={}",
-                request_id,
-                r.status().as_u16(),
-                send_start.elapsed().as_millis()
-            );
-            r
-        }
-        Err(e) => {
-            let root = root_cause_chain(&e);
-            tracing::error!(
-                "[ai_proxy:{}] 请求发送失败: url={}, elapsed_ms={}, {}",
-                request_id,
-                url,
-                send_start.elapsed().as_millis(),
-                root
-            );
-            return Err(format!("请求失败: url={}, {}", url, root));
-        }
-    };
+    let log_tag = format!("ai_proxy:{}", request_id);
+    let resp = send_with_retry(
+        || build_auth_request(client, &url, provider, api_key, body),
+        &log_tag,
+        &url,
+    )
+    .await
+    .inspect_err(|e| {
+        tracing::error!(
+            "[ai_proxy:{}] 请求发送失败: url={}, elapsed_ms={}, {}",
+            request_id, url, send_start.elapsed().as_millis(), e
+        );
+    })?;
+    tracing::info!(
+        "[ai_proxy:{}] upstream headers received: status={}, elapsed_ms={}",
+        request_id, resp.status().as_u16(), send_start.elapsed().as_millis()
+    );
     let status = resp.status().as_u16();
     let text_start = Instant::now();
     let resp_body = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
@@ -610,23 +580,20 @@ async fn do_stream(
     stream_id: &str,
     cancelled: &Arc<AtomicBool>,
 ) -> Result<(), String> {
-    let mut request = client
-        .post(url)
-        .header("Content-Type", "application/json")
-        .header("Accept-Encoding", "identity")
-        .json(body);
-
-    request = match provider {
-        "anthropic" => request
-            .header("x-api-key", api_key)
-            .header("anthropic-version", "2023-06-01"),
-        _ => request.header("Authorization", format!("Bearer {}", api_key)),
-    };
-
-    let resp = request.send().await.map_err(|e| {
-        let root = root_cause_chain(&e);
-        format!("请求失败: url={}, {}", url, root)
-    })?;
+    let resp = send_with_retry(
+        || apply_auth_headers(
+            client
+                .post(url)
+                .header("Content-Type", "application/json")
+                .header("Accept-Encoding", "identity")
+                .json(body),
+            provider,
+            api_key,
+        ),
+        "stream",
+        url,
+    )
+    .await?;
 
     let status = resp.status().as_u16();
     let version = format!("{:?}", resp.version());
@@ -656,8 +623,22 @@ async fn do_stream(
             Ok(Some(c)) => c,
             Ok(None) => break,
             Err(e) => {
-                tracing::error!("[stream] chunk error: {} (status={} version={} ce={} te={})", e, status, version, content_encoding, transfer_encoding);
-                return Err(format!("读取流失败: {}", e));
+                let msg = root_cause_chain(&e);
+                // 部分上游服务器 (含 nginx/cloudflare 反代) 在响应结束时不发送 TLS close_notify，
+                // 严格 TLS 实现会把这种半正常关闭报为错误。如果我们已经收到过完整的 [DONE] 之外的数据，
+                // 把它当作正常结束更符合实际场景，避免误报失败。
+                if msg.contains("close_notify")
+                    || msg.contains("UnexpectedEof")
+                    || msg.contains("connection closed before message completed")
+                {
+                    tracing::warn!(
+                        "[stream] graceful-EOF style error treated as end-of-stream: {} (status={} version={} ce={} te={})",
+                        msg, status, version, content_encoding, transfer_encoding
+                    );
+                    break;
+                }
+                tracing::error!("[stream] chunk error: {} (status={} version={} ce={} te={})", msg, status, version, content_encoding, transfer_encoding);
+                return Err(format!("读取流失败: {}", msg));
             }
         };
 
@@ -888,7 +869,14 @@ pub async fn save_media(
 
         downloaded.ok_or_else(|| format!("下载失败 (重试{}次): {}", max_retries, last_err))?
     } else {
-        std::fs::read(&source).map_err(|e| format!("读取文件失败: {}", e))?
+        // 当 source 是 media/ 开头的相对路径时，解析到 data_dir 而不是当前工作目录。
+        // 否则 std::fs::read 会以 CWD 为基准导致 "系统找不到指定的路径"。
+        let abs = if source.starts_with("media/") || source.starts_with("media\\") {
+            data_dir.join(&source)
+        } else {
+            std::path::PathBuf::from(&source)
+        };
+        std::fs::read(&abs).map_err(|e| format!("读取文件失败: {}", e))?
     };
 
     let dest = media_dir.join(format!("{}.{}", file_id, ext));
