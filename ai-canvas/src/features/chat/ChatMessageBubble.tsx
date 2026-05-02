@@ -19,6 +19,7 @@ import { modelService } from "@/services/models";
 import { IMAGE_SIZE_OPTIONS, getAllowedSizesForModel, coerceToAllowedSize } from "@/shared/constants";
 import type { ModelOption } from "@/providers/types";
 import MarkdownContent from "@/shared/MarkdownContent";
+import ReasoningBlock from "./ReasoningBlock";
 import { cn } from "@/lib/utils";
 
 const isTauri =
@@ -83,6 +84,9 @@ function ContentPartRenderer({
       ) : (
         <MarkdownContent content={part.text} compact />
       );
+    case "reasoning":
+      // 用户消息里不应出现 reasoning，但保险起见兜底返回 null
+      return isUser ? null : <ReasoningBlock text={part.text} />;
     case "image":
       return <ImageBlock url={part.url} prompt={part.prompt} />;
     case "video":

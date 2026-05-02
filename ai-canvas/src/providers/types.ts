@@ -51,7 +51,9 @@ export type UnifiedContentPart =
   | { type: "text"; text: string }
   | { type: "image"; url: string }
   | { type: "video"; url: string }
-  | { type: "file"; name: string; url: string };
+  | { type: "file"; name: string; url: string }
+  // 模型 thinking / reasoning 内容（与 text 严格区分，不回传 API）
+  | { type: "reasoning"; text: string };
 
 export interface UnifiedToolCall {
   id: string;
@@ -63,6 +65,8 @@ export interface UnifiedToolCall {
 
 export type StreamEvent =
   | { type: "text"; text: string }
+  // 思考/推理 delta（独立于 text 的子流；UI 单独渲染）
+  | { type: "reasoning"; text: string }
   | { type: "tool_call_start"; id: string; name: string }
   | { type: "tool_call_delta"; id: string; arguments: string }
   | { type: "tool_call_end"; id: string }

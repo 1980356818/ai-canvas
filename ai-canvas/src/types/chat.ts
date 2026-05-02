@@ -6,7 +6,10 @@ export type ChatContentPart =
   | { type: "video"; url: string; prompt?: string; coverUrl?: string }
   | { type: "loading"; mediaType: "image" | "video" }
   | { type: "image_pending"; prompt: string; suggestedSize?: string }
-  | { type: "video_pending"; prompt: string };
+  | { type: "video_pending"; prompt: string }
+  // 模型的思考/推理过程（如 Gemini Thinking 的 reasoning_content）。
+  // 与 text 严格分开：UI 折叠展示；不回传给下一轮 API；不参与 token 上下文。
+  | { type: "reasoning"; text: string };
 
 export interface ChatHistoryMessage {
   role: "user" | "assistant" | "system";

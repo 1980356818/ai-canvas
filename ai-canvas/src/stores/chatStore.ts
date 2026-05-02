@@ -10,6 +10,7 @@ import {
 } from "@/platform";
 import type { ChatSessionRow, ChatMessageRow, ChatHistoryMessage, ChatContentPart } from "@/types";
 import { generateTitle } from "@/lib/chatService";
+import { CHAT_PANEL_SYSTEM_PROMPT } from "@/lib/systemPrompts";
 import { modelService } from "@/services/models";
 import { providerService } from "@/services/provider.service";
 import { useProviderStore, parseModelRef } from "@/stores/providerStore";
@@ -27,18 +28,17 @@ const CHAT_TOOLS = [
     type: "function" as const,
     function: {
       name: "generate_image",
-      description:
-        "When the user asks to generate, draw, create, or design an image/picture/illustration, call this function.",
+      description: "当用户要求生成、绘制、创作或设计图片、插画时，调用此工具。",
       parameters: {
         type: "object",
         properties: {
           prompt: {
             type: "string",
-            description: "Detailed English prompt for image generation",
+            description: "用于图像生成的详细提示词（必须是英文，模型对英文提示词效果更好）",
           },
           size: {
             type: "string",
-            description: "Image aspect ratio",
+            description: "图像比例",
             enum: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"],
           },
         },
@@ -50,14 +50,13 @@ const CHAT_TOOLS = [
     type: "function" as const,
     function: {
       name: "generate_video",
-      description:
-        "When the user asks to generate, create, or make a video/animation/clip, call this function.",
+      description: "当用户要求生成、制作视频、动画或短片时，调用此工具。",
       parameters: {
         type: "object",
         properties: {
           prompt: {
             type: "string",
-            description: "Detailed English prompt for video generation",
+            description: "用于视频生成的详细提示词（必须是英文，模型对英文提示词效果更好）",
           },
         },
         required: ["prompt"],
@@ -110,7 +109,15 @@ async function historyToUnified(history: ChatHistoryMessage[]): Promise<UnifiedM
   for (const msg of history) {
     const parts: UnifiedContentPart[] = [];
     for (const p of msg.content) {
-      if (p.type === "loading" || p.type === "image_pending" || p.type === "video_pending") continue;
+      // 占位、待生成、模型思考都不发给下一轮
+      if (
+        p.type === "loading" ||
+        p.type === "image_pending" ||
+        p.type === "video_pending" ||
+        p.type === "reasoning"
+      ) {
+        continue;
+      }
       if (p.type === "text") {
         parts.push({ type: "text", text: p.text });
       } else if (p.type === "image") {
@@ -135,6 +142,8 @@ export interface GenerationState {
   generatingStatus: string;
   generatingStartedAt: number;
   streamingText: string;
+  /** 模型思考流（Gemini Thinking 等） — 与 streamingText 严格分离 */
+  streamingReasoning: string;
 }
 
 const DEFAULT_GENERATION: GenerationState = {
@@ -144,6 +153,7 @@ const DEFAULT_GENERATION: GenerationState = {
   generatingStatus: "",
   generatingStartedAt: 0,
   streamingText: "",
+  streamingReasoning: "",
 };
 
 // ── 输入草稿（含未发送的文本与参考图，按会话隔离） ─────────
@@ -203,6 +213,7 @@ interface ChatState {
   generatingStatus: string;
   generatingStartedAt: number;
   streamingText: string;
+  streamingReasoning: string;
 
   chatModel: string;
   imageModel: string;
@@ -272,6 +283,7 @@ function applyDerived<S extends Pick<ChatState, "currentSessionId" | "messagesBy
   generatingStatus: string;
   generatingStartedAt: number;
   streamingText: string;
+  streamingReasoning: string;
 } {
   const sid = next.currentSessionId;
   const msgs = sid ? next.messagesBySession[sid] ?? [] : [];
@@ -284,6 +296,7 @@ function applyDerived<S extends Pick<ChatState, "currentSessionId" | "messagesBy
     generatingStatus: gen.generatingStatus,
     generatingStartedAt: gen.generatingStartedAt,
     streamingText: gen.streamingText,
+    streamingReasoning: gen.streamingReasoning,
   };
 }
 
@@ -305,7 +318,7 @@ function sessionBelongsToCurrentProject(state: ChatState, sessionId: string | nu
 function visibleState(
   state: ChatState,
   currentSessionId: string | null,
-): Pick<ChatState, "currentSessionId" | "messages" | "generating" | "generatingType" | "generatingProgress" | "generatingStatus" | "generatingStartedAt" | "streamingText"> {
+): Pick<ChatState, "currentSessionId" | "messages" | "generating" | "generatingType" | "generatingProgress" | "generatingStatus" | "generatingStartedAt" | "streamingText" | "streamingReasoning"> {
   return {
     currentSessionId,
     ...applyDerived({ ...state, currentSessionId }),
@@ -370,6 +383,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   generatingStatus: "",
   generatingStartedAt: 0,
   streamingText: "",
+  streamingReasoning: "",
 
   chatModel: "",
   imageModel: "",
@@ -622,6 +636,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       generatingStatus: "",
       generatingStartedAt: Date.now(),
       streamingText: "",
+      streamingReasoning: "",
     }));
 
     const userContent: ChatContentPart[] = [];
@@ -670,6 +685,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const { providerId, modelId } = parseModelRef(lockedChatRef);
 
       let fullText = "";
+      let fullReasoning = "";
       const unifiedMessages = await historyToUnified(history);
       const streamResult = await new Promise<{
         textParts: ChatContentPart[];
@@ -693,8 +709,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             providerId,
             {
               model: modelId,
-              systemPrompt:
-                "You are a helpful AI assistant. You can have conversations, and when the user asks you to generate images or videos, use the provided tools. Always respond in the user's language.",
+              systemPrompt: CHAT_PANEL_SYSTEM_PROMPT,
               messages: unifiedMessages,
               tools: CHAT_TOOLS,
               signal: ac.signal,
@@ -710,11 +725,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     streamingText: (s.generationBySession[sid]?.streamingText ?? "") + event.text,
                   }));
                   break;
+                case "reasoning":
+                  fullReasoning += event.text;
+                  set((s) => patchSessionGenerationIfVisible(s, sid, {
+                    streamingReasoning: (s.generationBySession[sid]?.streamingReasoning ?? "") + event.text,
+                  }));
+                  break;
                 case "error":
                   settle(() => reject(new Error(event.message)));
                   break;
                 case "done": {
                   const textParts: ChatContentPart[] = [];
+                  // reasoning 永远放在 text 之前（视觉上"先思考再回答"）
+                  if (fullReasoning) textParts.push({ type: "reasoning", text: fullReasoning });
                   if (fullText) textParts.push({ type: "text", text: fullText });
 
                   const imageJobs: { prompt: string; size?: string }[] = [];
@@ -738,8 +761,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                       });
                     }
                   }
+                  // "无有效内容" 的判定基于用户可见答案（text/工具调用），而非 reasoning。
+                  // 仅有 reasoning 没有 text 也算"模型没真正回答"。
                   if (
-                    textParts.length === 0 &&
+                    !fullText &&
                     imageJobs.length === 0 &&
                     videoJobs.length === 0
                   ) {
@@ -748,7 +773,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                       text: "（模型未返回有效内容，请尝试重新发送或切换模型）",
                     });
                   }
-                  set((s) => patchSessionGenerationIfVisible(s, sid, { streamingText: "" }));
+                  set((s) => patchSessionGenerationIfVisible(s, sid, {
+                    streamingText: "",
+                    streamingReasoning: "",
+                  }));
                   settle(() => resolve({ textParts, imageJobs, videoJobs }));
                   break;
                 }
@@ -791,6 +819,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           generatingStatus: "",
           generatingStartedAt: 0,
           streamingText: "",
+          streamingReasoning: "",
         }));
         await saveChatMessage(messageToRow(assistantMsg));
       } else {
@@ -800,6 +829,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           generatingStatus: "",
           generatingStartedAt: Date.now(),
           streamingText: "",
+          streamingReasoning: "",
         }));
 
         const { providerId: chatProvId, modelId: chatModId } = parseModelRef(lockedChatRef);
@@ -911,6 +941,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           generatingStatus: "",
           generatingStartedAt: 0,
           streamingText: "",
+          streamingReasoning: "",
         });
         return { ...partA, ...partB };
       });
@@ -1149,6 +1180,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       generatingStatus: "",
       generatingStartedAt: 0,
       streamingText: "",
+      streamingReasoning: "",
     }));
   },
 
@@ -1159,7 +1191,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => {
       const partA = patchSessionMessagesIfVisible(s, sid, () => []);
       const merged = { ...s, ...partA } as ChatState;
-      const partB = patchSessionGenerationIfVisible(merged, sid, { streamingText: "" });
+      const partB = patchSessionGenerationIfVisible(merged, sid, {
+        streamingText: "",
+        streamingReasoning: "",
+      });
       return { ...partA, ...partB };
     });
   },

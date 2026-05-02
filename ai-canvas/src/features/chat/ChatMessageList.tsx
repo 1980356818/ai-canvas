@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from "react";
 import { MessageSquare, Loader2, ImageIcon, Video } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
 import ChatMessageBubble from "./ChatMessageBubble";
+import ReasoningBlock from "./ReasoningBlock";
 
 const STATUS_LABELS: Record<string, string> = {
   submitting: "提交任务中",
@@ -33,12 +34,15 @@ export default function ChatMessageList() {
   const generatingStatus = useChatStore((s) => s.generatingStatus);
   const generatingStartedAt = useChatStore((s) => s.generatingStartedAt);
   const streamingText = useChatStore((s) => s.streamingText);
+  const streamingReasoning = useChatStore((s) => s.streamingReasoning);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const isMediaGenerating = generating && !streamingText && (generatingType === "image" || generatingType === "video");
+  const hasAnyStream = !!streamingText || !!streamingReasoning;
+  const isMediaGenerating = generating && !hasAnyStream && (generatingType === "image" || generatingType === "video");
   const hasLoadingPart = isMediaGenerating && messages.some((m) => m.content.some((p) => p.type === "loading"));
   const showMediaCard = isMediaGenerating && !hasLoadingPart;
-  const isThinking = generating && !streamingText && !isMediaGenerating;
+  // 纯"正在思考..."占位：什么流都还没来
+  const isThinking = generating && !hasAnyStream && !isMediaGenerating;
 
   const [elapsed, setElapsed] = useState(0);
 
@@ -61,7 +65,7 @@ export default function ChatMessageList() {
     if (el) {
       el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }
-  }, [messages.length, streamingText, generatingProgress]);
+  }, [messages.length, streamingText, streamingReasoning, generatingProgress]);
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3">
@@ -77,11 +81,22 @@ export default function ChatMessageList() {
         <ChatMessageBubble key={msg.id} message={msg} />
       ))}
 
-      {generating && streamingText && (
+      {generating && (streamingText || streamingReasoning) && (
         <div className="mb-3 flex justify-start">
           <div className="min-w-0 max-w-[85%] overflow-hidden rounded-2xl rounded-tl-sm bg-muted/60 px-3.5 py-2.5 text-sm">
-            <p className="whitespace-pre-wrap">{streamingText}</p>
-            <span className="inline-block h-4 w-1 animate-pulse bg-foreground/60" />
+            {streamingReasoning && (
+              <ReasoningBlock
+                text={streamingReasoning}
+                streaming
+                defaultOpen={!streamingText}
+              />
+            )}
+            {streamingText && (
+              <>
+                <p className="whitespace-pre-wrap">{streamingText}</p>
+                <span className="inline-block h-4 w-1 animate-pulse bg-foreground/60" />
+              </>
+            )}
           </div>
         </div>
       )}

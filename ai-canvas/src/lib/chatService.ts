@@ -1,4 +1,5 @@
 import { aiProxy } from "@/platform";
+import { CHAT_TITLE_SYSTEM_PROMPT } from "@/lib/systemPrompts";
 
 // ── Auto-title generation ───────────────────────────────────
 
@@ -9,11 +10,7 @@ export async function generateTitle(
   const body: Record<string, unknown> = {
     model,
     messages: [
-      {
-        role: "system",
-        content:
-          "Generate a very short title (max 10 Chinese characters or 6 English words) for this conversation. Output ONLY the title, no quotes, no explanation.",
-      },
+      { role: "system", content: CHAT_TITLE_SYSTEM_PROMPT },
       { role: "user", content: firstUserMessage },
     ],
     max_tokens: 30,

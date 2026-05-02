@@ -7,6 +7,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { autoSave } from "@/lib/autoSave";
+import { CHAT_EDITOR_DEFAULT_SYSTEM_PROMPT } from "@/lib/systemPrompts";
 import { hasApiKey } from "@/platform";
 import type { UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 import "@/providers";
@@ -482,7 +483,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     }
 
     const systemPrompt = contextPrefix
-      + (data._systemPrompt || "你是一个有帮助的 AI 助手，请用中文回复。请直接回答用户的问题。");
+      + (data._systemPrompt || CHAT_EDITOR_DEFAULT_SYSTEM_PROMPT);
     const hasMedia = userContent.some((p) => p.type === "image_url");
 
     const unifiedUserContent: UnifiedContentPart[] = hasMedia
@@ -501,7 +502,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       const provider = modelService.resolveProvider(model, data.provider);
       const resp = await provider.chat({
         model,
-        systemPrompt: systemPrompt || "You are a helpful AI assistant.",
+        systemPrompt: systemPrompt || CHAT_EDITOR_DEFAULT_SYSTEM_PROMPT,
         messages: unifiedMessages,
         maxTokens: 4096,
       });

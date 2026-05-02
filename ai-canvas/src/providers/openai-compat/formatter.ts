@@ -40,6 +40,7 @@ export function normalizeIncomingChatRequest(req: ChatRequest): ChatRequest {
         if (p.type === "video") return { type: "video", url: p.url ?? "" };
         if (p.type === "file")
           return { type: "file", name: p.name ?? "file", url: p.path ?? p.url ?? "" };
+        if (p.type === "reasoning") return { type: "reasoning", text: p.text ?? "" };
         return { type: "text", text: "" };
       });
     } else {
@@ -62,10 +63,13 @@ type OpenAIContentPart =
   | { type: "image_url"; image_url: { url: string } };
 
 function formatContentParts(parts: UnifiedContentPart[]): string | OpenAIContentPart[] {
-  if (parts.length === 1 && parts[0]!.type === "text") {
-    return parts[0]!.text;
+  // reasoning 是模型私有思考，不能回传给下一轮 API（也不属于对话上下文）
+  const visible = parts.filter((p) => p.type !== "reasoning");
+  if (visible.length === 0) return "";
+  if (visible.length === 1 && visible[0]!.type === "text") {
+    return visible[0]!.text;
   }
-  return parts.map((p): OpenAIContentPart => {
+  return visible.map((p): OpenAIContentPart => {
     switch (p.type) {
       case "text":
         return { type: "text", text: p.text };
@@ -74,6 +78,9 @@ function formatContentParts(parts: UnifiedContentPart[]): string | OpenAIContent
         return { type: "image_url", image_url: { url: p.url } };
       case "file":
         return { type: "text", text: `[file: ${p.name}]` };
+      case "reasoning":
+        // 已被上面 filter 排除，这里仅为穷尽 switch
+        return { type: "text", text: "" };
     }
   });
 }
@@ -145,10 +152,10 @@ export function parseOpenAIStreamChunk(
       emit({ type: "text", text: delta.content });
     }
 
-    // Gemini thinking models may emit reasoning in a separate field
+    // Gemini thinking 等模型把推理过程放在独立的 reasoning_content 字段。
+    // 不要混进 text 流：reasoning 经常是英文，且与最终答案逻辑分离，必须独立渲染。
     if (typeof delta.reasoning_content === "string" && delta.reasoning_content) {
-      // Treat reasoning as text so the user sees the model's thinking
-      emit({ type: "text", text: delta.reasoning_content });
+      emit({ type: "reasoning", text: delta.reasoning_content });
     }
 
     // Standard OpenAI tool_calls format
