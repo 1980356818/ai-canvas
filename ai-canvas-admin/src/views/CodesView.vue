@@ -79,7 +79,14 @@ onMounted(loadCodes)
       <el-table-column label="有效期至" width="140">
         <template #default="{ row }">{{ formatTime(row.expireAt) }}</template>
       </el-table-column>
-      <el-table-column prop="usedBy" label="使用者" width="70" align="center" />
+      <el-table-column label="使用者" min-width="140">
+        <template #default="{ row }">
+          <span v-if="row.usedBy">
+            <el-tag size="small" type="info">ID:{{ row.usedBy }}</el-tag>
+            {{ row.usedByName || '-' }}
+          </span>
+        </template>
+      </el-table-column>
       <el-table-column label="使用时间" width="140">
         <template #default="{ row }">{{ formatTime(row.usedAt) }}</template>
       </el-table-column>

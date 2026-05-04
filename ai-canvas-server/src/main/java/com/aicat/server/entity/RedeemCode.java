@@ -19,4 +19,7 @@ public class RedeemCode {
     private String remark;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
+
+    @TableField(exist = false)
+    private String usedByName;
 }

@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -112,7 +113,23 @@ public class RedeemService {
         if (status != null && !status.isBlank()) qw.eq(RedeemCode::getStatus, status);
         if (batchNo != null && !batchNo.isBlank()) qw.eq(RedeemCode::getBatchNo, batchNo);
         qw.orderByDesc(RedeemCode::getCreatedAt);
-        return redeemCodeMapper.selectPage(new Page<>(page, size), qw);
+        Page<RedeemCode> result = redeemCodeMapper.selectPage(new Page<>(page, size), qw);
+
+        List<Long> userIds = result.getRecords().stream()
+                .map(RedeemCode::getUsedBy)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (!userIds.isEmpty()) {
+            Map<Long, String> nameMap = userMapper.selectBatchIds(userIds).stream()
+                    .collect(Collectors.toMap(User::getId, User::getUsername));
+            result.getRecords().forEach(rc -> {
+                if (rc.getUsedBy() != null) {
+                    rc.setUsedByName(nameMap.get(rc.getUsedBy()));
+                }
+            });
+        }
+        return result;
     }
 
     public void disableCode(Long id) {
