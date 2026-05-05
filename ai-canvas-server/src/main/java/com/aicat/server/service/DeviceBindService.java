@@ -49,6 +49,9 @@ public class DeviceBindService {
 
     @Transactional
     public void unbindAndRebind(Long userId, String newMachineCode, String deviceInfo, String ip, String operator) {
+        // 悲观锁：防止并发请求绕过月度限制
+        UserDevice existing = userDeviceMapper.selectForUpdate(userId);
+
         if ("user".equals(operator)) {
             int limit = sysConfigService.getInt("unbind_limit_per_month", 1);
             int used = unbindLogMapper.countThisMonth(userId);
@@ -57,7 +60,6 @@ public class DeviceBindService {
             }
         }
 
-        UserDevice existing = getBound(userId);
         String oldCode = existing != null ? existing.getMachineCode() : "";
 
         if (existing != null) {
