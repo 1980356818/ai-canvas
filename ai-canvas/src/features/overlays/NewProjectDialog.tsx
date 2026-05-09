@@ -181,8 +181,16 @@ const TEMPLATE_OPTIONS: {
     gradient: "from-fuchsia-500/10 via-purple-500/5 to-pink-500/10",
   },
   {
+    id: "wf-mirror-selfie-1",
+    name: "对镜自拍一键换装1.0",
+    desc: "模特+服装+场景，AI 生成一张电商对镜自拍图",
+    icon: Smartphone,
+    accent: "text-orange-500",
+    gradient: "from-orange-500/10 via-amber-500/5 to-yellow-500/10",
+  },
+  {
     id: "wf-mirror-selfie",
-    name: "对镜自拍",
+    name: "对镜自拍一键换装2.0",
     desc: "模特+服装+场景，AI 生成电商对镜自拍图",
     icon: Smartphone,
     accent: "text-orange-500",

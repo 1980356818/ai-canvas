@@ -6,6 +6,7 @@ import { formatTime, isExpired } from '@/utils/format'
 import AdjustMemberDialog from '@/components/dialogs/AdjustMemberDialog.vue'
 import ForceUnbindDialog from '@/components/dialogs/ForceUnbindDialog.vue'
 import ResetUserPwdDialog from '@/components/dialogs/ResetUserPwdDialog.vue'
+import EditUserDialog from '@/components/dialogs/EditUserDialog.vue'
 
 const users = ref<{ records: any[]; total: number }>({ records: [], total: 0 })
 const page = ref(1)
@@ -20,6 +21,9 @@ const unbindUser = ref<any>(null)
 
 const resetPwdVisible = ref(false)
 const resetPwdUser = ref<any>(null)
+
+const editVisible = ref(false)
+const editUser = ref<any>(null)
 
 async function loadUsers() {
   loading.value = true
@@ -43,6 +47,11 @@ function openUnbind(row: any) {
 function openResetPwd(row: any) {
   resetPwdUser.value = row
   resetPwdVisible.value = true
+}
+
+function openEdit(row: any) {
+  editUser.value = row
+  editVisible.value = true
 }
 
 async function toggleStatus(row: any) {
@@ -103,8 +112,9 @@ onMounted(loadUsers)
       <el-table-column label="注册时间" width="140">
         <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="300" align="center">
+      <el-table-column label="操作" width="360" align="center">
         <template #default="{ row }">
+          <el-button size="small" @click="openEdit(row)">编辑</el-button>
           <el-button size="small" @click="openAdjust(row)">调整会员</el-button>
           <el-button size="small" type="primary" @click="openResetPwd(row)">改密码</el-button>
           <el-button
@@ -128,6 +138,7 @@ onMounted(loadUsers)
     />
   </div>
 
+  <EditUserDialog v-model="editVisible" :user="editUser" @updated="loadUsers" />
   <AdjustMemberDialog v-model="adjustVisible" :user="adjustUser" @adjusted="loadUsers" />
   <ForceUnbindDialog v-model="unbindVisible" :user="unbindUser" />
   <ResetUserPwdDialog v-model="resetPwdVisible" :user="resetPwdUser" @reset="loadUsers" />

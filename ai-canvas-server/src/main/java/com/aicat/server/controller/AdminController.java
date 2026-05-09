@@ -76,16 +76,23 @@ public class AdminController {
         return Result.ok(null, "密码已重置");
     }
 
+    @PostMapping("/user/edit")
+    public Result<?> editUser(@Valid @RequestBody EditUserReq req, HttpServletRequest request) {
+        Long adminId = (Long) request.getAttribute("userId");
+        String adminName = (String) request.getAttribute("username");
+        String ip = IpUtil.getClientIp(request);
+        adminService.editUser(req.getUserId(), req.getUsername(), req.getEmail(), adminId, adminName, ip);
+        return Result.ok(null, "用户信息已更新");
+    }
+
     @PostMapping("/user/force-unbind")
     public Result<?> forceUnbind(@Valid @RequestBody ForceUnbindReq req, HttpServletRequest request) {
         Long adminId = (Long) request.getAttribute("userId");
         String adminName = (String) request.getAttribute("username");
         String ip = IpUtil.getClientIp(request);
-        deviceBindService.unbindAndRebind(req.getUserId(), req.getNewMachineCode(),
-                req.getDeviceInfo(), ip, "admin");
-        adminService.logOp(adminId, adminName, "force_unbind", "user", req.getUserId(),
-                "newMachineCode=" + req.getNewMachineCode(), ip);
-        return Result.ok(null, "设备已强制解绑并绑定新设备");
+        deviceBindService.adminUnbind(req.getUserId(), ip);
+        adminService.logOp(adminId, adminName, "force_unbind", "user", req.getUserId(), null, ip);
+        return Result.ok(null, "设备已解绑，用户下次登录将自动绑定新设备");
     }
 
     // ========= 兑换码管理 =========
@@ -109,6 +116,17 @@ public class AdminController {
         adminService.logOp(adminId, adminName, "generate_codes", "redeem_code", null,
                 "count=" + req.getCount() + ", days=" + req.getDays(), ip);
         return Result.ok(data);
+    }
+
+    @PutMapping("/redeem-codes/{id}")
+    public Result<?> updateCode(@PathVariable Long id, @Valid @RequestBody UpdateCodeReq req, HttpServletRequest request) {
+        Long adminId = (Long) request.getAttribute("userId");
+        String adminName = (String) request.getAttribute("username");
+        String ip = IpUtil.getClientIp(request);
+        redeemService.updateCode(id, req.getDays(), req.getRemark());
+        adminService.logOp(adminId, adminName, "update_code", "redeem_code", id,
+                "days=" + req.getDays() + ", remark=" + req.getRemark(), ip);
+        return Result.ok(null, "兑换码已更新");
     }
 
     @PostMapping("/redeem-codes/disable/{id}")
@@ -184,8 +202,6 @@ public class AdminController {
 
     @Data static class ForceUnbindReq {
         @NotNull private Long userId;
-        @NotBlank private String newMachineCode;
-        private String deviceInfo;
     }
 
     @Data static class ResetUserPwdReq {
@@ -198,6 +214,17 @@ public class AdminController {
         @NotNull @Min(1) private Integer days;
         private Integer validDays;
         private String remark;
+    }
+
+    @Data static class UpdateCodeReq {
+        @NotNull @Min(1) private Integer days;
+        private String remark;
+    }
+
+    @Data static class EditUserReq {
+        @NotNull private Long userId;
+        @NotBlank @Size(min = 2, max = 32, message = "用户名须2-32位") private String username;
+        private String email;
     }
 
     @Data static class ConfigReq {

@@ -132,6 +132,15 @@ public class RedeemService {
         return result;
     }
 
+    public void updateCode(Long id, Integer days, String remark) {
+        RedeemCode rc = redeemCodeMapper.selectById(id);
+        if (rc == null) throw new BizException(ErrorCode.REDEEM_INVALID);
+        if (!"unused".equals(rc.getStatus())) throw new BizException(ErrorCode.INVALID_PARAM, "只能编辑未使用的兑换码");
+        if (days != null) rc.setDays(days);
+        rc.setRemark(remark);
+        redeemCodeMapper.updateById(rc);
+    }
+
     public void disableCode(Long id) {
         RedeemCode rc = redeemCodeMapper.selectById(id);
         if (rc == null) throw new BizException(ErrorCode.REDEEM_INVALID);

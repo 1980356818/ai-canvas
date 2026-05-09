@@ -117,6 +117,24 @@ public class AdminService {
         logOp(adminId, adminName, "reset_user_password", "user", userId, null, ip);
     }
 
+    public void editUser(Long userId, String username, String email, Long adminId, String adminName, String ip) {
+        User user = userMapper.selectById(userId);
+        if (user == null) throw new BizException(ErrorCode.INVALID_PARAM, "用户不存在");
+
+        if (!user.getUsername().equals(username)) {
+            User existing = userMapper.selectOne(
+                    new LambdaQueryWrapper<User>().eq(User::getUsername, username));
+            if (existing != null) throw new BizException(ErrorCode.INVALID_PARAM, "用户名已被占用");
+        }
+
+        String detail = "username=" + username + ", email=" + email;
+        user.setUsername(username);
+        user.setEmail(email);
+        userMapper.updateById(user);
+
+        logOp(adminId, adminName, "edit_user", "user", userId, detail, ip);
+    }
+
     public void setUserStatus(Long userId, int status, Long adminId, String adminName, String ip) {
         User user = userMapper.selectById(userId);
         if (user == null) throw new BizException(ErrorCode.INVALID_PARAM, "用户不存在");

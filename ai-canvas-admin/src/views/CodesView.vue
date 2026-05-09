@@ -5,6 +5,7 @@ import { adminApi } from '@/api'
 import { formatTime, statusType, statusLabel } from '@/utils/format'
 import GenCodeDialog from '@/components/dialogs/GenCodeDialog.vue'
 import GenResultDialog from '@/components/dialogs/GenResultDialog.vue'
+import EditCodeDialog from '@/components/dialogs/EditCodeDialog.vue'
 
 const codes = ref<{ records: any[]; total: number }>({ records: [], total: 0 })
 const page = ref(1)
@@ -18,6 +19,14 @@ const genResult = ref<{ count: number; batchNo: string; codes: string[] }>({
   batchNo: '',
   codes: [],
 })
+
+const editVisible = ref(false)
+const editCode = ref<any>(null)
+
+function openEdit(row: any) {
+  editCode.value = row
+  editVisible.value = true
+}
 
 async function loadCodes() {
   loading.value = true
@@ -91,16 +100,12 @@ onMounted(loadCodes)
         <template #default="{ row }">{{ formatTime(row.usedAt) }}</template>
       </el-table-column>
       <el-table-column prop="remark" label="备注" min-width="100" show-overflow-tooltip />
-      <el-table-column label="操作" width="80" align="center">
+      <el-table-column label="操作" width="140" align="center">
         <template #default="{ row }">
-          <el-button
-            v-if="row.status === 'unused'"
-            size="small"
-            type="danger"
-            @click="disableCode(row)"
-          >
-            禁用
-          </el-button>
+          <template v-if="row.status === 'unused'">
+            <el-button size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="disableCode(row)">禁用</el-button>
+          </template>
         </template>
       </el-table-column>
     </el-table>
@@ -116,4 +121,5 @@ onMounted(loadCodes)
 
   <GenCodeDialog v-model="genVisible" @generated="onGenerated" />
   <GenResultDialog v-model="genResultVisible" :result="genResult" />
+  <EditCodeDialog v-model="editVisible" :code="editCode" @updated="loadCodes" />
 </template>

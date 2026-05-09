@@ -82,10 +82,10 @@ export const adminApi = {
     })
   },
 
-  forceUnbind(userId: number, newMachineCode: string, deviceInfo: string) {
+  forceUnbind(userId: number) {
     return api('/admin/user/force-unbind', {
       method: 'POST',
-      body: JSON.stringify({ userId, newMachineCode, deviceInfo }),
+      body: JSON.stringify({ userId }),
     })
   },
 
@@ -102,8 +102,22 @@ export const adminApi = {
     })
   },
 
+  updateCode(id: number, data: { days: number; remark: string }) {
+    return api(`/admin/redeem-codes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
   disableCode(id: number) {
     return api(`/admin/redeem-codes/disable/${id}`, { method: 'POST' })
+  },
+
+  editUser(data: { userId: number; username: string; email: string }) {
+    return api('/admin/user/edit', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
   },
 
   getConfig() {

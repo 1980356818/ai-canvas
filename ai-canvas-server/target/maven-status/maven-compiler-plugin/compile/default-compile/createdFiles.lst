@@ -4,6 +4,7 @@ com\aicat\server\controller\AuthController$LoginReq.class
 com\aicat\server\controller\UserController$ChangePasswordReq.class
 com\aicat\server\mapper\RedeemLogMapper.class
 com\aicat\server\config\MyBatisPlusConfig$1.class
+com\aicat\server\controller\AdminController$UpdateCodeReq.class
 com\aicat\server\service\SysConfigService.class
 com\aicat\server\controller\AuthController.class
 com\aicat\server\mapper\AdminMapper.class
@@ -28,6 +29,7 @@ com\aicat\server\controller\UserController.class
 com\aicat\server\controller\AuthController$ResetPasswordReq.class
 com\aicat\server\controller\AdminController$ResetUserPwdReq.class
 com\aicat\server\entity\SysConfig.class
+com\aicat\server\controller\AdminController$EditUserReq.class
 com\aicat\server\controller\UserController$UnbindReq.class
 com\aicat\server\controller\AdminController$ForceUnbindReq.class
 com\aicat\server\common\GlobalExceptionHandler.class

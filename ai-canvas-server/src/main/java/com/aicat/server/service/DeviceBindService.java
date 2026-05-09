@@ -48,6 +48,24 @@ public class DeviceBindService {
     }
 
     @Transactional
+    public void adminUnbind(Long userId, String ip) {
+        UserDevice existing = userDeviceMapper.selectForUpdate(userId);
+        if (existing == null) {
+            throw new BizException(ErrorCode.INVALID_PARAM, "该用户没有绑定设备");
+        }
+        String oldCode = existing.getMachineCode();
+        userDeviceMapper.deleteById(existing.getId());
+
+        UnbindLog log = new UnbindLog();
+        log.setUserId(userId);
+        log.setOldMachineCode(oldCode);
+        log.setNewMachineCode("");
+        log.setIp(ip);
+        log.setOperator("admin");
+        unbindLogMapper.insert(log);
+    }
+
+    @Transactional
     public void unbindAndRebind(Long userId, String newMachineCode, String deviceInfo, String ip, String operator) {
         // 悲观锁：防止并发请求绕过月度限制
         UserDevice existing = userDeviceMapper.selectForUpdate(userId);

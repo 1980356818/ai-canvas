@@ -52,6 +52,7 @@ import coverMultimodalFusion from "@/assets/templates/covers/multimodal-fusion.j
 import coverMultimodalFusion6 from "@/assets/templates/covers/multimodal-fusion-6.jpg";
 import coverStudioLook from "@/assets/templates/covers/studio-look.jpg";
 import coverMirrorSelfie from "@/assets/templates/covers/mirror-selfie.jpg";
+import coverMirrorSelfie1 from "@/assets/templates/covers/mirror-selfie-1.jpg";
 
 // ── card sizes derived from actual template-image pixel ratios ──
 const sz = (w: number, h: number) => sizeFromRatio(w / h);
@@ -394,6 +395,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
         "Technical Constraints:",
         "Maintain consistent lighting across the blended features.",
         "Output in 4k resolution, raw photography style.",
+        "",
+        "A 2x2 grid character sheet of reference image, white background. The grid shows the same character from 4 different camera angles: 1. Front view, 2. Left Profile view, 3. Right Three-Quarter view, 4. Low angle looking up. Headshot framing. Consistent facial features",
       ].join("\n");
 
       return [
@@ -896,8 +899,89 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     ],
   },
   {
+    id: "wf-mirror-selfie-1",
+    name: "对镜自拍一键换装1.0",
+    description:
+      "上传模特、服装与场景参考图，AI 生成一张电商对镜自拍穿搭图",
+    icon: "Smartphone",
+    category: "composite",
+    coverImage: coverMirrorSelfie1,
+    cards: (() => {
+      const GAP = 60;
+      const COL_H = PORTRAIT.height * 3 + GAP * 2;
+      const CHAT_W = CARD_DEFAULTS.ai_chat.width;
+      const CHAT_H = CARD_DEFAULTS.ai_chat.height;
+      const CHAT_X = PORTRAIT.width + GAP + 20;
+      const RESULT_X = CHAT_X + CHAT_W + GAP + 20;
+
+      const selfiePrompt = [
+        "把图1、图2、图3这三张图组合成一张电商对镜自拍图。",
+        "",
+        "人物保持图1的五官长相，穿上图2的服装，背景换成图3的场景。人物正对镜子，一手举手机自拍，手机挡住脸部，展示全身穿搭。光线和色调参考图3。人物脸部要有明显的真实质感，不要磨皮，写实风格，高质量电商图片。",
+        "",
+        "最终生成4个提示词方案，分别为一张全身正面，一张全身侧面，一张半身侧面，一张半身正面，要求人物状态自然，悠闲。不要有任何的废话。",
+      ].join("\n");
+
+      return [
+        {
+          type: "ai_image" as const,
+          title: "模特图（图1）",
+          relativeX: 0,
+          relativeY: 0,
+          ...PORTRAIT,
+          data: { content: "", size: "3:4", imageUrl: mirrorSelfiePerson },
+        },
+        {
+          type: "ai_image" as const,
+          title: "服装图（图2）",
+          relativeX: 0,
+          relativeY: PORTRAIT.height + GAP,
+          ...I_624x1690,
+          data: { content: "", size: "3:4", imageUrl: mirrorSelfieGarment },
+        },
+        {
+          type: "ai_image" as const,
+          title: "场景图（图3）",
+          relativeX: 0,
+          relativeY: (PORTRAIT.height + GAP) * 2,
+          ...PORTRAIT,
+          data: { content: "", size: "3:4", imageUrl: mirrorSelfieScene },
+        },
+        {
+          type: "ai_chat" as const,
+          title: "对镜自拍提示词",
+          relativeX: CHAT_X,
+          relativeY: (COL_H - CHAT_H) / 2,
+          width: CHAT_W,
+          height: CHAT_H,
+          data: {
+            content: selfiePrompt,
+            result: "",
+          },
+        },
+        {
+          type: "ai_image" as const,
+          title: "效果图",
+          relativeX: RESULT_X,
+          relativeY: (COL_H - PORTRAIT.height) / 2,
+          ...PORTRAIT,
+          data: { content: "", size: "3:4", imageUrl: mirrorSelfieResult1 },
+        },
+      ];
+    })(),
+    connections: [
+      { sourceIndex: 0, targetIndex: 3 },
+      { sourceIndex: 1, targetIndex: 3 },
+      { sourceIndex: 2, targetIndex: 3 },
+      { sourceIndex: 0, targetIndex: 4 },
+      { sourceIndex: 1, targetIndex: 4 },
+      { sourceIndex: 2, targetIndex: 4 },
+      { sourceIndex: 3, targetIndex: 4 },
+    ],
+  },
+  {
     id: "wf-mirror-selfie",
-    name: "对镜自拍",
+    name: "对镜自拍一键换装2.0",
     description:
       "上传模特、服装与场景参考图，AI 生成电商对镜自拍穿搭图",
     icon: "Smartphone",
