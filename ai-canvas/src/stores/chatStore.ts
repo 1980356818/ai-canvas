@@ -849,38 +849,59 @@ export const useChatStore = create<ChatState>((set, get) => ({
             )
           : undefined;
 
-        for (let i = 0; i < streamResult.imageJobs.length; i++) {
-          const job = streamResult.imageJobs[i]!;
-          const partIdx = imageLoadingIndices[i]!;
-          const finalSize = coerceToAllowedSize(job.size || "1:1", allowedSizes);
-          try {
-            const result = await providerService.generateImage(imgProvId, {
-              prompt: job.prompt,
-              model: imgModId,
-              size: finalSize,
-              referenceImages: refImages && refImages.length > 0 ? refImages : undefined,
-              onProgress: (p) =>
-                set((s) => patchSessionGenerationIfVisible(s, sid, {
-                  generatingProgress: p.percent,
-                  generatingStatus: p.label,
-                })),
-              signal: ac.signal,
-            });
-            const savedUrl = await persistGeneratedMedia(result.url, job.prompt, lockedPid);
-            set((s) => patchSessionMessagesIfVisible(s, sid, (prev) =>
-              prev.map((m) => {
-                if (m.id !== assistantId) return m;
-                const newContent = [...m.content];
-                newContent[partIdx] = {
-                  type: "image",
-                  url: savedUrl,
-                  prompt: job.prompt,
-                };
-                return { ...m, content: newContent };
-              }),
-            ));
-          } catch (e) {
-            const errorText = e instanceof Error ? e.message : String(e);
+        const jobCount = streamResult.imageJobs.length;
+        const perProgress = new Array<number>(jobCount).fill(0);
+
+        const syncChatProgress = () => {
+          const avg = perProgress.reduce((a, b) => a + b, 0) / jobCount;
+          const doneCount = perProgress.filter((p) => p >= 100).length;
+          set((s) => patchSessionGenerationIfVisible(s, sid, {
+            generatingProgress: Math.round(avg),
+            generatingStatus: `批量生成中 (${doneCount}/${jobCount} 完成)`,
+          }));
+        };
+
+        const settled = await Promise.allSettled(
+          streamResult.imageJobs.map((job, i) => {
+            const partIdx = imageLoadingIndices[i]!;
+            const finalSize = coerceToAllowedSize(job.size || "1:1", allowedSizes);
+            return (async () => {
+              const result = await providerService.generateImage(imgProvId, {
+                prompt: job.prompt,
+                model: imgModId,
+                size: finalSize,
+                referenceImages: refImages && refImages.length > 0 ? refImages : undefined,
+                projectId: lockedPid,
+                onProgress: (p) => {
+                  perProgress[i] = p.percent;
+                  syncChatProgress();
+                },
+                signal: ac.signal,
+              });
+              perProgress[i] = 100;
+              syncChatProgress();
+              const savedUrl = await persistGeneratedMedia(result.url, job.prompt, lockedPid);
+              set((s) => patchSessionMessagesIfVisible(s, sid, (prev) =>
+                prev.map((m) => {
+                  if (m.id !== assistantId) return m;
+                  const newContent = [...m.content];
+                  newContent[partIdx] = {
+                    type: "image",
+                    url: savedUrl,
+                    prompt: job.prompt,
+                  };
+                  return { ...m, content: newContent };
+                }),
+              ));
+            })();
+          }),
+        );
+
+        for (let i = 0; i < settled.length; i++) {
+          const r = settled[i]!;
+          if (r.status === "rejected") {
+            const partIdx = imageLoadingIndices[i]!;
+            const errorText = r.reason instanceof Error ? r.reason.message : String(r.reason);
             set((s) => patchSessionMessagesIfVisible(s, sid, (prev) =>
               prev.map((m) => {
                 if (m.id !== assistantId) return m;
@@ -985,6 +1006,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         prompt,
         model: modelId,
         size: size || undefined,
+        projectId: lockedPid,
         onProgress: (p) =>
           set((s) => patchSessionGenerationIfVisible(s, sid, {
             generatingProgress: p.percent,
@@ -1082,6 +1104,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const result = await providerService.generateVideo(providerId, {
         prompt,
         model: modelId,
+        projectId: lockedPid,
         onProgress: (p) =>
           set((s) => patchSessionGenerationIfVisible(s, sid, {
             generatingProgress: p.percent,

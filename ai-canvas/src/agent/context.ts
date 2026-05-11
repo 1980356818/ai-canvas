@@ -137,9 +137,13 @@ export function createAgentContext(
         return provider.chat(request as Parameters<typeof provider.chat>[0]);
       }
       if (capability === "image_gen" && provider.generateImage) {
-        return provider.generateImage(
-          request as Parameters<typeof provider.generateImage>[0],
-        );
+        // 强制把 agent 上下文的 projectId 注入请求，确保异步保存阶段写入正确项目目录。
+        const imageReq = request as Parameters<typeof provider.generateImage>[0];
+        return provider.generateImage({ ...imageReq, projectId });
+      }
+      if (capability === "video_gen" && provider.generateVideo) {
+        const videoReq = request as Parameters<typeof provider.generateVideo>[0];
+        return provider.generateVideo({ ...videoReq, projectId });
       }
       throw new Error(`Unsupported capability dispatch: ${capability}`);
     },

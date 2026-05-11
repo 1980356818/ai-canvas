@@ -415,13 +415,13 @@ export function CropDialog() {
     if (cropping || !imageUrl || !cardId) return;
     setCropping(true);
     try {
+      const sourceCard = useCardStore.getState().getCard(cardId);
+      const projectId = sourceCard?.projectId;
+      if (!projectId) return;
+
       const { dataUrl, cropW, cropH } = await cropImageRegion(
         imageUrl, rect.x, rect.y, rect.w, rect.h,
       );
-      const projectId = useProjectStore.getState().currentProjectId;
-      if (!projectId) return;
-
-      const sourceCard = useCardStore.getState().getCard(cardId);
       const srcTitle = (sourceCard?.data as Record<string, unknown>)?.content as string || "";
       const cropTitle = srcTitle ? `${srcTitle}_裁剪` : "裁剪图片";
       const { localPath } = await persistImage(dataUrl, cropTitle, projectId);

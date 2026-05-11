@@ -40,7 +40,7 @@ export default function RedeemWindow() {
 
   if (!restricted && success) {
     return (
-      <div className="dark relative flex h-screen w-screen items-center justify-center bg-[oklch(0.10_0.035_270)] text-white">
+      <div className="dark relative flex h-screen w-screen items-center justify-center bg-[#16131e] text-white">
         <div data-tauri-drag-region className="absolute inset-x-0 top-0 z-10 h-9" />
         <div className="absolute right-0 top-0 z-20 flex">
           <button onClick={() => appWindow?.minimize()} className="flex h-8 w-10 items-center justify-center text-white/50 transition-colors hover:bg-white/10 hover:text-white/80"><Minus className="h-3.5 w-3.5" /></button>
@@ -67,7 +67,7 @@ export default function RedeemWindow() {
   }
 
   return (
-    <div className="dark relative flex h-screen w-screen items-center justify-center bg-[oklch(0.10_0.035_270)] text-white">
+    <div className="dark relative flex h-screen w-screen items-center justify-center bg-[#16131e] text-white">
       {/* Ambient glow */}
       <div className="redeem-ambient pointer-events-none absolute inset-0 overflow-hidden" />
 
@@ -88,7 +88,7 @@ export default function RedeemWindow() {
         {/* Header */}
         <div className="relative mb-7 flex flex-col items-center gap-3">
           <div className="redeem-icon-ring flex h-14 w-14 items-center justify-center rounded-full">
-            <KeyRound className="h-6 w-6 text-[oklch(0.75_0.18_275)]" />
+            <KeyRound className="h-6 w-6 text-[#c49bea]" />
           </div>
           <h1 className="text-2xl font-bold">
             <span className="text-login-hero">激活会员</span>
@@ -126,7 +126,7 @@ export default function RedeemWindow() {
           <div>
             <label className="mb-1.5 block text-sm font-medium text-white/60">
               <span className="flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-[oklch(0.65_0.18_275)]" />
+                <Sparkles className="h-3.5 w-3.5 text-[#9b6fd0]" />
                 激活码
               </span>
             </label>
@@ -138,7 +138,7 @@ export default function RedeemWindow() {
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 placeholder="请输入激活码"
                 autoFocus
-                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.06] py-2.5 pl-10 pr-3 font-mono text-sm tracking-[0.2em] text-white/90 outline-none placeholder:text-white/20 transition-colors focus-visible:border-[oklch(0.45_0.12_275)] focus-visible:ring-2 focus-visible:ring-[oklch(0.50_0.18_275)]"
+                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.06] py-2.5 pl-10 pr-3 font-mono text-sm tracking-[0.2em] text-white/90 outline-none placeholder:text-white/20 transition-colors focus-visible:border-[#5a3888] focus-visible:ring-2 focus-visible:ring-[#6d42b0]"
               />
             </div>
           </div>

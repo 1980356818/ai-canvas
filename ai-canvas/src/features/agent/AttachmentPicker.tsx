@@ -1,7 +1,6 @@
 import { useCallback, useRef } from "react";
 import { Paperclip, X, ImageIcon } from "lucide-react";
 import type { ContentPart } from "@/agent/types";
-import { useProjectStore } from "@/stores/projectStore";
 import { persistImage, getDisplayUrl } from "@/lib/media";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
 
@@ -13,12 +12,15 @@ interface AttachmentPickerProps {
   attachments: ContentPart[];
   onAdd: (part: ContentPart) => void;
   onRemove: (index: number) => void;
+  /** 附件归属的项目 ID；由父组件传入，避免该组件直接依赖全局 store。 */
+  projectId?: string;
 }
 
 export default function AttachmentPicker({
   attachments,
   onAdd,
   onRemove,
+  projectId,
 }: AttachmentPickerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -40,8 +42,7 @@ export default function AttachmentPicker({
         const filePath =
           typeof selected === "string" ? selected : (selected as { path: string }).path;
 
-        const pid = useProjectStore.getState().currentProjectId ?? undefined;
-        const { localPath: relativePath } = await persistImage(filePath, undefined, pid);
+        const { localPath: relativePath } = await persistImage(filePath, undefined, projectId);
         onAdd({ type: "image", url: relativePath, mimeType: "image/png" });
       } catch (err) {
         console.error("Failed to pick file:", err);
@@ -49,7 +50,7 @@ export default function AttachmentPicker({
     } else {
       fileInputRef.current?.click();
     }
-  }, [onAdd]);
+  }, [onAdd, projectId]);
 
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,8 +62,7 @@ export default function AttachmentPicker({
         reader.onload = () => resolve(reader.result as string);
         reader.readAsDataURL(file);
       });
-      const pid = useProjectStore.getState().currentProjectId ?? undefined;
-      const { localPath: relativePath } = await persistImage(dataUrl, undefined, pid);
+      const { localPath: relativePath } = await persistImage(dataUrl, undefined, projectId);
       onAdd({
         type: "image",
         url: relativePath,
@@ -70,7 +70,7 @@ export default function AttachmentPicker({
       });
       e.target.value = "";
     },
-    [onAdd],
+    [onAdd, projectId],
   );
 
   const imageAttachments = attachments.filter((a) => a.type === "image");

@@ -276,14 +276,6 @@ export default memo(
           cy: card.y,
         };
 
-        const isEditingThis =
-          useCanvasStore.getState().editingCardId === card.id;
-        const editorEl = isEditingThis
-          ? (document.querySelector(
-              "[data-floating-editor]",
-            ) as HTMLElement | null)
-          : null;
-
         const thisHasImage = cardHasImage(card);
         let lastHoveredSlot: Element | null = null;
 
@@ -360,11 +352,6 @@ export default memo(
           const screenDy = ev.clientY - dragStart.current.my;
           if (Math.abs(screenDx) > 5 || Math.abs(screenDy) > 5) didDrag.current = true;
           el.style.transform = `translate(${dx}px, ${dy}px)`;
-          if (editorEl) {
-            const sx = dx * zoom;
-            const sy = dy * zoom;
-            editorEl.style.transform = `translate(${sx}px, ${sy}px) scale(${zoom})`;
-          }
 
           if (isGroupDrag) {
             const offsets = new Map<string, { dx: number; dy: number }>();
@@ -422,7 +409,6 @@ export default memo(
           el.style.transform = "";
           el.style.willChange = "";
           el.style.cursor = "";
-          if (editorEl) editorEl.style.transform = `scale(${zoom})`;
           el.removeEventListener("pointermove", onMove);
           el.removeEventListener("pointerup", onUp);
           el.removeEventListener("lostpointercapture", onUp);

@@ -21,7 +21,6 @@ import {
   type RefImageEntry,
 } from "@/config/model-ref-images";
 import { useConnectionStore } from "@/stores/connectionStore";
-import { useProjectStore } from "@/stores/projectStore";
 import { disconnectCardPairAndCleanup } from "@/lib/referenceConsistency";
 import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize, getAllowedSizesForModel, coerceToAllowedSize } from "@/shared/constants";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
@@ -242,18 +241,15 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       if (entry.sourceCardId) {
         const connStore = useConnectionStore.getState();
         if (!connStore.hasConnection(entry.sourceCardId, card.id)) {
-          const projectId = useProjectStore.getState().currentProjectId;
-          if (projectId) {
-            const conn: Connection = {
-              id: crypto.randomUUID(),
-              projectId,
-              sourceCardId: entry.sourceCardId,
-              targetCardId: card.id,
-              createdAt: new Date().toISOString(),
-            };
-            connStore.addConnection(conn);
-            autoSave.markDirty();
-          }
+          const conn: Connection = {
+            id: crypto.randomUUID(),
+            projectId: card.projectId,
+            sourceCardId: entry.sourceCardId,
+            targetCardId: card.id,
+            createdAt: new Date().toISOString(),
+          };
+          connStore.addConnection(conn);
+          autoSave.markDirty();
         }
       }
     },
@@ -472,6 +468,8 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         : undefined;
 
       const count = data.batchSize ?? 1;
+      // 把卡片自身的 projectId 作为本次任务的归属，整个异步链都用这个快照。
+      const ownerProjectId = card.projectId;
       let results: ImageResult[];
 
       if (count === 1) {
@@ -483,6 +481,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           model: resolvedModel,
           quality: isEnhancer ? undefined : "standard",
           referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+          projectId: ownerProjectId,
           onProgress: (p) => {
             logElapsed("generateImage progress", { percent: p.percent, phase: p.phase, label: p.label });
             setCardProgress(card.id, { percent: p.percent, label: p.label });
@@ -504,43 +503,44 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           const doneCount = perStatus.filter((s) => s === "done").length;
           setCardProgress(card.id, {
             percent: Math.round(avg),
-            label: `并行生成中 (${doneCount}/${count} 完成)`,
+            label: `批量生成中 (${doneCount}/${count} 完成)`,
             subs: perProgress.map((p, i) => ({ percent: p, status: perStatus[i]! })),
           });
         };
 
         console.log(`[MediaEditor] 并行启动 ${count} 张生成`);
+        perStatus.fill("running");
         syncProgress();
 
         const settled = await Promise.allSettled(
-          Array.from({ length: count }, (_, i) => {
-            perStatus[i] = "running";
-            return provider.generateImage!({
+          Array.from({ length: count }, (_, i) =>
+            provider.generateImage!({
               prompt: prompt || undefined,
               size: isEnhancer ? undefined : currentSize,
               resolution: supportsResolution ? currentResolution : undefined,
               model: resolvedModel,
               quality: isEnhancer ? undefined : "standard",
               referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+              projectId: ownerProjectId,
               onProgress: (p) => {
                 logElapsed("generateImage progress", { index: i, percent: p.percent, phase: p.phase, label: p.label });
                 perProgress[i] = p.percent;
                 syncProgress();
               },
-            });
-          }),
+            }),
+          ),
         );
 
         results = [];
         for (let i = 0; i < settled.length; i++) {
-          const s = settled[i]!;
-          if (s.status === "fulfilled") {
+          const r = settled[i]!;
+          if (r.status === "fulfilled") {
             perStatus[i] = "done";
             perProgress[i] = 100;
-            results.push({ url: s.value.url, revisedPrompt: s.value.revisedPrompt });
+            results.push({ url: r.value.url, revisedPrompt: r.value.revisedPrompt });
           } else {
             perStatus[i] = "error";
-            console.warn(`[MediaEditor] 第 ${i + 1}/${count} 张生成失败:`, s.reason);
+            console.warn(`[MediaEditor] 第 ${i + 1}/${count} 张生成失败:`, r.reason);
           }
         }
         syncProgress();
@@ -565,10 +565,9 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         (r) => r.url.startsWith("http://") || r.url.startsWith("https://"),
       );
       if (hasRemote) {
-        const pid = useProjectStore.getState().currentProjectId ?? undefined;
         for (let i = 0; i < results.length; i++) {
           if (results[i]!.url.startsWith("http")) {
-            scheduleBackgroundSave(card.id, results[i]!.url, i === 0 ? "imageUrl" : undefined, pid);
+            scheduleBackgroundSave(card.id, results[i]!.url, i === 0 ? "imageUrl" : undefined, ownerProjectId);
           }
         }
         useUIStore.getState().addToast({

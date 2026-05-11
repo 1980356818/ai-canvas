@@ -5,7 +5,6 @@ import type { CanvasCard, Connection } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore } from "@/stores/connectionStore";
-import { useProjectStore } from "@/stores/projectStore";
 import { autoSave } from "@/lib/autoSave";
 import { CHAT_EDITOR_DEFAULT_SYSTEM_PROMPT } from "@/lib/systemPrompts";
 import { hasApiKey } from "@/platform";
@@ -145,7 +144,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
   const addDirectMedia = useCallback(
     async (src: string, kind: "image" | "video") => {
       if (generating) return;
-      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const pid = card.projectId;
       try {
         const isLocal = !!src && !src.startsWith("data:") && !src.startsWith("http") && !src.startsWith("blob:");
         let url: string;
@@ -167,13 +166,13 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         console.error(`Failed to add ${kind}:`, err);
       }
     },
-    [card.id, data, directMedia, generating, updateCard],
+    [card.id, card.projectId, data, directMedia, generating, updateCard],
   );
 
   const addFilesAsMedia = useCallback(
     async (files: File[]) => {
       if (generating) return;
-      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const pid = card.projectId;
       const newMedia = [...directMedia];
       const newVideos = [...(data.refVideos ?? [])];
       let changed = false;
@@ -206,7 +205,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         autoSave.markDirty(card.id);
       }
     },
-    [card.id, data, directMedia, generating, updateCard],
+    [card.id, card.projectId, data, directMedia, generating, updateCard],
   );
 
   const removeDirectMedia = useCallback(
@@ -282,18 +281,15 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       if (entry.sourceCardId) {
         const connStore = useConnectionStore.getState();
         if (!connStore.hasConnection(entry.sourceCardId, card.id)) {
-          const projectId = useProjectStore.getState().currentProjectId;
-          if (projectId) {
-            const conn: Connection = {
-              id: crypto.randomUUID(),
-              projectId,
-              sourceCardId: entry.sourceCardId,
-              targetCardId: card.id,
-              createdAt: new Date().toISOString(),
-            };
-            connStore.addConnection(conn);
-            autoSave.markDirty();
-          }
+          const conn: Connection = {
+            id: crypto.randomUUID(),
+            projectId: card.projectId,
+            sourceCardId: entry.sourceCardId,
+            targetCardId: card.id,
+            createdAt: new Date().toISOString(),
+          };
+          connStore.addConnection(conn);
+          autoSave.markDirty();
         }
       }
     },

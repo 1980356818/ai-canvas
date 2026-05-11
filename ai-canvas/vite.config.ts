@@ -29,6 +29,15 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
   plugins: [react(), tailwindcss()],
+  css: {
+    transformer: "lightningcss",
+    lightningcss: {
+      // Chrome 99 supports @layer (required by Tailwind v4);
+      // setting this target makes LightningCSS convert oklch() → rgb()
+      // so the app renders correctly on older WebView2 runtimes.
+      targets: { chrome: 99 << 16 },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

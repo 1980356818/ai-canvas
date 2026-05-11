@@ -10,7 +10,6 @@ import { throwIfError } from "../errors";
 import { SEEDANCE_MODELS, resolveModel } from "./models";
 import { aiProxy, saveMedia } from "@/platform";
 import { waitForTask } from "@/services/tasks";
-import { useProjectStore } from "@/stores/projectStore";
 import type { ModelInfo } from "@/types";
 
 const SEEDANCE_ENDPOINT = "/seedance/v3/contents/generations/tasks";
@@ -118,7 +117,7 @@ export class SeedanceProvider implements AIProvider {
     if (!result.resultUrl) throw new Error("视频生成完成但未返回结果地址");
 
     emit?.({ percent: 92, phase: "saving", label: "正在保存视频…" });
-    const pid = useProjectStore.getState().currentProjectId ?? undefined;
+    const pid = req.projectId;
     try {
       const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
       emit?.({ percent: 100, phase: "saving", label: "完成" });

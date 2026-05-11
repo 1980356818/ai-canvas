@@ -14,7 +14,6 @@ import {
   type ChatInputMedia,
 } from "@/stores/chatStore";
 import { useProviderStore, parseModelRef } from "@/stores/providerStore";
-import { useProjectStore } from "@/stores/projectStore";
 import { persistImage, getDisplayUrl } from "@/lib/media";
 import { CARD_REF_MIME, type CardRefPayload } from "@/config/model-ref-images";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
@@ -107,7 +106,8 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
         ]);
         return;
       }
-      const pid = useChatStore.getState().currentProjectId ?? useProjectStore.getState().currentProjectId ?? undefined;
+      // 用 chat 已锁定的 projectId（chat 在 openProjectChat 时同步锁定），不再 fallback 到全局当前项目。
+      const pid = currentProjectId ?? undefined;
       const { localPath } = await persistImage(src, undefined, pid);
       setMedia((prev) => [
         ...prev,
@@ -116,7 +116,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
     } catch (err) {
       console.error(`Failed to add ${kind}:`, err);
     }
-  }, [generating, isAlreadyPersisted]);
+  }, [generating, isAlreadyPersisted, setMedia, currentProjectId]);
 
   const addImageFromUrl = useCallback(
     (src: string) => addMediaFromUrl(src, "image"),
@@ -142,7 +142,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
         });
         if (!selected) return;
         const paths = Array.isArray(selected) ? selected : [selected];
-        const pid = useChatStore.getState().currentProjectId ?? useProjectStore.getState().currentProjectId ?? undefined;
+        const pid = currentProjectId ?? undefined;
         for (const sel of paths) {
           const filePath = typeof sel === "string" ? sel : (sel as { path: string }).path;
           const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
@@ -159,13 +159,13 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
     } else {
       fileInputRef.current?.click();
     }
-  }, []);
+  }, [currentProjectId, setMedia]);
 
   const handleFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
       if (!files || files.length === 0) return;
-      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const pid = currentProjectId ?? undefined;
       for (const raw of Array.from(files)) {
         const isVideo = raw.type.startsWith("video/") || VIDEO_MIME.has(raw.type);
         const file = isVideo ? raw : await ensureDisplayableImage(raw);
@@ -184,7 +184,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
       }
       e.target.value = "";
     },
-    [],
+    [currentProjectId, setMedia],
   );
 
   const removeMedia = useCallback((idx: number) => {
@@ -263,7 +263,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
     const imageFiles = allFiles.filter((f) => IMAGE_MIME.has(f.type) || (f.type.startsWith("image/") && !f.type.startsWith("video/")));
     const videoFiles = allFiles.filter((f) => VIDEO_MIME.has(f.type) || f.type.startsWith("video/"));
 
-    const pid = useProjectStore.getState().currentProjectId ?? undefined;
+    const pid = currentProjectId ?? undefined;
 
     for (const raw of imageFiles) {
       const file = await ensureDisplayableImage(raw);
@@ -295,7 +295,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
         ]);
       } catch { /* skip */ }
     }
-  }, [generating, addImageFromUrl, addVideoFromUrl]);
+  }, [generating, addImageFromUrl, addVideoFromUrl, currentProjectId, setMedia]);
 
   const canSend = input.trim() || media.length > 0;
 

@@ -79,7 +79,7 @@ export default function SizeCombo({
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ bottom: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{ bottom: number; left: number; zoom: number } | null>(null);
 
   const reposition = useCallback(() => {
     const btn = triggerRef.current;
@@ -92,7 +92,7 @@ export default function SizeCombo({
       left = window.innerWidth - 8 - panelW;
     }
     const gap = 4 * zoom;
-    setPos({ bottom: window.innerHeight - rect.top + gap, left });
+    setPos({ bottom: window.innerHeight - rect.top + gap, left, zoom });
   }, []);
 
   useEffect(() => {
@@ -115,8 +115,6 @@ export default function SizeCombo({
     filteredOptions.find((o) => o.value === value) ?? filteredOptions[0]!;
   const isAuto = current.value === "auto";
   const currentUnsupported = valueUnsupported && current.value === value;
-
-  const zoom = triggerRef.current ? getEditorZoom(triggerRef.current) : 1;
 
   return (
     <>
@@ -150,7 +148,8 @@ export default function SizeCombo({
           style={{
             bottom: pos.bottom,
             left: pos.left,
-            zoom,
+            transform: `scale(${pos.zoom})`,
+            transformOrigin: '0 100%',
           }}
         >
           {onResolutionChange && (

@@ -154,6 +154,61 @@ fn boot_log(msg: &str) {
     }
 }
 
+#[cfg(target_os = "windows")]
+extern "system" {
+    fn MessageBoxW(
+        hwnd: *mut std::ffi::c_void,
+        text: *const u16,
+        caption: *const u16,
+        utype: u32,
+    ) -> i32;
+}
+
+#[cfg(target_os = "windows")]
+fn check_webview2_version() {
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let version = hklm
+        .open_subkey(
+            r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BEE-13A6279FE6FF}",
+        )
+        .or_else(|_| {
+            hklm.open_subkey(
+                r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BEE-13A6279FE6FF}",
+            )
+        })
+        .ok()
+        .and_then(|key| key.get_value::<String, _>("pv").ok());
+
+    let major = version
+        .as_deref()
+        .and_then(|v| v.split('.').next())
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+
+    if major > 0 && major < 111 {
+        let msg = format!(
+            "检测到 WebView2 版本过旧 (v{})，可能导致界面显示异常。\n\n\
+             请前往以下地址下载最新版 WebView2 Runtime 并安装：\n\
+             https://developer.microsoft.com/microsoft-edge/webview2/\n\n\
+             安装完成后请重新启动本应用。",
+            version.as_deref().unwrap_or("未知")
+        );
+        unsafe {
+            use std::os::windows::ffi::OsStrExt;
+            let text_w: Vec<u16> =
+                std::ffi::OsStr::new(&msg).encode_wide().chain(Some(0)).collect();
+            let cap_w: Vec<u16> = std::ffi::OsStr::new("AI猫 - 组件需要更新")
+                .encode_wide()
+                .chain(Some(0))
+                .collect();
+            MessageBoxW(std::ptr::null_mut(), text_w.as_ptr(), cap_w.as_ptr(), 0x30);
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Panic hook: write to file so we can diagnose crashes on macOS (no stderr visible from Finder)
@@ -165,6 +220,12 @@ pub fn run() {
     }));
 
     boot_log("=== AICat process started ===");
+
+    #[cfg(target_os = "windows")]
+    {
+        boot_log("checking WebView2 version");
+        check_webview2_version();
+    }
 
     tracing_subscriber::fmt::init();
 

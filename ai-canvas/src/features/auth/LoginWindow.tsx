@@ -27,7 +27,7 @@ import("@tauri-apps/api/window").then((mod) => {
 });
 
 const INPUT_CLASS =
-  "w-full rounded-md border border-white/[0.08] bg-white/[0.06] py-2 pl-9 pr-3 text-sm text-white/90 outline-none placeholder:text-white/25 focus-visible:ring-2 focus-visible:ring-[oklch(0.50_0.18_275)] focus-visible:border-[oklch(0.45_0.12_275)] transition-colors";
+  "w-full rounded-md border border-white/[0.08] bg-white/[0.06] py-2 pl-9 pr-3 text-sm text-white/90 outline-none placeholder:text-white/25 focus-visible:ring-2 focus-visible:ring-[#6d42b0] focus-visible:border-[#5a3888] transition-colors";
 
 const INPUT_ICON_CLASS = "pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/25";
 
@@ -191,7 +191,7 @@ export default function LoginWindow() {
   const hero = (HERO[authView] ?? HERO.login)!;
 
   return (
-    <div className="dark relative flex h-screen w-screen bg-[oklch(0.10_0.035_270)] text-white">
+    <div className="dark relative flex h-screen w-screen bg-[#16131e] text-white">
       {/* Drag region */}
       <div data-tauri-drag-region className="absolute inset-x-0 top-0 z-10 h-9" />
 
@@ -270,7 +270,7 @@ export default function LoginWindow() {
                 <button
                   type="button"
                   onClick={() => goTo("login")}
-                  className="mt-2 w-full rounded-md bg-[oklch(0.50_0.18_275)] px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+                  className="mt-2 w-full rounded-md bg-[#6d42b0] px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
                 >
                   返回登录
                 </button>
@@ -361,7 +361,7 @@ export default function LoginWindow() {
                       <button
                         type="button"
                         onClick={() => goTo("resetPassword")}
-                        className="text-xs text-white/30 hover:text-[oklch(0.70_0.18_275)]"
+                        className="text-xs text-white/30 hover:text-[#af85dd]"
                       >
                         忘记密码？
                       </button>
@@ -371,7 +371,7 @@ export default function LoginWindow() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="mt-1 flex w-full items-center justify-center gap-2 rounded-md bg-[oklch(0.50_0.18_275)] px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                    className="mt-1 flex w-full items-center justify-center gap-2 rounded-md bg-[#6d42b0] px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
                     {loading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -390,21 +390,21 @@ export default function LoginWindow() {
                   {isReset ? (
                     <>
                       想起密码了？
-                      <button type="button" onClick={() => goTo("login")} className="ml-1 font-medium text-[oklch(0.65_0.18_275)] hover:underline">
+                      <button type="button" onClick={() => goTo("login")} className="ml-1 font-medium text-[#9b6fd0] hover:underline">
                         返回登录
                       </button>
                     </>
                   ) : isLogin ? (
                     <>
                       还没有账号？
-                      <button type="button" onClick={() => goTo("register")} className="ml-1 font-medium text-[oklch(0.65_0.18_275)] hover:underline">
+                      <button type="button" onClick={() => goTo("register")} className="ml-1 font-medium text-[#9b6fd0] hover:underline">
                         立即注册
                       </button>
                     </>
                   ) : (
                     <>
                       已有账号？
-                      <button type="button" onClick={() => goTo("login")} className="ml-1 font-medium text-[oklch(0.65_0.18_275)] hover:underline">
+                      <button type="button" onClick={() => goTo("login")} className="ml-1 font-medium text-[#9b6fd0] hover:underline">
                         去登录
                       </button>
                     </>

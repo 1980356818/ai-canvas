@@ -27,7 +27,7 @@ export default function PortalSelect({
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; minW: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; minW: number; zoom: number } | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const selectedLabel = options.find((o) => o.value === value)?.label ?? value;
@@ -52,7 +52,7 @@ export default function PortalSelect({
     }
     if (top < 8) top = 8;
 
-    setPos({ top, left, minW });
+    setPos({ top, left, minW, zoom });
   }, [options.length]);
 
   useEffect(() => {
@@ -111,8 +111,6 @@ export default function PortalSelect({
       ?.scrollIntoView({ block: "nearest" });
   }, [open, activeIndex]);
 
-  const zoom = triggerRef.current ? getEditorZoom(triggerRef.current) : 1;
-
   return (
     <>
       <button
@@ -141,7 +139,13 @@ export default function PortalSelect({
           <div
             ref={panelRef}
             className="fixed z-[99999] max-h-[240px] overflow-y-auto rounded-lg border border-border bg-popover py-1 shadow-xl"
-            style={{ top: pos.top, left: pos.left, minWidth: pos.minW, zoom }}
+            style={{
+              top: pos.top,
+              left: pos.left,
+              minWidth: pos.minW,
+              transform: `scale(${pos.zoom})`,
+              transformOrigin: '0 0',
+            }}
           >
             {options.map((opt, idx) => {
               const highlighted = idx === activeIndex;

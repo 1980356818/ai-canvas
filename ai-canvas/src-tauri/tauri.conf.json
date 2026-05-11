@@ -37,6 +37,7 @@
   },
   "bundle": {
     "active": true,
+    "copyright": "© 2024 AI猫",
     "targets": [
       "nsis",
       "app",
@@ -54,12 +55,15 @@
       "minimumSystemVersion": "12.0"
     },
     "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
       "nsis": {
         "languages": [
           "SimpChinese"
         ],
         "displayLanguageSelector": false,
-        "installMode": "both",
+        "installMode": "currentUser",
         "compression": "lzma",
         "startMenuFolder": "AICat",
         "installerIcon": "icons/icon.ico",

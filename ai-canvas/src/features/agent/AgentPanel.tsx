@@ -149,6 +149,7 @@ export default function AgentPanel() {
           attachments={attachments}
           onAdd={(a) => setAttachments((p) => [...p, a])}
           onRemove={(i) => setAttachments((p) => p.filter((_, idx) => idx !== i))}
+          projectId={projectId ?? undefined}
         />
         <div className="mt-2 flex items-end gap-2">
           <textarea

@@ -133,6 +133,11 @@ export interface ImageGenRequest {
   referenceImages?: ImageRefInput[];
   onProgress?: (p: GenerationProgress) => void;
   signal?: AbortSignal;
+  /**
+   * 任务所属项目 ID。**调用方必须在发起请求前快照**，禁止在异步回调里从全局
+   * store 读取，否则用户在生成期间切换项目会导致结果保存到错误的项目目录。
+   */
+  projectId?: string;
 }
 
 export interface ImageGenResponse {
@@ -154,6 +159,11 @@ export interface VideoGenRequest {
   generateAudio?: boolean;
   seed?: number;
   watermark?: boolean;
+  /**
+   * 任务所属项目 ID。**调用方必须在发起请求前快照**，禁止在异步回调里从全局
+   * store 读取，否则用户在生成期间切换项目会导致结果保存到错误的项目目录。
+   */
+  projectId?: string;
 }
 
 export interface VideoGenResponse {

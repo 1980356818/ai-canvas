@@ -330,7 +330,7 @@ export default function ImageToolbar() {
           info.col,
           activeGrid,
         );
-        const projectId = useProjectStore.getState().currentProjectId;
+        const projectId = card.projectId;
         if (!projectId) return;
 
         const { localPath: relativePath } = await persistImage(dataUrl, undefined, projectId);
@@ -407,7 +407,7 @@ export default function ImageToolbar() {
       return;
     }
     try {
-      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const pid = card.projectId;
       await exportFile(data.imageUrl, (data.content as string) || "AI图片", pid);
       useUIStore.getState().addToast({ type: "success", title: "图片已导出", duration: 3000 });
     } catch (err) {
@@ -428,7 +428,7 @@ export default function ImageToolbar() {
 
     setSaving(true);
     try {
-      const projectId = useProjectStore.getState().currentProjectId ?? undefined;
+      const projectId = card.projectId;
       const { localPath } = await persistImage(data.imageUrl, card.title || undefined, projectId);
       useCardStore.getState().updateCard(card.id, {
         data: { ...card.data, imageUrl: localPath },
@@ -452,7 +452,7 @@ export default function ImageToolbar() {
     const imgData = card.data as { imageUrl?: string };
     if (!imgData.imageUrl) return;
 
-    const projectId = useProjectStore.getState().currentProjectId;
+    const projectId = card.projectId;
     if (!projectId) return;
 
     const { maxZIndex } = useCardStore.getState();
@@ -503,7 +503,7 @@ export default function ImageToolbar() {
     const imgData = card.data as { imageUrl?: string };
     if (!imgData.imageUrl) return;
 
-    const projectId = useProjectStore.getState().currentProjectId;
+    const projectId = card.projectId;
     if (!projectId) return;
 
     const { maxZIndex } = useCardStore.getState();

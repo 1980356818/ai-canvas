@@ -19,7 +19,6 @@ import {
 } from "./formatter";
 import { aiProxy, aiProxyStream, isTauri, listModels as platformListModels, saveMedia } from "@/platform";
 import { waitForTask } from "@/services/tasks";
-import { useProjectStore } from "@/stores/projectStore";
 import { compressDataUrlForApi } from "@/lib/imageCompression";
 import type { ModelInfo } from "@/types";
 
@@ -352,7 +351,7 @@ export abstract class OpenAICompatProvider implements AIProvider {
       if (!result.resultUrl) throw new Error("图片生成完成但未返回结果地址");
 
       emit?.({ percent: 92, phase: "saving", label: "正在保存图片…" });
-      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const pid = req.projectId;
       try {
         const saveStart = nowMs();
         logImageGen(requestId, "saveMedia started", { source: describeMediaValue(result.resultUrl), projectId: pid });
@@ -379,7 +378,7 @@ export abstract class OpenAICompatProvider implements AIProvider {
     emit?.({ percent: 80, phase: "saving", label: "正在保存图片…" });
     const img = data.data?.[0];
     if (!img?.url) throw new Error("No image returned");
-    const pid = useProjectStore.getState().currentProjectId ?? undefined;
+    const pid = req.projectId;
     try {
       const saveStart = nowMs();
       logImageGen(requestId, "saveMedia started", { source: describeMediaValue(img.url), projectId: pid });
@@ -450,7 +449,7 @@ export abstract class OpenAICompatProvider implements AIProvider {
       if (!result.resultUrl) throw new Error("视频生成完成但未返回结果地址");
 
       emit?.({ percent: 92, phase: "saving", label: "正在保存视频…" });
-      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      const pid = req.projectId;
       try {
         const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
         emit?.({ percent: 100, phase: "saving", label: "完成" });

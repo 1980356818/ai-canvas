@@ -16,7 +16,6 @@ import {
   type RefImageEntry,
 } from "@/config/model-ref-images";
 import { useConnectionStore } from "@/stores/connectionStore";
-import { useProjectStore } from "@/stores/projectStore";
 import { disconnectCardPairAndCleanup } from "@/lib/referenceConsistency";
 import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize } from "@/shared/constants";
 import ModelSelector from "./ModelSelector";
@@ -154,18 +153,15 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
       if (entry.sourceCardId) {
         const connStore = useConnectionStore.getState();
         if (!connStore.hasConnection(entry.sourceCardId, card.id)) {
-          const projectId = useProjectStore.getState().currentProjectId;
-          if (projectId) {
-            const conn: Connection = {
-              id: crypto.randomUUID(),
-              projectId,
-              sourceCardId: entry.sourceCardId,
-              targetCardId: card.id,
-              createdAt: new Date().toISOString(),
-            };
-            connStore.addConnection(conn);
-            autoSave.markDirty();
-          }
+          const conn: Connection = {
+            id: crypto.randomUUID(),
+            projectId: card.projectId,
+            sourceCardId: entry.sourceCardId,
+            targetCardId: card.id,
+            createdAt: new Date().toISOString(),
+          };
+          connStore.addConnection(conn);
+          autoSave.markDirty();
         }
       }
     },
@@ -233,6 +229,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
         model: currentModel,
         quality: "standard",
         referenceImages,
+        projectId: card.projectId,
         onProgress: (p) => {
           setCardProgress(card.id, { percent: p.percent, label: p.label });
         },
@@ -259,17 +256,15 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
       const { ensureDisplayableImage } = await import("@/lib/heicConverter");
       const file = await ensureDisplayableImage(rawFile);
       const { persistImage } = await import("@/lib/media");
-      const { useProjectStore } = await import("@/stores/projectStore");
       const dataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.readAsDataURL(file);
       });
-      const pid = useProjectStore.getState().currentProjectId ?? undefined;
-      const { localPath } = await persistImage(dataUrl, undefined, pid);
+      const { localPath } = await persistImage(dataUrl, undefined, card.projectId);
       setRefImage("refImage0", { url: localPath, sourceType: "file" });
     },
-    [setRefImage],
+    [setRefImage, card.projectId],
   );
 
   return (

@@ -113,8 +113,11 @@ export default function FloatingEditor() {
       const offDx = off ? off.dx * vp.zoom : 0;
       const offDy = off ? off.dy * vp.zoom : 0;
 
-      const prevZoom = parseFloat(panel.style.zoom) || 1;
-      const w = panel.offsetWidth / prevZoom;
+      // Use transform: scale() instead of CSS zoom to avoid the
+      // non-standard zoom property multiplying left/top/offsetWidth.
+      // With transform, offsetWidth returns the unzoomed layout width
+      // and left/top are pure screen-space coordinates.
+      const w = panel.offsetWidth;
       const scaledW = w * vp.zoom;
       const cardScreenLeft = c.x * vp.zoom + vp.x + offDx;
       const cardScreenCenterX = cardScreenLeft + (c.width * vp.zoom) / 2;
@@ -127,7 +130,9 @@ export default function FloatingEditor() {
 
       panel.style.left = `${screenLeft}px`;
       panel.style.top = `${screenTop}px`;
-      (panel.style as any).zoom = String(vp.zoom);
+      panel.style.transform = `scale(${vp.zoom})`;
+      panel.style.transformOrigin = '0 0';
+      if ((panel.style as any).zoom) (panel.style as any).zoom = '';
       panel.dataset.editorZoom = String(vp.zoom);
     };
 

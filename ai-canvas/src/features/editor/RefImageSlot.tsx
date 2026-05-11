@@ -1,7 +1,7 @@
 import { useRef, useCallback, useState, useEffect } from "react";
 import { Upload, X } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
-import { useProjectStore } from "@/stores/projectStore";
+import { useCardStore } from "@/stores/cardStore";
 import {
   CARD_REF_MIME,
   type CardRefPayload,
@@ -86,11 +86,12 @@ export default function RefImageSlot({
         reader.onload = () => resolve(reader.result as string);
         reader.readAsDataURL(file);
       });
-      const pid = useProjectStore.getState().currentProjectId ?? undefined;
+      // 跟随目标卡片归属，避免读全局当前项目导致跨项目串档。
+      const pid = useCardStore.getState().getCard(targetCardId)?.projectId;
       const { localPath, width, height } = await persistImage(dataUrl, undefined, pid);
       onImage({ url: localPath, sourceType: "file", width, height });
     },
-    [onImage],
+    [onImage, targetCardId],
   );
 
   const onDrop = useCallback(

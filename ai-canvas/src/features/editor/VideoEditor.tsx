@@ -8,7 +8,6 @@ import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
 import { scheduleBackgroundSave, getBase64ForApi, getDisplayUrl } from "@/lib/media";
-import { useProjectStore } from "@/stores/projectStore";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
@@ -515,6 +514,9 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         }
       }
 
+      // 把卡片本身的 projectId 作为本次任务的归属，整个异步链都用这个快照。
+      const ownerProjectId = card.projectId;
+
       const result = await provider.generateVideo({
         prompt,
         model: currentModel || undefined,
@@ -525,6 +527,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         duration: isSeedance ? currentDuration : undefined,
         resolution: isSeedance ? currentResolution : undefined,
         generateAudio: isSeedance ? currentAudio : undefined,
+        projectId: ownerProjectId,
         onProgress: (p) => {
           setCardProgress(card.id, { percent: p.percent, label: p.label });
         },
@@ -537,8 +540,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
 
       const isRemote = result.url.startsWith("http://") || result.url.startsWith("https://");
       if (isRemote) {
-        const pid = useProjectStore.getState().currentProjectId ?? undefined;
-        scheduleBackgroundSave(card.id, result.url, "videoUrl", pid);
+        scheduleBackgroundSave(card.id, result.url, "videoUrl", ownerProjectId);
         useUIStore.getState().addToast({
           type: "warning",
           title: "视频已生成，保存到本地失败",
