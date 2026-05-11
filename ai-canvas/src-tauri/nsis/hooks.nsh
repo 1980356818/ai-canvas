@@ -13,9 +13,9 @@
 !define MUI_ABORTWARNING_TEXT "确定要取消安装 AI猫 吗？"
 
 ; --- 默认安装路径：D 盘 ---
-; .onGUIInit 在 .onInit 之后、页面显示之前执行
-; 确保目录选择页面默认显示 D:\AICat
-Function .onGUIInit
+!define MUI_CUSTOMFUNCTION_GUIINIT CustomGUIInit
+
+Function CustomGUIInit
   StrCpy $INSTDIR "D:\AICat"
 FunctionEnd
 
