@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
-import { ChevronDown } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { modelService } from "@/services/models";
 import type { ModelOption } from "@/providers/types";
 import { cn } from "@/lib/utils";
+import PortalSelect from "./PortalSelect";
 
 interface ModelSelectorProps {
   capability: "CHAT" | "IMAGE" | "VIDEO";
@@ -58,7 +58,6 @@ export default function ModelSelector({
     };
   }, [capability, filter]);
 
-
   const selectedKey = useMemo(() => {
     if (!value) return "";
     if (propProviderId) {
@@ -70,10 +69,29 @@ export default function ModelSelector({
     return value;
   }, [value, propProviderId, models]);
 
-  const handleChange = (compositeKey: string) => {
-    const { providerId, modelId } = parseCompositeKey(compositeKey);
-    onChange(modelId, providerId);
-  };
+  const providerCount = useMemo(() => new Set(models.map((m) => m.providerId)).size, [models]);
+
+  const options = useMemo(() => {
+    const result: { value: string; label: string }[] = [];
+    if (!models.some((m) => m.id === value) && value) {
+      result.push({ value, label: modelService.getDisplayName(value) });
+    }
+    for (const m of models) {
+      const label = providerCount > 1
+        ? `[${m.providerName}] ${m.display_name || m.id}`
+        : (m.display_name || m.id);
+      result.push({ value: toCompositeKey(m), label });
+    }
+    return result;
+  }, [models, value, providerCount]);
+
+  const handleChange = useCallback(
+    (compositeKey: string) => {
+      const { providerId, modelId } = parseCompositeKey(compositeKey);
+      onChange(modelId, providerId);
+    },
+    [onChange],
+  );
 
   if (loading) {
     return (
@@ -90,32 +108,11 @@ export default function ModelSelector({
   }
 
   return (
-    <div className={cn("relative inline-block", className)}>
-      <select
-        value={selectedKey}
-        onChange={(e) => handleChange(e.target.value)}
-        className="h-8 appearance-none rounded border border-input bg-background pl-2.5 pr-7 text-sm outline-none ring-ring focus:ring-1"
-      >
-        {!models.some((m) => m.id === value) && value && (
-          <option value={value}>
-            {modelService.getDisplayName(value)}
-          </option>
-        )}
-        {(() => {
-          const providerCount = new Set(models.map((m) => m.providerId)).size;
-          return models.map((m) => {
-            const label = providerCount > 1
-              ? `[${m.providerName}] ${m.display_name || m.id}`
-              : (m.display_name || m.id);
-            return (
-              <option key={toCompositeKey(m)} value={toCompositeKey(m)}>
-                {label}
-              </option>
-            );
-          });
-        })()}
-      </select>
-      <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-    </div>
+    <PortalSelect
+      value={selectedKey}
+      onChange={handleChange}
+      options={options}
+      className={cn("h-8", className)}
+    />
   );
 }

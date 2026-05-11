@@ -17,6 +17,7 @@ import { getRefSlotsForVideoModel, compactRefImages, type RefImageEntry } from "
 import { disconnectCardPairAndCleanup } from "@/lib/referenceConsistency";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
+import PortalSelect from "./PortalSelect";
 import SizeCombo from "./SizeCombo";
 import PromptTextarea, { type PromptTextareaHandle } from "./PromptTextarea";
 import { normalizeImageSize, IMAGE_SIZE_OPTIONS, sizeFromRatio } from "@/shared/constants";
@@ -29,9 +30,15 @@ interface VideoFrameRef {
 
 const MAX_AUDIO_SLOTS = 3;
 
+const DURATION_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
+  value: String(i + 4),
+  label: `${i + 4}s`,
+}));
+
 const VIDEO_RESOLUTION_OPTIONS = [
   { value: "480p", label: "480p" },
   { value: "720p", label: "720p" },
+  { value: "1080p", label: "1080p" },
 ] as const;
 
 interface AudioRefEntry {
@@ -372,8 +379,8 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   );
 
   const handleDurationChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const dur = Number(e.target.value);
+    (val: string) => {
+      const dur = Number(val);
       setCurrentDuration(dur);
       updateCard(card.id, { data: { ...data, duration: dur } });
       autoSave.markDirty(card.id);
@@ -829,20 +836,13 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         )}
         {isSeedance && !isLocked && (
           <>
-            <select
-              value={currentDuration}
+            <PortalSelect
+              value={String(currentDuration)}
               onChange={handleDurationChange}
+              options={DURATION_OPTIONS}
               disabled={generating}
-              className={cn(
-                "rounded-lg border border-border bg-transparent px-2 py-1.5 text-sm font-medium transition-colors",
-                "text-muted-foreground hover:bg-muted hover:text-foreground",
-                generating && "cursor-not-allowed opacity-40",
-              )}
-            >
-              {Array.from({ length: 12 }, (_, i) => i + 4).map((s) => (
-                <option key={s} value={s}>{s}s</option>
-              ))}
-            </select>
+              className="rounded-lg border-border bg-transparent font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            />
             <button
               type="button"
               onClick={handleAudioToggle}

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { ChevronUp } from "lucide-react";
 import { IMAGE_SIZE_OPTIONS } from "@/shared/constants";
 import { cn } from "@/lib/utils";
+import { getEditorZoom } from "./editorUtils";
 
 const RESOLUTION_OPTIONS = [
   { value: "2K", label: "2K", px: 2048 },
@@ -54,12 +55,6 @@ function RatioIcon({
       style={{ width: w, height: h }}
     />
   );
-}
-
-function getEditorZoom(el: HTMLElement): number {
-  const editor = el.closest("[data-editor-zoom]");
-  if (!editor) return 1;
-  return parseFloat((editor as HTMLElement).dataset.editorZoom ?? "1") || 1;
 }
 
 export default function SizeCombo({
@@ -155,8 +150,7 @@ export default function SizeCombo({
           style={{
             bottom: pos.bottom,
             left: pos.left,
-            transform: `scale(${zoom})`,
-            transformOrigin: "bottom left",
+            zoom,
           }}
         >
           {onResolutionChange && (
