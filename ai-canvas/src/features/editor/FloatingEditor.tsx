@@ -113,7 +113,8 @@ export default function FloatingEditor() {
       const offDx = off ? off.dx * vp.zoom : 0;
       const offDy = off ? off.dy * vp.zoom : 0;
 
-      const w = panel.offsetWidth;
+      const prevZoom = parseFloat(panel.style.zoom) || 1;
+      const w = panel.offsetWidth / prevZoom;
       const scaledW = w * vp.zoom;
       const cardScreenLeft = c.x * vp.zoom + vp.x + offDx;
       const cardScreenCenterX = cardScreenLeft + (c.width * vp.zoom) / 2;
@@ -126,7 +127,7 @@ export default function FloatingEditor() {
 
       panel.style.left = `${screenLeft}px`;
       panel.style.top = `${screenTop}px`;
-      panel.style.transform = `scale(${vp.zoom})`;
+      (panel.style as any).zoom = String(vp.zoom);
       panel.dataset.editorZoom = String(vp.zoom);
     };
 
@@ -199,7 +200,6 @@ export default function FloatingEditor() {
       style={{
         width,
         height,
-        transformOrigin: "top left",
       }}
       onWheel={(e) => e.stopPropagation()}
       onPointerDown={(e) => {
