@@ -16,6 +16,7 @@ import {
   parseOpenAIStreamChunk,
   resetStreamState,
   getAccumulatedToolCalls,
+  getLastFinishReason,
 } from "./formatter";
 import { aiProxy, aiProxyStream, isTauri, listModels as platformListModels, saveMedia } from "@/platform";
 import { waitForTask } from "@/services/tasks";
@@ -215,7 +216,14 @@ export abstract class OpenAICompatProvider implements AIProvider {
           for (const tc of tcs) {
             onEvent({ type: "tool_call_end", id: tc.id });
           }
-          onEvent({ type: "done" });
+          const fr = getLastFinishReason();
+          const finishReason =
+            fr === "tool_calls" || fr === "function_call"
+              ? "tool_calls" as const
+              : fr === "length"
+                ? "length" as const
+                : "stop" as const;
+          onEvent({ type: "done", finishReason });
         },
         onError: (e) => onEvent({ type: "error", message: e }),
       },

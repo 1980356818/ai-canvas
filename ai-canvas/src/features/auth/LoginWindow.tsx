@@ -12,13 +12,9 @@ import { isTauri } from "@/platform/runtime";
 import { cn } from "@/lib/utils";
 import loginBrand from "@/assets/login-brand.png";
 
-async function getMachineCode(): Promise<string | undefined> {
-  if (!isTauri) return undefined;
-  try {
-    return await invoke<string>("get_machine_code");
-  } catch {
-    return undefined;
-  }
+async function getMachineCode(): Promise<string> {
+  if (!isTauri) throw new Error("非桌面客户端，无法获取设备标识");
+  return await invoke<string>("get_machine_code");
 }
 
 let appWindow: { minimize(): void } | null = null;
@@ -90,9 +86,11 @@ export default function LoginWindow() {
     const saved = getSavedCredentials();
     if (saved && saved.username && saved.password) {
       autoLoginAttempted.current = true;
-      getMachineCode().then((mc) => {
-        login(saved.username, saved.password, mc).catch(() => {});
-      });
+      getMachineCode()
+        .then((mc) => login(saved.username, saved.password, mc))
+        .catch((err) => {
+          useAuthStore.setState({ error: err?.message || "设备标识获取失败，请重启应用" });
+        });
     }
   }, [isLogin, login]);
 
@@ -125,8 +123,10 @@ export default function LoginWindow() {
   const handleUnbindAndRetry = async () => {
     setUnbinding(true);
     try {
-      const mc = await getMachineCode();
-      if (!mc) {
+      let mc: string;
+      try {
+        mc = await getMachineCode();
+      } catch {
         useAuthStore.setState({ error: "无法获取设备标识", errorCode: null });
         return;
       }
@@ -178,7 +178,13 @@ export default function LoginWindow() {
     }
     try {
       if (isLogin) {
-        const mc = await getMachineCode();
+        let mc: string;
+        try {
+          mc = await getMachineCode();
+        } catch {
+          useAuthStore.setState({ error: "设备标识获取失败，请重启应用后重试", errorCode: null });
+          return;
+        }
         await login(username, password, mc);
         saveCredentials(username, password);
         persistAutoLogin(true);

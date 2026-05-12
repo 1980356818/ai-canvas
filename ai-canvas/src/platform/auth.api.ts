@@ -82,7 +82,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export async function apiLogin(
   username: string,
   password: string,
-  machineCode?: string,
+  machineCode: string,
   forceRebind?: boolean,
 ): Promise<LoginResult> {
   const data = await request<LoginResult>("POST", "/api/auth/login", {

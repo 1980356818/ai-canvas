@@ -8,7 +8,7 @@ import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { autoSave } from "@/lib/autoSave";
 import { recordUpdate } from "@/lib/history";
-import { cn } from "@/lib/utils";
+import { cn, hexAlpha } from "@/lib/utils";
 import { TYPE_COLORS, sizeFromRatio } from "@/shared/constants";
 import {
   cardHasImage,
@@ -196,12 +196,12 @@ const Port = memo(function Port({
         )}
         style={{
           border: `2px solid ${color}`,
-          borderColor: isDraftTarget ? color : `color-mix(in srgb, ${color} 55%, transparent)`,
+          borderColor: isDraftTarget ? color : hexAlpha(color, 0.55),
           background: isDraftTarget
-            ? `color-mix(in srgb, ${color} 25%, transparent)`
-            : `color-mix(in srgb, ${color} 8%, transparent)`,
+            ? hexAlpha(color, 0.25)
+            : hexAlpha(color, 0.08),
           boxShadow: isDraftTarget
-            ? `0 0 12px ${color}88, inset 0 1px 3px rgba(0,0,0,0.2)`
+            ? `0 0 12px ${hexAlpha(color, 0.53)}, inset 0 1px 3px rgba(0,0,0,0.2)`
             : `inset 0 1px 3px rgba(0,0,0,0.2)`,
         }}
       >

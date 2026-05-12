@@ -15,6 +15,7 @@ public class User {
     private String email;
     private LocalDateTime memberExpireAt;
     private Integer status;
+    private Integer tokenVersion;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE)

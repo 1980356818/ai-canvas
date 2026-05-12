@@ -712,6 +712,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               systemPrompt: CHAT_PANEL_SYSTEM_PROMPT,
               messages: unifiedMessages,
               tools: CHAT_TOOLS,
+              maxTokens: 65536,
               signal: ac.signal,
             },
             (event: StreamEvent) => {
@@ -736,7 +737,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   break;
                 case "done": {
                   const textParts: ChatContentPart[] = [];
-                  // reasoning 永远放在 text 之前（视觉上"先思考再回答"）
                   if (fullReasoning) textParts.push({ type: "reasoning", text: fullReasoning });
                   if (fullText) textParts.push({ type: "text", text: fullText });
 
@@ -761,8 +761,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
                       });
                     }
                   }
-                  // "无有效内容" 的判定基于用户可见答案（text/工具调用），而非 reasoning。
-                  // 仅有 reasoning 没有 text 也算"模型没真正回答"。
                   if (
                     !fullText &&
                     imageJobs.length === 0 &&
@@ -771,6 +769,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     textParts.push({
                       type: "text",
                       text: "（模型未返回有效内容，请尝试重新发送或切换模型）",
+                    });
+                  }
+                  if (event.finishReason === "length" && fullText) {
+                    textParts.push({
+                      type: "text",
+                      text: "\n\n---\n⚠️ *回复因达到输出上限被截断，可继续追问以获取剩余内容。*",
                     });
                   }
                   set((s) => patchSessionGenerationIfVisible(s, sid, {

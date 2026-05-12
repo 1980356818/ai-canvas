@@ -26,11 +26,16 @@ public class JwtUtil {
     }
 
     public String generate(Long userId, String username, boolean restricted) {
+        return generate(userId, username, restricted, 1);
+    }
+
+    public String generate(Long userId, String username, boolean restricted, int tokenVersion) {
         long expire = restricted ? restrictedExpireMs : fullExpireMs;
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim("username", username)
                 .claim("restricted", restricted)
+                .claim("tv", tokenVersion)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expire))
                 .signWith(key)

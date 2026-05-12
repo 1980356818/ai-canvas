@@ -500,10 +500,13 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         model,
         systemPrompt: systemPrompt || CHAT_EDITOR_DEFAULT_SYSTEM_PROMPT,
         messages: unifiedMessages,
-        maxTokens: 4096,
+        maxTokens: 65536,
       });
 
-      const result = resp.content ?? "（无回复 — 模型未返回任何内容）";
+      let result = resp.content ?? "（无回复 — 模型未返回任何内容）";
+      if (resp.finishReason === "length" && resp.content) {
+        result += "\n\n---\n⚠️ *回复因达到输出上限被截断，可尝试拆分提问以获取完整内容。*";
+      }
 
       useCardStore.getState().updateCard(card.id, {
         data: { ...data, result, _resultStale: false },

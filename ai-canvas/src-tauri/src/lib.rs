@@ -162,23 +162,35 @@ extern "system" {
         caption: *const u16,
         utype: u32,
     ) -> i32;
+    fn ShellExecuteW(
+        hwnd: *mut std::ffi::c_void,
+        operation: *const u16,
+        file: *const u16,
+        parameters: *const u16,
+        directory: *const u16,
+        show_cmd: i32,
+    ) -> isize;
 }
 
+const MIN_WEBVIEW2_MAJOR: u32 = 111;
+
 #[cfg(target_os = "windows")]
-fn check_webview2_version() {
+fn get_webview2_version() -> (Option<String>, u32) {
     use winreg::enums::*;
     use winreg::RegKey;
 
+    const WV2_CLIENT_KEY: &str =
+        r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BEE-13A6279FE6FF}";
+    const WV2_CLIENT_KEY_WOW64: &str =
+        r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BEE-13A6279FE6FF}";
+
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
     let version = hklm
-        .open_subkey(
-            r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BEE-13A6279FE6FF}",
-        )
-        .or_else(|_| {
-            hklm.open_subkey(
-                r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BEE-13A6279FE6FF}",
-            )
-        })
+        .open_subkey(WV2_CLIENT_KEY_WOW64)
+        .or_else(|_| hklm.open_subkey(WV2_CLIENT_KEY))
+        .or_else(|_| hkcu.open_subkey(WV2_CLIENT_KEY))
         .ok()
         .and_then(|key| key.get_value::<String, _>("pv").ok());
 
@@ -188,24 +200,104 @@ fn check_webview2_version() {
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(0);
 
-    if major > 0 && major < 111 {
-        let msg = format!(
-            "检测到 WebView2 版本过旧 (v{})，可能导致界面显示异常。\n\n\
-             请前往以下地址下载最新版 WebView2 Runtime 并安装：\n\
-             https://developer.microsoft.com/microsoft-edge/webview2/\n\n\
-             安装完成后请重新启动本应用。",
-            version.as_deref().unwrap_or("未知")
+    (version, major)
+}
+
+#[cfg(target_os = "windows")]
+fn win_msgbox(text: &str, caption: &str, flags: u32) -> i32 {
+    unsafe {
+        use std::os::windows::ffi::OsStrExt;
+        let text_w: Vec<u16> = std::ffi::OsStr::new(text)
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
+        let cap_w: Vec<u16> = std::ffi::OsStr::new(caption)
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
+        MessageBoxW(std::ptr::null_mut(), text_w.as_ptr(), cap_w.as_ptr(), flags)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn win_open_url(url: &str) {
+    unsafe {
+        use std::os::windows::ffi::OsStrExt;
+        let op: Vec<u16> = std::ffi::OsStr::new("open")
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
+        let url_w: Vec<u16> = std::ffi::OsStr::new(url)
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            op.as_ptr(),
+            url_w.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            1, // SW_SHOWNORMAL
         );
-        unsafe {
-            use std::os::windows::ffi::OsStrExt;
-            let text_w: Vec<u16> =
-                std::ffi::OsStr::new(&msg).encode_wide().chain(Some(0)).collect();
-            let cap_w: Vec<u16> = std::ffi::OsStr::new("AI猫 - 组件需要更新")
-                .encode_wide()
-                .chain(Some(0))
-                .collect();
-            MessageBoxW(std::ptr::null_mut(), text_w.as_ptr(), cap_w.as_ptr(), 0x30);
+    }
+}
+
+/// Returns `true` if WebView2 is good to go; `false` means the process should exit.
+///
+/// When the version is too old, enters a retry loop: the user can install the
+/// update and click "重试" without restarting the app.
+#[cfg(target_os = "windows")]
+fn check_webview2_version() -> bool {
+    const WV2_DOWNLOAD_URL: &str = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
+
+    loop {
+        let (version, major) = get_webview2_version();
+
+        if major == 0 || major >= MIN_WEBVIEW2_MAJOR {
+            return true;
         }
+
+        let ver_str = version.as_deref().unwrap_or("未知");
+        boot_log(&format!(
+            "WebView2 too old: v{} (major {}), need >= {}",
+            ver_str, major, MIN_WEBVIEW2_MAJOR,
+        ));
+
+        // First dialog: offer to open the download page
+        // MB_YESNO = 0x04, MB_ICONWARNING = 0x30
+        let msg = format!(
+            "检测到您的 WebView2 组件版本过旧（v{}），\
+             应用界面将无法正常显示。\n\n\
+             点击「是」立即打开下载页面。\n\
+             点击「否」退出应用。",
+            ver_str,
+        );
+        let choice = win_msgbox(&msg, "AI猫 - 需要更新 WebView2 组件", 0x04 | 0x30);
+
+        if choice != 6 {
+            // IDYES = 6; user chose No → exit
+            return false;
+        }
+
+        win_open_url(WV2_DOWNLOAD_URL);
+
+        // Second dialog: wait for user to finish installing, then retry
+        // MB_RETRYCANCEL = 0x05, MB_ICONINFORMATION = 0x40
+        let retry = win_msgbox(
+            "浏览器已打开 WebView2 下载页面。\n\n\
+             请下载并安装完成后，点击「重试」继续启动应用。\n\
+             点击「取消」退出应用。",
+            "AI猫 - 等待安装完成",
+            0x05 | 0x40,
+        );
+
+        // IDRETRY = 4
+        if retry != 4 {
+            return false;
+        }
+
+        boot_log("user requested retry after WebView2 install");
+        // loop back to re-check the version
     }
 }
 
@@ -224,7 +316,10 @@ pub fn run() {
     #[cfg(target_os = "windows")]
     {
         boot_log("checking WebView2 version");
-        check_webview2_version();
+        if !check_webview2_version() {
+            boot_log("WebView2 too old, exiting");
+            return;
+        }
     }
 
     tracing_subscriber::fmt::init();

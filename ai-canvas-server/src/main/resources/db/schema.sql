@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     `member_expire_at` DATETIME     DEFAULT NULL COMMENT '会员到期时间',
     `status`           TINYINT      NOT NULL DEFAULT 1 COMMENT '1=正常 0=禁用',
     `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `token_version`    INT          NOT NULL DEFAULT 1 COMMENT '登录版本号，每次登录递增，用于踢掉旧设备',
     `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_username` (`username`),

@@ -240,6 +240,13 @@ export async function aiProxyStream(
         }
       }
 
+      if (buffer.trim()) {
+        const trimmed = buffer.trim();
+        if (trimmed !== "data: [DONE]" && trimmed.startsWith("data: ")) {
+          callbacks.onChunk(trimmed.slice(6));
+        }
+      }
+
       callbacks.onDone();
       return { ok: true, retryable: false };
     };

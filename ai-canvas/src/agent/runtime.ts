@@ -77,7 +77,25 @@ export async function runAgent(
       systemPrompt,
       messages: llmMessages,
       tools: tools.length > 0 ? tools : undefined,
+      maxTokens: 65536,
     });
+
+    if (response.finishReason === "length") {
+      const truncatedMsg: AgentMessage = {
+        id: makeId(),
+        role: "assistant",
+        content: [
+          ...(response.content
+            ? [{ type: "text" as const, text: response.content }]
+            : []),
+          { type: "text" as const, text: "\n\n---\n⚠️ *回复因达到输出上限被截断。*" },
+        ],
+        timestamp: Date.now(),
+      };
+      callbacks.onMessage(truncatedMsg);
+      callbacks.onStatusChange("idle");
+      return;
+    }
 
     if (response.finishReason === "stop" || response.toolCalls.length === 0) {
       const assistantMsg: AgentMessage = {

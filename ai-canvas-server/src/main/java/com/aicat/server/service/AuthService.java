@@ -48,7 +48,8 @@ public class AuthService {
         userMapper.insert(user);
 
         boolean restricted = true;
-        String token = jwtUtil.generate(user.getId(), user.getUsername(), restricted);
+        int tv = user.getTokenVersion() != null ? user.getTokenVersion() : 1;
+        String token = jwtUtil.generate(user.getId(), user.getUsername(), restricted, tv);
 
         Map<String, Object> data = new HashMap<>();
         data.put("token", token);
@@ -74,17 +75,21 @@ public class AuthService {
             throw new BizException(ErrorCode.ACCOUNT_DISABLED);
         }
 
-        if (machineCode != null && !machineCode.isBlank()) {
-            if (forceRebind) {
-                UserDevice existing = deviceBindService.getBound(user.getId());
-                if (existing != null && !existing.getMachineCode().equals(machineCode)) {
-                    deviceBindService.unbindAndRebind(user.getId(), machineCode, deviceInfo, ip, "user");
-                } else {
-                    deviceBindService.checkOrBind(user.getId(), machineCode, deviceInfo, ip);
-                }
+        UserDevice boundDevice = deviceBindService.getBound(user.getId());
+
+        if (machineCode == null || machineCode.isBlank()) {
+            logLogin(user, ip, deviceInfo, boundDevice != null ? "device_mismatch_no_code" : "missing_machine_code");
+            throw new BizException(boundDevice != null ? ErrorCode.DEVICE_MISMATCH : ErrorCode.DEVICE_CODE_MISSING);
+        }
+
+        if (forceRebind) {
+            if (boundDevice != null && !boundDevice.getMachineCode().equals(machineCode)) {
+                deviceBindService.unbindAndRebind(user.getId(), machineCode, deviceInfo, ip, "user");
             } else {
                 deviceBindService.checkOrBind(user.getId(), machineCode, deviceInfo, ip);
             }
+        } else {
+            deviceBindService.checkOrBind(user.getId(), machineCode, deviceInfo, ip);
         }
 
         boolean memberActive = user.getMemberExpireAt() != null
@@ -100,7 +105,11 @@ public class AuthService {
             status = "expired";
         }
 
-        String token = jwtUtil.generate(user.getId(), user.getUsername(), restricted);
+        int newVersion = (user.getTokenVersion() != null ? user.getTokenVersion() : 0) + 1;
+        user.setTokenVersion(newVersion);
+        userMapper.updateById(user);
+
+        String token = jwtUtil.generate(user.getId(), user.getUsername(), restricted, newVersion);
         logLogin(user, ip, deviceInfo, memberActive ? "success" : status);
 
         Map<String, Object> data = new HashMap<>();

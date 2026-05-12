@@ -5,6 +5,7 @@ import type { CanvasCard, Viewport } from "@/types";
 import CardShell from "@/features/cards/CardShell";
 import CardContent from "@/features/cards/CardContent";
 import { TYPE_COLORS } from "@/shared/constants";
+import { hexAlpha } from "@/lib/utils";
 import { spatialIndex } from "@/lib/spatial-index";
 import { preloadImages } from "@/lib/imagePreloader";
 import { getDisplayUrl } from "@/lib/media";
@@ -50,11 +51,11 @@ function CardThumbnail({ card }: { card: CanvasCard }) {
         width: card.width,
         height: card.height,
         zIndex: card.zIndex,
-        backgroundColor: `color-mix(in srgb, ${color} 35%, var(--color-card))`,
-        border: `2px solid color-mix(in srgb, ${color} 60%, transparent)`,
-        boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 12%, transparent)`,
+        backgroundColor: hexAlpha(color, 0.35),
+        border: `2px solid ${hexAlpha(color, 0.6)}`,
+        boxShadow: `inset 0 0 0 1px ${hexAlpha(color, 0.12)}`,
         fontSize: Math.min(card.width, card.height) * 0.35,
-        color: `color-mix(in srgb, ${color} 80%, var(--color-card-foreground))`,
+        color: hexAlpha(color, 0.8),
         fontWeight: 700,
         lineHeight: 1,
       }}

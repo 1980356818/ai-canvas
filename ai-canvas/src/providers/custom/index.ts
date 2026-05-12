@@ -16,6 +16,7 @@ import {
   parseOpenAIStreamChunk,
   resetStreamState,
   getAccumulatedToolCalls,
+  getLastFinishReason,
 } from "../openai-compat/formatter";
 import { aiProxy, aiProxyStream, listModels as platformListModels } from "@/platform";
 import type { ModelInfo } from "@/types";
@@ -111,7 +112,14 @@ export class CustomProvider implements AIProvider {
           for (const tc of tcs) {
             onEvent({ type: "tool_call_end", id: tc.id });
           }
-          onEvent({ type: "done" });
+          const fr = getLastFinishReason();
+          const finishReason =
+            fr === "tool_calls" || fr === "function_call"
+              ? "tool_calls" as const
+              : fr === "length"
+                ? "length" as const
+                : "stop" as const;
+          onEvent({ type: "done", finishReason });
         },
         onError: (e) => onEvent({ type: "error", message: e }),
       },

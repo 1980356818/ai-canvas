@@ -70,7 +70,7 @@ export type StreamEvent =
   | { type: "tool_call_start"; id: string; name: string }
   | { type: "tool_call_delta"; id: string; arguments: string }
   | { type: "tool_call_end"; id: string }
-  | { type: "done" }
+  | { type: "done"; finishReason?: "stop" | "tool_calls" | "length" }
   | { type: "error"; message: string };
 
 // ── 请求 / 响应 ────────────────────────────────────────────

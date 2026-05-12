@@ -135,9 +135,15 @@ interface ToolCallAccumulator {
 }
 
 let _tcAccum: ToolCallAccumulator = {};
+let _lastFinishReason: string | null = null;
 
 export function resetStreamState(): void {
   _tcAccum = {};
+  _lastFinishReason = null;
+}
+
+export function getLastFinishReason(): string | null {
+  return _lastFinishReason;
 }
 
 export function parseOpenAIStreamChunk(
@@ -195,6 +201,10 @@ export function parseOpenAIStreamChunk(
         emit({ type: "tool_call_delta", id: _tcAccum[idx]!.id, arguments: fc.arguments });
       }
     }
+
+    if (typeof choice.finish_reason === "string" && choice.finish_reason) {
+      _lastFinishReason = choice.finish_reason;
+    }
   } catch (e) {
     if (import.meta.env.DEV) {
       console.warn("[parseOpenAIStreamChunk] failed to parse:", raw?.slice(0, 200), e);
@@ -242,7 +252,11 @@ export function parseOpenAIChatResponse(raw: AiProxyResponse): ChatResponse {
       completionTokens: data.usage?.completion_tokens ?? 0,
     },
     finishReason:
-      fr === "tool_calls" || fr === "function_call" ? "tool_calls" : "stop",
+      fr === "tool_calls" || fr === "function_call"
+        ? "tool_calls"
+        : fr === "length"
+          ? "length"
+          : "stop",
   };
 }
 
