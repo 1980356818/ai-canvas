@@ -321,7 +321,21 @@ function extractNestedUrl(raw: Record<string, unknown>): string | undefined {
   if (content) {
     return (content.video_url ?? content.url) as string | undefined;
   }
+  // Comfly Veo: { data: { output: "https://..." } }
+  const data = raw.data as Record<string, unknown> | undefined;
+  if (data && typeof data.output === "string") {
+    return data.output;
+  }
   return undefined;
+}
+
+function parseProgressValue(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "string") {
+    const m = v.match(/-?\d+(\.\d+)?/);
+    if (m) return Number(m[0]);
+  }
+  return 0;
 }
 
 function parseFirstUrl(raw: string | undefined): string | undefined {
@@ -344,12 +358,12 @@ export function normalizeTaskInfo(raw: Record<string, unknown>): TaskInfo {
   }
   const rawUrl = (raw.resultUrl ?? raw.result_url ?? raw.video_url ?? extractNestedUrl(raw)) as string | undefined;
   const info: TaskInfo = {
-    id: String(raw.id ?? ""),
+    id: String(raw.id ?? raw.task_id ?? ""),
     status: String(raw.status ?? ""),
-    progress: Number(raw.progress ?? 0),
+    progress: parseProgressValue(raw.progress),
     resultUrl: parseFirstUrl(rawUrl),
     thumbnailUrl: (raw.thumbnailUrl ?? raw.thumbnail_url) as string | undefined,
-    errorMessage: (raw.errorMessage ?? raw.error_message ?? raw.error_msg) as string | undefined,
+    errorMessage: (raw.errorMessage ?? raw.error_message ?? raw.error_msg ?? raw.fail_reason) as string | undefined,
     createdAt: (raw.createdAt ?? raw.created_at) as string | undefined,
     finishedAt: (raw.finishedAt ?? raw.finished_at) as string | undefined,
   };
@@ -373,14 +387,32 @@ export async function pollTask(taskId: string, endpoint?: string, provider?: str
   return normalizeTaskInfo(raw);
 }
 
-export async function validateConnection(provider?: string): Promise<boolean> {
+export interface ValidateConnectionOverrides {
+  /** 当前表单里填写的 key（未保存），优先于数据库中的值。 */
+  apiKey?: string;
+  /** 当前表单里填写的 base URL（未保存），优先于数据库中的值。 */
+  baseUrl?: string;
+}
+
+export async function validateConnection(
+  provider?: string,
+  overrides?: ValidateConnectionOverrides,
+): Promise<boolean> {
   if (isTauri) {
     await ensureTauriAPIs();
-    return getInvoke()<boolean>("validate_connection", { provider });
+    return getInvoke()<boolean>("validate_connection", {
+      provider,
+      apiKey: overrides?.apiKey,
+      baseUrl: overrides?.baseUrl,
+    });
   }
 
+  const apiKey = overrides?.apiKey?.trim();
+  const headers: Record<string, string> = apiKey
+    ? { Authorization: `Bearer ${apiKey}` }
+    : getProviderAuthHeaders(provider);
   const url = buildProxyUrl("/v1/models", provider);
-  const resp = await fetch(url, { headers: getProviderAuthHeaders(provider) });
+  const resp = await fetch(url, { headers });
   if (!resp.ok)
     throw new Error(`连接失败: HTTP ${resp.status}`);
   return true;

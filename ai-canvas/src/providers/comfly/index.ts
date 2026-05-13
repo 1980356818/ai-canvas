@@ -21,7 +21,9 @@ const SEEDANCE_ENDPOINT = "/seedance/v3/contents/generations/tasks";
 const SEEDANCE_POLL_ENDPOINT = "/seedance/v3/contents/generations/tasks/{task_id}";
 
 // Comfly Veo: 上游 /v1/videos/generations 已废弃 (实测 404), 现在走 v2 plural。
+// poll 端点必须显式给出 — 默认 /v1/tasks/{id} 在 Comfly 上是 404。
 const VEO_ENDPOINT = "/v2/videos/generations";
+const VEO_POLL_ENDPOINT = "/v2/videos/generations/{task_id}";
 
 export class ComflyProvider extends OpenAICompatProvider {
   readonly descriptor = {
@@ -76,6 +78,7 @@ export class ComflyProvider extends OpenAICompatProvider {
     return await executeAsyncMediaTask({
       providerId: this.descriptor.id,
       submitEndpoint: VEO_ENDPOINT,
+      pollEndpoint: VEO_POLL_ENDPOINT,
       body,
       emit: req.onProgress,
       expectedSec: PROGRESS_EXPECTED_SEC.videoVeo,

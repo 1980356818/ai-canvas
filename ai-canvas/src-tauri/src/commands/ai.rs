@@ -1,5 +1,5 @@
 use crate::AppState;
-use super::config::{read_api_config, read_full_api_config, set_active_key, is_retryable_status, apply_auth_headers};
+use super::config::{provider_display_name, read_full_api_config, set_active_key, is_retryable_status, apply_auth_headers};
 use super::http_util::{root_cause_chain, send_with_retry};
 use base64::Engine as _;
 use serde::Serialize;
@@ -242,31 +242,16 @@ pub async fn ai_proxy(
     };
 
     if full_config.keys.is_empty() {
-        let config = {
-            let db = state.db.lock().map_err(|e| e.to_string())?;
-            read_api_config(&db, &provider)?
-        };
-        let result = ai_proxy_single(
-            state.http_client(),
-            &provider,
-            &endpoint,
-            &body,
-            &config.api_key,
-            &config.base_url,
-            &request_id,
-        ).await;
-        tracing::info!(
-            "[ai_proxy:{}] finished total_elapsed_ms={}",
-            request_id,
-            total_start.elapsed().as_millis()
-        );
-        return result;
+        return Err(format!(
+            "Provider '{}' 的 API Key 未配置，请在设置中填写",
+            provider_display_name(&provider)
+        ));
     }
 
     if full_config.base_url.is_empty() {
         return Err(format!(
             "Provider '{}' 的 API 地址未配置，请在设置中填写 Base URL",
-            provider
+            provider_display_name(&provider)
         ));
     }
 
@@ -372,55 +357,6 @@ pub async fn ai_proxy(
     })
 }
 
-async fn ai_proxy_single(
-    client: &reqwest::Client,
-    provider: &str,
-    endpoint: &str,
-    body: &serde_json::Value,
-    api_key: &str,
-    base_url: &str,
-    request_id: &str,
-) -> Result<AiProxyResponse, String> {
-    if base_url.is_empty() {
-        return Err(format!("Provider '{}' 的 API 地址未配置", provider));
-    }
-    let url = format!("{}{}", base_url.trim_end_matches('/'), endpoint);
-    let send_start = Instant::now();
-    tracing::info!(
-        "[ai_proxy:{}] upstream request sending: url={}, single_key=true",
-        request_id, url
-    );
-    let log_tag = format!("ai_proxy:{}", request_id);
-    let resp = send_with_retry(
-        || build_auth_request(client, &url, provider, api_key, body),
-        &log_tag,
-        &url,
-    )
-    .await
-    .inspect_err(|e| {
-        tracing::error!(
-            "[ai_proxy:{}] 请求发送失败: url={}, elapsed_ms={}, {}",
-            request_id, url, send_start.elapsed().as_millis(), e
-        );
-    })?;
-    tracing::info!(
-        "[ai_proxy:{}] upstream headers received: status={}, elapsed_ms={}",
-        request_id, resp.status().as_u16(), send_start.elapsed().as_millis()
-    );
-    let status = resp.status().as_u16();
-    let text_start = Instant::now();
-    let resp_body = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
-    tracing::info!(
-        "[ai_proxy:{}] upstream body read: status={}, body_bytes={}, read_elapsed_ms={}, request_elapsed_ms={}",
-        request_id,
-        status,
-        resp_body.len(),
-        text_start.elapsed().as_millis(),
-        send_start.elapsed().as_millis()
-    );
-    Ok(AiProxyResponse { body: resp_body, status, rotated_key_name: None, tried_count: 1 })
-}
-
 // ── Streaming AI Proxy ──────────────────────────────────────
 
 #[derive(Clone, Serialize)]
@@ -459,7 +395,7 @@ pub async fn ai_proxy_stream(
     if full_config.base_url.is_empty() {
         return Err(format!(
             "Provider '{}' 的 API 地址未配置，请在设置中填写 Base URL",
-            provider
+            provider_display_name(&provider)
         ));
     }
 
@@ -484,7 +420,10 @@ pub async fn ai_proxy_stream(
             let _ = app.emit("ai-stream", StreamEvent {
                 stream_id: sid.clone(),
                 event: "error".into(),
-                data: format!("Provider '{}' 未配置 API Key", provider_clone),
+                data: format!(
+                    "Provider '{}' 的 API Key 未配置，请在设置中填写",
+                    provider_display_name(&provider_clone)
+                ),
             });
         } else {
             for (i, key_entry) in keys.iter().enumerate() {

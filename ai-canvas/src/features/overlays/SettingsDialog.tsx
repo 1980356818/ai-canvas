@@ -184,7 +184,14 @@ export default function SettingsDialog() {
     async (id: string) => {
       updatePlatform(id, { connStatus: "testing", connError: "" });
       try {
-        await validateConnection(id);
+        // 用当前表单里的 key/baseUrl 测试，避免"必须先保存才能测连接"的歧义。
+        // 取 activeKeyId 对应的条目，回退到第一条非空；都没有就让后端报错。
+        const p = platforms.find((x) => x.id === id);
+        const activeEntry = p?.keys.find((e) => e.id === p?.activeKeyId);
+        const fallbackEntry = p?.keys.find((e) => e.key.trim());
+        const apiKey = (activeEntry?.key ?? fallbackEntry?.key ?? "").trim();
+        const baseUrl = p?.baseUrl.trim() || undefined;
+        await validateConnection(id, { apiKey: apiKey || undefined, baseUrl });
         updatePlatform(id, { connStatus: "ok" });
       } catch (err) {
         updatePlatform(id, {
@@ -193,7 +200,7 @@ export default function SettingsDialog() {
         });
       }
     },
-    [updatePlatform],
+    [updatePlatform, platforms],
   );
 
   const handlePickAutoSavePath = useCallback(async () => {

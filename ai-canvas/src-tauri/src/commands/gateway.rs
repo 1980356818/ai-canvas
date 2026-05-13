@@ -1,5 +1,5 @@
 use crate::AppState;
-use super::config::{read_api_config, read_full_api_config, apply_auth_headers};
+use super::config::{provider_display_name, read_full_api_config, apply_auth_headers, normalize_base_url};
 use super::http_util::send_with_retry;
 use tauri::State;
 
@@ -10,11 +10,13 @@ fn resolve_provider(provider: Option<String>) -> String {
 fn resolve_first_key(state: &State<'_, AppState>, provider: &str) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let full = read_full_api_config(&db, provider)?;
-    if let Some(first) = full.keys.first() {
-        return Ok(first.key.clone());
+    match full.keys.first() {
+        Some(first) => Ok(first.key.clone()),
+        None => Err(format!(
+            "Provider '{}' 的 API Key 未配置，请在设置中填写",
+            provider_display_name(provider)
+        )),
     }
-    let config = read_api_config(&db, provider)?;
-    Ok(config.api_key)
 }
 
 fn resolve_base_url(state: &State<'_, AppState>, provider: &str) -> Result<String, String> {
@@ -96,16 +98,28 @@ pub async fn poll_task(
 /// Validate the API connection by trying /v1/models first, then always falling
 /// back to /v1/chat/completions. Many third-party providers return 401/403/404
 /// on /v1/models even with a valid key, so we must always attempt the fallback.
+///
+/// `api_key` / `base_url` 用于让设置面板传"当前表单值"，无需先保存即可测试；
+/// 缺省时回退到数据库已保存的配置。
 #[tauri::command]
 pub async fn validate_connection(
     state: State<'_, AppState>,
     provider: Option<String>,
+    api_key: Option<String>,
+    base_url: Option<String>,
 ) -> Result<bool, String> {
     let p = resolve_provider(provider);
-    let key = resolve_first_key(&state, &p)?;
+
+    let key = match api_key.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+        Some(k) => k,
+        None => resolve_first_key(&state, &p)?,
+    };
 
     if key.is_empty() {
-        return Err("API Key 未配置，请在设置中填写".to_string());
+        return Err(format!(
+            "Provider '{}' 的 API Key 未配置，请在设置中填写",
+            provider_display_name(&p)
+        ));
     }
 
     let key_len = key.len();
@@ -114,8 +128,11 @@ pub async fn validate_connection(
     } else {
         "****".to_string()
     };
-    let base_url = resolve_base_url(&state, &p)?;
-    let base = base_url.trim_end_matches('/');
+    let resolved_base = match base_url.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+        Some(u) => normalize_base_url(&u),
+        None => resolve_base_url(&state, &p)?,
+    };
+    let base = resolved_base.trim_end_matches('/');
 
     if base.is_empty() {
         return Err("API 地址未配置，请在设置中填写 Base URL".to_string());
