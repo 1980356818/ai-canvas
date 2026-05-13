@@ -18,9 +18,10 @@ import {
   getAccumulatedToolCalls,
   getLastFinishReason,
 } from "./formatter";
-import { aiProxy, aiProxyStream, isTauri, listModels as platformListModels, saveMedia } from "@/platform";
-import { waitForTask } from "@/services/tasks";
+import { aiProxy, aiProxyStream, isTauri, listModels as platformListModels } from "@/platform";
 import { compressDataUrlForApi } from "@/lib/imageCompression";
+import { executeAsyncMediaTask } from "../shared/asyncMediaTask";
+import { PROGRESS_EXPECTED_SEC } from "../shared/progress";
 import type { ModelInfo } from "@/types";
 
 function gcd(a: number, b: number): number {
@@ -65,55 +66,9 @@ function toGptImage2Size(size: string, resolution: string): string | undefined {
   return GPT_IMAGE_2_SIZE_MAP[resolution]?.[ratio];
 }
 
-const IMAGE_GEN_DEBUG = import.meta.env.DEV;
-
-function nowMs(): number {
-  return globalThis.performance?.now?.() ?? Date.now();
-}
-
-function elapsedMs(start: number): number {
-  return Math.round(nowMs() - start);
-}
-
 function makeRequestId(): string {
   return globalThis.crypto?.randomUUID?.().slice(0, 8)
     ?? Math.random().toString(36).slice(2, 10);
-}
-
-function estimateJsonBytes(value: unknown): number {
-  if (value == null) return 4;
-  if (typeof value === "string") return value.length + 2;
-  if (typeof value === "number" || typeof value === "boolean") return String(value).length;
-  if (Array.isArray(value)) {
-    if (value.length === 0) return 2;
-    return 2 + value.length - 1 + value.reduce((sum, item) => sum + estimateJsonBytes(item), 0);
-  }
-  if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.length === 0) return 2;
-    return 2 + entries.length - 1 + entries.reduce(
-      (sum, [key, item]) => sum + key.length + 3 + estimateJsonBytes(item),
-      0,
-    );
-  }
-  return 0;
-}
-
-function describeMediaValue(value: string): { type: string; length: number; approxBytes?: number } {
-  if (value.startsWith("data:")) {
-    const comma = value.indexOf(",");
-    const payloadLength = comma >= 0 ? value.length - comma - 1 : value.length;
-    return { type: "data-url", length: value.length, approxBytes: Math.round(payloadLength * 0.75) };
-  }
-  if (value.startsWith("local://")) return { type: "local", length: value.length };
-  if (value.startsWith("http://") || value.startsWith("https://")) return { type: "remote-url", length: value.length };
-  return { type: "other", length: value.length };
-}
-
-function logImageGen(requestId: string, message: string, payload?: Record<string, unknown>) {
-  if (!IMAGE_GEN_DEBUG) return;
-  if (payload) console.log(`[ImageGen:${requestId}] ${message}`, payload);
-  else console.log(`[ImageGen:${requestId}] ${message}`);
 }
 
 /**
@@ -241,23 +196,12 @@ export abstract class OpenAICompatProvider implements AIProvider {
   }
 
   async generateImage(req: ImageGenRequest): Promise<ImageGenResponse> {
-    const emit = req.onProgress;
-    const requestId = makeRequestId();
-    const totalStart = nowMs();
     const imageField = this.imageRefField();
-    emit?.({ percent: 0, phase: "submitting", label: "正在提交请求…" });
-    logImageGen(requestId, "start", {
-      provider: this.providerId,
-      model: req.model ?? this.defaultImageModel(),
-      promptLength: req.prompt?.length ?? 0,
-      size: req.size,
-      resolution: req.resolution,
-      referenceCount: req.referenceImages?.length ?? 0,
-      references: req.referenceImages?.map((ref) => ({ role: ref.role, ...describeMediaValue(ref.url) })) ?? [],
-    });
+    const requestId = makeRequestId();
+    const modelId = req.model ?? this.defaultImageModel();
 
     const body: Record<string, unknown> = {
-      model: req.model ?? this.defaultImageModel(),
+      model: modelId,
       n: 1,
       response_format: "url",
     };
@@ -266,14 +210,12 @@ export abstract class OpenAICompatProvider implements AIProvider {
     if (req.prompt) {
       body.prompt = req.prompt;
       const baseSize = req.size || "1024x1024";
-      const modelId = (req.model ?? this.defaultImageModel()).toLowerCase();
-      const isGptImage2 = modelId.startsWith("gpt-image-2") || modelId.startsWith("gpt-image-1");
+      const modelLower = modelId.toLowerCase();
+      const isGptImage2 = modelLower.startsWith("gpt-image-2") || modelLower.startsWith("gpt-image-1");
       const resolution = isGptImage2 ? (req.resolution || "2K") : req.resolution;
-      const pixelSize = resolution
-        ? toGptImage2Size(baseSize, resolution)
-        : undefined;
+      const pixelSize = resolution ? toGptImage2Size(baseSize, resolution) : undefined;
       body.size = pixelSize ?? toAspectRatio(baseSize);
-      // gpt-image-* 只接受 low/medium/high/auto；DALL-E 用 standard/hd。做一次映射兜底。
+      // gpt-image-* 只接受 low/medium/high/auto；DALL-E 用 standard/hd。映射兜底。
       if (isGptImage2) {
         const q = (req.quality || "medium").toLowerCase();
         const map: Record<string, string> = { standard: "medium", hd: "high" };
@@ -286,134 +228,37 @@ export abstract class OpenAICompatProvider implements AIProvider {
     if (req.referenceImages?.length) {
       // 在送往 API 前对参考图统一做"过大才压缩"，单点维护、不污染 UI 链路。
       // 详见 lib/imageCompression.ts。
-      const compressStart = nowMs();
-      const compressed = await Promise.all(
+      body[imageField] = await Promise.all(
         req.referenceImages.map((ref) => compressDataUrlForApi(ref.url)),
       );
-      logImageGen(requestId, "reference compression finished", {
-        elapsedMs: elapsedMs(compressStart),
-        before: req.referenceImages.map((ref) => describeMediaValue(ref.url)),
-        after: compressed.map((url) => describeMediaValue(url)),
-      });
-      body[imageField] = compressed;
     }
 
-    logImageGen(requestId, "calling aiProxy", {
-      endpoint: "/v1/images/generations",
-      approximateBodyBytes: estimateJsonBytes(body),
-      imageField,
-      referenceCount: Array.isArray(body[imageField]) ? (body[imageField] as unknown[]).length : 0,
+    const isHd = req.resolution === "2K" || req.resolution === "4K";
+    return await executeAsyncMediaTask({
+      providerId: this.providerId,
+      submitEndpoint: "/v1/images/generations",
+      body,
+      emit: req.onProgress,
+      expectedSec: isHd ? PROGRESS_EXPECTED_SEC.imageHD : PROGRESS_EXPECTED_SEC.image,
+      generatingLabel: "生成中…",
+      submittingLabel: "正在提交请求…",
+      savingLabel: "正在保存图片…",
+      failedFallbackMessage: "图片生成失败",
+      projectId: req.projectId,
+      title: req.prompt,
+      trySyncResult: (data) => {
+        // OpenAI 兼容图像 API 经常一次性返回 URL (data[0].url + revised_prompt)
+        const d = data as { data?: Array<{ url?: string; revised_prompt?: string }> };
+        const img = d.data?.[0];
+        if (img?.url) {
+          return { url: img.url, revisedPrompt: img.revised_prompt };
+        }
+        return null;
+      },
     });
-    const proxyStart = nowMs();
-    const raw = await aiProxy(this.providerId, "/v1/images/generations", body);
-    logImageGen(requestId, "aiProxy returned", {
-      elapsedMs: elapsedMs(proxyStart),
-      totalElapsedMs: elapsedMs(totalStart),
-      status: raw.status,
-      responseBytes: raw.body.length,
-      triedCount: raw.tried_count,
-      rotatedKey: raw.rotated_key_name,
-    });
-    throwIfError(raw.status, raw.body);
-
-    const parseStart = nowMs();
-    const data = JSON.parse(raw.body);
-    const taskIdMatch = raw.body.match(/"task_id"\s*:\s*(\d+)/);
-    logImageGen(requestId, "response parsed", {
-      elapsedMs: elapsedMs(parseStart),
-      hasTaskId: Boolean(data.task_id || taskIdMatch),
-      hasDirectUrl: Boolean(data.data?.[0]?.url),
-    });
-
-    if (data.task_id || taskIdMatch) {
-      const taskId = taskIdMatch ? taskIdMatch[1]! : String(data.task_id);
-      emit?.({ percent: 5, phase: "queued", label: "已提交，排队中…" });
-      logImageGen(requestId, "task polling started", { taskId });
-
-      const pollStart = nowMs();
-      const result = await waitForTask(
-        taskId,
-        (progress, status) => {
-          const st = status.toLowerCase();
-          if (st === "queued" || st === "pending") {
-            emit?.({ percent: Math.max(5, progress), phase: "queued", label: "排队中…" });
-          } else {
-            emit?.({ percent: Math.min(progress, 90) || 10, phase: "generating", label: "生成中…" });
-          }
-        },
-        undefined,
-        undefined,
-        this.providerId,
-      );
-      logImageGen(requestId, "task polling finished", {
-        elapsedMs: elapsedMs(pollStart),
-        totalElapsedMs: elapsedMs(totalStart),
-        status: result.status,
-        hasResultUrl: Boolean(result.resultUrl),
-      });
-
-      const failed = result.status.toLowerCase();
-      if (failed === "failed" || failed === "error" || failed === "cancelled") {
-        throw new Error(result.errorMessage || "图片生成失败");
-      }
-      if (!result.resultUrl) throw new Error("图片生成完成但未返回结果地址");
-
-      emit?.({ percent: 92, phase: "saving", label: "正在保存图片…" });
-      const pid = req.projectId;
-      try {
-        const saveStart = nowMs();
-        logImageGen(requestId, "saveMedia started", { source: describeMediaValue(result.resultUrl), projectId: pid });
-        const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
-        logImageGen(requestId, "saveMedia finished", {
-          elapsedMs: elapsedMs(saveStart),
-          totalElapsedMs: elapsedMs(totalStart),
-          localPath: saved.localPath,
-          width: saved.width,
-          height: saved.height,
-        });
-        emit?.({ percent: 100, phase: "saving", label: "完成" });
-        return { url: saved.localPath };
-      } catch (e) {
-        logImageGen(requestId, "saveMedia failed, using remote url", {
-          totalElapsedMs: elapsedMs(totalStart),
-          error: e instanceof Error ? e.message : String(e),
-        });
-        emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
-        return { url: result.resultUrl };
-      }
-    }
-
-    emit?.({ percent: 80, phase: "saving", label: "正在保存图片…" });
-    const img = data.data?.[0];
-    if (!img?.url) throw new Error("No image returned");
-    const pid = req.projectId;
-    try {
-      const saveStart = nowMs();
-      logImageGen(requestId, "saveMedia started", { source: describeMediaValue(img.url), projectId: pid });
-      const saved = await saveMedia(img.url, undefined, undefined, pid);
-      logImageGen(requestId, "saveMedia finished", {
-        elapsedMs: elapsedMs(saveStart),
-        totalElapsedMs: elapsedMs(totalStart),
-        localPath: saved.localPath,
-        width: saved.width,
-        height: saved.height,
-      });
-      emit?.({ percent: 100, phase: "saving", label: "完成" });
-      return { url: saved.localPath, revisedPrompt: img.revised_prompt };
-    } catch (e) {
-      logImageGen(requestId, "saveMedia failed, using remote url", {
-        totalElapsedMs: elapsedMs(totalStart),
-        error: e instanceof Error ? e.message : String(e),
-      });
-      emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
-      return { url: img.url, revisedPrompt: img.revised_prompt };
-    }
   }
 
   async generateVideo(req: VideoGenRequest): Promise<VideoGenResponse> {
-    const emit = req.onProgress;
-    emit?.({ percent: 0, phase: "submitting", label: "正在提交视频请求…" });
-
     const body: Record<string, unknown> = {
       prompt: req.prompt,
       model: req.model ?? this.defaultVideoModel(),
@@ -425,49 +270,18 @@ export abstract class OpenAICompatProvider implements AIProvider {
       body.aspect_ratio = toAspectRatio(req.size);
     }
 
-    const raw = await aiProxy(this.providerId, this.videoEndpoint(), body);
-    throwIfError(raw.status, raw.body);
-
-    const data = JSON.parse(raw.body);
-    const taskIdMatch = raw.body.match(/"task_id"\s*:\s*(\d+)/);
-
-    if (data.task_id || taskIdMatch) {
-      const taskId = taskIdMatch ? taskIdMatch[1]! : String(data.task_id);
-      emit?.({ percent: 5, phase: "queued", label: "已提交，排队中…" });
-
-      const result = await waitForTask(
-        taskId,
-        (progress, status) => {
-          const st = status.toLowerCase();
-          if (st === "queued" || st === "pending") {
-            emit?.({ percent: Math.max(5, progress), phase: "queued", label: "排队中…" });
-          } else {
-            emit?.({ percent: Math.min(progress, 90) || 10, phase: "generating", label: "视频生成中…" });
-          }
-        },
-        undefined,
-        undefined,
-        this.providerId,
-      );
-
-      const failed = result.status.toLowerCase();
-      if (failed === "failed" || failed === "error" || failed === "cancelled") {
-        throw new Error(result.errorMessage || "视频生成失败");
-      }
-      if (!result.resultUrl) throw new Error("视频生成完成但未返回结果地址");
-
-      emit?.({ percent: 92, phase: "saving", label: "正在保存视频…" });
-      const pid = req.projectId;
-      try {
-        const saved = await saveMedia(result.resultUrl, undefined, undefined, pid);
-        emit?.({ percent: 100, phase: "saving", label: "完成" });
-        return { url: saved.localPath };
-      } catch {
-        emit?.({ percent: 100, phase: "saving", label: "完成（使用远程地址）" });
-        return { url: result.resultUrl };
-      }
-    }
-
-    throw new Error("未能从响应中获取视频任务ID");
+    return await executeAsyncMediaTask({
+      providerId: this.providerId,
+      submitEndpoint: this.videoEndpoint(),
+      body,
+      emit: req.onProgress,
+      expectedSec: PROGRESS_EXPECTED_SEC.videoGeneric,
+      generatingLabel: "视频生成中…",
+      submittingLabel: "正在提交视频请求…",
+      savingLabel: "正在保存视频…",
+      failedFallbackMessage: "视频生成失败",
+      projectId: req.projectId,
+      title: req.prompt,
+    });
   }
 }

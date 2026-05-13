@@ -765,8 +765,15 @@ fn detect_image_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 }
 
 /// Save media from a remote URL, base64 data-URL, or local path into
-/// `{data_dir}/media/images/{uuid}.{ext}`, plus an auto-save copy in
-/// `{data_dir}/auto-save/{project_folder}/{friendly_name}`.
+/// `{data_dir}/media/images/{uuid}.{ext}`, plus a friendly auto-save copy.
+///
+/// 自动保存副本目录解析：
+/// 1. `settings.file_auto_save_path`（用户在设置里填的路径），非空时优先；
+/// 2. 否则回退到 [`AppState::auto_save_default_dir`]——启动时解析的
+///    "程序运行目录/文件自动保存"。
+///
+/// 副本最终路径为 `<base>/<project_folder>/<friendly_filename>`；项目子目录
+/// 命名 `<sanitized_title>_<project_id_short>`。
 /// Returns a **relative** path like `media/images/{uuid}.{ext}`.
 #[tauri::command]
 pub async fn save_media(
@@ -797,15 +804,30 @@ pub async fn save_media(
 
     let mut ext = detect_extension(&source, &filename);
     let file_id = uuid::Uuid::new_v4().to_string();
+    tracing::info!(
+        "[save_media] media_dir ready, ext={}, file_id={}",
+        ext, file_id
+    );
 
     let bytes = if source.starts_with("data:") {
         let b64 = source
             .splitn(2, ',')
             .nth(1)
             .ok_or("Invalid data-URL format")?;
-        BASE64_ENGINE
+        tracing::info!(
+            "[save_media] data-url branch: payload_base64_len={}",
+            b64.len()
+        );
+        let decode_start = Instant::now();
+        let decoded = BASE64_ENGINE
             .decode(b64)
-            .map_err(|e| format!("Base64 解码失败: {}", e))?
+            .map_err(|e| format!("Base64 解码失败: {}", e))?;
+        tracing::info!(
+            "[save_media] base64 decoded: bytes={}, elapsed_ms={}",
+            decoded.len(),
+            decode_start.elapsed().as_millis()
+        );
+        decoded
     } else if source.starts_with("http://") || source.starts_with("https://") {
         let client = state.http_client();
         let max_retries = 3u32;
@@ -876,7 +898,15 @@ pub async fn save_media(
         } else {
             std::path::PathBuf::from(&source)
         };
-        std::fs::read(&abs).map_err(|e| format!("读取文件失败: {}", e))?
+        tracing::info!("[save_media] local-file branch: abs_path={:?}", abs);
+        let read_start = Instant::now();
+        let data = std::fs::read(&abs).map_err(|e| format!("读取文件失败: {}", e))?;
+        tracing::info!(
+            "[save_media] local file read: bytes={}, elapsed_ms={}",
+            data.len(),
+            read_start.elapsed().as_millis()
+        );
+        data
     };
 
     let dest = media_dir.join(format!("{}.{}", file_id, ext));
@@ -890,21 +920,23 @@ pub async fn save_media(
         dest
     );
 
-    let auto_save_base = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
-        db.query_row(
-            "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .map(|s| std::path::PathBuf::from(s.trim()))
-        .unwrap_or_else(|| data_dir.join("auto-save"))
-    };
+    tracing::info!("[save_media] acquiring db lock (auto_save_base)…");
+    let lock1_start = Instant::now();
+    let auto_save_base = resolve_auto_save_base(&state);
+    tracing::info!(
+        "[save_media] auto_save_base resolved: {:?}, total_lock1_block_ms={}",
+        auto_save_base,
+        lock1_start.elapsed().as_millis()
+    );
     let target_dir = if let Some(ref pid) = project_id {
+        tracing::info!("[save_media] acquiring db lock (project title) for pid={}…", pid);
+        let lock2_start = Instant::now();
         let folder = {
             let db = state.db.lock().map_err(|e| e.to_string())?;
+            tracing::info!(
+                "[save_media] db lock #2 acquired, elapsed_ms={}",
+                lock2_start.elapsed().as_millis()
+            );
             db.query_row(
                 "SELECT title FROM projects WHERE id = ?1",
                 rusqlite::params![pid],
@@ -913,6 +945,11 @@ pub async fn save_media(
             .ok()
             .map(|t| build_project_folder_name(&t, pid))
         };
+        tracing::info!(
+            "[save_media] project folder lookup done: folder={:?}, total_lock2_block_ms={}",
+            folder,
+            lock2_start.elapsed().as_millis()
+        );
         match folder {
             Some(f) => auto_save_base.join(f),
             None => auto_save_base.clone(),
@@ -923,6 +960,10 @@ pub async fn save_media(
 
     let friendly_name = build_friendly_filename(&title, &file_id, &ext);
     let user_dest = target_dir.join(&friendly_name);
+    tracing::info!(
+        "[save_media] auto-save plan: target_dir={:?}, friendly_name={:?}",
+        target_dir, friendly_name
+    );
 
     if let Err(e) = std::fs::create_dir_all(&target_dir) {
         tracing::warn!("创建自动保存目录失败: {}", e);
@@ -968,7 +1009,11 @@ pub async fn get_media_base_path(state: State<'_, AppState>) -> Result<String, S
 }
 
 /// Copy an image or video from internal storage to the user's export directory.
-/// Falls back to `{data_dir}/auto-save/{project_folder}/` when no export path is set.
+///
+/// 导出目录解析（优先级从高到低）：
+/// 1. `settings.file_export_path`（用户手动导出路径）；
+/// 2. `settings.file_auto_save_path`（用户的自动保存路径）；
+/// 3. [`AppState::auto_save_default_dir`]（启动时解析的"程序运行目录/文件自动保存"）。
 #[tauri::command]
 pub async fn export_file(
     state: State<'_, AppState>,
@@ -983,25 +1028,12 @@ pub async fn export_file(
         return Err(format!("源文件不存在: {}", source_path));
     }
 
-    let dir = {
+    let base_dir = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
-        db.query_row(
-            "SELECT value FROM settings WHERE key = 'file_export_path'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .or_else(|| {
-            db.query_row(
-                "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
-                [],
-                |row| row.get::<_, String>(0),
-            )
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-        })
-        .unwrap_or_else(|| data_dir.join("auto-save").to_string_lossy().to_string())
+        read_nonempty_setting(&db, "file_export_path")
+            .or_else(|| read_nonempty_setting(&db, "file_auto_save_path"))
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| state.auto_save_default_dir.clone())
     };
 
     let target_dir = if let Some(ref pid) = project_id {
@@ -1016,11 +1048,11 @@ pub async fn export_file(
             .map(|t| build_project_folder_name(&t, pid))
         };
         match folder {
-            Some(f) => std::path::Path::new(&dir).join(f),
-            None => std::path::PathBuf::from(&dir),
+            Some(f) => base_dir.join(f),
+            None => base_dir,
         }
     } else {
-        std::path::PathBuf::from(&dir)
+        base_dir
     };
 
     std::fs::create_dir_all(&target_dir)
@@ -1035,7 +1067,7 @@ pub async fn export_file(
 }
 
 /// Open the system file explorer and highlight the given file.
-/// Prefers the user-facing copy in auto-save/ or export path over internal storage.
+/// 优先在用户配置的导出/自动保存目录中查找友好命名副本，否则回退到内部存储。
 #[tauri::command]
 pub async fn open_in_explorer(
     state: State<'_, AppState>,
@@ -1093,19 +1125,15 @@ fn resolve_user_media_path(
 
     if let Ok(db) = state.db.lock() {
         for key in &["file_export_path", "file_auto_save_path"] {
-            if let Ok(val) = db.query_row(
-                "SELECT value FROM settings WHERE key = ?1",
-                rusqlite::params![key],
-                |row| row.get::<_, String>(0),
-            ) {
-                let val = val.trim().to_string();
-                if !val.is_empty() {
-                    candidate_dirs.push(std::path::PathBuf::from(val));
-                }
+            if let Some(val) = read_nonempty_setting(&db, key) {
+                candidate_dirs.push(std::path::PathBuf::from(val));
             }
         }
     }
 
+    // 兜底：新版默认目录（"程序运行目录/文件自动保存"），以及旧版 `auto-save/`
+    // 兼容已存在的历史数据。后续 release 中老用户数据已迁移，但保留兜底无害。
+    candidate_dirs.push(state.auto_save_default_dir.clone());
     candidate_dirs.push(data_dir.join("auto-save"));
 
     for base in &candidate_dirs {
@@ -1266,17 +1294,69 @@ fn build_friendly_filename(title: &Option<String>, fallback_id: &str, ext: &str)
     let base = title
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .map(|s| sanitize_filename(s))
+        .map(sanitize_filename)
+        .filter(|s| !s.is_empty())
         .unwrap_or_else(|| fallback_id[..8.min(fallback_id.len())].to_string());
     format!("{}_{}.{}", base, timestamp, ext)
 }
 
+/// 最长字符数（按 Unicode `char` 计）。Windows MAX_PATH 是 260 字节，
+/// 项目子目录 + 友好文件名 + 时间戳 + 扩展名 + 多字节字符（中文 3 字节 UTF-8）
+/// 加起来很容易顶到上限，统一截到 40 char 留余量。
+const FRIENDLY_NAME_MAX_CHARS: usize = 40;
+
 fn sanitize_filename(name: &str) -> String {
-    name.chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' || c > '\x7f' { c } else { '_' })
-        .collect::<String>()
-        .trim()
-        .to_string()
+    let mapped: String = name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' || c > '\x7f' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let trimmed = mapped.trim();
+    if trimmed.chars().count() <= FRIENDLY_NAME_MAX_CHARS {
+        trimmed.to_string()
+    } else {
+        trimmed
+            .chars()
+            .take(FRIENDLY_NAME_MAX_CHARS)
+            .collect::<String>()
+            .trim_end()
+            .to_string()
+    }
+}
+
+/// 读取 `settings` 表中的字符串值，去除两端空白后空字符串视作"未配置"返回 None。
+/// 所有"用户没设路径就回退"的逻辑都通过这一个函数判断，避免散落的语义偏差。
+pub(crate) fn read_nonempty_setting(
+    db: &rusqlite::Connection,
+    key: &str,
+) -> Option<String> {
+    db.query_row(
+        "SELECT value FROM settings WHERE key = ?1",
+        rusqlite::params![key],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .map(|v| v.trim().to_string())
+    .filter(|v| !v.is_empty())
+}
+
+/// 解析自动保存的"基目录"（用户配置优先，否则回退到 `AppState::auto_save_default_dir`）。
+/// 不拼项目子目录——调用方按需自己拼。
+pub(crate) fn resolve_auto_save_base(state: &AppState) -> std::path::PathBuf {
+    let user_path = state
+        .db
+        .lock()
+        .ok()
+        .and_then(|db| read_nonempty_setting(&db, "file_auto_save_path"));
+    match user_path {
+        Some(p) => std::path::PathBuf::from(p),
+        None => state.auto_save_default_dir.clone(),
+    }
 }
 
 fn ext_from_content_type(headers: &reqwest::header::HeaderMap) -> Option<String> {

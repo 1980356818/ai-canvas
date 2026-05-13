@@ -5,9 +5,7 @@
  * the platform from settings, model dropdowns, and provider registration.
  * This is a compile-time developer switch — not exposed to end users.
  */
-export const HIDDEN_PLATFORMS: ReadonlySet<string> = new Set([
-  "jijing",
-]);
+export const HIDDEN_PLATFORMS: ReadonlySet<string> = new Set([]);
 
 export function isPlatformVisible(id: string): boolean {
   return !HIDDEN_PLATFORMS.has(id);

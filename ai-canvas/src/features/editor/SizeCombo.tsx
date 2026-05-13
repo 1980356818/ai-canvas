@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ChevronUp } from "lucide-react";
 import { IMAGE_SIZE_OPTIONS } from "@/shared/constants";
+import type { ImageSizeOption } from "@/types";
 import { cn } from "@/lib/utils";
 import { getEditorZoom } from "./editorUtils";
 
@@ -18,6 +19,8 @@ interface SizeComboProps {
   disabled?: boolean;
   allowedSizes?: string[] | null;
   resolutionOptions?: readonly { value: string; label: string }[];
+  /** Override the full option list. Defaults to IMAGE_SIZE_OPTIONS. */
+  sizeOptions?: readonly ImageSizeOption[];
 }
 
 function RatioIcon({
@@ -65,13 +68,15 @@ export default function SizeCombo({
   disabled,
   allowedSizes,
   resolutionOptions,
+  sizeOptions,
 }: SizeComboProps) {
+  const allOptions = sizeOptions ?? IMAGE_SIZE_OPTIONS;
   const baseOptions = allowedSizes
-    ? IMAGE_SIZE_OPTIONS.filter((o) => allowedSizes.includes(o.value))
-    : IMAGE_SIZE_OPTIONS;
+    ? allOptions.filter((o) => allowedSizes.includes(o.value))
+    : allOptions;
   // 当前 value 不在模型允许列表里（如模板预设 3:4 但用户上次选的模型只支持 1:1/16:9 等）。
   // 把当前值附加进选项里并标记“不支持”，避免静默 fallback 误导用户以为比例自动变了。
-  const valueOption = IMAGE_SIZE_OPTIONS.find((o) => o.value === value);
+  const valueOption = allOptions.find((o) => o.value === value);
   const valueUnsupported = !!allowedSizes && !!valueOption && !allowedSizes.includes(value);
   const filteredOptions = valueUnsupported && valueOption
     ? [...baseOptions, valueOption]

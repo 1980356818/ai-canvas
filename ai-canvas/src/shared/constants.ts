@@ -19,6 +19,7 @@ export function sizeFromRatio(ratio: number): { width: number; height: number } 
 
 export type { ImageSizeOption, QuickCreateItem, WorkflowCardPreset, WorkflowConnectionPreset, WorkflowTemplate } from "@/types";
 import type { ImageSizeOption } from "@/types";
+import { isSeedanceModel, isVeoModel } from "@/providers/shared/video";
 
 export const IMAGE_SIZE_OPTIONS: ImageSizeOption[] = [
   { value: "1:1",   label: "1:1",   ratio: 1 },
@@ -31,7 +32,16 @@ export const IMAGE_SIZE_OPTIONS: ImageSizeOption[] = [
   { value: "21:9",  label: "21:9",  ratio: 21 / 9 },
 ];
 
+// 视频画面比例可选项 = 图片比例 + 自适应 (seedance 默认 "adaptive")。
+// SizeCombo 已识别 value === "auto" 为自适应渲染，因此沿用 "auto" 作为内部值,
+// providers 在出站时再翻译成各 API 期望的形式 (seedance: "adaptive"; veo: 省略)。
+export const VIDEO_SIZE_OPTIONS: ImageSizeOption[] = [
+  { value: "auto", label: "自适应", ratio: 1 },
+  ...IMAGE_SIZE_OPTIONS,
+];
+
 export const DEFAULT_IMAGE_SIZE = IMAGE_SIZE_OPTIONS[0]!.value;
+export const DEFAULT_VIDEO_SIZE = "16:9";
 
 const LEGACY_SIZE_MAP: Record<string, string> = {
   "auto": "1:1",
@@ -46,6 +56,15 @@ export function normalizeImageSize(raw: string | undefined): string {
   return LEGACY_SIZE_MAP[raw] ?? DEFAULT_IMAGE_SIZE;
 }
 
+// Video 单独走 normalizer: "auto" / "adaptive" 视为有效值 (seedance 自适应),
+// 其余复用图像的 legacy 兜底但默认 16:9。
+export function normalizeVideoSize(raw: string | undefined): string {
+  if (!raw) return DEFAULT_VIDEO_SIZE;
+  if (raw === "auto" || raw === "adaptive") return "auto";
+  if (raw.includes(":")) return raw;
+  return LEGACY_SIZE_MAP[raw] ?? DEFAULT_VIDEO_SIZE;
+}
+
 const MODEL_SIZE_CONSTRAINTS: Record<string, string[]> = {
   "gpt-image-2": ["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16"],
 };
@@ -55,6 +74,62 @@ export function getAllowedSizesForModel(modelId: string): string[] | null {
     if (modelId === pattern || modelId.startsWith(pattern)) return sizes;
   }
   return null;
+}
+
+// 视频模型可选比例 (上游 API 明确支持的). 不在此列表的会被 SizeCombo 标灰。
+//   Seedance 2.0 / 2.0 fast: 16:9 4:3 1:1 3:4 9:16 21:9 + adaptive (auto)
+//   Veo 3.1 (Google):        16:9 9:16 1:1
+const SEEDANCE_RATIOS = ["auto", "16:9", "9:16", "1:1", "4:3", "3:4", "21:9"] as const;
+const VEO_RATIOS = ["16:9", "9:16", "1:1"] as const;
+
+export function getAllowedVideoSizesForModel(modelId: string): string[] | null {
+  if (isSeedanceModel(modelId)) return [...SEEDANCE_RATIOS];
+  if (isVeoModel(modelId)) return [...VEO_RATIOS];
+  return null;
+}
+
+export interface VideoResolutionOption {
+  readonly value: string;
+  readonly label: string;
+}
+
+// Seedance 2.0 / 2.0 fast 仅支持 480p / 720p (1080p 在 2.0 系列不支持).
+const SEEDANCE_RESOLUTIONS: VideoResolutionOption[] = [
+  { value: "480p", label: "480p" },
+  { value: "720p", label: "720p" },
+];
+
+// Veo 的分辨率由变体 ID 决定 (fast=720p, 4k/pro-4k=4K),
+// canonical "veo3.1" 别名让用户在 fast 与 4K 间切换。
+const VEO_FAST_RESOLUTIONS: VideoResolutionOption[] = [
+  { value: "720p", label: "720P" },
+];
+const VEO_4K_RESOLUTIONS: VideoResolutionOption[] = [
+  { value: "4K", label: "4K" },
+];
+const VEO_UNIFIED_RESOLUTIONS: VideoResolutionOption[] = [
+  { value: "720p", label: "Fast 720P" },
+  { value: "4K", label: "4K" },
+];
+
+export function getVideoResolutionsForModel(modelId: string): VideoResolutionOption[] | null {
+  if (isSeedanceModel(modelId)) return SEEDANCE_RESOLUTIONS;
+  if (modelId === "veo3.1") return VEO_UNIFIED_RESOLUTIONS;
+  if (modelId === "veo3.1-fast") return VEO_FAST_RESOLUTIONS;
+  if (modelId === "veo3.1-4k" || modelId === "veo3.1-pro-4k") return VEO_4K_RESOLUTIONS;
+  return null;
+}
+
+export function getDefaultResolutionForModel(modelId: string): string | null {
+  if (isSeedanceModel(modelId)) return "720p";
+  if (modelId === "veo3.1" || modelId === "veo3.1-fast") return "720p";
+  if (modelId === "veo3.1-4k" || modelId === "veo3.1-pro-4k") return "4K";
+  return null;
+}
+
+export function getDefaultVideoSizeForModel(modelId: string): string {
+  if (isSeedanceModel(modelId)) return "auto"; // seedance 默认 adaptive
+  return DEFAULT_VIDEO_SIZE;
 }
 
 export function coerceToAllowedSize(currentSize: string, allowedSizes: string[] | null): string {

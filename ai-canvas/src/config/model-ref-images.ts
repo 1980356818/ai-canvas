@@ -1,4 +1,5 @@
 import type { CanvasCard } from "@/types";
+import { isSeedanceModel, isVeoModel } from "@/providers/shared/video";
 
 export interface RefImageSlot {
   key: string;
@@ -68,6 +69,20 @@ const CHAT_REF_SLOTS: RefImageSlot[] = Array.from({ length: 12 }, (_, i) => ({
   required: false,
 }));
 
+// Seedance 2.0 多模态参考: 0~9 张
+const SEEDANCE_VIDEO_REF_SLOTS: RefImageSlot[] = Array.from({ length: 9 }, (_, i) => ({
+  key: `refImage${i}`,
+  label: `参考图${i + 1}`,
+  description: "Seedance 多模态参考图",
+  required: false,
+}));
+
+// Veo 3.1 参考: 单张首帧 (官方 API 仅支持一张参考图)
+const VEO_VIDEO_REF_SLOTS: RefImageSlot[] = [
+  { key: "refImage0", label: "参考图", description: "Veo 首帧参考图", required: false },
+];
+
+// 兜底: 通用视频参考图槽位
 const VIDEO_REF_SLOTS: RefImageSlot[] = Array.from({ length: 9 }, (_, i) => ({
   key: `refImage${i}`,
   label: `参考图${i + 1}`,
@@ -94,10 +109,13 @@ export function getRefSlotsForChatModel(modelId: string): RefImageSlot[] {
 }
 
 export function getRefSlotsForVideoModel(
-  _modelId: string,
+  modelId: string,
   imageMode: string = "reference",
 ): RefImageSlot[] {
-  return imageMode === "reference" ? VIDEO_REF_SLOTS : [];
+  if (imageMode !== "reference") return [];
+  if (isSeedanceModel(modelId)) return SEEDANCE_VIDEO_REF_SLOTS;
+  if (isVeoModel(modelId)) return VEO_VIDEO_REF_SLOTS;
+  return VIDEO_REF_SLOTS;
 }
 
 export function getRefSlotsForModel(modelId: string): RefImageSlot[] {

@@ -1,6 +1,6 @@
 [package]
 name = "ai-canvas"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2021"
 
 [lib]
@@ -22,6 +22,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "nat
 base64 = "0.22"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+tracing-appender = "0.2"
 chrono = "0.4"
 tauri-plugin-clipboard-manager = "2"
 sha2 = "0.10"

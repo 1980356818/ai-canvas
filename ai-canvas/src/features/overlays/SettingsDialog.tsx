@@ -345,7 +345,7 @@ export default function SettingsDialog() {
                 label="自动保存路径"
                 hint="AI 生成的图片/视频自动保存到此目录，按项目分组"
                 value={autoSavePath}
-                placeholder="未设置则使用应用数据目录的 auto-save 文件夹"
+                placeholder="未设置则使用：程序运行目录/文件自动保存"
                 onPick={handlePickAutoSavePath}
                 onClear={() => setAutoSavePath("")}
               />

@@ -168,44 +168,43 @@ pub fn rename_project(state: State<AppState>, id: String, title: String) -> Resu
 
     if let Some(old) = old_title {
         if old != title {
-            let auto_dir = db
-                .query_row(
-                    "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
-                    [],
-                    |row| row.get::<_, String>(0),
-                )
-                .ok()
-                .filter(|s| !s.trim().is_empty())
-                .or_else(|| {
-                    db.query_row(
-                        "SELECT value FROM settings WHERE key = 'image_auto_save_path'",
-                        [],
-                        |row| row.get::<_, String>(0),
-                    )
-                    .ok()
-                    .filter(|s| !s.trim().is_empty())
-                });
+            let old_folder = super::ai::build_project_folder_name_pub(&old, &id);
+            let new_folder = super::ai::build_project_folder_name_pub(&title, &id);
 
-            if let Some(base) = auto_dir {
-                let old_folder = super::ai::build_project_folder_name_pub(&old, &id);
-                let new_folder = super::ai::build_project_folder_name_pub(&title, &id);
+            if old_folder != new_folder {
+                // 用户配置的自动保存路径 + 默认目录都要尝试 rename。
+                // 同一项目可能在不同基目录都留有子文件夹（比如先没配后又配了路径，
+                // 或者配置切换过），所以我们对所有候选基目录做 best-effort rename。
+                let mut bases: Vec<std::path::PathBuf> = Vec::new();
+                if let Some(p) = super::ai::read_nonempty_setting(&db, "file_auto_save_path") {
+                    bases.push(std::path::PathBuf::from(p));
+                }
+                if !bases.iter().any(|p| p == &state.auto_save_default_dir) {
+                    bases.push(state.auto_save_default_dir.clone());
+                }
 
-                if old_folder != new_folder {
-                    let old_path = std::path::Path::new(&base).join(&old_folder);
-                    let new_path = std::path::Path::new(&base).join(&new_folder);
-
-                    if old_path.exists() {
-                        if let Err(e) = std::fs::rename(&old_path, &new_path) {
-                            tracing::warn!(
-                                "重命名自动保存文件夹失败 ({} → {}): {}",
-                                old_folder, new_folder, e
-                            );
-                        } else {
-                            tracing::info!(
-                                "自动保存文件夹已重命名: {} → {}",
-                                old_folder, new_folder
-                            );
-                        }
+                for base in &bases {
+                    let old_path = base.join(&old_folder);
+                    let new_path = base.join(&new_folder);
+                    if !old_path.exists() {
+                        continue;
+                    }
+                    if new_path.exists() {
+                        tracing::warn!(
+                            "目标文件夹已存在，跳过重命名: {:?} (项目 {} → {})",
+                            new_path, old_folder, new_folder
+                        );
+                        continue;
+                    }
+                    match std::fs::rename(&old_path, &new_path) {
+                        Ok(_) => tracing::info!(
+                            "自动保存文件夹已重命名: {:?} → {:?}",
+                            old_path, new_path
+                        ),
+                        Err(e) => tracing::warn!(
+                            "重命名自动保存文件夹失败 ({:?} → {:?}): {}",
+                            old_path, new_path, e
+                        ),
                     }
                 }
             }

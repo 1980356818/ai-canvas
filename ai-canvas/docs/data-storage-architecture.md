@@ -12,7 +12,7 @@ AICat 的数据分布在 **三个独立位置**：
 |----------|------|------|
 | `{data_dir}/data.db` | SQLite 数据库 | 项目、卡片、连线、设置、聊天、Agent 会话 |
 | `{data_dir}/media/` | 文件目录 | AI 生成的图片/视频（内部存储，按 UUID 命名） |
-| `{data_dir}/auto-save/` | 文件目录 | AI 生成的文件自动保存副本（按项目分文件夹，友好命名） |
+| `{auto_save_default_dir}` | 文件目录 | AI 生成的文件自动保存副本（按项目分文件夹，友好命名）。默认 `{exe_dir}/文件自动保存/`，详见 [§3.2](#32-自动保存自动无需配置) |
 | WebView localStorage | 浏览器存储 | 视口状态、登录 Token、认证信息、主题/模型偏好 |
 
 ### 1.1 `data_dir` 解析策略（`resolve_data_dir`）
@@ -48,27 +48,33 @@ AppData 有 data.db 且 exe/data 没有？ ──是──→ AppData（旧版�
 ### 1.2 目录结构
 
 ```
-{data_dir}/
-├── data.db              ← SQLite 主数据库
-├── data.db-wal          ← WAL 日志（Write-Ahead Logging）
-├── data.db-shm          ← 共享内存文件
-├── media/
-│   ├── images/          ← AI 生成的图片/视频（内部存储）
-│   │   ├── {uuid}.png
-│   │   ├── {uuid}.jpg
-│   │   ├── {uuid}.webp
-│   │   └── {uuid}.mp4
-│   └── thumbnails/      ← 缩略图（预留目录）
-└── auto-save/           ← 自动保存副本（友好命名，按项目分组）
-    ├── {项目标题}_{短ID}/
-    │   ├── 赛博猫_20260422_143021.png
-    │   ├── 风景画_20260422_143522.jpg
-    │   └── ...
-    └── {另一个项目}_{短ID}/
-        └── ...
+{exe_dir}/                       ← Windows 便携模式：与 exe 同级
+├── AICat.exe
+├── 文件自动保存/                  ← 自动保存默认目录（友好命名，按项目分组）
+│   ├── {项目标题}_{短ID}/
+│   │   ├── 赛博猫_20260422_143021.png
+│   │   ├── 风景画_20260422_143522.jpg
+│   │   └── ...
+│   └── {另一个项目}_{短ID}/
+│       └── ...
+└── data/                        ← data_dir
+    ├── data.db                  ← SQLite 主数据库
+    ├── data.db-wal              ← WAL 日志（Write-Ahead Logging）
+    ├── data.db-shm              ← 共享内存文件
+    └── media/
+        ├── images/              ← AI 生成的图片/视频（内部存储）
+        │   ├── {uuid}.png
+        │   ├── {uuid}.jpg
+        │   ├── {uuid}.webp
+        │   └── {uuid}.mp4
+        └── thumbnails/          ← 缩略图（预留目录）
 ```
 
-> **Windows 示例**：安装到 `D:\AICat` → 数据在 `D:\AICat\data\`，数据库、图片、自动保存全部在 D 盘。
+> **Windows 便携模式（推荐）**：安装到 `D:\AICat\` → exe 在 `D:\AICat\AICat.exe`，
+> 自动保存可见于 `D:\AICat\文件自动保存\`，数据库等内部数据在 `D:\AICat\data\`。
+>
+> **回退场景**（Program Files / exe 不可写 / debug）：自动保存目录会回退到 `{data_dir}/文件自动保存/`，
+> 即和 `data/` 同级关系不再存在，整个自动保存目录嵌入到 `data/` 里面。具体规则见 [§3.2](#32-自动保存自动无需配置)。
 
 ---
 
@@ -160,38 +166,39 @@ AICat 采用 **三层文件保存**机制，自动保存路径无需用户配置
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ 1. 内部存储（永远保存）                                        │
-│    app_data_dir/media/images/{uuid}.{ext}                    │
+│    {data_dir}/media/images/{uuid}.{ext}                      │
 │    所有 AI 生成的媒体文件都会先存到这里                           │
 │    卡片 data 字段中引用此相对路径                                │
 ├─────────────────────────────────────────────────────────────┤
-│ 2. 自动保存（自动复制一份，无需配置）                             │
-│    app_data_dir/auto-save/{项目标题}_{短ID}/{友好文件名}         │
+│ 2. 自动保存（自动复制一份，可配置）                              │
+│    {file_auto_save_path | 默认目录}/{项目标题_短ID}/{友好文件名}   │
 │    每次 AI 生成文件后自动同步一份可读副本                         │
+│    默认目录 = "程序运行目录/文件自动保存"（启动时解析，见 §3.2.1）   │
 ├─────────────────────────────────────────────────────────────┤
 │ 3. 手动导出（可选，用户触发）                                    │
 │    settings key: file_export_path                             │
 │    用户手动点击「下载/导出」时，从内部存储复制到此路径               │
-│    回退：如果未设置，使用 auto-save 目录                         │
+│    回退：如果未设置，使用自动保存目录                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### 3.1 内部存储
 
-- **位置**：`app_data_dir/media/images/`
+- **位置**：`{data_dir}/media/images/`
 - **命名**：`{uuid}.{ext}`（如 `a1b2c3d4-e5f6-7890-abcd-ef1234567890.png`）
 - **触发**：每次 AI 生成图片/视频时自动保存
 - **引用**：卡片 `data` 字段中存储相对路径 `media/images/{uuid}.{ext}`
 - **显示**：通过 Tauri asset protocol 转换为可显示的 URL
 
-### 3.2 自动保存（自动，无需配置）
+### 3.2 自动保存
 
-- **位置**：`app_data_dir/auto-save/`
-- **工作方式**：每次 AI 生成文件后，在写入内部存储的**同时**，自动复制一份到此目录
+- **位置**：用户在「设置 → 通用 → 自动保存路径」可配置；未配置则使用 [§3.2.1](#321-默认目录解析) 中解析的默认目录。
+- **工作方式**：每次 AI 生成文件后，在写入内部存储的**同时**，自动复制一份到此目录。复制失败仅打 warning，不影响内部存储和卡片显示。
 - **目录结构**：
 
 ```
-{app_data_dir}/auto-save/
-├── {项目标题}_{项目ID前8位}/     ← 按项目分文件夹
+{auto_save_base}/
+├── {项目标题}_{项目ID前8位}/        ← 按项目分文件夹
 │   ├── 赛博猫_20260422_143021.png
 │   ├── 风景画_20260422_143522.jpg
 │   └── ...
@@ -199,35 +206,63 @@ AICat 采用 **三层文件保存**机制，自动保存路径无需用户配置
     └── ...
 ```
 
-- **文件命名**：`{卡片标题}_{YYYYMMDD_HHMMSS}.{ext}`
-- **回退命名**：无卡片标题时使用 `{UUID前8位}_{YYYYMMDD_HHMMSS}.{ext}`
+- **文件命名**：`{prompt|卡片标题}_{YYYYMMDD_HHMMSS}.{ext}`，标题超过 40 个字符会被截断。
+- **回退命名**：无 title 时使用 `{UUID前8位}_{YYYYMMDD_HHMMSS}.{ext}`。
+
+#### 3.2.1 默认目录解析
+
+`AppState::auto_save_default_dir` 在启动时一次性解析，所有"用户没设路径"的回退都用它（保证全代码路径一致，不会因为读 setting 时机不同而产生分歧）：
+
+| 平台 / 场景 | 默认目录 | 备注 |
+|------------|---------|------|
+| Windows release，exe 同级目录可写 | `{exe_dir}/文件自动保存/` | **便携模式推荐**：用户能在安装目录里直接看到文件 |
+| Windows release，exe 在 Program Files | `{data_dir}/文件自动保存/` | exe 同级不可写，落到 AppData |
+| Windows release，exe 同级不可写 | `{data_dir}/文件自动保存/` | 任何其它 IO 错误也回退 |
+| Windows debug | `{data_dir}/文件自动保存/` | 防止 cargo clean 误删 |
+| Linux release | `{exe_dir}/文件自动保存/`（可写时） | 不可写时回退 `{data_dir}/文件自动保存/` |
+| macOS release | `{data_dir}/文件自动保存/` | exe 在 .app/Contents/MacOS/，不适合放用户文件 |
+
+旧版本使用的 `{data_dir}/auto-save/` 目录会在启动时自动迁移到新位置（仅当新目录不存在或为空时；冲突时保留两份并打日志）。
 
 ### 3.3 手动导出
 
 - **设置入口**：设置 → 通用 → 导出路径
 - **存储 key**：`file_export_path`
 - **工作方式**：用户手动点击「下载/导出」按钮时，从内部存储复制到此路径
-- **回退**：如果未设置 `file_export_path`，使用 `app_data_dir/auto-save/{项目文件夹}/`
+- **回退优先级**：`file_export_path` → `file_auto_save_path` → §3.2.1 默认目录
 - **提示**：导出路径和自动保存路径的文件夹结构一致（按项目分组）
 
 ### 3.4 路径解析规则（Rust 侧）
 
 **save_media（AI 生成时自动保存）**：
 ```
-1. 写入内部存储 → app_data_dir/media/images/{uuid}.{ext}
-2. 自动复制到  → app_data_dir/auto-save/{项目文件夹}/{友好文件名}
+1. 写入内部存储 → {data_dir}/media/images/{uuid}.{ext}
+2. 自动复制到  → resolve_auto_save_base() / {项目文件夹} / {友好文件名}
+
+resolve_auto_save_base():
+    settings.file_auto_save_path （非空） → 用户路径
+    否则                                  → state.auto_save_default_dir
 ```
 
 **export_file（手动导出）**：
 ```
-file_export_path → app_data_dir/auto-save/ → 报错
+file_export_path → file_auto_save_path → state.auto_save_default_dir
 ```
 
 **open_in_explorer（打开文件所在位置）**：
 ```
 1. 优先在 file_export_path 中查找用户友好的副本
-2. 回退到 app_data_dir/auto-save/ 中查找
-3. 最终回退到 app_data_dir/media/ 内部存储
+2. 回退到 file_auto_save_path 中查找
+3. 回退到 state.auto_save_default_dir 中查找
+4. 兼容回退到 {data_dir}/auto-save/（旧版数据未迁移的兜底）
+5. 最终回退到 {data_dir}/media/ 内部存储
+```
+
+**rename_project（项目改名时同步重命名子目录）**：
+```
+对每个候选基目录（settings.file_auto_save_path + state.auto_save_default_dir）：
+  rename {base}/{旧标题_短ID}/ → {base}/{新标题_短ID}/
+失败仅 warn，不影响数据库 rename。
 ```
 
 ---
@@ -255,12 +290,12 @@ file_export_path → app_data_dir/auto-save/ → 报错
 
 | key | 说明 | 状态 |
 |-----|------|------|
-| `file_export_path` | 手动导出路径 | **当前使用** |
+| `file_auto_save_path` | 用户自定义的自动保存根目录；为空时回退到 [§3.2.1](#321-默认目录解析) 中解析的默认目录 | **当前使用** |
+| `file_export_path` | 手动导出路径；为空时按 [§3.3](#33-手动导出) 的回退链 | **当前使用** |
 
 > **已废弃的 key**（旧数据库中可能存在，代码不再读写）：
-> - `file_auto_save_path`（旧版自动保存路径 — 现改为固定的 `app_data_dir/auto-save/`）
-> - `image_auto_save_path`（更早期兼容 key）
-> - `image_export_path`（更早期兼容 key）
+> - `image_auto_save_path`（早期兼容 key）
+> - `image_export_path`（早期兼容 key）
 
 ### 4.3 `api_keys` JSON 格式
 
@@ -339,7 +374,7 @@ file_export_path → app_data_dir/auto-save/ → 报错
 
 | 文件 | 职责 |
 |------|------|
-| `src/lib.rs` | `resolve_data_dir` 解析数据目录、创建子目录（含 `auto-save/`）、打开数据库、注册命令 |
+| `src/lib.rs` | `resolve_data_dir` / `resolve_auto_save_default_dir` 解析目录、迁移旧版 `auto-save/`、打开数据库、注册命令 |
 | `src/db/mod.rs` | 数据库初始化（WAL 模式、外键、busy_timeout） |
 | `src/db/migrations.rs` | 6 个版本的数据库迁移，含 API KEY 种子数据 |
 | `src/commands/project.rs` | 项目 CRUD、卡片 CRUD、连线 CRUD、`get_setting`/`set_setting` |
@@ -424,21 +459,36 @@ file_export_path → app_data_dir/auto-save/ → 报错
 
 **实现**：`lib.rs` 中的 `resolve_data_dir()` 函数，Windows 优先尝试 exe 目录，失败则回退到 AppData。
 
-### 8.2 自动保存路径简化
+### 8.2 自动保存路径演进
 
-**变更前**（4 个冗余 key + 复杂回退链）：
+**v1：4 个冗余 key + 复杂回退链**
 ```
 save_media:    file_auto_save_path → image_auto_save_path → 不保存
 export_file:   file_export_path → file_auto_save_path → image_export_path → image_auto_save_path → 报错
 open_explorer: 扫描全部 4 个 key 目录
 ```
 
-**变更后**（固定路径 + 1 个可选 key）：
+**v2：精简到 2 个 key + 内部 auto-save/ 兜底**
 ```
-save_media:    {data_dir}/auto-save/{项目文件夹}/  （固定，永远保存）
-export_file:   file_export_path → {data_dir}/auto-save/  （1 级回退）
-open_explorer: file_export_path → {data_dir}/auto-save/ → {data_dir}/media/  （3 级回退）
+save_media:    file_auto_save_path → {data_dir}/auto-save/
+export_file:   file_export_path → file_auto_save_path → {data_dir}/auto-save/
 ```
+问题：`rename_project` 漏掉了 `{data_dir}/auto-save/` 这一层 fallback —— 用户没设
+`file_auto_save_path` 时改名项目，自动保存子目录不会跟着 rename，导致老文件孤儿化。
+另外 `auto-save/` 这个英文名+嵌在 `data/` 深处，普通用户根本看不到。
+
+**v3（当前）：默认目录抬到"程序运行目录/文件自动保存"，AppState 缓存**
+```
+启动时：state.auto_save_default_dir = resolve_auto_save_default_dir(data_dir)
+       具体规则见 §3.2.1，简言之 Windows 便携模式 → exe 同级，否则 data_dir 内
+
+save_media:    file_auto_save_path → state.auto_save_default_dir
+export_file:   file_export_path → file_auto_save_path → state.auto_save_default_dir
+rename_project: 对 {file_auto_save_path, state.auto_save_default_dir} 都尝试 rename
+open_explorer: file_export_path → file_auto_save_path → state.auto_save_default_dir
+                → {data_dir}/auto-save/ (旧版兼容) → {data_dir}/media/
+```
+迁移：启动时若发现旧版 `{data_dir}/auto-save/`，且新默认目录不存在或为空，自动 rename。
 
 ### 8.3 统一数据目录访问
 
@@ -463,10 +513,12 @@ open_explorer: file_export_path → {data_dir}/auto-save/ → {data_dir}/media/ 
 ```
 D:\AICat\                    ← 安装目录
 ├── AICat.exe                ← 程序
+├── 文件自动保存\              ← 自动保存默认目录（用户可见、按项目分组）
+│   └── 我的画布_a1b2c3d4\
+│       └── ...
 └── data\                    ← 所有用户数据
     ├── data.db              ← 含 API Key，分享时注意
-    ├── media/images/
-    └── auto-save/
+    └── media/images/
 ```
 
 - 换电脑：整个 `D:\AICat\` 目录拷走即可
@@ -496,7 +548,7 @@ D:\AICat\                    ← 安装目录
 ~/Library/Application Support/com.ai-canvas.desktop/
 ├── data.db
 ├── media/images/
-└── auto-save/
+└── 文件自动保存/             ← 自动保存默认目录（macOS 不放到 .app 旁边）
 ```
 
 - 遵循 macOS 标准数据存储规范

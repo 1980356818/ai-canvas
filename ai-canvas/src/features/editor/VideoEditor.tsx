@@ -19,8 +19,17 @@ import RefImageSlot from "./RefImageSlot";
 import PortalSelect from "./PortalSelect";
 import SizeCombo from "./SizeCombo";
 import PromptTextarea, { type PromptTextareaHandle } from "./PromptTextarea";
-import { normalizeImageSize, IMAGE_SIZE_OPTIONS, sizeFromRatio } from "@/shared/constants";
-import { isSeedanceModel } from "@/providers/comfly/models";
+import {
+  normalizeVideoSize,
+  IMAGE_SIZE_OPTIONS,
+  VIDEO_SIZE_OPTIONS,
+  sizeFromRatio,
+  getAllowedVideoSizesForModel,
+  getVideoResolutionsForModel,
+  getDefaultResolutionForModel,
+  getDefaultVideoSizeForModel,
+} from "@/shared/constants";
+import { isSeedanceModel } from "@/providers/shared/video";
 
 interface VideoFrameRef {
   url: string;
@@ -33,12 +42,6 @@ const DURATION_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
   value: String(i + 4),
   label: `${i + 4}s`,
 }));
-
-const VIDEO_RESOLUTION_OPTIONS = [
-  { value: "480p", label: "480p" },
-  { value: "720p", label: "720p" },
-  { value: "1080p", label: "1080p" },
-] as const;
 
 interface AudioRefEntry {
   url: string;
@@ -131,13 +134,15 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const promptRef = useRef<PromptTextareaHandle>(null);
   const [currentModel, setCurrentModel] = useState("");
-  const [currentSize, setCurrentSize] = useState(() => normalizeImageSize((card.data as VideoData).size));
+  const [currentSize, setCurrentSize] = useState(() => normalizeVideoSize((card.data as VideoData).size));
   const [currentResolution, setCurrentResolution] = useState(() => (card.data as VideoData).resolution ?? "720p");
   const [currentDuration, setCurrentDuration] = useState(() => (card.data as VideoData).duration ?? 5);
   const [currentAudio, setCurrentAudio] = useState(() => (card.data as VideoData).generateAudio ?? true);
   const [error, setError] = useState<string | null>(null);
   const data = card.data as VideoData;
   const isSeedance = isSeedanceModel(currentModel);
+  const allowedVideoSizes = useMemo(() => getAllowedVideoSizesForModel(currentModel), [currentModel]);
+  const videoResolutionOptions = useMemo(() => getVideoResolutionsForModel(currentModel), [currentModel]);
   const availableModes: VideoImageMode[] = isSeedance
     ? ["text", "firstFrame", "firstLastFrame", "reference"]
     : ["text", "firstLastFrame"];
@@ -347,11 +352,28 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
           newData.refVideos = undefined;
         }
       }
+
+      // 切换模型时, 把比例/分辨率收敛到新模型支持的集合, 避免发送不支持的值。
+      const allowedSizes = getAllowedVideoSizesForModel(modelId);
+      if (allowedSizes && !allowedSizes.includes(currentSize)) {
+        const fallback = getDefaultVideoSizeForModel(modelId);
+        setCurrentSize(fallback);
+        newData.size = fallback;
+        const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === fallback);
+        if (opt) Object.assign(newData, sizeFromRatio(opt.ratio));
+      }
+      const resolutions = getVideoResolutionsForModel(modelId);
+      if (resolutions && !resolutions.some((r) => r.value === currentResolution)) {
+        const def = getDefaultResolutionForModel(modelId) ?? resolutions[0]!.value;
+        setCurrentResolution(def);
+        newData.resolution = def;
+      }
+
       updateCard(card.id, { data: newData });
       autoSave.markDirty(card.id);
       useSettingsStore.getState().setLastModel("video", modelId, providerId);
     },
-    [card.id, data, imageMode, frames, updateCard],
+    [card.id, data, imageMode, frames, updateCard, currentSize, currentResolution],
   );
 
   const handleSizeChange = useCallback(
@@ -830,9 +852,11 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
           <SizeCombo
             value={currentSize}
             onChange={handleSizeChange}
-            resolution={isSeedance ? currentResolution : undefined}
-            onResolutionChange={isSeedance ? handleResolutionChange : undefined}
-            resolutionOptions={isSeedance ? VIDEO_RESOLUTION_OPTIONS : undefined}
+            sizeOptions={VIDEO_SIZE_OPTIONS}
+            allowedSizes={allowedVideoSizes}
+            resolution={videoResolutionOptions ? currentResolution : undefined}
+            onResolutionChange={videoResolutionOptions ? handleResolutionChange : undefined}
+            resolutionOptions={videoResolutionOptions ?? undefined}
             disabled={generating}
           />
         )}

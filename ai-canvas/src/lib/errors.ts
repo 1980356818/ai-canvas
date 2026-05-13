@@ -1,8 +1,16 @@
+// 数字 code 对应 JiJing 后端 com.jijing.common.core.exception.ErrorCode：
+//   10001 = FAILED          (操作失败 / 业务级失败的兜底)
+//   10002 = BAD_REQUEST     (参数错误 / 调用非法)
+//   10003 = NOT_FOUND       (资源不存在 / 任务不存在 / 模型路由缺失)
+//   10004 = INTERNAL_ERROR  (后端内部异常, 上游适配器抛错通常落这里)
+//   20003 = AUTH_TOKEN_EXPIRED (网关认证体系自己的码段, 通用前端兜底)
+// 字符串 type 对应 OpenAI 风格错误（保留向后兼容，调用 OpenAI 兼容渠道时上游会回这些）。
 const ERROR_CODE_MAP: Record<string, string> = {
-  "10004": "模型不可用或分组不支持，请检查模型名称和令牌分组",
-  "10001": "API Key 无效或已过期",
-  "10002": "余额不足",
-  "10003": "请求频率过高，请稍后重试",
+  "10001": "操作失败，请稍后重试或检查请求参数",
+  "10002": "请求参数错误，请检查输入",
+  "10003": "资源或任务不存在",
+  "10004": "服务内部错误，请稍后重试",
+  "20003": "登录已过期，请重新登录",
   insufficient_quota: "余额不足，请充值后重试",
   model_not_found: "模型不存在，请检查模型名称",
   invalid_api_key: "API Key 无效",

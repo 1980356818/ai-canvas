@@ -43,6 +43,9 @@ pub struct AppState {
     stream_client: OnceLock<reqwest::Client>,
     pub active_streams: Mutex<HashMap<String, Arc<AtomicBool>>>,
     pub data_dir: std::path::PathBuf,
+    /// 文件自动保存的**默认目录**。当 `settings.file_auto_save_path` 为空时，
+    /// 所有自动保存/导出回退都落到这里。规则参见 [`resolve_auto_save_default_dir`]。
+    pub auto_save_default_dir: std::path::PathBuf,
 }
 
 impl AppState {
@@ -130,6 +133,91 @@ fn resolve_data_dir(app: &tauri::App) -> Result<std::path::PathBuf, Box<dyn std:
     Ok(app_data)
 }
 
+/// 自动保存目录的固定文件夹名。
+pub const AUTO_SAVE_FOLDER_NAME: &str = "文件自动保存";
+
+/// 解析"文件自动保存"的**默认目录**（用户未在设置里指定路径时使用）。
+///
+/// 规则：
+/// - Windows release：优先 `exe 同级目录/文件自动保存/`（与便携模式 `data/` 同级，
+///   用户友好可见）。exe 在 Program Files 或不可写时回退到 `data_dir/文件自动保存/`。
+/// - macOS release：app bundle 内的 `MacOS/` 不适合放用户文件，直接用
+///   `data_dir/文件自动保存/`。
+/// - 任意 debug 模式：始终用 `data_dir/文件自动保存/`，避免 cargo clean 误删。
+fn resolve_auto_save_default_dir(data_dir: &std::path::Path) -> std::path::PathBuf {
+    if cfg!(debug_assertions) {
+        return data_dir.join(AUTO_SAVE_FOLDER_NAME);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(exe_dir) = exe.parent() {
+                let exe_dir_str = exe_dir.to_string_lossy().to_lowercase();
+                if !exe_dir_str.contains("program files") {
+                    let candidate = exe_dir.join(AUTO_SAVE_FOLDER_NAME);
+                    if std::fs::create_dir_all(&candidate).is_ok() {
+                        return candidate;
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(exe_dir) = exe.parent() {
+                let candidate = exe_dir.join(AUTO_SAVE_FOLDER_NAME);
+                if std::fs::create_dir_all(&candidate).is_ok() {
+                    return candidate;
+                }
+            }
+        }
+    }
+
+    data_dir.join(AUTO_SAVE_FOLDER_NAME)
+}
+
+/// 把旧版 `{data_dir}/auto-save/` 中的内容迁移到新默认目录。
+/// 仅在新目录不存在或为空时迁移；冲突时保留两者并打日志，等待用户决定。
+fn migrate_legacy_auto_save_dir(
+    data_dir: &std::path::Path,
+    new_dir: &std::path::Path,
+) {
+    let legacy = data_dir.join("auto-save");
+    if !legacy.exists() {
+        return;
+    }
+    if legacy == new_dir {
+        return;
+    }
+
+    let new_is_empty = !new_dir.exists()
+        || std::fs::read_dir(new_dir)
+            .map(|mut it| it.next().is_none())
+            .unwrap_or(false);
+
+    if !new_is_empty {
+        boot_log(&format!(
+            "legacy auto-save dir exists at {:?}, but new dir {:?} is non-empty; leaving legacy in place",
+            legacy, new_dir
+        ));
+        return;
+    }
+
+    if new_dir.exists() {
+        let _ = std::fs::remove_dir(new_dir);
+    }
+    match std::fs::rename(&legacy, new_dir) {
+        Ok(_) => boot_log(&format!("migrated auto-save {:?} -> {:?}", legacy, new_dir)),
+        Err(e) => boot_log(&format!(
+            "failed to migrate auto-save {:?} -> {:?}: {}",
+            legacy, new_dir, e
+        )),
+    }
+}
+
 fn boot_log_path() -> std::path::PathBuf {
     #[cfg(target_os = "macos")]
     {
@@ -139,6 +227,67 @@ fn boot_log_path() -> std::path::PathBuf {
         }
     }
     std::env::temp_dir().join("aicat-startup.log")
+}
+
+/// 在不依赖 Tauri context 的情况下尽量预测 data_dir，仅用于日志落盘目录。
+fn predict_log_dir() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            return Some(
+                std::path::PathBuf::from(appdata)
+                    .join("com.ai-canvas.desktop")
+                    .join("logs"),
+            );
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            return Some(
+                std::path::PathBuf::from(home)
+                    .join("Library/Application Support/com.ai-canvas.desktop/logs"),
+            );
+        }
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            return Some(
+                std::path::PathBuf::from(home)
+                    .join(".local/share/com.ai-canvas.desktop/logs"),
+            );
+        }
+    }
+    None
+}
+
+static TRACING_GUARD: OnceLock<tracing_appender::non_blocking::WorkerGuard> = OnceLock::new();
+
+fn init_tracing() {
+    if let Some(dir) = predict_log_dir() {
+        if std::fs::create_dir_all(&dir).is_ok() {
+            let file_appender = tracing_appender::rolling::daily(&dir, "app.log");
+            let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+            let init_result = tracing_subscriber::fmt()
+                .with_writer(non_blocking)
+                .with_ansi(false)
+                .with_thread_ids(true)
+                .with_target(false)
+                .try_init();
+            if init_result.is_ok() {
+                let _ = TRACING_GUARD.set(guard);
+                boot_log(&format!("tracing initialized → file appender at {:?}", dir));
+                return;
+            }
+            boot_log("tracing file init failed, falling back to stderr");
+        } else {
+            boot_log(&format!("could not create log dir {:?}, falling back to stderr", dir));
+        }
+    } else {
+        boot_log("could not predict log dir, falling back to stderr");
+    }
+    let _ = tracing_subscriber::fmt().try_init();
 }
 
 fn boot_log(msg: &str) {
@@ -322,7 +471,7 @@ pub fn run() {
         }
     }
 
-    tracing_subscriber::fmt::init();
+    init_tracing();
 
     boot_log("building tauri app");
 
@@ -375,11 +524,23 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
             std::fs::create_dir_all(data_dir.join("media/images"))?;
             std::fs::create_dir_all(data_dir.join("media/thumbnails"))?;
-            std::fs::create_dir_all(data_dir.join("auto-save"))?;
+
+            let auto_save_default_dir = resolve_auto_save_default_dir(&data_dir);
+            boot_log(&format!("auto_save_default_dir = {:?}", auto_save_default_dir));
+            migrate_legacy_auto_save_dir(&data_dir, &auto_save_default_dir);
+            std::fs::create_dir_all(&auto_save_default_dir)?;
             boot_log("directories created");
 
             if let Err(e) = app.asset_protocol_scope().allow_directory(&data_dir, true) {
                 boot_log(&format!("asset scope warn: {}", e));
+            }
+            if auto_save_default_dir.starts_with(&data_dir) {
+                // 已经在 data_dir 下，asset 协议作用域已覆盖
+            } else if let Err(e) = app
+                .asset_protocol_scope()
+                .allow_directory(&auto_save_default_dir, true)
+            {
+                boot_log(&format!("asset scope warn (auto_save_default): {}", e));
             }
 
             let db_path = data_dir.join("data.db");
@@ -393,6 +554,7 @@ pub fn run() {
                 stream_client: OnceLock::new(),
                 active_streams: Mutex::new(HashMap::new()),
                 data_dir: data_dir.clone(),
+                auto_save_default_dir,
             });
             boot_log("state managed (http clients deferred)");
 

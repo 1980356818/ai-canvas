@@ -155,10 +155,30 @@ export interface VideoGenRequest {
   onProgress?: (p: GenerationProgress) => void;
   signal?: AbortSignal;
   duration?: number;
+  /** 帧数 (frames)，优先级高于 duration。Seedance 1.0 系列支持。 */
+  frames?: number;
   resolution?: string;
+  /** 显式画面比例 (如 "16:9"、"adaptive")。若提供则覆盖 size 推断。 */
+  ratio?: string;
   generateAudio?: boolean;
   seed?: number;
   watermark?: boolean;
+  /** 固定镜头。Seedance 2.0 暂不支持。 */
+  cameraFixed?: boolean;
+  /** 返回视频尾帧图像，便于续生成。 */
+  returnLastFrame?: boolean;
+  /** 服务等级: default (在线) / flex (离线，价格 50%)。 */
+  serviceTier?: "default" | "flex";
+  /** 任务超时阈值，单位秒，范围 [3600, 259200]。默认 172800 (48h)。 */
+  executionExpiresAfter?: number;
+  /** 样片模式 (Seedance 1.5 pro 专属，便宜的预览)。 */
+  draft?: boolean;
+  /** 终端用户唯一标识 (用于安全审计)。 */
+  safetyIdentifier?: string;
+  /** Seedance 2.0 工具调用列表，目前支持 web_search。 */
+  tools?: Array<{ type: string }>;
+  /** 状态变更回调地址。 */
+  callbackUrl?: string;
   /**
    * 任务所属项目 ID。**调用方必须在发起请求前快照**，禁止在异步回调里从全局
    * store 读取，否则用户在生成期间切换项目会导致结果保存到错误的项目目录。
