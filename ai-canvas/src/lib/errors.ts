@@ -18,6 +18,45 @@ const ERROR_CODE_MAP: Record<string, string> = {
   context_length_exceeded: "输入内容过长，请缩短提示词",
 };
 
+// HTTP 状态码 → 友好文案。覆盖网关/上游最常见的错误，让用户能区分"我方问题"还是"上游问题"。
+const HTTP_STATUS_MAP: Record<string, string> = {
+  "400": "请求格式错误（HTTP 400），请检查参数",
+  "401": "未授权（HTTP 401），API Key 无效或登录已过期",
+  "403": "访问被拒绝（HTTP 403），可能权限不足或被风控",
+  "404": "接口不存在（HTTP 404），请检查 API 路径",
+  "408": "请求超时（HTTP 408），请稍后重试",
+  "413": "请求体过大（HTTP 413），请减少图片数量或压缩输入",
+  "429": "请求频率过高（HTTP 429），请稍后重试",
+  "500": "上游服务内部错误（HTTP 500），请稍后重试",
+  "502": "上游网关错误（HTTP 502 Bad Gateway），上游模型服务暂时不可用或正在重启，请稍后重试",
+  "503": "上游服务暂不可用（HTTP 503），可能在维护或过载，请稍后重试",
+  "504": "上游网关超时（HTTP 504 Gateway Timeout），上游响应过慢，请稍后重试",
+};
+
+function matchHttpStatus(raw: string): string | null {
+  // 网关 HTML 错误页：<title>502 Bad Gateway</title>
+  if (/<html[\s>]/i.test(raw)) {
+    const titleMatch = raw.match(/<title>\s*(\d{3})\s+([^<]+?)\s*<\/title>/i);
+    const h1Match = raw.match(/<h1>\s*(\d{3})\s+([^<]+?)\s*<\/h1>/i);
+    const m = titleMatch ?? h1Match;
+    if (m) {
+      const status = m[1]!;
+      const reason = m[2]!.trim();
+      return HTTP_STATUS_MAP[status] ?? `上游返回 HTTP ${status} ${reason}，请稍后重试`;
+    }
+    return "上游服务器返回错误页面，请稍后重试";
+  }
+
+  // 纯文本：形如 "HTTP 502" / "status 502" / "502 Bad Gateway"
+  const textMatch = raw.match(/(?:HTTP[/ ]?\d?\.?\d?\s+|status[:\s]+|^|\s)(\d{3})\s+(Bad\s+Gateway|Gateway\s+Timeout|Service\s+Unavailable|Internal\s+Server\s+Error|Not\s+Found|Unauthorized|Forbidden|Too\s+Many\s+Requests)/i);
+  if (textMatch) {
+    const status = textMatch[1]!;
+    return HTTP_STATUS_MAP[status] ?? null;
+  }
+
+  return null;
+}
+
 export function friendlyError(raw: string): string {
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
@@ -33,6 +72,9 @@ export function friendlyError(raw: string): string {
       if (msg) return msg;
     } catch { /* fall through */ }
   }
+
+  const httpMatched = matchHttpStatus(raw);
+  if (httpMatched) return httpMatched;
 
   if (raw.includes("timeout") || raw.includes("Timeout") || raw.includes("timed out")) {
     return "连接超时，服务器未在规定时间内响应，请稍后重试";

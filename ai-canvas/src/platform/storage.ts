@@ -38,18 +38,25 @@ interface BrowserKeyEntry {
   id: string;
   name: string;
   key: string;
+  tag?: string;
 }
 
 /**
  * Resolve the first usable API key for a provider from localStorage.
  * Checks JSON array (new format) → legacy single key → empty string.
+ *
+ * 可选 keyTag 过滤——Comfly 用 "default" / "gemini_premium" 区分槽位。
+ * 没标 tag 的旧条目视作 "default"。
  */
-export function getBrowserFirstKey(provider: string): string {
+export function getBrowserFirstKey(provider: string, keyTag?: string): string {
   const json = lsGet<string | null>(`setting_${provider}_api_keys`, null);
   if (json) {
     try {
       const parsed: BrowserKeyEntry[] = JSON.parse(json);
-      const first = parsed.find((k) => k.key.trim());
+      const filtered = keyTag
+        ? parsed.filter((k) => (k.tag ?? "default") === keyTag)
+        : parsed;
+      const first = filtered.find((k) => k.key.trim());
       if (first) return first.key.trim();
     } catch { /* ignore */ }
   }
@@ -62,8 +69,8 @@ export function getBrowserFirstKey(provider: string): string {
  * Build Authorization headers using the first key of the given provider.
  * Falls back to comfly when no provider is specified.
  */
-export function getProviderAuthHeaders(provider?: string): Record<string, string> {
-  const apiKey = getBrowserFirstKey(provider ?? "comfly");
+export function getProviderAuthHeaders(provider?: string, keyTag?: string): Record<string, string> {
+  const apiKey = getBrowserFirstKey(provider ?? "comfly", keyTag);
   if (!apiKey) return {};
   return { Authorization: `Bearer ${apiKey}` };
 }

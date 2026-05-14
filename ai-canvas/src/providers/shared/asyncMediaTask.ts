@@ -3,6 +3,7 @@ import { waitForTask } from "@/services/tasks";
 import { throwIfError } from "../errors";
 import { makeSmoothProgressTracker } from "./progress";
 import type { GenerationProgress } from "../types";
+import { getComflyKeyTag } from "../comfly/models";
 
 /**
  * 异步媒体任务统一执行器。
@@ -116,6 +117,12 @@ export async function executeAsyncMediaTask(
 
   emit?.({ percent: 5, phase: "queued", label: "已提交，排队中…" });
 
+  // 轮询时复用提交时的 key 槽位——Comfly 上 Gemini 优质渠道生成的 task_id
+  // 用普通槽位的 key 是查不到的。tag 从 body.model 直接派生，与提交逻辑一致。
+  const pollKeyTag = req.providerId === "comfly"
+    ? getComflyKeyTag(typeof req.body.model === "string" ? req.body.model : undefined)
+    : undefined;
+
   const result = await waitForTask(
     String(taskId),
     makeSmoothProgressTracker(emit, {
@@ -125,6 +132,7 @@ export async function executeAsyncMediaTask(
     undefined,
     req.pollEndpoint,
     req.providerId,
+    pollKeyTag,
   );
 
   const status = result.status.toLowerCase();

@@ -17,6 +17,51 @@ pub struct KeyEntry {
     pub id: String,
     pub name: String,
     pub key: String,
+    /// 槽位标签。Comfly 用 "default" / "gemini_premium" 把 key 分到不同上游通道。
+    /// 其他 provider 字段缺省/为 None。
+    #[serde(default)]
+    pub tag: Option<String>,
+}
+
+/// 把模型名映射到 Comfly 的 key 槽位。
+/// 规则与前端 comfly/models.ts::getComflyKeyTag 保持一致。
+pub fn comfly_key_tag_for_model(model: Option<&str>) -> &'static str {
+    let Some(m) = model else { return "default" };
+    let m = m.to_ascii_lowercase();
+    if m.starts_with("nano-banana")
+        || m.starts_with("gemini-3.1-flash-image-preview")
+        || m.starts_with("veo3.1")
+        || m.starts_with("veo-3.1")
+        || m.starts_with("gemini-3.1-pro")
+        || m.starts_with("gemini-3.1-flash")
+    {
+        "gemini_premium"
+    } else {
+        "default"
+    }
+}
+
+/// 根据 provider + 请求体派生 key 槽位 tag。非 comfly 返回 None。
+pub fn resolve_key_tag(provider: &str, body: &serde_json::Value) -> Option<String> {
+    if provider != "comfly" {
+        return None;
+    }
+    let model = body.get("model").and_then(|v| v.as_str());
+    Some(comfly_key_tag_for_model(model).to_string())
+}
+
+/// 按 tag 过滤 key 列表。tag 为 None 时不过滤。
+/// 过滤后保持原顺序（即按用户在设置里调整的优先级）。
+pub fn filter_keys_by_tag(keys: Vec<KeyEntry>, tag: Option<&str>) -> Vec<KeyEntry> {
+    let Some(want) = tag else { return keys };
+    keys
+        .into_iter()
+        .filter(|k| {
+            // 没标 tag 的旧条目默认归 default
+            let t = k.tag.as_deref().unwrap_or("default");
+            t == want
+        })
+        .collect()
 }
 
 pub struct FullApiConfig {
@@ -78,6 +123,7 @@ pub fn read_full_api_config(db: &Connection, provider: &str) -> Result<FullApiCo
                     id: "legacy".to_string(),
                     name: "默认".to_string(),
                     key: lk,
+                    tag: None,
                 };
                 resolved_active_id = entry.id.clone();
                 keys.push(entry);

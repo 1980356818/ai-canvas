@@ -69,3 +69,26 @@ export function isComflyLegacySeedanceModel(modelId: string): boolean {
 }
 
 export const isComflyVeoModel = sharedIsVeoModel;
+
+// ── Key slot routing ──────────────────────────────────────────
+//
+// Comfly 有两个固定 KEY 槽位 (default / gemini_premium)；不同上游通道。
+// 把模型映射到对应槽位的规则集中放这里，前后端都引用，避免漂移。
+//
+// gemini_premium 走"Gemini 优质"渠道:
+//   - nano-banana* (Nanobanana Pro 等)
+//   - gemini-3.1-flash-image-preview* (Nanobanana 2)
+//   - veo3.1* / veo-3.1*
+//   - gemini-3.1-pro* (Gemini 对话)
+// 其他模型一律走 default。
+export type ComflyKeyTag = "default" | "gemini_premium";
+
+export function getComflyKeyTag(modelId: string | undefined | null): ComflyKeyTag {
+  if (!modelId) return "default";
+  const m = modelId.toLowerCase();
+  if (m.startsWith("nano-banana")) return "gemini_premium";
+  if (m.startsWith("gemini-3.1-flash-image-preview")) return "gemini_premium";
+  if (m.startsWith("veo3.1") || m.startsWith("veo-3.1")) return "gemini_premium";
+  if (m.startsWith("gemini-3.1-pro") || m.startsWith("gemini-3.1-flash")) return "gemini_premium";
+  return "default";
+}

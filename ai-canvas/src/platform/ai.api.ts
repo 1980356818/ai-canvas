@@ -1,6 +1,7 @@
 import type { AiProxyResponse, StreamCallbacks, ModelInfo, TaskInfo } from "@/types";
 import { isTauri, ensureTauriAPIs, getInvoke, getListen } from "./runtime";
 import { buildProxyUrl, getProviderAuthHeaders, lsGet, lsSet } from "./storage";
+import { getComflyKeyTag } from "@/providers/comfly/models";
 
 const DEBUG = import.meta.env.DEV;
 
@@ -12,15 +13,35 @@ interface BrowserKeyEntry {
   id: string;
   name: string;
   key: string;
+  tag?: string;
 }
 
-function getBrowserKeys(provider: string): BrowserKeyEntry[] {
+/**
+ * 根据 provider + 请求体派生 key 槽位 tag。
+ * 仅 comfly 启用槽位路由；其他 provider 返回 undefined（不过滤）。
+ */
+function resolveKeyTag(provider: string, body: Record<string, unknown>): string | undefined {
+  if (provider !== "comfly") return undefined;
+  const model = typeof body.model === "string" ? body.model : undefined;
+  return getComflyKeyTag(model);
+}
+
+function keyTagLabel(tag: string | undefined): string {
+  if (tag === "gemini_premium") return "Gemini 优质";
+  if (tag === "default") return "普通默认";
+  return "";
+}
+
+function getBrowserKeys(provider: string, keyTag?: string): BrowserKeyEntry[] {
   const prefix = provider === "comfly" ? "openai" : provider;
   const json = lsGet<string | null>(`setting_${provider}_api_keys`, null);
   if (json) {
     try {
       const parsed: BrowserKeyEntry[] = JSON.parse(json);
-      return parsed.filter((k) => k.key.trim());
+      const filtered = keyTag
+        ? parsed.filter((k) => (k.tag ?? "default") === keyTag)
+        : parsed;
+      return filtered.filter((k) => k.key.trim());
     } catch { /* ignore */ }
   }
   const legacy = lsGet<string | null>(`setting_${prefix}_api_key`, null);
@@ -78,10 +99,18 @@ export async function aiProxy(
   }
 
   const url = buildProxyUrl(endpoint, provider);
-  const keys = getBrowserKeys(provider);
+  const keyTag = resolveKeyTag(provider, body);
+  const keys = getBrowserKeys(provider, keyTag);
   const canRotate = isBrowserAutoRotate(provider) && keys.length > 1;
 
   if (keys.length === 0) {
+    const tagLabel = keyTagLabel(keyTag);
+    if (tagLabel) {
+      return {
+        body: JSON.stringify({ error: { message: `Provider '${provider}' 的「${tagLabel}」槽位未配置 API Key，请在设置中填写` } }),
+        status: 401,
+      };
+    }
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...getProviderAuthHeaders(provider),
@@ -183,7 +212,8 @@ export async function aiProxyStream(
 
   const abortController = new AbortController();
   const url = buildProxyUrl(endpoint, provider);
-  const keys = getBrowserKeys(provider);
+  const keyTag = resolveKeyTag(provider, body);
+  const keys = getBrowserKeys(provider, keyTag);
   const canRotate = isBrowserAutoRotate(provider) && keys.length > 1;
 
   (async () => {
@@ -370,10 +400,15 @@ export function normalizeTaskInfo(raw: Record<string, unknown>): TaskInfo {
   return info;
 }
 
-export async function pollTask(taskId: string, endpoint?: string, provider?: string): Promise<TaskInfo> {
+export async function pollTask(
+  taskId: string,
+  endpoint?: string,
+  provider?: string,
+  keyTag?: string,
+): Promise<TaskInfo> {
   if (isTauri) {
     await ensureTauriAPIs();
-    const raw = await getInvoke()<Record<string, unknown>>("poll_task", { taskId, endpoint, provider });
+    const raw = await getInvoke()<Record<string, unknown>>("poll_task", { taskId, endpoint, provider, keyTag });
     return normalizeTaskInfo(raw);
   }
 
@@ -381,7 +416,7 @@ export async function pollTask(taskId: string, endpoint?: string, provider?: str
     ? endpoint.replace("{task_id}", taskId)
     : `/v1/tasks/${taskId}`;
   const url = buildProxyUrl(path, provider);
-  const resp = await fetch(url, { headers: getProviderAuthHeaders(provider) });
+  const resp = await fetch(url, { headers: getProviderAuthHeaders(provider, keyTag) });
   if (!resp.ok) throw new Error(`Failed to poll task: ${resp.status}`);
   const raw = await resp.json();
   return normalizeTaskInfo(raw);
@@ -392,6 +427,8 @@ export interface ValidateConnectionOverrides {
   apiKey?: string;
   /** 当前表单里填写的 base URL（未保存），优先于数据库中的值。 */
   baseUrl?: string;
+  /** 可选 key 槽位（comfly: "default" / "gemini_premium"）；用于按槽位测试连接。 */
+  keyTag?: string;
 }
 
 export async function validateConnection(
@@ -404,13 +441,14 @@ export async function validateConnection(
       provider,
       apiKey: overrides?.apiKey,
       baseUrl: overrides?.baseUrl,
+      keyTag: overrides?.keyTag,
     });
   }
 
   const apiKey = overrides?.apiKey?.trim();
   const headers: Record<string, string> = apiKey
     ? { Authorization: `Bearer ${apiKey}` }
-    : getProviderAuthHeaders(provider);
+    : getProviderAuthHeaders(provider, overrides?.keyTag);
   const url = buildProxyUrl("/v1/models", provider);
   const resp = await fetch(url, { headers });
   if (!resp.ok)

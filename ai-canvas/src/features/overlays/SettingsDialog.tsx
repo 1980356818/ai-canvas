@@ -54,11 +54,13 @@ import { ConfirmDialog } from "./ConfirmDialog";
 
 type SettingsTab = "platforms" | "general" | "backup" | "account";
 type ConnStatus = "idle" | "testing" | "ok" | "error";
+type KeyTag = "default" | "gemini_premium";
 
 interface KeyEntry {
   id: string;
   name: string;
   key: string;
+  tag?: KeyTag;
 }
 
 interface PlatformState {
@@ -84,6 +86,45 @@ function genId() {
 function maskKey(key: string): string {
   if (key.length <= 8) return "••••••••";
   return key.slice(0, 4) + "····" + key.slice(-4);
+}
+
+// Comfly 两个固定保留槽位 —— 不可删除、名称不可改，KEY 值可改。
+const COMFLY_RESERVED: { id: string; name: string; tag: KeyTag }[] = [
+  { id: "__default__", name: "普通默认", tag: "default" },
+  { id: "__gemini_premium__", name: "Gemini优质", tag: "gemini_premium" },
+];
+
+function isReservedKey(platformId: string, keyId: string): boolean {
+  return platformId === "comfly" && COMFLY_RESERVED.some((r) => r.id === keyId);
+}
+
+// 把已存储的 keys 数组归一化为：两个保留槽位永远在前 + 用户自定义条目 + 必须有 tag。
+function normalizeComflyKeys(rawKeys: KeyEntry[]): KeyEntry[] {
+  const out: KeyEntry[] = [];
+  const remaining = [...rawKeys];
+
+  for (const r of COMFLY_RESERVED) {
+    const idx = remaining.findIndex((k) => k.id === r.id);
+    if (idx >= 0) {
+      const existing = remaining[idx]!;
+      out.push({ id: r.id, name: r.name, key: existing.key, tag: r.tag });
+      remaining.splice(idx, 1);
+    } else {
+      // 升级老数据：第一次找到的、tag 匹配/未标记的条目当成保留槽位的 key 值
+      let donorIdx = remaining.findIndex((k) => k.tag === r.tag);
+      if (donorIdx === -1 && r.tag === "default") {
+        donorIdx = remaining.findIndex((k) => !k.tag);
+      }
+      const donorKey = donorIdx >= 0 ? remaining[donorIdx]!.key : "";
+      if (donorIdx >= 0) remaining.splice(donorIdx, 1);
+      out.push({ id: r.id, name: r.name, key: donorKey, tag: r.tag });
+    }
+  }
+
+  for (const k of remaining) {
+    out.push({ ...k, tag: k.tag ?? "default" });
+  }
+  return out;
 }
 
 const ALL_PLATFORMS: { id: string; name: string; defaultBaseUrl: string }[] = [
@@ -157,6 +198,14 @@ export default function SettingsDialog() {
             const entry: KeyEntry = { id: genId(), name: "默认", key: legacyKey };
             keys = [entry];
             active = entry.id;
+          }
+
+          // Comfly: 强制保留两个固定槽位
+          if (p.id === "comfly") {
+            keys = normalizeComflyKeys(keys);
+            if (!keys.some((k) => k.id === active)) {
+              active = keys.find((k) => k.key.trim())?.id ?? keys[0]!.id;
+            }
           }
 
           states.push({
@@ -390,7 +439,7 @@ export default function SettingsDialog() {
             <button
               type="button"
               onClick={toggleSettings}
-              className="rounded-lg px-5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
             >
               {tab === "backup" ? "关闭" : "取消"}
             </button>
@@ -399,11 +448,15 @@ export default function SettingsDialog() {
                 type="submit"
                 disabled={saving}
                 className={cn(
-                  "flex items-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90",
+                  "flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/25 transition-all hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/30",
                   saving && "opacity-60",
                 )}
               >
-                <Save className="h-4 w-4" />
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
                 {saving ? "保存中..." : "保存设置"}
               </button>
             )}
@@ -428,9 +481,12 @@ function PlatformCard({
   const activeEntry = p.keys.find((e) => e.id === p.activeKeyId);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
+  const isComfly = p.id === "comfly";
 
-  const handleAddKey = () => {
-    const entry: KeyEntry = { id: genId(), name: "", key: "" };
+  const handleAddKey = (tag?: KeyTag) => {
+    const entry: KeyEntry = isComfly
+      ? { id: genId(), name: "", key: "", tag: tag ?? "default" }
+      : { id: genId(), name: "", key: "" };
     const next = [...p.keys, entry];
     onUpdate({
       keys: next,
@@ -440,6 +496,7 @@ function PlatformCard({
   };
 
   const handleRemoveKey = (id: string) => {
+    if (isReservedKey(p.id, id)) return;
     const next = p.keys.filter((e) => e.id !== id);
     const newActive =
       p.activeKeyId === id
@@ -455,8 +512,12 @@ function PlatformCard({
   };
 
   const handleUpdateKey = (id: string, patch: Partial<KeyEntry>) => {
+    // 保留槽位的名字和 tag 不允许改
+    const safePatch = isReservedKey(p.id, id)
+      ? { key: patch.key }
+      : patch;
     onUpdate({
-      keys: p.keys.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+      keys: p.keys.map((e) => (e.id === id ? { ...e, ...safePatch } : e)),
     });
   };
 
@@ -467,8 +528,22 @@ function PlatformCard({
     onUpdate({ showKeyIds: next });
   };
 
+  // Comfly 分组拖动：仅在同一槽位内重排——避免把 default 的 key 拖到 premium 槽。
   const handleDragEnd = () => {
     if (dragIdx != null && overIdx != null && dragIdx !== overIdx) {
+      const from = p.keys[dragIdx];
+      const to = p.keys[overIdx];
+      if (isComfly && from && to && from.tag !== to.tag) {
+        setDragIdx(null);
+        setOverIdx(null);
+        return;
+      }
+      // 保留槽位不能被拖走
+      if (from && isReservedKey(p.id, from.id)) {
+        setDragIdx(null);
+        setOverIdx(null);
+        return;
+      }
       const reordered = [...p.keys];
       const [moved] = reordered.splice(dragIdx, 1);
       reordered.splice(overIdx, 0, moved!);
@@ -479,6 +554,8 @@ function PlatformCard({
   };
 
   const keyCount = p.keys.filter((e) => e.key.trim()).length;
+  const defaultKeys = isComfly ? p.keys.filter((k) => (k.tag ?? "default") === "default") : [];
+  const premiumKeys = isComfly ? p.keys.filter((k) => k.tag === "gemini_premium") : [];
 
   return (
     <div
@@ -536,14 +613,18 @@ function PlatformCard({
         <button
           type="button"
           onClick={() => onUpdate({ enabled: !p.enabled })}
-          className="flex-shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+          className={cn(
+            "flex h-7 w-12 flex-shrink-0 items-center rounded-full px-0.5 transition-colors",
+            p.enabled ? "bg-primary" : "bg-muted",
+          )}
           title={p.enabled ? "禁用" : "启用"}
         >
-          {p.enabled ? (
-            <ToggleRight className="h-6 w-6 text-primary" />
-          ) : (
-            <ToggleLeft className="h-6 w-6" />
-          )}
+          <span
+            className={cn(
+              "h-6 w-6 rounded-full bg-background shadow-sm transition-transform",
+              p.enabled ? "translate-x-5" : "translate-x-0",
+            )}
+          />
         </button>
       </div>
 
@@ -556,7 +637,9 @@ function PlatformCard({
               <div>
                 <p className="text-xs font-semibold text-foreground">自动切换 Key</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Key 不可用时自动尝试下一个，按列表顺序
+                  {isComfly
+                    ? "同槽位内 Key 不可用时自动尝试下一个，按列表顺序"
+                    : "Key 不可用时自动尝试下一个，按列表顺序"}
                 </p>
               </div>
               <button
@@ -565,203 +648,82 @@ function PlatformCard({
                 className="flex-shrink-0"
               >
                 {p.autoRotate ? (
-                  <ToggleRight className="h-6 w-6 text-primary" />
+                  <ToggleRight className="h-7 w-7 text-primary" />
                 ) : (
-                  <ToggleLeft className="h-6 w-6 text-muted-foreground" />
+                  <ToggleLeft className="h-7 w-7 text-muted-foreground" />
                 )}
               </button>
             </div>
           )}
 
           {/* Keys */}
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <label className="text-xs font-semibold text-foreground">
-                API Key
-                {p.autoRotate && p.keys.length > 1 && (
-                  <span className="ml-2 font-normal text-muted-foreground">
-                    拖拽调整优先级
-                  </span>
-                )}
-              </label>
-              <button
-                type="button"
-                onClick={handleAddKey}
-                className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                添加
-              </button>
-            </div>
-
-            {p.keys.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
-                暂无密钥，点击「添加」创建
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {p.keys.map((entry, idx) => {
-                  const isActive = entry.id === p.activeKeyId;
-                  const isEditing = entry.id === p.editingKeyId;
-                  const isShown = p.showKeyIds.has(entry.id);
-                  const isDragOver = overIdx === idx && dragIdx !== idx;
-
-                  return (
-                    <div
-                      key={entry.id}
-                      draggable={p.keys.length > 1 && !isEditing}
-                      onDragStart={() => setDragIdx(idx)}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        setOverIdx(idx);
-                      }}
-                      onDragEnd={handleDragEnd}
-                      className={cn(
-                        "rounded-lg border px-3 py-2.5 transition-colors",
-                        isActive
-                          ? "border-primary/30 bg-primary/[0.03]"
-                          : "border-border",
-                        isDragOver && "border-primary/50 bg-primary/5",
-                        dragIdx === idx && "opacity-50",
-                      )}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        {/* Drag handle */}
-                        {p.keys.length > 1 && !isEditing && (
-                          <div className="flex-shrink-0 cursor-grab text-muted-foreground/40 active:cursor-grabbing">
-                            <GripVertical className="h-4 w-4" />
-                          </div>
-                        )}
-
-                        {/* Priority badge */}
-                        {p.autoRotate && p.keys.length > 1 && (
-                          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
-                            {idx + 1}
-                          </span>
-                        )}
-
-                        {/* Radio */}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onUpdate({ activeKeyId: entry.id })
-                          }
-                          className="flex-shrink-0"
-                          title="设为当前使用"
-                        >
-                          <div
-                            className={cn(
-                              "flex h-4 w-4 items-center justify-center rounded-full border-2 transition-colors",
-                              isActive
-                                ? "border-primary"
-                                : "border-muted-foreground/30 hover:border-muted-foreground",
-                            )}
-                          >
-                            {isActive && (
-                              <div className="h-2 w-2 rounded-full bg-primary" />
-                            )}
-                          </div>
-                        </button>
-
-                        {/* Content */}
-                        <div className="min-w-0 flex-1">
-                          {isEditing ? (
-                            <div className="space-y-1.5">
-                              <input
-                                type="text"
-                                value={entry.name}
-                                onChange={(e) =>
-                                  handleUpdateKey(entry.id, {
-                                    name: e.target.value,
-                                  })
-                                }
-                                placeholder="名称（如：生产环境）"
-                                className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none ring-ring placeholder:text-muted-foreground/60 focus:ring-1"
-                                autoFocus
-                              />
-                              <div className="relative">
-                                <input
-                                  type={isShown ? "text" : "password"}
-                                  value={entry.key}
-                                  onChange={(e) =>
-                                    handleUpdateKey(entry.id, {
-                                      key: e.target.value,
-                                    })
-                                  }
-                                  placeholder="sk-..."
-                                  className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 pr-8 text-xs outline-none ring-ring placeholder:text-muted-foreground/60 focus:ring-1"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => toggleShowKey(entry.id)}
-                                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-                                >
-                                  {isShown ? (
-                                    <EyeOff className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <Eye className="h-3.5 w-3.5" />
-                                  )}
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              className="w-full text-left"
-                              onClick={() =>
-                                onUpdate({ editingKeyId: entry.id })
-                              }
-                            >
-                              <div className="truncate text-xs font-medium text-foreground">
-                                {entry.name || "未命名"}
-                              </div>
-                              <div className="mt-0.5 text-xs text-muted-foreground">
-                                {maskKey(entry.key)}
-                              </div>
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex flex-shrink-0 items-center gap-1">
-                          {isEditing ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onUpdate({ editingKeyId: null })
-                              }
-                              className="rounded-md px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-                            >
-                              完成
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onUpdate({ editingKeyId: entry.id })
-                              }
-                              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                              title="编辑"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveKey(entry.id)}
-                            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                            title="删除"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {isComfly ? (
+            <>
+              <KeyGroup
+                title="普通默认"
+                hint="用于 GPT 系列、Seedance 等非 Gemini 模型"
+                tag="default"
+                entries={defaultKeys}
+                allKeys={p.keys}
+                platformId={p.id}
+                activeKeyId={p.activeKeyId}
+                editingKeyId={p.editingKeyId}
+                showKeyIds={p.showKeyIds}
+                autoRotate={p.autoRotate}
+                dragIdx={dragIdx}
+                overIdx={overIdx}
+                onUpdate={onUpdate}
+                onUpdateKey={handleUpdateKey}
+                onRemoveKey={handleRemoveKey}
+                onToggleShow={toggleShowKey}
+                onAdd={() => handleAddKey("default")}
+                onDragStart={setDragIdx}
+                onDragOver={setOverIdx}
+                onDragEnd={handleDragEnd}
+              />
+              <KeyGroup
+                title="Gemini优质"
+                hint="用于 Nano-banana、Veo 3.1、Gemini 对话模型"
+                tag="gemini_premium"
+                entries={premiumKeys}
+                allKeys={p.keys}
+                platformId={p.id}
+                activeKeyId={p.activeKeyId}
+                editingKeyId={p.editingKeyId}
+                showKeyIds={p.showKeyIds}
+                autoRotate={p.autoRotate}
+                dragIdx={dragIdx}
+                overIdx={overIdx}
+                onUpdate={onUpdate}
+                onUpdateKey={handleUpdateKey}
+                onRemoveKey={handleRemoveKey}
+                onToggleShow={toggleShowKey}
+                onAdd={() => handleAddKey("gemini_premium")}
+                onDragStart={setDragIdx}
+                onDragOver={setOverIdx}
+                onDragEnd={handleDragEnd}
+              />
+            </>
+          ) : (
+            <FlatKeyList
+              entries={p.keys}
+              platformId={p.id}
+              activeKeyId={p.activeKeyId}
+              editingKeyId={p.editingKeyId}
+              showKeyIds={p.showKeyIds}
+              autoRotate={p.autoRotate}
+              dragIdx={dragIdx}
+              overIdx={overIdx}
+              onUpdate={onUpdate}
+              onUpdateKey={handleUpdateKey}
+              onRemoveKey={handleRemoveKey}
+              onToggleShow={toggleShowKey}
+              onAdd={() => handleAddKey()}
+              onDragStart={setDragIdx}
+              onDragOver={setOverIdx}
+              onDragEnd={handleDragEnd}
+            />
+          )}
 
           {/* Base URL */}
           <div>
@@ -798,6 +760,295 @@ function PlatformCard({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Key Group (Comfly slot) / Flat Key List (other platforms) ──
+
+interface KeyListSharedProps {
+  entries: KeyEntry[];
+  platformId: string;
+  activeKeyId: string;
+  editingKeyId: string | null;
+  showKeyIds: Set<string>;
+  autoRotate: boolean;
+  dragIdx: number | null;
+  overIdx: number | null;
+  onUpdate: (patch: Partial<PlatformState>) => void;
+  onUpdateKey: (id: string, patch: Partial<KeyEntry>) => void;
+  onRemoveKey: (id: string) => void;
+  onToggleShow: (id: string) => void;
+  onAdd: () => void;
+  onDragStart: (idx: number) => void;
+  onDragOver: (idx: number) => void;
+  onDragEnd: () => void;
+}
+
+interface KeyGroupProps extends KeyListSharedProps {
+  title: string;
+  hint: string;
+  tag: KeyTag;
+  allKeys: KeyEntry[];
+}
+
+function KeyGroup(props: KeyGroupProps) {
+  const { title, hint, entries, allKeys, autoRotate } = props;
+  const filledCount = entries.filter((e) => e.key.trim()).length;
+  return (
+    <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-foreground">{title}</span>
+            <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {filledCount} / {entries.length}
+            </span>
+          </div>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>
+        </div>
+        <button
+          type="button"
+          onClick={props.onAdd}
+          className="flex flex-shrink-0 items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          添加
+        </button>
+      </div>
+      <div className="space-y-2">
+        {entries.map((entry) => {
+          const idx = allKeys.indexOf(entry);
+          return (
+            <KeyRow
+              key={entry.id}
+              entry={entry}
+              idx={idx}
+              groupLen={entries.length}
+              {...props}
+              autoRotate={autoRotate}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FlatKeyList(props: KeyListSharedProps) {
+  const { entries, autoRotate } = props;
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <label className="text-xs font-semibold text-foreground">
+          API Key
+          {autoRotate && entries.length > 1 && (
+            <span className="ml-2 font-normal text-muted-foreground">拖拽调整优先级</span>
+          )}
+        </label>
+        <button
+          type="button"
+          onClick={props.onAdd}
+          className="flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          添加
+        </button>
+      </div>
+      {entries.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
+          暂无密钥，点击「添加」创建
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {entries.map((entry, idx) => (
+            <KeyRow
+              key={entry.id}
+              entry={entry}
+              idx={idx}
+              groupLen={entries.length}
+              {...props}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface KeyRowProps extends KeyListSharedProps {
+  entry: KeyEntry;
+  idx: number;
+  groupLen: number;
+}
+
+function KeyRow({
+  entry,
+  idx,
+  groupLen,
+  platformId,
+  activeKeyId,
+  editingKeyId,
+  showKeyIds,
+  autoRotate,
+  dragIdx,
+  overIdx,
+  onUpdate,
+  onUpdateKey,
+  onRemoveKey,
+  onToggleShow,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+}: KeyRowProps) {
+  const reserved = isReservedKey(platformId, entry.id);
+  const isActive = entry.id === activeKeyId;
+  const isEditing = entry.id === editingKeyId;
+  const isShown = showKeyIds.has(entry.id);
+  const isDragOver = overIdx === idx && dragIdx !== idx;
+  const canDrag = !reserved && groupLen > 1 && !isEditing;
+
+  return (
+    <div
+      draggable={canDrag}
+      onDragStart={() => onDragStart(idx)}
+      onDragOver={(e) => {
+        e.preventDefault();
+        onDragOver(idx);
+      }}
+      onDragEnd={onDragEnd}
+      className={cn(
+        "rounded-lg border bg-background px-3 py-2.5 transition-colors",
+        isActive ? "border-primary/30 bg-primary/[0.03]" : "border-border",
+        isDragOver && "border-primary/50 bg-primary/5",
+        dragIdx === idx && "opacity-50",
+      )}
+    >
+      <div className="flex items-center gap-2.5">
+        {canDrag ? (
+          <div className="flex-shrink-0 cursor-grab text-muted-foreground/40 active:cursor-grabbing">
+            <GripVertical className="h-4 w-4" />
+          </div>
+        ) : reserved ? (
+          <div
+            className="flex-shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary"
+            title="固定槽位，名称不可改、不可删除"
+          >
+            固定
+          </div>
+        ) : null}
+
+        {autoRotate && groupLen > 1 && (
+          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+            {idx + 1}
+          </span>
+        )}
+
+        <button
+          type="button"
+          onClick={() => onUpdate({ activeKeyId: entry.id })}
+          className="flex-shrink-0"
+          title="设为当前使用（用于显示，不影响路由）"
+        >
+          <div
+            className={cn(
+              "flex h-4 w-4 items-center justify-center rounded-full border-2 transition-colors",
+              isActive ? "border-primary" : "border-muted-foreground/30 hover:border-muted-foreground",
+            )}
+          >
+            {isActive && <div className="h-2 w-2 rounded-full bg-primary" />}
+          </div>
+        </button>
+
+        <div className="min-w-0 flex-1">
+          {isEditing ? (
+            <div className="space-y-1.5">
+              {reserved ? (
+                <div className="px-1 py-0.5 text-xs font-semibold text-foreground">
+                  {entry.name}
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  value={entry.name}
+                  onChange={(e) => onUpdateKey(entry.id, { name: e.target.value })}
+                  placeholder="名称（如：生产环境）"
+                  className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-xs outline-none ring-ring placeholder:text-muted-foreground/60 focus:ring-1"
+                  autoFocus
+                />
+              )}
+              <div className="relative">
+                <input
+                  type={isShown ? "text" : "password"}
+                  value={entry.key}
+                  onChange={(e) => onUpdateKey(entry.id, { key: e.target.value })}
+                  placeholder="sk-..."
+                  className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 pr-8 text-xs outline-none ring-ring placeholder:text-muted-foreground/60 focus:ring-1"
+                  autoFocus={reserved}
+                />
+                <button
+                  type="button"
+                  onClick={() => onToggleShow(entry.id)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {isShown ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="w-full text-left"
+              onClick={() => onUpdate({ editingKeyId: entry.id })}
+            >
+              <div className="truncate text-xs font-medium text-foreground">
+                {entry.name || "未命名"}
+              </div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                {entry.key.trim() ? maskKey(entry.key) : "（未填写）"}
+              </div>
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-shrink-0 items-center gap-1">
+          {isEditing ? (
+            <button
+              type="button"
+              onClick={() => onUpdate({ editingKeyId: null })}
+              className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              完成
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onUpdate({ editingKeyId: entry.id })}
+              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title="编辑"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {reserved ? (
+            <span
+              className="rounded-md p-1.5 text-muted-foreground/30"
+              title="保留槽位，不可删除"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onRemoveKey(entry.id)}
+              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              title="删除"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

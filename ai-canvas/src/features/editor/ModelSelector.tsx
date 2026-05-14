@@ -47,7 +47,8 @@ export default function ModelSelector({
         const filtered = filter ? list.filter(filter) : list;
         setModels(filtered);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("[ModelSelector] getByCapability failed", err);
         if (!cancelled) setModels([]);
       })
       .finally(() => {
@@ -69,21 +70,17 @@ export default function ModelSelector({
     return value;
   }, [value, propProviderId, models]);
 
-  const providerCount = useMemo(() => new Set(models.map((m) => m.providerId)).size, [models]);
-
   const options = useMemo(() => {
     const result: { value: string; label: string }[] = [];
     if (!models.some((m) => m.id === value) && value) {
       result.push({ value, label: modelService.getDisplayName(value) });
     }
     for (const m of models) {
-      const label = providerCount > 1
-        ? `[${m.providerName}] ${m.display_name || m.id}`
-        : (m.display_name || m.id);
+      const label = `[${m.providerName}] ${m.display_name || m.id}`;
       result.push({ value: toCompositeKey(m), label });
     }
     return result;
-  }, [models, value, providerCount]);
+  }, [models, value]);
 
   const handleChange = useCallback(
     (compositeKey: string) => {
@@ -99,19 +96,11 @@ export default function ModelSelector({
     );
   }
 
-  if (models.length === 0) {
-    return (
-      <span className={cn("text-sm text-muted-foreground", className)}>
-        {value || "无可用模型"}
-      </span>
-    );
-  }
-
   return (
     <PortalSelect
       value={selectedKey}
       onChange={handleChange}
-      options={options}
+      options={options.length > 0 ? options : [{ value: value || "", label: value || "无可用模型" }]}
       className={cn("h-8", className)}
     />
   );

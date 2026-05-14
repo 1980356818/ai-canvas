@@ -45,6 +45,7 @@ export async function waitForTask(
   signal?: AbortSignal,
   endpoint?: string,
   provider?: string,
+  keyTag?: string,
 ): Promise<TaskResult> {
   let delay = INITIAL_DELAY;
 
@@ -53,7 +54,7 @@ export async function waitForTask(
       throw new DOMException("Aborted", "AbortError");
     }
 
-    const info: TaskInfo = await pollTask(taskId, endpoint, provider);
+    const info: TaskInfo = await pollTask(taskId, endpoint, provider, keyTag);
 
     onProgress?.(info.progress ?? 0, info.status);
 

@@ -1,5 +1,5 @@
 use crate::AppState;
-use super::config::{provider_display_name, read_full_api_config, set_active_key, is_retryable_status, apply_auth_headers};
+use super::config::{provider_display_name, read_full_api_config, set_active_key, is_retryable_status, apply_auth_headers, resolve_key_tag, filter_keys_by_tag};
 use super::http_util::{root_cause_chain, send_with_retry};
 use base64::Engine as _;
 use serde::Serialize;
@@ -255,9 +255,27 @@ pub async fn ai_proxy(
         ));
     }
 
+    // Comfly: 按 body.model 派生 key 槽位，只用匹配 tag 的 key（按用户设置的优先级顺序）
+    let key_tag = resolve_key_tag(&provider, &body);
+    let filtered_keys = filter_keys_by_tag(full_config.keys.clone(), key_tag.as_deref());
+    if filtered_keys.is_empty() {
+        let tag_label = key_tag.as_deref().map(|t| match t {
+            "gemini_premium" => "Gemini 优质",
+            _ => "普通默认",
+        }).unwrap_or("");
+        return Err(format!(
+            "Provider '{}' 的「{}」槽位未配置 API Key，请在设置中填写",
+            provider_display_name(&provider), tag_label
+        ));
+    }
+    tracing::info!(
+        "[ai_proxy:{}] key_tag={:?}, candidate_keys={}",
+        request_id, key_tag, filtered_keys.len()
+    );
+
     let url = format!("{}{}", full_config.base_url.trim_end_matches('/'), endpoint);
     let client = state.http_client();
-    let keys = &full_config.keys;
+    let keys = &filtered_keys;
     let can_rotate = full_config.auto_rotate && keys.len() > 1;
 
     let mut last_body = String::new();
@@ -409,9 +427,15 @@ pub async fn ai_proxy_stream(
     let client = state.stream_client().clone();
     let sid = stream_id.clone();
 
-    let keys = full_config.keys.clone();
+    // Comfly: 按 body.model 派生 key 槽位，只用匹配 tag 的 key
+    let key_tag = resolve_key_tag(&provider, &body);
+    let keys = filter_keys_by_tag(full_config.keys.clone(), key_tag.as_deref());
     let can_rotate = full_config.auto_rotate && keys.len() > 1;
     let provider_clone = provider.clone();
+    let key_tag_label = key_tag.as_deref().map(|t| match t {
+        "gemini_premium" => "Gemini 优质",
+        _ => "普通默认",
+    }).unwrap_or("");
 
     tauri::async_runtime::spawn(async move {
         let mut succeeded = false;
@@ -420,10 +444,17 @@ pub async fn ai_proxy_stream(
             let _ = app.emit("ai-stream", StreamEvent {
                 stream_id: sid.clone(),
                 event: "error".into(),
-                data: format!(
-                    "Provider '{}' 的 API Key 未配置，请在设置中填写",
-                    provider_display_name(&provider_clone)
-                ),
+                data: if key_tag_label.is_empty() {
+                    format!(
+                        "Provider '{}' 的 API Key 未配置，请在设置中填写",
+                        provider_display_name(&provider_clone)
+                    )
+                } else {
+                    format!(
+                        "Provider '{}' 的「{}」槽位未配置 API Key，请在设置中填写",
+                        provider_display_name(&provider_clone), key_tag_label
+                    )
+                },
             });
         } else {
             for (i, key_entry) in keys.iter().enumerate() {

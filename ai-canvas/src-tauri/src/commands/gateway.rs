@@ -1,5 +1,5 @@
 use crate::AppState;
-use super::config::{provider_display_name, read_full_api_config, apply_auth_headers, normalize_base_url};
+use super::config::{provider_display_name, read_full_api_config, apply_auth_headers, normalize_base_url, filter_keys_by_tag};
 use super::http_util::send_with_retry;
 use tauri::State;
 
@@ -8,14 +8,36 @@ fn resolve_provider(provider: Option<String>) -> String {
 }
 
 fn resolve_first_key(state: &State<'_, AppState>, provider: &str) -> Result<String, String> {
+    resolve_first_key_with_tag(state, provider, None)
+}
+
+fn resolve_first_key_with_tag(
+    state: &State<'_, AppState>,
+    provider: &str,
+    key_tag: Option<&str>,
+) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let full = read_full_api_config(&db, provider)?;
-    match full.keys.first() {
+    let filtered = filter_keys_by_tag(full.keys, key_tag);
+    match filtered.first() {
         Some(first) => Ok(first.key.clone()),
-        None => Err(format!(
-            "Provider '{}' 的 API Key 未配置，请在设置中填写",
-            provider_display_name(provider)
-        )),
+        None => {
+            let tag_label = key_tag.map(|t| match t {
+                "gemini_premium" => "Gemini 优质",
+                _ => "普通默认",
+            }).unwrap_or("");
+            if tag_label.is_empty() {
+                Err(format!(
+                    "Provider '{}' 的 API Key 未配置，请在设置中填写",
+                    provider_display_name(provider)
+                ))
+            } else {
+                Err(format!(
+                    "Provider '{}' 的「{}」槽位未配置 API Key，请在设置中填写",
+                    provider_display_name(provider), tag_label
+                ))
+            }
+        }
     }
 }
 
@@ -63,9 +85,10 @@ pub async fn poll_task(
     task_id: String,
     endpoint: Option<String>,
     provider: Option<String>,
+    key_tag: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let p = resolve_provider(provider);
-    let api_key = resolve_first_key(&state, &p)?;
+    let api_key = resolve_first_key_with_tag(&state, &p, key_tag.as_deref())?;
     let base_url = resolve_base_url(&state, &p)?;
 
     let path = endpoint
@@ -107,12 +130,13 @@ pub async fn validate_connection(
     provider: Option<String>,
     api_key: Option<String>,
     base_url: Option<String>,
+    key_tag: Option<String>,
 ) -> Result<bool, String> {
     let p = resolve_provider(provider);
 
     let key = match api_key.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
         Some(k) => k,
-        None => resolve_first_key(&state, &p)?,
+        None => resolve_first_key_with_tag(&state, &p, key_tag.as_deref())?,
     };
 
     if key.is_empty() {
