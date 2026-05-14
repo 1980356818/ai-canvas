@@ -63,3 +63,13 @@ export { clipboardWriteText, clipboardReadText } from "./clipboard.api";
 export { pickDirectory } from "./dialog.api";
 
 export { onTauriFileDrop } from "./file-drop";
+
+export {
+  listBackups,
+  getBackupDir,
+  createBackupNow,
+  prepareRestore,
+  cancelPendingRestore,
+  getPendingRestore,
+} from "./backup.api";
+export type { BackupInfo } from "./backup.api";

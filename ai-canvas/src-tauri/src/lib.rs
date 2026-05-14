@@ -1,3 +1,4 @@
+mod backup;
 mod commands;
 mod db;
 
@@ -46,6 +47,9 @@ pub struct AppState {
     /// 文件自动保存的**默认目录**。当 `settings.file_auto_save_path` 为空时，
     /// 所有自动保存/导出回退都落到这里。规则参见 [`resolve_auto_save_default_dir`]。
     pub auto_save_default_dir: std::path::PathBuf,
+    /// 数据库备份目录（`~/Documents/AICat Data/backups/`）。
+    /// 故意放在 Documents 而非 app_data_dir，规避卸载工具清理。
+    pub backup_dir: std::path::PathBuf,
 }
 
 impl AppState {
@@ -88,7 +92,9 @@ impl AppState {
 /// - **Windows release**：优先使用 exe 同级 `data/` 目录（便携模式），
 ///   但如果旧版 AppData 中已有数据库而 exe/data 中没有，继续使用 AppData（升级兼容）。
 ///   Program Files 下安装或 exe 目录不可写时自动回退到 AppData。
-/// - **Windows debug / macOS / Linux**：始终使用系统 app_data_dir。
+/// - **Windows debug / Linux**：始终使用系统 app_data_dir。
+/// - **macOS**：系统 `Application Support/com.ai-canvas.desktop/`；如果当前位置
+///   没有 data.db 但旧版 `com.ai-canvas.app/` 下有，自动迁移过来。
 fn resolve_data_dir(app: &tauri::App) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     let app_data = app.path().app_data_dir()?;
 
@@ -130,7 +136,73 @@ fn resolve_data_dir(app: &tauri::App) -> Result<std::path::PathBuf, Box<dyn std:
         }
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        // 历史包袱：早期 bundle identifier 是 `com.ai-canvas.app`，因 `.app` 后缀
+        // 与应用包扩展名冲突已改为 `com.ai-canvas.desktop`。旧版用户的 data.db
+        // 还沉淀在老路径里 —— 如果新路径没数据但老路径有，整体搬过去。
+        if let Some(parent) = app_data.parent() {
+            let legacy = parent.join("com.ai-canvas.app");
+            let new_has_db = app_data.join("data.db").exists();
+            let legacy_has_db = legacy.join("data.db").exists();
+
+            if !new_has_db && legacy_has_db {
+                boot_log(&format!(
+                    "macOS legacy identifier data detected at {:?}, migrating to {:?}",
+                    legacy, app_data
+                ));
+                if let Err(e) = migrate_legacy_macos_identifier(&legacy, &app_data) {
+                    boot_log(&format!("legacy identifier migration failed: {}", e));
+                } else {
+                    boot_log("legacy identifier migration succeeded");
+                }
+            }
+        }
+    }
+
     Ok(app_data)
+}
+
+/// 把 macOS 旧 identifier 目录（`com.ai-canvas.app`）下的所有内容拷贝到新目录。
+///
+/// 用 copy 而非 rename 是为了兼容跨卷场景（理论上不会跨卷，但保险）。
+/// 拷贝成功后保留旧目录不删，给用户留一份兜底；同时写一个 `.migrated-to`
+/// 标记到旧目录，避免下次启动重复迁移日志噪音。
+#[cfg(target_os = "macos")]
+fn migrate_legacy_macos_identifier(
+    legacy: &std::path::Path,
+    new: &std::path::Path,
+) -> std::io::Result<()> {
+    std::fs::create_dir_all(new)?;
+    copy_dir_recursive(legacy, new)?;
+    let marker = legacy.join(".migrated-to");
+    let _ = std::fs::write(&marker, new.to_string_lossy().as_bytes());
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let src_path = entry.path();
+        let name = entry.file_name();
+        // 跳过我们自己写的标记文件
+        if name == ".migrated-to" {
+            continue;
+        }
+        let dst_path = dst.join(&name);
+        if file_type.is_dir() {
+            std::fs::create_dir_all(&dst_path)?;
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else if file_type.is_file() {
+            // 目标已存在就跳过（新目录里的同名文件优先，避免覆盖用户新数据）
+            if !dst_path.exists() {
+                std::fs::copy(&src_path, &dst_path)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// 自动保存目录的固定文件夹名。
@@ -543,10 +615,67 @@ pub fn run() {
                 boot_log(&format!("asset scope warn (auto_save_default): {}", e));
             }
 
+            // 备份目录：故意放在 ~/Documents/AICat Data/backups/ 而非 data_dir，
+            // AppCleaner / Windows 卸载器都不会动 Documents，是"重装数据丢失"的最后防线。
+            let doc_dir = app.path().document_dir().ok();
+            let backup_dir = backup::resolve_backup_dir(doc_dir.as_deref())
+                .unwrap_or_else(|| data_dir.join("backups"));
+            boot_log(&format!("backup_dir = {:?}", backup_dir));
+
             let db_path = data_dir.join("data.db");
+
+            // 处理用户在上一次会话中"安排"的恢复（commands::backup::prepare_restore 写的标记）。
+            // 必须在 db::init 之前，否则 Windows 上数据库文件被占用无法覆盖。
+            let pending_marker = data_dir.join(".pending-restore");
+            if pending_marker.exists() {
+                match std::fs::read_to_string(&pending_marker) {
+                    Ok(backup_path) => {
+                        let bp = std::path::PathBuf::from(backup_path.trim());
+                        boot_log(&format!("pending restore from {:?}", bp));
+                        match backup::restore_from(&bp, &db_path) {
+                            Ok(_) => {
+                                boot_log("pending restore succeeded");
+                                tracing::info!("restored data.db from user-selected backup {:?}", bp);
+                            }
+                            Err(e) => {
+                                boot_log(&format!("pending restore failed: {}", e));
+                                tracing::error!("pending restore failed: {}", e);
+                            }
+                        }
+                        let _ = std::fs::remove_file(&pending_marker);
+                    }
+                    Err(e) => {
+                        boot_log(&format!("read pending-restore marker failed: {}", e));
+                        let _ = std::fs::remove_file(&pending_marker);
+                    }
+                }
+            }
+
+            // 关键防线：data.db 不存在但备份目录有 → 从最新备份恢复。
+            // 必须在 db::init 之前，否则会创建一个空库再迁移。
+            match backup::restore_if_missing(&db_path, &backup_dir) {
+                Ok(Some(used)) => {
+                    boot_log(&format!("auto-restored data.db from backup {:?}", used));
+                    tracing::warn!(
+                        "data.db missing — restored from backup {:?}",
+                        used
+                    );
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    boot_log(&format!("restore_if_missing failed: {}", e));
+                }
+            }
+
             boot_log("opening database");
             let conn = db::init(&db_path)?;
             boot_log("database ready");
+
+            // 启动后立即备份一份。失败仅 warn，不阻塞启动。
+            match backup::create_backup(&conn, &backup_dir, backup::DEFAULT_MAX_KEEP) {
+                Ok(p) => boot_log(&format!("startup backup created: {:?}", p)),
+                Err(e) => boot_log(&format!("startup backup failed: {}", e)),
+            }
 
             app.manage(AppState {
                 db: Mutex::new(conn),
@@ -555,8 +684,35 @@ pub fn run() {
                 active_streams: Mutex::new(HashMap::new()),
                 data_dir: data_dir.clone(),
                 auto_save_default_dir,
+                backup_dir: backup_dir.clone(),
             });
             boot_log("state managed (http clients deferred)");
+
+            // 定时备份：每 30 分钟一份，跟随保留策略自动清理旧份。
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let mut ticker =
+                    tokio::time::interval(std::time::Duration::from_secs(30 * 60));
+                ticker.tick().await; // 跳过首次（启动时已备份）
+                loop {
+                    ticker.tick().await;
+                    if let Some(state) = handle.try_state::<AppState>() {
+                        let conn_guard = state.db.lock();
+                        if let Ok(conn) = conn_guard {
+                            match backup::create_backup(
+                                &conn,
+                                &state.backup_dir,
+                                backup::DEFAULT_MAX_KEEP,
+                            ) {
+                                Ok(p) => {
+                                    tracing::info!("periodic backup created: {:?}", p)
+                                }
+                                Err(e) => tracing::warn!("periodic backup failed: {}", e),
+                            }
+                        }
+                    }
+                }
+            });
 
             if let Some(win) = app.get_webview_window("main") {
                 #[cfg(target_os = "macos")]
@@ -618,6 +774,12 @@ pub fn run() {
             commands::chat::save_chat_message,
             commands::chat::clear_chat_messages,
             commands::device::get_machine_code,
+            commands::backup::list_backups,
+            commands::backup::get_backup_dir,
+            commands::backup::create_backup_now,
+            commands::backup::prepare_restore,
+            commands::backup::cancel_pending_restore,
+            commands::backup::get_pending_restore,
         ])
         .run(tauri::generate_context!());
 

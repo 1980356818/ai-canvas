@@ -6,13 +6,14 @@
 
 ## 1. 数据存储总览
 
-AICat 的数据分布在 **三个独立位置**：
+AICat 的数据分布在 **四个独立位置**：
 
 | 存储位置 | 类型 | 内容 |
 |----------|------|------|
 | `{data_dir}/data.db` | SQLite 数据库 | 项目、卡片、连线、设置、聊天、Agent 会话 |
 | `{data_dir}/media/` | 文件目录 | AI 生成的图片/视频（内部存储，按 UUID 命名） |
 | `{auto_save_default_dir}` | 文件目录 | AI 生成的文件自动保存副本（按项目分文件夹，友好命名）。默认 `{exe_dir}/文件自动保存/`，详见 [§3.2](#32-自动保存自动无需配置) |
+| `~/Documents/AICat Data/backups/` | 文件目录 | data.db 自动备份（启动 + 每 30 分钟，保留最近 10 份）。详见 [§11](#11-数据备份与恢复) |
 | WebView localStorage | 浏览器存储 | 视口状态、登录 Token、认证信息、主题/模型偏好 |
 
 ### 1.1 `data_dir` 解析策略（`resolve_data_dir`）
@@ -553,6 +554,9 @@ D:\AICat\                    ← 安装目录
 
 - 遵循 macOS 标准数据存储规范
 - 换电脑：需手动复制此目录
+- **历史包袱**：早期 bundle identifier 为 `com.ai-canvas.app`（因与 `.app` 应用包扩展名冲突已弃用），
+  老用户数据沉淀在 `~/Library/Application Support/com.ai-canvas.app/`。
+  `resolve_data_dir()` 在 macOS 分支会自动检测此情况并把内容拷到新路径（[lib.rs](../src-tauri/src/lib.rs) `migrate_legacy_macos_identifier`）。
 
 ---
 
@@ -724,3 +728,116 @@ CREATE TABLE unbind_log (
 | machineCode 为空（旧版客户端） | 服务端跳过校验 | 向后兼容，不会阻止登录 |
 | 虚拟机/容器 | 可能共享宿主机 UUID | 可接受 |
 | 管理员强制解绑 | 不受月度限额 | 通过后台管理面板操作 |
+
+---
+
+## 11. 数据备份与恢复
+
+> 起因：曾出现 Mac 用户反馈"重装应用后项目全没了"。根因主要有三类：
+> ① bundle identifier 历史变更（`com.ai-canvas.app` → `com.ai-canvas.desktop`）
+> ② AppCleaner / CleanMyMac 之类的卸载工具清掉了 `Application Support`
+> ③ 用户为"干净重装"自己删了数据目录
+>
+> 第①类已通过 `migrate_legacy_macos_identifier` 自动迁移解决。
+> 第②③类无法在 OS 标准目录里防御 —— 因此引入**异地自动备份**作为最后防线。
+
+### 11.1 备份位置
+
+```
+~/Documents/AICat Data/backups/
+├── data-20260514-093015.db
+├── data-20260514-103015.db
+├── ...
+└── data-20260514-180015.db   ← 最新 10 份
+```
+
+**为什么放在 Documents 而不是 app_data_dir**：
+
+| 位置 | 卸载/重装是否安全 | 卸载工具是否会清 |
+|------|------------------|-----------------|
+| `app_data_dir` | 看情况 | AppCleaner / CleanMyMac 会扫 bundle id 并清掉 |
+| `Documents/` | 安全 | 几乎没有工具会动用户文档目录 |
+
+跨平台路径解析（[backup.rs](../src-tauri/src/backup.rs) `resolve_backup_dir`）：
+
+| 平台 | 备份目录 |
+|------|---------|
+| Windows | `%USERPROFILE%\Documents\AICat Data\backups\` |
+| macOS | `~/Documents/AICat Data/backups/` |
+| Linux | `~/Documents/AICat Data/backups/` |
+
+### 11.2 备份触发时机
+
+| 时机 | 行为 |
+|------|------|
+| 应用启动后 db::init 成功 | 立即写一份备份 |
+| 运行中每 30 分钟 | tokio interval task 写一份 |
+| 前端调用 `create_backup_now` | 手动触发一份 |
+
+每次备份都会调用 `prune_old` 删除超出 `DEFAULT_MAX_KEEP = 10` 份的最早备份。
+
+### 11.3 备份实现
+
+使用 SQLite 的 `VACUUM INTO 'path'`，而非简单的 `fs::copy`。原因：
+- 数据库运行在 WAL 模式，main db 文件不一定包含最新写入
+- `VACUUM INTO` 会等到事务边界并生成完整快照，无需 checkpoint
+- 生成的快照文件不带 WAL/SHM 后缀，单文件即完整
+
+### 11.4 自动恢复
+
+启动流程（[lib.rs](../src-tauri/src/lib.rs) setup）：
+
+```
+1. resolve_data_dir（含 macOS 旧 identifier 迁移）
+2. resolve_backup_dir（解析 Documents 备份位置）
+3. ── 检测 {data_dir}/.pending-restore 标记 ──
+   有 → 用户上次会话点了"恢复某备份" → 立即执行 backup::restore_from
+4. ── 检测 data.db 是否存在 ──
+   不存在但备份目录有 → 自动从最新备份恢复（backup::restore_if_missing）
+5. db::init
+6. 写一份启动后备份
+7. spawn 30 分钟定时备份 task
+```
+
+**自动恢复的标记**：恢复后会在 `{data_dir}/.restored-from` 写一行备份来源和时间，方便客服/用户事后追溯。
+
+### 11.5 用户主动恢复（前端命令）
+
+| 命令 | 用途 |
+|------|------|
+| `list_backups` | 返回所有备份的元信息列表（路径、大小、修改时间） |
+| `get_backup_dir` | 返回备份目录绝对路径（用于在文件管理器中打开） |
+| `create_backup_now` | 立即触发一次手动备份 |
+| `prepare_restore(backup_path)` | 安排"下次启动时恢复"，写 `.pending-restore` 标记 |
+| `cancel_pending_restore` | 取消已安排的恢复 |
+| `get_pending_restore` | 查询是否有挂起的恢复 |
+
+**为什么用"重启再恢复"而不是热替换**：
+- 运行时替换需要让所有持有 db 连接的代码暂停，工程量大
+- Windows 上正在打开的 db 文件不能直接被覆盖
+- WAL 文件可能正在写入，热替换会导致数据撕裂
+
+`prepare_restore` 在写标记前会校验：
+- 备份文件必须存在
+- 备份路径必须在 `state.backup_dir` 之下（防御任意路径写入）
+
+恢复执行前会把当前 `data.db` 拷贝一份带 `.before-restore-{ts}` 后缀的副本作为"后悔药"，并清理 WAL/SHM。
+
+### 11.6 灾难场景覆盖矩阵
+
+| 场景 | 自动应对 | 用户感知 |
+|------|---------|---------|
+| Mac 老 identifier 升级 | `resolve_data_dir` 自动拷贝 | 无 |
+| AppCleaner 清掉 Application Support | 启动时检测 db 缺失 → 从 Documents 备份恢复 | 项目最多丢失最近 30 分钟内的变更 |
+| 手动删了 data/ 目录 | 同上 | 同上 |
+| Windows 换路径重装 | 旧路径数据孤立 → 仍可通过 Documents 备份恢复 | 同上 |
+| Documents 备份也被清 | 无法自动恢复 | 数据真正丢失（这是用户主动行为） |
+| 数据库损坏 | 自动备份不能识别损坏，但定时备份有 10 份历史可手动回滚 | 用户在设置 UI 选某份回滚 |
+
+### 11.7 不备份的内容
+
+- **`media/` 媒体文件**：太大，备份成本高；用户可以重新生成
+- **WebView localStorage**：浏览器层缓存，包含登录 Token，每次登录可重新获取
+- **`auto-save/` 自动保存的友好副本**：是 `media/` 的可读版本，同样不备份
+
+`data.db` 才是无可替代的（项目结构 + 卡片内容 + API Key + 设置）。媒体文件丢了能重做，项目结构丢了就是真没了。

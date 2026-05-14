@@ -23,6 +23,9 @@ import {
   Monitor,
   GripVertical,
   RefreshCw,
+  Database,
+  RotateCcw,
+  AlertTriangle,
 } from "lucide-react";
 import {
   getSetting,
@@ -30,6 +33,13 @@ import {
   validateConnection,
   invalidateApiKeyCache,
   pickDirectory,
+  listBackups,
+  getBackupDir,
+  createBackupNow,
+  prepareRestore,
+  cancelPendingRestore,
+  getPendingRestore,
+  type BackupInfo,
 } from "@/platform";
 import { registry } from "@/providers/registry";
 import { modelService } from "@/services/models";
@@ -40,8 +50,9 @@ import { isTauri } from "@/platform/runtime";
 import { invoke } from "@tauri-apps/api/core";
 import { isPlatformVisible } from "@/config/platforms";
 import { cn } from "@/lib/utils";
+import { ConfirmDialog } from "./ConfirmDialog";
 
-type SettingsTab = "platforms" | "general" | "account";
+type SettingsTab = "platforms" | "general" | "backup" | "account";
 type ConnStatus = "idle" | "testing" | "ok" | "error";
 
 interface KeyEntry {
@@ -305,6 +316,9 @@ export default function SettingsDialog() {
           {([
             { key: "platforms" as const, icon: Zap, label: "AI 平台" },
             { key: "general" as const, icon: FolderOpen, label: "通用" },
+            ...(isTauri
+              ? [{ key: "backup" as const, icon: Database, label: "数据备份" }]
+              : []),
             { key: "account" as const, icon: UserCircle, label: "账号" },
           ]).map((t) => (
             <button
@@ -367,6 +381,8 @@ export default function SettingsDialog() {
             </div>
           )}
 
+          {tab === "backup" && <BackupTab />}
+
           {tab === "account" && <AccountTab onClose={toggleSettings} />}
 
           {/* Footer */}
@@ -376,19 +392,21 @@ export default function SettingsDialog() {
               onClick={toggleSettings}
               className="rounded-lg px-5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
-              取消
+              {tab === "backup" ? "关闭" : "取消"}
             </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className={cn(
-                "flex items-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90",
-                saving && "opacity-60",
-              )}
-            >
-              <Save className="h-4 w-4" />
-              {saving ? "保存中..." : "保存设置"}
-            </button>
+            {tab !== "backup" && (
+              <button
+                type="submit"
+                disabled={saving}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90",
+                  saving && "opacity-60",
+                )}
+              >
+                <Save className="h-4 w-4" />
+                {saving ? "保存中..." : "保存设置"}
+              </button>
+            )}
           </div>
         </form>
       </div>
@@ -1138,6 +1156,260 @@ function PathField({
           清除路径
         </button>
       )}
+    </div>
+  );
+}
+
+// ── Backup Tab ───────────────────────────────────────────────
+
+function formatBackupTime(ms: number): string {
+  if (!ms) return "未知";
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function BackupTab() {
+  const [backupDir, setBackupDir] = useState("");
+  const [backups, setBackups] = useState<BackupInfo[]>([]);
+  const [pending, setPending] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<BackupInfo | null>(null);
+  const addToast = useUIStore((s) => s.addToast);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [dir, list, pend] = await Promise.all([
+        getBackupDir(),
+        listBackups(),
+        getPendingRestore(),
+      ]);
+      setBackupDir(dir);
+      setBackups(list);
+      setPending(pend);
+    } catch (e) {
+      console.error("[Backup] load failed:", e);
+      addToast({
+        type: "error",
+        title: "加载备份列表失败",
+        description: String(e),
+        duration: 4000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [addToast]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const handleBackupNow = async () => {
+    setBusy(true);
+    try {
+      await createBackupNow();
+      addToast({ type: "success", title: "已创建新备份", duration: 2500 });
+      await refresh();
+    } catch (e) {
+      addToast({
+        type: "error",
+        title: "备份失败",
+        description: String(e),
+        duration: 4000,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleConfirmRestore = async () => {
+    const target = confirmTarget;
+    if (!target) return;
+    setConfirmTarget(null);
+    try {
+      await prepareRestore(target.path);
+      const next = await getPendingRestore();
+      setPending(next);
+      addToast({
+        type: "success",
+        title: "已安排恢复",
+        description: "重启应用后从该备份恢复数据",
+        duration: 4000,
+      });
+    } catch (e) {
+      addToast({
+        type: "error",
+        title: "安排恢复失败",
+        description: String(e),
+        duration: 4000,
+      });
+    }
+  };
+
+  const handleCancelPending = async () => {
+    try {
+      await cancelPendingRestore();
+      setPending(null);
+      addToast({ type: "info", title: "已取消恢复计划", duration: 2500 });
+    } catch (e) {
+      addToast({
+        type: "error",
+        title: "取消失败",
+        description: String(e),
+        duration: 4000,
+      });
+    }
+  };
+
+  const handleOpenBackupDir = async () => {
+    if (!backupDir) return;
+    try {
+      await invoke("open_in_explorer", { path: backupDir, projectId: null });
+    } catch (e) {
+      addToast({
+        type: "error",
+        title: "打开目录失败",
+        description: String(e),
+        duration: 4000,
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border p-4">
+        <div className="flex items-center gap-2">
+          <Database className="h-4 w-4 text-foreground" />
+          <h3 className="text-sm font-semibold text-foreground">数据备份</h3>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          AICat 会在启动时和每 30 分钟自动备份你的项目数据库，保留最近 10 份。备份位于用户文档目录，不受应用卸载/重装影响。
+        </p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            readOnly
+            value={backupDir}
+            className="min-w-0 flex-1 rounded-lg border border-input bg-background px-3 py-2 font-mono text-xs outline-none ring-ring focus:ring-1"
+          />
+          <button
+            type="button"
+            onClick={() => void handleOpenBackupDir()}
+            disabled={!backupDir}
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-input px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-50"
+          >
+            <FolderOpen className="h-4 w-4" />
+            打开目录
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleBackupNow()}
+            disabled={busy}
+            className={cn(
+              "flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90",
+              busy && "opacity-60",
+            )}
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            立即备份
+          </button>
+        </div>
+      </div>
+
+      {pending && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-foreground">
+                已安排在下次启动时从备份恢复
+              </p>
+              <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
+                {pending}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleCancelPending()}
+              className="shrink-0 rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-border">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h4 className="text-sm font-semibold text-foreground">历史备份</h4>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={loading}
+            className="flex items-center gap-1 rounded text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+          >
+            <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
+            刷新
+          </button>
+        </div>
+        {backups.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            {loading ? "加载中..." : "暂无备份。下次启动时会自动创建。"}
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {backups.map((b) => (
+              <li key={b.path} className="flex items-center gap-3 px-4 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm text-foreground">
+                    {formatBackupTime(b.modified_ms)}
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {b.name} · {formatBytes(b.size)}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmTarget(b)}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg border border-input px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  恢复
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <ConfirmDialog
+        open={!!confirmTarget}
+        title="确认从备份恢复？"
+        description={
+          confirmTarget
+            ? `将用 ${formatBackupTime(confirmTarget.modified_ms)} 的备份覆盖当前数据库。\n\n应用重启后才会生效。当前数据库会自动保存一份带 .before-restore 后缀的副本，以防你后悔。`
+            : ""
+        }
+        confirmLabel="安排恢复"
+        cancelLabel="取消"
+        variant="danger"
+        onConfirm={() => void handleConfirmRestore()}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </div>
   );
 }
