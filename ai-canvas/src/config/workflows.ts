@@ -16,7 +16,9 @@ import faceMergePerson1 from "@/assets/templates/face-merge/person-1.jpg";
 import faceMergePerson2 from "@/assets/templates/face-merge/person-2.jpg";
 import faceMergeResult from "@/assets/templates/face-merge/result.jpg";
 import lookFissionPerson from "@/assets/templates/look-fission/person.jpg";
-import lookFissionResult from "@/assets/templates/look-fission/result.jpg";
+import lookFissionResult1 from "@/assets/templates/look-fission/result-1.jpg";
+import lookFissionResult2 from "@/assets/templates/look-fission/result-2.jpg";
+import lookFissionResult3 from "@/assets/templates/look-fission/result-3.jpg";
 import multimodalFusionPerson from "@/assets/templates/multimodal-fusion/person.jpg";
 import multimodalFusionGarment from "@/assets/templates/multimodal-fusion/garment.jpg";
 import multimodalFusionScene from "@/assets/templates/multimodal-fusion/scene.jpg";
@@ -34,7 +36,10 @@ import mf6Result5 from "@/assets/templates/multimodal-fusion-6/result-5.jpg";
 import studioLookPerson from "@/assets/templates/studio-look/person.jpg";
 import studioLookGarment from "@/assets/templates/studio-look/garment.png";
 import studioLookScene from "@/assets/templates/studio-look/scene.jpg";
-import studioLookResult from "@/assets/templates/studio-look/result.jpg";
+import studioLookResult1 from "@/assets/templates/studio-look/result-1.jpg";
+import studioLookResult2 from "@/assets/templates/studio-look/result-2.jpg";
+import studioLookResult3 from "@/assets/templates/studio-look/result-3.jpg";
+import studioLookResult4 from "@/assets/templates/studio-look/result-4.jpg";
 import mirrorSelfiePerson from "@/assets/templates/mirror-selfie/person.jpg";
 import mirrorSelfieGarment from "@/assets/templates/mirror-selfie/garment-cut.png";
 import mirrorSelfieScene from "@/assets/templates/mirror-selfie/scene.jpg";
@@ -447,73 +452,165 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     icon: "PersonStanding",
     category: "composite",
     coverImage: coverLookFission,
-    cards: [
-      {
-        type: "ai_image",
-        title: "人物图",
-        relativeX: 0,
-        relativeY: (CARD_DEFAULTS.ai_chat.height - I_1970x2626.height) / 2,
-        ...I_1970x2626,
-        data: { content: "", size: "3:4", imageUrl: lookFissionPerson },
-      },
-      {
-        type: "ai_chat",
-        title: "全身裂变提示词",
-        relativeX: I_1970x2626.width + 80,
-        relativeY: 0,
-        width: CARD_DEFAULTS.ai_chat.width,
-        height: CARD_DEFAULTS.ai_chat.height,
+    cards: (() => {
+      const GAP = 80;
+      const RESULT_GAP = 40;
+      const PERSON = I_1970x2626;
+      const RESULT = I_1536x2752;
+      const CHAT_W = CARD_DEFAULTS.ai_chat.width;
+      const CHAT_H = CARD_DEFAULTS.ai_chat.height;
+
+      const CONTAINER_H = Math.max(PERSON.height, CHAT_H, RESULT.height);
+      const CHAT_X = PERSON.width + GAP;
+      const RESULT_X_1 = CHAT_X + CHAT_W + GAP;
+      const RESULT_X_2 = RESULT_X_1 + RESULT.width + RESULT_GAP;
+      const RESULT_X_3 = RESULT_X_2 + RESULT.width + RESULT_GAP;
+
+      const promptContent = [
+        "【任务目标】",
+        "基于我上传的人物参考图，生成一组适合 Nano Banana 2 / 香蕉2 出图的全身模特多角度提示词。",
+        "",
+        "请先严格分析参考图中的人物、服装和场景，并在生成提示词时保持高度一致：",
+        "- 人物：性别、年龄感、脸型、五官特征、发型、妆容、肤色、体型、身高比例、气质必须一致",
+        "- 服装：颜色、款式、版型、面料、图案、纽扣/拉链/绑带/口袋/缝线等结构细节、鞋子、包袋、首饰和所有配饰必须一致",
+        "- 场景：拍摄空间、背景材质、地面、光线方向、阴影、色调、氛围必须一致",
+        "",
+        "【核心要求】",
+        "最终生成 3 个中文提示词方案，分别为:",
+        "1. 人物全身正面 90 度",
+        "2. 人物全身右侧 45 度",
+        "3. 人物全身左侧 45 度",
+        "",
+        "【最高优先级 · 一致性锁定】",
+        "1. 必须保持同一位模特：",
+        "面部特征、发型、妆容、肤色、体型、气质、年龄感一致。",
+        "",
+        "2. 必须保持同一套服装：",
+        "服装颜色、款式、版型、材质、图案、纹理、褶皱逻辑、鞋子、包袋、首饰和配饰一致，不得改款，不得减少或新增配饰。",
+        "",
+        "3. 必须保持同一场景：",
+        "背景、地面、空间尺度、光线方向、阴影形状、色调和整体氛围一致。",
+        "",
+        "4. 必须是完整全身画面：",
+        "从头到脚完整可见，人物不能被裁切，鞋子必须完整出现。",
+        "",
+        "5. 必须保持真实比例：",
+        "人物头身比例、肩宽、腰臀比例、腿长、手脚大小自然真实，人物与场景比例协调，不得拉长腿，不得缩小头部，不得改变体型。",
+        "",
+        "【角度要求】",
+        "- 正面 90 度：人物身体正对镜头，脸部正对镜头，完整展示正面服装效果。",
+        "- 右侧 45 度：人物身体向画面右侧自然旋转约 45 度，脸部可轻微看向镜头，展示服装右侧轮廓。",
+        "- 左侧 45 度：人物身体向画面左侧自然旋转约 45 度，脸部可轻微看向镜头，展示服装左侧轮廓。",
+        "",
+        "【动作要求】",
+        "每个角度可以有小幅度、合理、真实的人体姿态变化，但动作必须克制自然，符合商业摄影、电商模特、lookbook 风格。",
+        "允许变化：",
+        "- 手臂自然垂落、轻扶腰侧、轻触衣摆、轻扶包带、轻整理发丝",
+        "- 双腿自然站立、轻微前后错落、重心小幅转移",
+        "禁止变化：",
+        "- 夸张摆拍",
+        "- 舞蹈动作",
+        "- 大幅度扭腰",
+        "- 跳跃",
+        "- 坐姿",
+        "- 背影",
+        "- 半身图",
+        "- 近景图",
+        "",
+        "【摄影风格】",
+        "真实商业摄影，电商模特，品牌 lookbook，全身棚拍，自然克制，专业高级，柔和自然光，真实皮肤质感，服装清晰展示，面料纹理真实，褶皱自然，上身效果真实。",
+        "",
+        "【输出格式】",
+        "只输出以下 3 个提示词，不要解释，不要输出分析过程：",
+        "",
+        "【灵感1：全身正面90度】",
+        "提示词：",
+        "",
+        "【灵感2：全身右侧45度】",
+        "提示词：",
+        "",
+        "【灵感3：全身左侧45度】",
+        "提示词：",
+        "",
+        "【统一负面提示词】",
+        "不同人物，不同脸，不同发型，不同妆容，不同体型，不同服装，服装改款，颜色改变，材质改变，图案改变，配饰丢失，新增配饰，鞋子改变，场景改变，背景改变，光线改变，半身图，近景图，坐姿，背影，人物被裁切，脚被裁切，头被裁切，比例异常，腿过长，头太小，头太大，手脚过大，手指畸形，肢体扭曲，夸张姿势，网红写真感，卡通，插画，CG感，低清晰度。",
+      ].join("\n");
+
+      const inspirationCommon = [
+        "请严格以已上传参考图为唯一人物、服装和场景依据生成。保持同一位模特、同一张脸、同一发型、同一妆容、同一肤色、同一体型比例、同一气质；保持同一套服装、同一颜色、同一款式、同一面料、同一图案、同一版型、同一褶皱逻辑、同一鞋子、同一包袋和全部配饰；保持同一拍摄场景、同一背景、同一地面、同一光线、同一阴影、同一色调。",
+        "",
+        "人物身体正对镜头，脸部正对镜头，完整展示正面服装效果。只允许小幅度自然姿势变化，生成完整全身画面。人物从头到脚完整可见，人物大小比例真实，头身比例、腿长比例、手脚大小与参考图一致。不要扩图，不要裁切，不要补边，不要改变画布比例。真实商业摄影，电商模特，lookbook风格，自然克制专业。",
+        "",
+        "禁止：换脸，换发型，换衣服，改颜色，改图案，改版型，少配饰，多配饰，换鞋，换包，改变背景，改变光线，半身图，近景图，坐姿，背影，人物被裁切，比例异常，腿变长，头变小，肢体扭曲，手指畸形，网红写真感，卡通感，CG感。",
+      ].join("\n");
+
+      const makeResult = (
+        title: string,
+        relativeX: number,
+        content: string,
+        imageUrl: string,
+      ) => ({
+        type: "ai_image" as const,
+        title,
+        relativeX,
+        relativeY: (CONTAINER_H - RESULT.height) / 2,
+        ...RESULT,
         data: {
-          content: [
-            "【任务目标】",
-            "基于我上传的模特图像，在【不改变机位、不改变构图、不改变比例、不扩图】的前提下，",
-            "仅对模特姿势进行【小幅度、合理、真实】的动作变化，",
-            "生成5张看起来像\"同一场景下，模特动了一下\"的真实照片。",
-            "【最高优先级 · 强制锁定规则】",
-            "1. 机位必须完全锁定：",
-            "- 拍摄角度不变",
-            "- 镜头视角不变",
-            "- 相机高度不变",
-            "2. 构图必须完全一致：",
-            "- 模特在画面中的位置不变",
-            "- 人物大小比例不变",
-            "- 头身比例、腿长比例完全一致",
-            "3. 严禁扩图：",
-            "- 画布尺寸不变",
-            "- 不新增画面内容",
-            "- 不补边、不拉伸、不裁切",
-            "4. 模特身份必须一致：",
-            "- 面部、发型、体型、气质保持完全一致",
-            "- 服装保持 100% 一致（颜色、版型、材质、褶皱逻辑）",
-            "【唯一允许变化的内容：动作（小幅度）】",
-            "- 角色姿态：请随机设计全新的、符合商业摄影美感的人体姿势",
-            "【真实感要求】",
-            "- 动作变化必须符合真实人体力学",
-            "【整体风格】",
-            "真实商业摄影 / 电商模特 / Lookbook 风格",
-            "自然、克制、专业",
-            "最终只生成适合banana出图的中文提示词，按灵感1、灵感2、灵感3的格式输出，不解释",
-          ].join("\n"),
-          result: "",
-        },
-      },
-      {
-        type: "ai_image",
-        title: "全身裂变",
-        relativeX: I_1970x2626.width + 80 + CARD_DEFAULTS.ai_chat.width + 80,
-        relativeY: (CARD_DEFAULTS.ai_chat.height - I_1536x2752.height) / 2,
-        ...I_1536x2752,
-        data: {
-          imageUrl: lookFissionResult,
-          content: "",
+          imageUrl,
+          content,
           size: "9:16",
         },
-      },
-    ],
+      });
+
+      return [
+        {
+          type: "ai_image" as const,
+          title: "人物图",
+          relativeX: 0,
+          relativeY: (CONTAINER_H - PERSON.height) / 2,
+          ...PERSON,
+          data: { content: "", size: "3:4", imageUrl: lookFissionPerson },
+        },
+        {
+          type: "ai_chat" as const,
+          title: "全身裂变提示词",
+          relativeX: CHAT_X,
+          relativeY: (CONTAINER_H - CHAT_H) / 2,
+          width: CHAT_W,
+          height: CHAT_H,
+          data: {
+            content: promptContent,
+            result: "",
+          },
+        },
+        makeResult(
+          "全身正面 90 度",
+          RESULT_X_1,
+          ["生成【灵感1：全身正面90度】。", "", inspirationCommon].join("\n"),
+          lookFissionResult1,
+        ),
+        makeResult(
+          "全身右侧 45 度",
+          RESULT_X_2,
+          ["生成【灵感2：全身右侧45度】。", "", inspirationCommon].join("\n"),
+          lookFissionResult2,
+        ),
+        makeResult(
+          "全身左侧 45 度",
+          RESULT_X_3,
+          ["生成【灵感3：全身左侧45度】。", "", inspirationCommon].join("\n"),
+          lookFissionResult3,
+        ),
+      ];
+    })(),
     connections: [
       { sourceIndex: 0, targetIndex: 1 },
       { sourceIndex: 0, targetIndex: 2 },
       { sourceIndex: 1, targetIndex: 2 },
+      { sourceIndex: 0, targetIndex: 3 },
+      { sourceIndex: 1, targetIndex: 3 },
+      { sourceIndex: 0, targetIndex: 4 },
+      { sourceIndex: 1, targetIndex: 4 },
     ],
   },
   {
@@ -736,7 +833,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           relativeX: RESULT_X,
           relativeY: 0,
           ...IMG_RES,
-          data: { content: "", size: "3:4", imageUrl: mf6Result1 },
+          data: { content: "生成灵感1:保持人物跟图一100%一致，服装跟图二100%一致，场景跟图四类似。", size: "3:4", imageUrl: mf6Result1 },
         },
         {
           type: "ai_image" as const,
@@ -744,7 +841,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           relativeX: RESULT_X + ROW_STEP,
           relativeY: 0,
           ...IMG_RES,
-          data: { content: "", size: "3:4", imageUrl: mf6Result2 },
+          data: { content: "生成灵感2:保持人物跟图一100%一致，服装跟图二100%一致，场景跟图四类似。", size: "3:4", imageUrl: mf6Result2 },
         },
         {
           type: "ai_image" as const,
@@ -752,7 +849,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           relativeX: RESULT_X + ROW_STEP * 2,
           relativeY: 0,
           ...IMG_RES,
-          data: { content: "", size: "3:4", imageUrl: mf6Result3 },
+          data: { content: "生成灵感3:保持人物跟图一100%一致，服装跟图二100%一致，场景跟图四类似。", size: "3:4", imageUrl: mf6Result3 },
         },
         {
           type: "ai_image" as const,
@@ -760,7 +857,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           relativeX: RESULT_X + BTM_OFFSET,
           relativeY: IMG_RES.height + GAP,
           ...IMG_RES,
-          data: { content: "", size: "3:4", imageUrl: mf6Result4 },
+          data: { content: "生成灵感4:保持人物跟图一100%一致，服装跟图二100%一致，场景跟图四类似。", size: "3:4", imageUrl: mf6Result4 },
         },
         {
           type: "ai_image" as const,
@@ -768,7 +865,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           relativeX: RESULT_X + BTM_OFFSET + ROW_STEP,
           relativeY: IMG_RES.height + GAP,
           ...IMG_RES,
-          data: { content: "", size: "3:4", imageUrl: mf6Result5 },
+          data: { content: "生成灵感5:保持人物跟图一100%一致，服装跟图二100%一致，场景跟图四类似。", size: "3:4", imageUrl: mf6Result5 },
         },
       ];
     })(),
@@ -814,6 +911,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     coverImage: coverStudioLook,
     cards: (() => {
       const GAP = 60;
+      const RESULT_GAP = 40;
       const IMG_PERSON = I_1792x2400;
       const IMG_GARMENT = I_624x1690;
       const IMG_SCENE = I_736x1308;
@@ -823,18 +921,83 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       const CHAT_W = CARD_DEFAULTS.ai_chat.width;
       const CHAT_H = CARD_DEFAULTS.ai_chat.height;
       const CHAT_X = COL_W + GAP + 20;
-      const RESULT_X = CHAT_X + CHAT_W + GAP + 20;
+      const RESULT_X_1 = CHAT_X + CHAT_W + GAP + 20;
+      const RESULT_X_2 = RESULT_X_1 + IMG_RESULT.width + RESULT_GAP;
+      const RESULT_GRID_H = IMG_RESULT.height * 2 + RESULT_GAP;
+      const RESULT_TOP_Y = (COL_H - RESULT_GRID_H) / 2;
+      const RESULT_BTM_Y = RESULT_TOP_Y + IMG_RESULT.height + RESULT_GAP;
 
       const lookbookPrompt = [
-        "生成 4 个专业时装 lookbook 摄影的提示词方案",
+        "请严格分析我上传的三张参考图，并反推出一组可直接用于 Nano Banana 2 / 香蕉2 的专业时装 lookbook 摄影提示词。",
+        "三张图定义：",
+        "图1 = 模特参考图",
+        "图2 = 服装参考图",
+        "图3 = 场景参考图",
+        "请先完成反推分析，但分析内容要简洁准确，不要发挥不存在的细节。",
         "",
-        "要求：专业时装 lookbook 摄影，一位[模特描述：分析图1]穿着[服装描述：分析图2]。",
-        "服装要清晰展示，面料纹理真实，褶皱自然，版型准确，上身效果真实，不夸张变形。",
-        "模特自然淡妆，表情冷静，姿态松弛高级，符合品牌服装大片气质。",
-        "拍摄场景为[场景描述：分析图3]，背景干净高级，和服装风格统一。",
-        "柔和自然光，细腻阴影，低饱和色调，高端杂志编辑片风格，真实皮肤质感，85mm 人像镜头，浅景深。",
-        "包含全身站姿、半身图、坐姿图、服装细节图，超写实，高细节，lookbook 质感。",
+        "图1请分析：模特性别、年龄感、面部气质、脸型、五官特征、发型、妆容、肤色、身材比例、整体气质。生成时保持核心面部特征、发型、年龄感和气质一致。",
+        "图2请分析：服装品类、颜色、面料、版型、领口、袖型、纽扣/拉链/绑带/口袋/缝线等结构细节、上下装搭配、鞋子和配饰。生成时必须保持服装款式准确，不能改款，不能把上衣/下装/鞋子生成成其他品类。",
+        "图3请分析：拍摄空间、背景材质、主色调、光线方向、阴影形状、空间尺度、氛围风格。生成时保持同一场景风格，背景干净高级，人物比例与场景尺度协调。",
+        "请输出 4 个中文提示词方案：",
+        "1. 全身站姿图",
+        "2. 半身图",
+        "3. 坐姿图",
+        "4. 服装细节图",
+        "重要要求：",
+        "- 四张图必须像同一个品牌 lookbook 系列里的连续四张。",
+        "- 必须是同一位模特、同一套服装、同一个场景、同一套光线、同一套色调。",
+        "- 每张图只允许改变构图、姿态、镜头距离和表情情绪。",
+        "- 每条提示词都必须完整自包含，不要写\"同上\"。",
+        "- 每张图的人物情绪都要不同，但都要高级、克制、冷静。",
+        "- 服装必须清晰展示，面料纹理真实，褶皱自然，版型准确，上身效果真实，不夸张变形。",
+        "- 模特自然淡妆，真实皮肤质感，姿态松弛高级，符合品牌服装大片气质。",
+        "- 摄影风格为专业时装 lookbook，高端杂志编辑片风格，柔和自然光，细腻阴影，低饱和色调，85mm 人像镜头，浅景深，超写实，高细节。",
+        "- 特别注意人物比例、头身比例、手脚大小、坐姿比例、人物与场景比例都必须真实协调。",
+        "服装细节图要求：",
+        "必须是服装穿在模特身上的细节图，不是平铺图，不是单独产品图。可以裁切到下半张脸、肩颈、胸口、腰部、手部和服装区域，但必须看出服装真实上身效果。",
+        "坐姿图要求：",
+        "人物坐在与场景风格一致的简洁座椅或方凳上，座椅比例真实，腿部不拉长，手脚自然，服装在坐姿下产生真实自然褶皱。",
+        "请按以下格式输出：",
+        "【统一反推设定】",
+        "模特描述：",
+        "服装描述：",
+        "场景描述：",
+        "统一摄影风格：",
+        "统一生成稳定性提示：",
+        "【方案一：全身站姿图】",
+        "情绪：",
+        "提示词：",
+        "【方案二：半身图】",
+        "情绪：",
+        "提示词：",
+        "【方案三：坐姿图】",
+        "情绪：",
+        "提示词：",
+        "【方案四：服装细节图】",
+        "情绪：",
+        "提示词：",
+        "【统一负面提示词】",
+        "不同模特，不同发型，不同服装，不同场景，不同光线，服装改款，服装品类错误，面料塑料感，布料纹理模糊，衣服过曝，白色层次丢失，身体比例异常，头太大，腿过长，手脚过大，手指畸形，多余手指，肢体扭曲，脸部变形，过度磨皮，AI塑料皮肤，浓妆，夸张表情，夸张姿势，网红写真感，婚纱照感，电商白底平铺图，产品单独平铺，背景杂乱，人物与场景比例不协调，卡通，插画，CG感，低清晰度。",
       ].join("\n");
+
+      const makeResult = (
+        title: string,
+        relativeX: number,
+        relativeY: number,
+        content: string,
+        imageUrl: string,
+      ) => ({
+        type: "ai_image" as const,
+        title,
+        relativeX,
+        relativeY,
+        ...IMG_RESULT,
+        data: {
+          imageUrl,
+          content,
+          size: "3:4",
+        },
+      });
 
       return [
         {
@@ -873,19 +1036,34 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
             result: "",
           },
         },
-        {
-          type: "ai_image" as const,
-          title: "棚拍 Look 图",
-          relativeX: RESULT_X,
-          relativeY: (COL_H - IMG_RESULT.height) / 2,
-          ...IMG_RESULT,
-          data: {
-            content:
-              "生成方案1-4在2×2的宫格里全部展示。要求人物跟图1 100%一致，服装跟图2 100%一致。",
-            size: "3:4",
-            imageUrl: studioLookResult,
-          },
-        },
+        makeResult(
+          "棚拍 Look 1",
+          RESULT_X_1,
+          RESULT_TOP_Y,
+          "生成方案1：要求人物跟图一 100%一致，服装跟图二 100%一致。",
+          studioLookResult1,
+        ),
+        makeResult(
+          "棚拍 Look 2",
+          RESULT_X_2,
+          RESULT_TOP_Y,
+          "生成方案2：要求人物跟图一 100%一致，服装跟图二 100%一致。",
+          studioLookResult2,
+        ),
+        makeResult(
+          "棚拍 Look 3",
+          RESULT_X_1,
+          RESULT_BTM_Y,
+          "生成方案3：要求人物跟图一 100%一致，服装跟图二 100%一致。",
+          studioLookResult3,
+        ),
+        makeResult(
+          "棚拍 Look 4",
+          RESULT_X_2,
+          RESULT_BTM_Y,
+          "生成方案4：要求人物跟图一 100%一致，服装跟图二 100%一致。",
+          studioLookResult4,
+        ),
       ];
     })(),
     connections: [
@@ -896,6 +1074,18 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       { sourceIndex: 1, targetIndex: 4 },
       { sourceIndex: 2, targetIndex: 4 },
       { sourceIndex: 3, targetIndex: 4 },
+      { sourceIndex: 0, targetIndex: 5 },
+      { sourceIndex: 1, targetIndex: 5 },
+      { sourceIndex: 2, targetIndex: 5 },
+      { sourceIndex: 3, targetIndex: 5 },
+      { sourceIndex: 0, targetIndex: 6 },
+      { sourceIndex: 1, targetIndex: 6 },
+      { sourceIndex: 2, targetIndex: 6 },
+      { sourceIndex: 3, targetIndex: 6 },
+      { sourceIndex: 0, targetIndex: 7 },
+      { sourceIndex: 1, targetIndex: 7 },
+      { sourceIndex: 2, targetIndex: 7 },
+      { sourceIndex: 3, targetIndex: 7 },
     ],
   },
   {
