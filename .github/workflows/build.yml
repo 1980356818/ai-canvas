@@ -132,6 +132,13 @@ jobs:
         with:
           targets: x86_64-apple-darwin
 
+      - name: Activate Rust toolchain
+        run: |
+          rustup default stable
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          which cargo
+          cargo --version
+
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
