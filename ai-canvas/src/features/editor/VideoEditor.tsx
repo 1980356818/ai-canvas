@@ -375,6 +375,12 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         }
       }
 
+      // Dale Seedance 上游不支持 video reference (2026-05-16 实测, fast/标准都拒).
+      // 切到 Seedance 时把之前 Veo 模型留下来的 refVideos 清掉, 避免发送后 400.
+      if (newIsSeedance && Array.isArray(newData.refVideos) && (newData.refVideos as unknown[]).length > 0) {
+        newData.refVideos = undefined;
+      }
+
       // 切换模型时, 把比例/分辨率收敛到新模型支持的集合, 避免发送不支持的值。
       const allowedSizes = getAllowedVideoSizesForModel(modelId);
       if (allowedSizes && !allowedSizes.includes(currentSize)) {
@@ -535,6 +541,18 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
             referenceAudios.push({ url: dataUrl, role: "referenceAudio" });
           }
         }
+        // Seedance 上游 (Dale) 硬约束: fast/标准都拒绝 video reference.
+        // 这里在打包数据前先拦下来, 省一趟无意义的 base64 编码 + 网关往返.
+        if (isSeedanceModel(currentModel) && data.refVideos?.length) {
+          useUIStore.getState().addToast({
+            type: "warning",
+            title: "Seedance 不支持参考视频",
+            description: "Seedance 2.0 当前不接受 video_file 引用，请改用参考图 / 参考音频，或切换到 Veo 模型",
+            duration: 5000,
+          });
+          setCardProgress(card.id, null);
+          return;
+        }
         if (data.refVideos?.length) {
           for (const entry of data.refVideos) {
             const dataUrl = await getBase64ForApi(entry.url);
@@ -544,13 +562,13 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         if (
           isSeedanceModel(currentModel) &&
           referenceAudios.length > 0 &&
-          referenceImages.length === 0 &&
-          referenceVideos.length === 0
+          referenceImages.length === 0
         ) {
+          // referenceVideos 在 Seedance 永远为空 (上面已 guard), 只剩 audio+image 组合校验.
           useUIStore.getState().addToast({
             type: "warning",
             title: "参考音频不能单独使用",
-            description: "Seedance 要求参考音频必须搭配参考图或参考视频一起使用，请先添加图片或视频素材",
+            description: "Seedance 要求参考音频必须搭配参考图一起使用，请先添加图片素材",
             duration: 5000,
           });
           setCardProgress(card.id, null);
@@ -760,7 +778,8 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
             </div>
           )}
 
-          {imageMode === "reference" && data.refVideos && data.refVideos.length > 0 && (
+          {/* Seedance 上游不接受 video reference, 直接隐藏 UI (即使留有历史连线) */}
+          {imageMode === "reference" && !isSeedance && data.refVideos && data.refVideos.length > 0 && (
             <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
               <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
                 <Video className="h-3 w-3" />

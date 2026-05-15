@@ -4,6 +4,7 @@ import { useConnectionStore } from "@/stores/connectionStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
 import { getRefSlotsForModel, getRefSlotsForChatModel, getRefSlotsForVideoModel, compactRefImages, type RefImageEntry } from "@/config/model-ref-images";
+import { isSeedanceModel } from "@/providers/shared/video";
 
 const DEBUG = import.meta.env.DEV;
 
@@ -50,6 +51,9 @@ export function canAcceptImageConnection(
 
     if (source.type === "ai_video") {
       if (mode !== "reference") return false;
+      // Dale Seedance 上游硬约束: fast/标准都不接受 video reference (2026-05-16 实测).
+      // 提前拒掉 video → Seedance 的连线, 避免无效的 refVideos 状态污染.
+      if (isSeedanceModel((d.model as string) || "")) return false;
       type VideoRef = { sourceCardId: string };
       const videos = (d.refVideos as VideoRef[]) || [];
       if (videos.some((v) => v.sourceCardId === sourceCardId)) return true;
@@ -571,7 +575,12 @@ function injectIntoCard(
           }
         }
       } else if (payload.kind === "video") {
-        if ((d.imageMode as string ?? "reference") === "reference") {
+        // Seedance 上游不支持 video reference, 不要把 refVideos 注入到 Seedance 视频卡里.
+        // (canConnect 已经拦住新连线; 这里再防一道历史连线被重新触发注入的情况.)
+        if (
+          (d.imageMode as string ?? "reference") === "reference"
+          && !isSeedanceModel((d.model as string) || "")
+        ) {
           const MAX_VIDEOS = 3;
           type VideoRef = { url: string; sourceCardId: string };
           const videos = [...((d.refVideos as VideoRef[]) || [])];

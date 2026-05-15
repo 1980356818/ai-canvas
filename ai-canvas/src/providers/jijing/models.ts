@@ -19,9 +19,16 @@ export const JIJING_IMAGE_MODELS: ModelInfo[] = [
 ];
 
 // 视频模型经 JiJing 网关路由:
-//   veo3.1*  → JiJing model_route 2200..2204 → Comfly Gemini 优质 (channel 1081)
-//   seedance / doubao-seedance-* → JiJing model_route 2201/2205/2206 → Comfly 普通 (channel 1080)
+//   veo3.1*  → JiJing model_route 2200..2204 → dbgoc Veo 3.1 (channel 1092)
+//   seedance / doubao-seedance-* → JiJing model_route 2201/2205/2206 → Dale AI Seedance (channel 1094, V114, 2026-05-16)
+//     备份: Comfly 普通 (实际是 channel 1082, V114 已 enabled=0 屏蔽)。
 // 与 COMFLY_VIDEO_MODELS 一一对应，确保两路渠道在 UI 中暴露相同的变体。
+//
+// 注意 (Dale 上游硬约束, 2026-05-16 实测):
+//   - seedance-2.0-fast / seedance-2-0 都 **不支持参考视频** (video_file_*),
+//     UI 必须屏蔽 referenceVideos 入口, 见 VideoEditor.tsx + jijing/index.ts 的 guard.
+//   - 参考图 / 参考音频 / 文生视频 / 图生视频 都正常.
+//   - 上游 per-second 计费 fast 0.6/s, 标准 0.8/s.
 export const JIJING_VIDEO_MODELS: ModelInfo[] = [
   { id: "veo3.1", display_name: "Veo 3.1", capability: "VIDEO" },
   { id: "veo3.1-fast", display_name: "Veo 3.1 Fast", capability: "VIDEO" },

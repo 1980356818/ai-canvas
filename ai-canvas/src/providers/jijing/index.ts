@@ -43,6 +43,14 @@ export class JiJingProvider extends OpenAICompatProvider {
   async generateVideo(req: VideoGenRequest): Promise<VideoGenResponse> {
     const model = req.model ?? "";
     if (isJiJingVeoModel(model) || isJiJingSeedanceModel(model)) {
+      // Dale (Seedance 上游, V114) 硬约束: seedance-2.0-fast / seedance-2-0 都不支持
+      // 参考视频, 提交后会返回 400 "当前模型暂不支持视频引用". 在这里拦下避免一次
+      // 必失的网关往返 + 计费冻结/退款, 同时给用户清晰提示.
+      if (isJiJingSeedanceModel(model) && req.referenceVideos?.length) {
+        throw new Error(
+          "Seedance 当前不支持参考视频，请改用参考图或参考音频（或切到其他模型）",
+        );
+      }
       return this.generateGatewayVideo(req);
     }
     return super.generateVideo(req);
