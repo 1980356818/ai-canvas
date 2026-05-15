@@ -7,7 +7,7 @@ import pkg from "./package.json" with { type: "json" };
 const host = process.env.TAURI_DEV_HOST;
 
 const COMFLY_API = "https://ai.comfly.chat";
-const JIJING_API = "https://ai.snoworangekeji.cn";
+const JIJING_API = "https://api.snoworangekeji.cn";
 
 /**
  * Strip CSS `@layer` wrappers from production output so the app renders

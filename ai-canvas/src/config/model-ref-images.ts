@@ -1,5 +1,5 @@
 import type { CanvasCard } from "@/types";
-import { isSeedanceModel, isVeoModel } from "@/providers/shared/video";
+import { isSeedanceModel, isVeoModel, isVeoRefModel } from "@/providers/shared/video";
 
 export interface RefImageSlot {
   key: string;
@@ -77,9 +77,16 @@ const SEEDANCE_VIDEO_REF_SLOTS: RefImageSlot[] = Array.from({ length: 9 }, (_, i
   required: false,
 }));
 
-// Veo 3.1 参考: 单张首帧 (官方 API 仅支持一张参考图)
+// Veo 3.1 普通 (非 ref): 单张参考 (frame 模式由 VideoEditor 单独走 firstLastFrame, 此处仅作 reference 兜底)
 const VEO_VIDEO_REF_SLOTS: RefImageSlot[] = [
   { key: "refImage0", label: "参考图", description: "Veo 首帧参考图", required: false },
+];
+
+// Veo 3.1 参考图模式 (veo3.1-ref / veo3.1-ref-hd): 1-3 张参考图, 上游 image-asset 模式
+const VEO_REF_VIDEO_REF_SLOTS: RefImageSlot[] = [
+  { key: "refImage0", label: "参考图 1", description: "角色 / 道具 / 场景参考", required: false },
+  { key: "refImage1", label: "参考图 2", description: "角色 / 道具 / 场景参考", required: false },
+  { key: "refImage2", label: "参考图 3", description: "角色 / 道具 / 场景参考", required: false },
 ];
 
 // 兜底: 通用视频参考图槽位
@@ -114,6 +121,7 @@ export function getRefSlotsForVideoModel(
 ): RefImageSlot[] {
   if (imageMode !== "reference") return [];
   if (isSeedanceModel(modelId)) return SEEDANCE_VIDEO_REF_SLOTS;
+  if (isVeoRefModel(modelId)) return VEO_REF_VIDEO_REF_SLOTS;
   if (isVeoModel(modelId)) return VEO_VIDEO_REF_SLOTS;
   return VIDEO_REF_SLOTS;
 }

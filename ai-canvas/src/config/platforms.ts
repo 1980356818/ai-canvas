@@ -18,6 +18,6 @@ export function isPlatformVisible(id: string): boolean {
  * that depend exclusively on that platform are also hidden.
  */
 export const HIDDEN_FEATURES = {
-  upscale: HIDDEN_PLATFORMS.has("jijing"),
-  multiangle: HIDDEN_PLATFORMS.has("jijing"),
+  upscale: true,
+  multiangle: true,
 } as const;

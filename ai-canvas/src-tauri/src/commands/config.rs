@@ -183,7 +183,7 @@ pub fn apply_auth_headers(
 fn default_base_url(provider: &str) -> String {
     match provider {
         "openai" | "comfly" => "https://ai.comfly.chat".to_string(),
-        "jijing" => "https://ai.snoworangekeji.cn".to_string(),
+        "jijing" => "https://api.snoworangekeji.cn".to_string(),
         "anthropic" => "https://api.anthropic.com".to_string(),
         _ => String::new(),
     }

@@ -35,6 +35,15 @@ export function isVeoModel(modelId: string | undefined | null): boolean {
   return false;
 }
 
+/**
+ * Veo "参考图" (image-asset) 子家族。上游 dbgoc 硬约束: 16:9 + 8s + 1-3 张参考图。
+ * 与首帧/首尾帧的 frame 模式走不同 pipeline，必须用 veo31-ref / veo31-ref-HD 上游。
+ */
+export function isVeoRefModel(modelId: string | undefined | null): boolean {
+  if (!modelId) return false;
+  return modelId === "veo3.1-ref" || modelId === "veo3.1-ref-hd";
+}
+
 export function isVideoGenModel(modelId: string | undefined | null): boolean {
   return isSeedanceModel(modelId) || isVeoModel(modelId);
 }

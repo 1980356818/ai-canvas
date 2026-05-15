@@ -26,6 +26,9 @@ import {
   Database,
   RotateCcw,
   AlertTriangle,
+  ExternalLink,
+  Copy,
+  Check,
 } from "lucide-react";
 import {
   getSetting,
@@ -66,10 +69,13 @@ interface KeyEntry {
 interface PlatformState {
   id: string;
   name: string;
-  defaultBaseUrl: string;
+  // API baseUrl 由代码硬编码、不展示给用户也不允许编辑。仅用于 registry.setConfig
+  // 与 Tauri 校验调用——实际生效路径在 Rust 端 default_base_url() / Vite dev proxy。
+  apiBaseUrl: string;
+  // 平台用户官网（登录 / 充值入口），仅在 UI 展示为可点击/可复制链接。
+  homepageUrl: string;
   keys: KeyEntry[];
   activeKeyId: string;
-  baseUrl: string;
   enabled: boolean;
   expanded: boolean;
   editingKeyId: string | null;
@@ -127,9 +133,23 @@ function normalizeComflyKeys(rawKeys: KeyEntry[]): KeyEntry[] {
   return out;
 }
 
-const ALL_PLATFORMS: { id: string; name: string; defaultBaseUrl: string }[] = [
-  { id: "comfly", name: "Comfly", defaultBaseUrl: "https://ai.comfly.chat" },
-  { id: "jijing", name: "极境", defaultBaseUrl: "https://ai.snoworangekeji.cn" },
+// API baseUrl 与用户官网 URL 分离：
+//   - apiBaseUrl：SDK / Tauri Rust 端实际调用的地址，硬编码，不暴露给用户。
+//   - homepageUrl：用户访问、登录、充值的网址，显示在设置卡片里供用户点击/复制。
+// 极境两者不同：API 走 api.*，用户面板走 ai.*；Comfly 两者一致。
+const ALL_PLATFORMS: { id: string; name: string; apiBaseUrl: string; homepageUrl: string }[] = [
+  {
+    id: "comfly",
+    name: "Comfly",
+    apiBaseUrl: "https://ai.comfly.chat",
+    homepageUrl: "https://ai.comfly.chat",
+  },
+  {
+    id: "jijing",
+    name: "极境",
+    apiBaseUrl: "https://api.snoworangekeji.cn",
+    homepageUrl: "https://api.snoworangekeji.cn",
+  },
 ];
 
 const PLATFORMS = ALL_PLATFORMS.filter((p) => isPlatformVisible(p.id));
@@ -170,15 +190,13 @@ export default function SettingsDialog() {
 
         const states: PlatformState[] = [];
         for (const p of PLATFORMS) {
-          const [keysJson, activeId, legacyKey, url, legacyUrl, enabledStr, autoRotateStr] =
+          const [keysJson, activeId, legacyKey, enabledStr, autoRotateStr] =
             await Promise.all([
               getSetting(`${p.id}_api_keys`),
               getSetting(`${p.id}_active_key_id`),
               p.id === "comfly"
                 ? getSetting("openai_api_key")
                 : getSetting(`${p.id}_api_key`),
-              getSetting(`${p.id}_base_url`),
-              p.id === "comfly" ? getSetting("openai_base_url") : null,
               getSetting(`${p.id}_enabled`),
               getSetting(`${p.id}_auto_rotate`),
             ]);
@@ -211,10 +229,10 @@ export default function SettingsDialog() {
           states.push({
             id: p.id,
             name: p.name,
-            defaultBaseUrl: p.defaultBaseUrl,
+            apiBaseUrl: p.apiBaseUrl,
+            homepageUrl: p.homepageUrl,
             keys,
             activeKeyId: active || (keys.length > 0 ? keys[0]!.id : ""),
-            baseUrl: url || legacyUrl || "",
             enabled: enabledStr !== "false",
             expanded: false,
             editingKeyId: null,
@@ -244,14 +262,13 @@ export default function SettingsDialog() {
     async (id: string) => {
       updatePlatform(id, { connStatus: "testing", connError: "" });
       try {
-        // 用当前表单里的 key/baseUrl 测试，避免"必须先保存才能测连接"的歧义。
-        // 取 activeKeyId 对应的条目，回退到第一条非空；都没有就让后端报错。
+        // 用当前表单里的 key 测试，避免"必须先保存才能测连接"的歧义。
+        // baseUrl 已硬编码（Rust 端 default_base_url / Vite proxy），无需前端传。
         const p = platforms.find((x) => x.id === id);
         const activeEntry = p?.keys.find((e) => e.id === p?.activeKeyId);
         const fallbackEntry = p?.keys.find((e) => e.key.trim());
         const apiKey = (activeEntry?.key ?? fallbackEntry?.key ?? "").trim();
-        const baseUrl = p?.baseUrl.trim() || undefined;
-        await validateConnection(id, { apiKey: apiKey || undefined, baseUrl });
+        await validateConnection(id, { apiKey: apiKey || undefined });
         updatePlatform(id, { connStatus: "ok" });
       } catch (err) {
         updatePlatform(id, {
@@ -287,25 +304,23 @@ export default function SettingsDialog() {
 
         const activeEntry = cleanKeys.find((e) => e.id === p.activeKeyId);
         const activeKey = activeEntry?.key ?? cleanKeys[0]?.key ?? "";
-        const trimmedUrl = p.baseUrl.trim();
 
         await setSetting(`${p.id}_api_keys`, JSON.stringify(cleanKeys));
         await setSetting(`${p.id}_active_key_id`, p.activeKeyId);
         await setSetting(`${p.id}_api_key`, activeKey);
-        if (trimmedUrl) await setSetting(`${p.id}_base_url`, trimmedUrl);
         await setSetting(`${p.id}_enabled`, String(p.enabled));
         await setSetting(`${p.id}_auto_rotate`, String(p.autoRotate));
 
         if (p.id === "comfly") {
           await setSetting("openai_api_key", activeKey);
-          if (trimmedUrl) await setSetting("openai_base_url", trimmedUrl);
         }
 
+        // baseUrl 永远使用代码硬编码值，不读 storage、不允许用户覆盖。
         const existingExtra = registry.getConfig(p.id)?.extra ?? {};
         registry.setConfig(p.id, {
           id: p.id,
           apiKey: activeKey,
-          baseUrl: trimmedUrl || p.defaultBaseUrl,
+          baseUrl: p.apiBaseUrl,
           extra: existingExtra,
           enabled: p.enabled,
         });
@@ -725,19 +740,8 @@ function PlatformCard({
             />
           )}
 
-          {/* Base URL */}
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-foreground">
-              Base URL
-            </label>
-            <input
-              type="text"
-              value={p.baseUrl}
-              onChange={(e) => onUpdate({ baseUrl: e.target.value })}
-              placeholder={p.defaultBaseUrl}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground/60 focus:ring-1"
-            />
-          </div>
+          {/* 平台官网（登录 / 充值入口） */}
+          <PlatformHomepage url={p.homepageUrl} platformName={p.name} />
 
           {/* Test connection */}
           <div className="flex items-center gap-3">
@@ -760,6 +764,88 @@ function PlatformCard({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Platform Homepage Link ───────────────────────────────────
+
+/**
+ * 把平台用户官网作为只读链接展示，提供「打开」与「复制」两个动作。
+ * 用户不再能编辑 API baseUrl——它由代码硬编码。
+ */
+function PlatformHomepage({ url, platformName }: { url: string; platformName: string }) {
+  const [copied, setCopied] = useState(false);
+  const addToast = useUIStore((s) => s.addToast);
+
+  const handleOpen = async () => {
+    try {
+      if (isTauri) {
+        const { open } = await import("@tauri-apps/plugin-shell");
+        await open(url);
+      } else {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    } catch (err) {
+      addToast({
+        type: "error",
+        title: "打开链接失败",
+        description: err instanceof Error ? err.message : String(err),
+        duration: 3000,
+      });
+    }
+  };
+
+  const handleCopy = async () => {
+    try {
+      const { clipboardWriteText } = await import("@/platform");
+      await clipboardWriteText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      addToast({
+        type: "error",
+        title: "复制失败",
+        description: err instanceof Error ? err.message : String(err),
+        duration: 3000,
+      });
+    }
+  };
+
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-semibold text-foreground">
+        {platformName}官网
+      </label>
+      <div className="flex items-center gap-2 rounded-lg border border-input bg-muted/40 px-3 py-2">
+        <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground" title={url}>
+          {url}
+        </span>
+        <button
+          type="button"
+          onClick={handleOpen}
+          className="flex flex-shrink-0 items-center gap-1 rounded-md bg-background px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent"
+          title="在浏览器中打开"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          打开
+        </button>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className={cn(
+            "flex flex-shrink-0 items-center gap-1 rounded-md bg-background px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent",
+            copied ? "text-emerald-600" : "text-foreground",
+          )}
+          title="复制网址"
+        >
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? "已复制" : "复制"}
+        </button>
+      </div>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">
+        登录、充值、查看用量请访问上方网址。
+      </p>
     </div>
   );
 }

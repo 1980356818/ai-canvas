@@ -4,6 +4,9 @@ export { isSeedanceModel as isJiJingSeedanceModel, isVeoModel as isJiJingVeoMode
 
 export const JIJING_CHAT_MODELS: ModelInfo[] = [
   { id: "gemini-3.1-pro-preview", display_name: "Gemini 3.1 Pro", capability: "CHAT" },
+  // gpt-5.5-medium: 后端 ModelRouter 识别 "-medium" 后缀, 自动注入 reasoning_effort=medium,
+  // 触发 Sub2API channel 1075 的 GPT-5.5 thinking 模式。显示名按用户要求仅保留 "GPT 5.5"。
+  { id: "gpt-5.5-medium", display_name: "GPT 5.5", capability: "CHAT" },
 ];
 
 export const JIJING_IMAGE_MODELS: ModelInfo[] = [
@@ -22,8 +25,10 @@ export const JIJING_IMAGE_MODELS: ModelInfo[] = [
 export const JIJING_VIDEO_MODELS: ModelInfo[] = [
   { id: "veo3.1", display_name: "Veo 3.1", capability: "VIDEO" },
   { id: "veo3.1-fast", display_name: "Veo 3.1 Fast", capability: "VIDEO" },
-  { id: "veo3.1-4k", display_name: "Veo 3.1 (4K)", capability: "VIDEO" },
-  { id: "veo3.1-pro-4k", display_name: "Veo 3.1 Pro (4K)", capability: "VIDEO" },
+  { id: "veo3.1-4k", display_name: "Veo 3.1 1080p", capability: "VIDEO" },
+  { id: "veo3.1-pro-4k", display_name: "Veo 3.1 1080p Pro", capability: "VIDEO" },
+  { id: "veo3.1-ref", display_name: "Veo 3.1 参考图", capability: "VIDEO" },
+  { id: "veo3.1-ref-hd", display_name: "Veo 3.1 参考图 1080p", capability: "VIDEO" },
   { id: "seedance", display_name: "Seedance 2.0", capability: "VIDEO" },
   { id: "doubao-seedance-2-0-260128", display_name: "Seedance 2.0", capability: "VIDEO" },
   { id: "doubao-seedance-2-0-fast-260128", display_name: "Seedance 2.0 Fast", capability: "VIDEO" },

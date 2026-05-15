@@ -29,7 +29,7 @@ import {
   getDefaultResolutionForModel,
   getDefaultVideoSizeForModel,
 } from "@/shared/constants";
-import { isSeedanceModel } from "@/providers/shared/video";
+import { isSeedanceModel, isVeoRefModel } from "@/providers/shared/video";
 
 interface VideoFrameRef {
   url: string;
@@ -141,12 +141,15 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const [error, setError] = useState<string | null>(null);
   const data = card.data as VideoData;
   const isSeedance = isSeedanceModel(currentModel);
+  const isVeoRef = isVeoRefModel(currentModel);
   const allowedVideoSizes = useMemo(() => getAllowedVideoSizesForModel(currentModel), [currentModel]);
   const videoResolutionOptions = useMemo(() => getVideoResolutionsForModel(currentModel), [currentModel]);
   const availableModes: VideoImageMode[] = isSeedance
     ? ["text", "firstFrame", "firstLastFrame", "reference"]
-    : ["text", "firstLastFrame"];
-  const imageMode: VideoImageMode = resolveImageMode(data);
+    : isVeoRef
+      ? ["reference"]
+      : ["text", "firstLastFrame"];
+  const imageMode: VideoImageMode = isVeoRef ? "reference" : resolveImageMode(data);
 
   const refSlots = useMemo(
     () => getRefSlotsForVideoModel(currentModel, imageMode),
@@ -332,7 +335,26 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       setCurrentModel(modelId);
       const newData: Record<string, unknown> = { ...data, model: modelId, provider: providerId };
       const newIsSeedance = isSeedanceModel(modelId);
-      if (!newIsSeedance && (imageMode === "firstFrame" || imageMode === "reference")) {
+      const newIsVeoRef = isVeoRefModel(modelId);
+
+      if (newIsVeoRef) {
+        // 切到 Veo 参考图: 把 refFrames (首/尾帧) 迁到 refImages slot, 最多 3 张
+        newData.imageMode = "reference";
+        const refImages: Record<string, RefImageEntry> = {};
+        const candidateFrames =
+          frames.length > 0
+            ? frames
+            : data.refImages
+              ? Object.values(data.refImages).map((e) => ({ url: e.url, sourceCardId: e.sourceCardId ?? "" }))
+              : [];
+        candidateFrames.slice(0, 3).forEach((f, i) => {
+          refImages[`refImage${i}`] = { url: f.url, sourceCardId: f.sourceCardId, sourceType: "card" };
+        });
+        newData.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
+        newData.refFrames = undefined;
+        newData.refAudios = undefined;
+        newData.refVideos = undefined;
+      } else if (!newIsSeedance && (imageMode === "firstFrame" || imageMode === "reference")) {
         newData.imageMode = "firstLastFrame";
         if (imageMode === "firstFrame" && frames.length > 0) {
           newData.refFrames = frames.slice(0, 1);
@@ -340,7 +362,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         if (imageMode === "reference") {
           const keptFrames: VideoFrameRef[] = [];
           if (data.refImages) {
-            const slots = getRefSlotsForVideoModel(modelId, "reference");
+            const slots = getRefSlotsForVideoModel(currentModel, "reference");
             const entries = slots.map((s) => data.refImages?.[s.key]).filter((e): e is RefImageEntry => !!e);
             for (const e of entries.slice(0, 2)) {
               keptFrames.push({ url: e.url, sourceCardId: e.sourceCardId ?? "" });

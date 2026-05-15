@@ -404,13 +404,6 @@ function ContextMenuPanel({
         label: "添加模板",
         disabled: noProject,
         children: [
-          {
-            type: "item",
-            label: "模特换装",
-            disabled: noProject,
-            onSelect: (e) => addCardAtClick("ai_tryon", e),
-          },
-          { type: "sep" },
           ...WORKFLOW_TEMPLATES
             .filter((wf) => wf.connections && wf.connections.length > 0)
             .map((wf) => ({

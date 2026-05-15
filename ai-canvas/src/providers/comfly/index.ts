@@ -30,15 +30,9 @@ export class ComflyProvider extends OpenAICompatProvider {
     id: "comfly" as const,
     name: "Comfly",
     capabilities: ["chat", "vision", "tool_calling", "image_gen", "video_gen", "streaming"] as const,
+    // baseUrl 由代码硬编码（Rust default_base_url + Vite proxy），不暴露给用户编辑。
     configSchema: [
       { key: "apiKey", label: "API Key", type: "password" as const, required: true },
-      {
-        key: "baseUrl",
-        label: "Base URL",
-        type: "url" as const,
-        required: false,
-        default: "https://ai.comfly.chat",
-      },
     ],
   };
 

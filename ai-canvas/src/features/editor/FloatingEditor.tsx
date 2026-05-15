@@ -14,7 +14,7 @@ const EDITOR_SIZES: Record<string, { height: number; minWidth: number }> = {
   ai_image: { height: 160, minWidth: 560 },
   ai_video: { height: 150, minWidth: 560 },
   ai_tryon: { height: 150, minWidth: 560 },
-  ai_multiangle: { height: 88, minWidth: 400 },
+  ai_multiangle: { height: 175, minWidth: 400 },
   text: { height: 200, minWidth: 400 },
   sticky_note: { height: 160, minWidth: 360 },
 };

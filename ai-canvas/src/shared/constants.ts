@@ -19,7 +19,7 @@ export function sizeFromRatio(ratio: number): { width: number; height: number } 
 
 export type { ImageSizeOption, QuickCreateItem, WorkflowCardPreset, WorkflowConnectionPreset, WorkflowTemplate } from "@/types";
 import type { ImageSizeOption } from "@/types";
-import { isSeedanceModel, isVeoModel } from "@/providers/shared/video";
+import { isSeedanceModel, isVeoModel, isVeoRefModel } from "@/providers/shared/video";
 
 export const IMAGE_SIZE_OPTIONS: ImageSizeOption[] = [
   { value: "1:1",   label: "1:1",   ratio: 1 },
@@ -81,9 +81,12 @@ export function getAllowedSizesForModel(modelId: string): string[] | null {
 //   Veo 3.1 (Google):        16:9 9:16 1:1
 const SEEDANCE_RATIOS = ["auto", "16:9", "9:16", "1:1", "4:3", "3:4", "21:9"] as const;
 const VEO_RATIOS = ["16:9", "9:16", "1:1"] as const;
+// Veo 参考图模式 (image-asset) 上游硬约束: 只支持 16:9
+const VEO_REF_RATIOS = ["16:9"] as const;
 
 export function getAllowedVideoSizesForModel(modelId: string): string[] | null {
   if (isSeedanceModel(modelId)) return [...SEEDANCE_RATIOS];
+  if (isVeoRefModel(modelId)) return [...VEO_REF_RATIOS];
   if (isVeoModel(modelId)) return [...VEO_RATIOS];
   return null;
 }
