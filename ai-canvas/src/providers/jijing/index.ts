@@ -4,6 +4,7 @@ import {
   resolveJiJingImageModelId,
   isJiJingSeedanceModel,
   isJiJingVeoModel,
+  isJiJingGrokVideoModel,
 } from "./models";
 import { toSeedanceRatio, toVeoAspectRatio } from "../shared/video";
 import { executeAsyncMediaTask } from "../shared/asyncMediaTask";
@@ -42,10 +43,7 @@ export class JiJingProvider extends OpenAICompatProvider {
 
   async generateVideo(req: VideoGenRequest): Promise<VideoGenResponse> {
     const model = req.model ?? "";
-    if (isJiJingVeoModel(model) || isJiJingSeedanceModel(model)) {
-      // Dale (Seedance 上游, V114) 硬约束: seedance-2.0-fast / seedance-2-0 都不支持
-      // 参考视频, 提交后会返回 400 "当前模型暂不支持视频引用". 在这里拦下避免一次
-      // 必失的网关往返 + 计费冻结/退款, 同时给用户清晰提示.
+    if (isJiJingVeoModel(model) || isJiJingSeedanceModel(model) || isJiJingGrokVideoModel(model)) {
       if (isJiJingSeedanceModel(model) && req.referenceVideos?.length) {
         throw new Error(
           "Seedance 当前不支持参考视频，请改用参考图或参考音频（或切到其他模型）",
@@ -56,13 +54,14 @@ export class JiJingProvider extends OpenAICompatProvider {
     return super.generateVideo(req);
   }
 
-  // 极境网关统一视频生成入口 (/v1/videos/generations)。
-  // 全部参数都按字段名提交，由后端路由器分发到对应的 model_route → upstream channel。
   private async generateGatewayVideo(req: VideoGenRequest): Promise<VideoGenResponse> {
     const seedance = isJiJingSeedanceModel(req.model ?? "");
+    const grok = isJiJingGrokVideoModel(req.model ?? "");
     const expectedSec = seedance
       ? PROGRESS_EXPECTED_SEC.videoSeedance
-      : PROGRESS_EXPECTED_SEC.videoVeo;
+      : grok
+        ? PROGRESS_EXPECTED_SEC.videoVeo
+        : PROGRESS_EXPECTED_SEC.videoVeo;
 
     return await executeAsyncMediaTask({
       providerId: this.descriptor.id,
@@ -84,7 +83,7 @@ export class JiJingProvider extends OpenAICompatProvider {
       prompt: req.prompt,
       model: req.model,
     };
-    // Seedance 接受 "adaptive"; Veo 不接受 "auto"/"adaptive", 由 helper 落空让
+    // Seedance 接受 "adaptive"; Veo/Grok 不接受 "auto"/"adaptive", 由 helper 落空让
     // 后端走默认值。Canvas 的 ratio 优先级最高 (model_route form_schema 等场景)。
     const aspect = req.ratio
       ?? (seedance ? toSeedanceRatio(req.size) : toVeoAspectRatio(req.size));
@@ -112,6 +111,27 @@ export class JiJingProvider extends OpenAICompatProvider {
     }
     if (req.referenceVideos?.length) {
       body.videos = req.referenceVideos.map((ref) => ({ url: ref.url, role: ref.role }));
+    }
+
+    // Seedance 必须显式告诉后端 reference_mode,否则 DaleVideoAdapter 历史"启发式"
+    // 会在 images.length === 2 时误判为首尾帧,把图塞 first_frame_image 触发上游报错。
+    // 字面值取自 Dale 官方文档 (2026-05-15) curl 示例:
+    //   reference_mode=omni_reference  → 参考图/音频/视频通用模式
+    //   reference_mode=first_last_frames → 首尾帧专用 (image_file_1=首, image_file_2=尾)
+    // 纯文生不传 mode,让上游走默认。
+    if (seedance) {
+      const hasFrameRole = req.referenceImages?.some(
+        (ref) => ref.role === "firstFrame" || ref.role === "lastFrame",
+      );
+      const hasAnyRef =
+        !!req.referenceImages?.length
+        || !!req.referenceAudios?.length
+        || !!req.referenceVideos?.length;
+      if (hasFrameRole) {
+        body.reference_mode = "first_last_frames";
+      } else if (hasAnyRef) {
+        body.reference_mode = "omni_reference";
+      }
     }
     return body;
   }

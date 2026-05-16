@@ -6,7 +6,7 @@ import { scheduleFitCardsToViewport } from "@/lib/viewport";
 import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import type { WorkflowTemplate } from "@/shared/constants";
 
-const FEATURED_IDS = ["wf-white-bg", "wf-tryon", "wf-pose-fission", "wf-scene-replace", "wf-face-merge", "wf-look-fission", "wf-multimodal-fusion", "wf-multimodal-fusion-6", "wf-studio-look", "wf-mirror-selfie-1", "wf-mirror-selfie"];
+const FEATURED_IDS = ["wf-white-bg", "wf-tryon", "wf-pose-fission", "wf-scene-replace", "wf-face-merge", "wf-look-fission", "wf-multimodal-fusion", "wf-multimodal-fusion-6", "wf-multimodal-fusion-2", "wf-studio-look", "wf-mirror-selfie-1", "wf-mirror-selfie"];
 
 function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
   const handleClick = async () => {

@@ -44,8 +44,13 @@ export function isVeoRefModel(modelId: string | undefined | null): boolean {
   return modelId === "veo3.1-ref" || modelId === "veo3.1-ref-hd";
 }
 
+export function isGrokVideoModel(modelId: string | undefined | null): boolean {
+  if (!modelId) return false;
+  return modelId === "grok-video" || modelId.startsWith("grok-video-");
+}
+
 export function isVideoGenModel(modelId: string | undefined | null): boolean {
-  return isSeedanceModel(modelId) || isVeoModel(modelId);
+  return isSeedanceModel(modelId) || isVeoModel(modelId) || isGrokVideoModel(modelId);
 }
 
 /**
@@ -74,6 +79,146 @@ export function resolveVeoUpstreamModel(modelId: string | undefined): string {
   if (!modelId || modelId === "veo3.1") return "veo3.1-fast";
   return modelId;
 }
+
+/**
+ * Seedance 2.0 画质档 — UI 胶囊选择器直接对应的值。
+ *
+ * 返回的是 JiJing 后端 `model_route.model_name` 里实际存在的精确 SKU，而不是
+ * canonical alias `seedance`/`seedance-fast` —— 因为 JiJingProvider 不做 alias
+ * 解析，把 `req.model` 原样塞 body 给网关，只有精确 SKU 才能命中路由表：
+ *   Route 2206  `doubao-seedance-2-0-fast-260128` → Dale 1094 (fast)
+ *   Route 2205  `doubao-seedance-2-0-260128`      → Dale 1094 (标准)
+ * 不走 Route 2201 (`seedance`)，因为它同时挂了 fast+标准两个 upstream
+ * (priority 都是 5)，picker 行为不可控。
+ * Comfly 这边走 `resolveSeedanceUpstreamModel` 的 default 分支原样透传，精确
+ * SKU 同样直接被 Volcano API 接受 —— 两条 provider 链路都跑得通。
+ */
+export type SeedanceQualityTier = "fast" | "standard";
+
+export const SEEDANCE_TIERS: readonly { value: SeedanceQualityTier; label: string; price: string }[] = [
+  { value: "fast",     label: "快速", price: "0.5" },
+  { value: "standard", label: "标准", price: "1.0" },
+];
+
+export function resolveSeedanceVariantForTier(tier: SeedanceQualityTier): string {
+  return tier === "fast"
+    ? "doubao-seedance-2-0-fast-260128"
+    : "doubao-seedance-2-0-260128";
+}
+
+/**
+ * 从历史卡片的 model SKU 推断画质档。
+ * UI 引入 tier 之前所有 canvas 卡片都跑标准版（"seedance" 直接 resolve 到
+ * doubao-seedance-2-0-260128），因此默认 standard，避免历史复现意外变成 fast。
+ */
+export function inferSeedanceTierFromLegacy(
+  modelId: string | undefined | null,
+): SeedanceQualityTier {
+  if (!modelId) return "standard";
+  const m = modelId.toLowerCase();
+  if (m === "seedance-fast") return "fast";
+  if (m.includes("fast")) return "fast";
+  return "standard";
+}
+
+/**
+ * Veo 3.1 画质档 — UI 胶囊选择器直接对应的值。
+ *
+ * 非参考模式 3 档:
+ *   "fast-720p"       → veo3.1-fast      (upstream veo31-fast,    $0.20, ~20-60s)
+ *   "standard-1080p"  → veo3.1-1080p     (upstream veo31-fast-HD, $0.30, ~60-150s)
+ *   "pro-1080p"       → veo3.1-pro-1080p (upstream veo31-HD,      $0.35, ~80-240s)
+ *
+ * 参考模式 2 档 (fast 引擎不支持 image-asset):
+ *   "ref-720p"        → veo3.1-ref       (upstream veo31-ref,    $0.30)
+ *   "ref-1080p"       → veo3.1-ref-hd    (upstream veo31-ref-HD, $0.35)
+ */
+export type VeoQualityTier = "fast-720p" | "standard-1080p" | "pro-1080p" | "ref-720p" | "ref-1080p";
+
+export const VEO_NON_REF_TIERS: readonly { value: VeoQualityTier; label: string; price: string }[] = [
+  { value: "fast-720p",      label: "快速 720P",  price: "0.5" },
+  { value: "standard-1080p", label: "标准 1080P", price: "1.0" },
+  { value: "pro-1080p",      label: "Pro 1080P",  price: "1.5" },
+];
+
+export const VEO_REF_TIERS: readonly { value: VeoQualityTier; label: string; price: string }[] = [
+  { value: "ref-720p",  label: "720P",  price: "1.0" },
+  { value: "ref-1080p", label: "1080P", price: "1.5" },
+];
+
+export function resolveVeoVariantForMode(
+  mode: "text" | "firstFrame" | "firstLastFrame" | "reference",
+  tier: VeoQualityTier,
+): string {
+  if (mode === "reference") {
+    return tier === "ref-720p" ? "veo3.1-ref" : "veo3.1-ref-hd";
+  }
+  switch (tier) {
+    case "fast-720p": return "veo3.1-fast";
+    case "standard-1080p": return "veo3.1-1080p";
+    case "pro-1080p": return "veo3.1-pro-1080p";
+    default: return "veo3.1-fast";
+  }
+}
+
+/** 把历史卡片里的 Veo 变体 id 收敛回 canonical "veo3.1"，给收紧后的 dropdown 用。 */
+export function normalizeVeoModelToCanonical(modelId: string | undefined | null): string | null {
+  if (!modelId) return null;
+  if (!isVeoModel(modelId)) return modelId;
+  return "veo3.1";
+}
+
+/**
+ * Grok Video 时长档 — 每个 SKU 对应固定时长,UI 用胶囊选择。
+ * 上游 PearNo 支持参考图(最多 7 张),比例 16:9/9:16/2:3/3:2/1:1,720P 固定。
+ */
+export type GrokDurationTier = "12s" | "16s" | "20s";
+
+export const GROK_DURATION_TIERS: readonly { value: GrokDurationTier; label: string; price: string }[] = [
+  { value: "12s", label: "12秒", price: "1.0" },
+  { value: "16s", label: "16秒", price: "1.2" },
+  { value: "20s", label: "20秒", price: "1.5" },
+];
+
+export function resolveGrokVariant(tier: GrokDurationTier): string {
+  return `grok-video-${tier}`;
+}
+
+export function inferGrokTierFromLegacy(modelId: string | undefined | null): GrokDurationTier {
+  if (!modelId) return "12s";
+  if (modelId.includes("20s")) return "20s";
+  if (modelId.includes("16s")) return "16s";
+  return "12s";
+}
+
+/**
+ * 从历史卡片的 (model SKU + 旧 resolution / veoFast 字段) 推断画质档。
+ * 兼容所有历史格式: 旧 "4k" 别名、旧 resolution 字段值 ("fast"/"hd"/"pro"/"ref-720"/"ref-1080")、
+ * 旧 veoFast boolean。
+ */
+export function inferVeoTierFromLegacy(
+  modelId: string | undefined | null,
+  legacyResolution?: string | undefined,
+  legacyFast?: boolean,
+): VeoQualityTier {
+  const lr = (legacyResolution ?? "").toLowerCase();
+  if (lr === "ref-1080") return "ref-1080p";
+  if (lr === "ref-720") return "ref-720p";
+  if (lr === "pro") return "pro-1080p";
+  if (lr === "hd" || lr === "4k") return legacyFast === false ? "pro-1080p" : "standard-1080p";
+  if (lr === "1080p") return legacyFast === false ? "pro-1080p" : "standard-1080p";
+  if (lr === "fast" || lr === "720p") return "fast-720p";
+
+  if (!modelId) return "fast-720p";
+  const m = modelId.toLowerCase();
+  if (m === "veo3.1-pro-1080p" || m === "veo3.1-pro-4k") return "pro-1080p";
+  if (m === "veo3.1-1080p" || m === "veo3.1-4k") return "standard-1080p";
+  if (m === "veo3.1-ref-hd") return "ref-1080p";
+  if (m === "veo3.1-ref") return "ref-720p";
+  if (m.includes("1080p") || m.includes("4k") || m.includes("-hd") || m.endsWith("hd")) return "standard-1080p";
+  return "fast-720p";
+}
+
 
 /**
  * 用 Volcano Seedance 协议构建提交请求体。

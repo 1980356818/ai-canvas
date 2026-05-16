@@ -16,20 +16,36 @@ import { getRefSlotsForVideoModel, compactRefImages, type RefImageEntry } from "
 import { disconnectCardPairAndCleanup } from "@/lib/referenceConsistency";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
-import PortalSelect from "./PortalSelect";
 import SizeCombo from "./SizeCombo";
 import PromptTextarea, { type PromptTextareaHandle } from "./PromptTextarea";
 import {
   normalizeVideoSize,
   IMAGE_SIZE_OPTIONS,
   VIDEO_SIZE_OPTIONS,
+  VEO_REF_RATIOS,
   sizeFromRatio,
   getAllowedVideoSizesForModel,
-  getVideoResolutionsForModel,
-  getDefaultResolutionForModel,
   getDefaultVideoSizeForModel,
 } from "@/shared/constants";
-import { isSeedanceModel, isVeoRefModel } from "@/providers/shared/video";
+import {
+  isSeedanceModel,
+  isVeoModel,
+  isGrokVideoModel,
+  resolveVeoVariantForMode,
+  normalizeVeoModelToCanonical,
+  inferVeoTierFromLegacy,
+  VEO_NON_REF_TIERS,
+  VEO_REF_TIERS,
+  SEEDANCE_TIERS,
+  GROK_DURATION_TIERS,
+  resolveSeedanceVariantForTier,
+  resolveGrokVariant,
+  inferSeedanceTierFromLegacy,
+  inferGrokTierFromLegacy,
+  type VeoQualityTier,
+  type SeedanceQualityTier,
+  type GrokDurationTier,
+} from "@/providers/shared/video";
 
 interface VideoFrameRef {
   url: string;
@@ -38,10 +54,17 @@ interface VideoFrameRef {
 
 const MAX_AUDIO_SLOTS = 3;
 
-const DURATION_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
+// Seedance 4-15s (上游接受任意整秒)
+const SEEDANCE_DURATION_OPTIONS = Array.from({ length: 12 }, (_, i) => ({
   value: String(i + 4),
   label: `${i + 4}s`,
 }));
+// Veo 3.1 frame 模式自由 4/6/8;参考 (image-asset) 模式锁 8s,UI 在 ref 模式下禁用此控件
+const VEO_DURATION_OPTIONS = [
+  { value: "4", label: "4s" },
+  { value: "6", label: "6s" },
+  { value: "8", label: "8s" },
+];
 
 interface AudioRefEntry {
   url: string;
@@ -55,16 +78,18 @@ function formatDuration(sec: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-type VideoImageMode = "text" | "firstFrame" | "firstLastFrame" | "reference";
+// 模式只剩 2 个 — 首尾帧(用图当帧)/ 参考(用图当风格素材)。
+// "文生" 不再是显式按钮:任何模式下不传图就是文生,handleGenerate 自动适配。
+// 上游 dbgoc/Dale 的 frame pipeline 同一个 (role=firstFrame / lastFrame),
+// 1 张图自动当首帧,2 张图当首+尾帧。
+type VideoImageMode = "firstLastFrame" | "reference";
 
 function resolveImageMode(data: { imageMode?: string; refFrames?: unknown[] }): VideoImageMode {
   const raw = data.imageMode;
-  if (raw === "text" || raw === "firstFrame" || raw === "firstLastFrame" || raw === "reference") return raw;
-  if (raw === "frame") {
-    const len = data.refFrames?.length ?? 0;
-    return len <= 1 ? "firstFrame" : "firstLastFrame";
-  }
-  return "reference";
+  if (raw === "firstLastFrame" || raw === "reference") return raw;
+  // 历史卡片兼容: firstFrame / frame 归并到 firstLastFrame;text 也归到 firstLastFrame
+  // (空状态下首尾帧 = 文生,无差别)。
+  return "firstLastFrame";
 }
 
 interface VideoData {
@@ -83,7 +108,15 @@ interface VideoData {
   _label?: string;
   _description?: string;
   duration?: number;
+  /** @deprecated — 旧字段,迁移到 veoTier 后仅用于旧卡片兼容推断。 */
   resolution?: string;
+  /** @deprecated — 旧字段,迁移到 veoTier。 */
+  veoFast?: boolean;
+  veoTier?: VeoQualityTier;
+  /** Seedance 2.0 画质档:fast / standard。空值兼容老卡片(默认 standard)。 */
+  seedanceTier?: SeedanceQualityTier;
+  /** Grok Video 时长档:12s / 16s / 20s。 */
+  grokTier?: GrokDurationTier;
   generateAudio?: boolean;
   imageMode?: VideoImageMode;
   refImages?: Record<string, RefImageEntry>;
@@ -135,21 +168,37 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const promptRef = useRef<PromptTextareaHandle>(null);
   const [currentModel, setCurrentModel] = useState("");
   const [currentSize, setCurrentSize] = useState(() => normalizeVideoSize((card.data as VideoData).size));
-  const [currentResolution, setCurrentResolution] = useState(() => (card.data as VideoData).resolution ?? "720p");
+  const [currentTier, setCurrentTier] = useState<VeoQualityTier>(() => (card.data as VideoData).veoTier ?? "fast-720p");
+  const [currentSeedanceTier, setCurrentSeedanceTier] = useState<SeedanceQualityTier>(
+    () => (card.data as VideoData).seedanceTier ?? "standard",
+  );
+  const [currentGrokTier, setCurrentGrokTier] = useState<GrokDurationTier>(
+    () => (card.data as VideoData).grokTier ?? "12s",
+  );
   const [currentDuration, setCurrentDuration] = useState(() => (card.data as VideoData).duration ?? 5);
   const [currentAudio, setCurrentAudio] = useState(() => (card.data as VideoData).generateAudio ?? true);
   const [error, setError] = useState<string | null>(null);
   const data = card.data as VideoData;
   const isSeedance = isSeedanceModel(currentModel);
-  const isVeoRef = isVeoRefModel(currentModel);
+  const isVeo = isVeoModel(currentModel);
+  const isGrok = isGrokVideoModel(currentModel);
   const allowedVideoSizes = useMemo(() => getAllowedVideoSizesForModel(currentModel), [currentModel]);
-  const videoResolutionOptions = useMemo(() => getVideoResolutionsForModel(currentModel), [currentModel]);
-  const availableModes: VideoImageMode[] = isSeedance
-    ? ["text", "firstFrame", "firstLastFrame", "reference"]
-    : isVeoRef
-      ? ["reference"]
-      : ["text", "firstLastFrame"];
-  const imageMode: VideoImageMode = isVeoRef ? "reference" : resolveImageMode(data);
+  const availableModes: VideoImageMode[] = (isSeedance || isVeo || isGrok)
+    ? ["firstLastFrame", "reference"]
+    : ["firstLastFrame"];
+  const imageMode: VideoImageMode = resolveImageMode(data);
+  // Veo 参考模式 (image-asset): dbgoc 上游硬约束 16:9 + 8s,UI 强制锁
+  const isVeoRefMode = isVeo && imageMode === "reference";
+  const veoTierOptions = isVeoRefMode ? VEO_REF_TIERS : VEO_NON_REF_TIERS;
+  const effectiveTier: VeoQualityTier = isVeoRefMode
+    ? (currentTier === "ref-720p" || currentTier === "ref-1080p" ? currentTier : "ref-1080p")
+    : (currentTier === "fast-720p" || currentTier === "standard-1080p" || currentTier === "pro-1080p" ? currentTier : "fast-720p");
+  const effectiveAllowedSizes = useMemo(
+    () => (isVeoRefMode ? [...VEO_REF_RATIOS] : allowedVideoSizes),
+    [isVeoRefMode, allowedVideoSizes],
+  );
+  const effectiveDurationOptions = isVeo ? VEO_DURATION_OPTIONS : SEEDANCE_DURATION_OPTIONS;
+  // Grok 时长已编码在 tier(SKU) 里,不需要独立 duration 控件
 
   const refSlots = useMemo(
     () => getRefSlotsForVideoModel(currentModel, imageMode),
@@ -166,21 +215,62 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const canGenerate = finalPrompt.length > 0;
 
   useEffect(() => {
+    // 旧卡片可能存了 veo3.1-fast / -4k / -pro-4k / -ref / -ref-hd 等 SKU + 旧 resolution/veoFast。
+    // 全部收敛成: model=canonical "veo3.1" + veoTier (画质档单维度)。
+    const migrateVeoFields = (modelId: string): { model?: string; veoTier?: VeoQualityTier } => {
+      const patch: { model?: string; veoTier?: VeoQualityTier } = {};
+      const canonical = normalizeVeoModelToCanonical(modelId);
+      if (canonical && canonical !== modelId) {
+        patch.model = canonical;
+      }
+      if (isVeoModel(modelId) && !data.veoTier) {
+        patch.veoTier = inferVeoTierFromLegacy(modelId, data.resolution, data.veoFast);
+      }
+      return patch;
+    };
+
+    const migrateSeedanceFields = (modelId: string): { seedanceTier?: SeedanceQualityTier } => {
+      if (!isSeedanceModel(modelId) || data.seedanceTier) return {};
+      return { seedanceTier: inferSeedanceTierFromLegacy(modelId) };
+    };
+
+    const migrateGrokFields = (modelId: string): { model?: string; grokTier?: GrokDurationTier } => {
+      if (!isGrokVideoModel(modelId)) return {};
+      const patch: { model?: string; grokTier?: GrokDurationTier } = {};
+      if (modelId !== "grok-video") patch.model = "grok-video";
+      if (!data.grokTier) patch.grokTier = inferGrokTierFromLegacy(modelId);
+      return patch;
+    };
+
+    const applyAndSet = (modelId: string, providerId?: string) => {
+      const patch: Record<string, unknown> = {
+        ...migrateVeoFields(modelId),
+        ...migrateSeedanceFields(modelId),
+        ...migrateGrokFields(modelId),
+      };
+      const nextModel = (patch.model as string) ?? modelId;
+      if (providerId !== undefined) patch.provider = providerId;
+      setCurrentModel(nextModel);
+      if (Object.keys(patch).length > 0) {
+        updateCard(card.id, { data: { ...data, ...patch } });
+        if (patch.veoTier) setCurrentTier(patch.veoTier as VeoQualityTier);
+        if (patch.seedanceTier) setCurrentSeedanceTier(patch.seedanceTier as SeedanceQualityTier);
+        if (patch.grokTier) setCurrentGrokTier(patch.grokTier as GrokDurationTier);
+      }
+    };
+
     if (data.model && data.provider) {
-      setCurrentModel(data.model);
+      applyAndSet(data.model);
     } else if (data.model) {
-      setCurrentModel(data.model);
       const p = modelService.tryResolveProvider(data.model);
-      if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
+      applyAndSet(data.model, p?.descriptor.id);
     } else {
       const saved = useSettingsStore.getState().getLastModel("video");
       if (saved) {
-        setCurrentModel(saved.modelId);
-        updateCard(card.id, { data: { ...data, model: saved.modelId, provider: saved.providerId } });
+        applyAndSet(saved.modelId, saved.providerId);
       } else {
         modelService.getDefaultVideoModel().then(({ modelId, providerId }) => {
-          setCurrentModel(modelId);
-          updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+          applyAndSet(modelId, providerId);
         });
       }
     }
@@ -256,28 +346,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       if (imageMode === newMode) return;
       const patch: Record<string, unknown> = { imageMode: newMode };
 
-      if (newMode === "text") {
-        disconnectCards(collectAllSourceCardIds());
-        patch.refFrames = undefined;
-        patch.refImages = undefined;
-        patch.refAudios = undefined;
-        patch.refVideos = undefined;
-      } else if (newMode === "firstFrame") {
-        const firstImage = frames[0] ?? (data.refImages && Object.values(data.refImages)[0]);
-        const droppedIds = collectAllSourceCardIds();
-        const keptFrame = firstImage
-          ? { url: firstImage.url, sourceCardId: firstImage.sourceCardId ?? "" }
-          : undefined;
-        if (keptFrame?.sourceCardId) {
-          const idx = droppedIds.indexOf(keptFrame.sourceCardId);
-          if (idx >= 0) droppedIds.splice(idx, 1);
-        }
-        disconnectCards(droppedIds);
-        patch.refFrames = keptFrame ? [keptFrame] : undefined;
-        patch.refImages = undefined;
-        patch.refAudios = undefined;
-        patch.refVideos = undefined;
-      } else if (newMode === "firstLastFrame") {
+      if (newMode === "firstLastFrame") {
         const keptFrames: VideoFrameRef[] = [];
         if (frames.length > 0) {
           keptFrames.push(...frames.slice(0, 2));
@@ -335,50 +404,28 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       setCurrentModel(modelId);
       const newData: Record<string, unknown> = { ...data, model: modelId, provider: providerId };
       const newIsSeedance = isSeedanceModel(modelId);
-      const newIsVeoRef = isVeoRefModel(modelId);
+      const newIsVeo = isVeoModel(modelId);
 
-      if (newIsVeoRef) {
-        // 切到 Veo 参考图: 把 refFrames (首/尾帧) 迁到 refImages slot, 最多 3 张
-        newData.imageMode = "reference";
-        const refImages: Record<string, RefImageEntry> = {};
-        const candidateFrames =
-          frames.length > 0
-            ? frames
-            : data.refImages
-              ? Object.values(data.refImages).map((e) => ({ url: e.url, sourceCardId: e.sourceCardId ?? "" }))
-              : [];
-        candidateFrames.slice(0, 3).forEach((f, i) => {
-          refImages[`refImage${i}`] = { url: f.url, sourceCardId: f.sourceCardId, sourceType: "card" };
-        });
-        newData.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
-        newData.refFrames = undefined;
-        newData.refAudios = undefined;
-        newData.refVideos = undefined;
-      } else if (!newIsSeedance && (imageMode === "firstFrame" || imageMode === "reference")) {
-        newData.imageMode = "firstLastFrame";
-        if (imageMode === "firstFrame" && frames.length > 0) {
-          newData.refFrames = frames.slice(0, 1);
-        }
-        if (imageMode === "reference") {
-          const keptFrames: VideoFrameRef[] = [];
-          if (data.refImages) {
-            const slots = getRefSlotsForVideoModel(currentModel, "reference");
-            const entries = slots.map((s) => data.refImages?.[s.key]).filter((e): e is RefImageEntry => !!e);
-            for (const e of entries.slice(0, 2)) {
-              keptFrames.push({ url: e.url, sourceCardId: e.sourceCardId ?? "" });
-            }
-          }
-          newData.refFrames = keptFrames.length > 0 ? keptFrames : undefined;
-          newData.refImages = undefined;
-          newData.refAudios = undefined;
-          newData.refVideos = undefined;
-        }
-      }
-
-      // Dale Seedance 上游不支持 video reference (2026-05-16 实测, fast/标准都拒).
-      // 切到 Seedance 时把之前 Veo 模型留下来的 refVideos 清掉, 避免发送后 400.
+      // Dale Seedance 上游硬约束: 不支持参考视频 (2026-05-16 实测)。
       if (newIsSeedance && Array.isArray(newData.refVideos) && (newData.refVideos as unknown[]).length > 0) {
         newData.refVideos = undefined;
+      }
+      // dbgoc Veo 上游: 不支持参考音频/参考视频。
+      // Grok (PearNo) 同理: 只支持参考图。
+      if (newIsVeo || isGrokVideoModel(modelId)) {
+        newData.refAudios = undefined;
+        newData.refVideos = undefined;
+      }
+      // Veo 参考模式 (image-asset) 最多 3 张参考图,溢出的 slot 截断。
+      if (newIsVeo && imageMode === "reference" && data.refImages) {
+        const oldSlots = getRefSlotsForVideoModel(currentModel, "reference");
+        const entries = oldSlots
+          .map((s) => data.refImages?.[s.key])
+          .filter((e): e is RefImageEntry => !!e)
+          .slice(0, 3);
+        const refImages: Record<string, RefImageEntry> = {};
+        entries.forEach((e, i) => { refImages[`refImage${i}`] = e; });
+        newData.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
       }
 
       // 切换模型时, 把比例/分辨率收敛到新模型支持的集合, 避免发送不支持的值。
@@ -390,18 +437,20 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === fallback);
         if (opt) Object.assign(newData, sizeFromRatio(opt.ratio));
       }
-      const resolutions = getVideoResolutionsForModel(modelId);
-      if (resolutions && !resolutions.some((r) => r.value === currentResolution)) {
-        const def = getDefaultResolutionForModel(modelId) ?? resolutions[0]!.value;
-        setCurrentResolution(def);
-        newData.resolution = def;
+      // Veo 默认时长 8s,与 dbgoc 上游 default_duration 对齐。
+      if (newIsVeo) {
+        const allowed = VEO_DURATION_OPTIONS.map((o) => Number(o.value));
+        if (!allowed.includes(currentDuration)) {
+          setCurrentDuration(8);
+          newData.duration = 8;
+        }
       }
 
       updateCard(card.id, { data: newData });
       autoSave.markDirty(card.id);
       useSettingsStore.getState().setLastModel("video", modelId, providerId);
     },
-    [card.id, data, imageMode, frames, updateCard, currentSize, currentResolution],
+    [card.id, data, imageMode, currentModel, updateCard, currentSize, currentDuration],
   );
 
   const handleSizeChange = useCallback(
@@ -418,10 +467,28 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     [card.id, data, updateCard],
   );
 
-  const handleResolutionChange = useCallback(
-    (res: string) => {
-      setCurrentResolution(res);
-      updateCard(card.id, { data: { ...data, resolution: res } });
+  const handleTierChange = useCallback(
+    (tier: VeoQualityTier) => {
+      setCurrentTier(tier);
+      updateCard(card.id, { data: { ...data, veoTier: tier } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const handleSeedanceTierChange = useCallback(
+    (tier: SeedanceQualityTier) => {
+      setCurrentSeedanceTier(tier);
+      updateCard(card.id, { data: { ...data, seedanceTier: tier } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const handleGrokTierChange = useCallback(
+    (tier: GrokDurationTier) => {
+      setCurrentGrokTier(tier);
+      updateCard(card.id, { data: { ...data, grokTier: tier } });
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
@@ -443,6 +510,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     updateCard(card.id, { data: { ...data, generateAudio: next } });
     autoSave.markDirty(card.id);
   }, [card.id, data, currentAudio, updateCard]);
+
 
   const onPromptChange = useCallback(
     (newContent: string, newRefs: InlineImageRef[]) => {
@@ -517,12 +585,8 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       const referenceAudios: Array<{ url: string; role: string }> = [];
       const referenceVideos: Array<{ url: string; role: string }> = [];
 
-      if (imageMode === "firstFrame") {
-        if (frames[0]) {
-          const dataUrl = await getBase64ForApi(frames[0].url);
-          referenceImages.push({ url: dataUrl, role: "firstFrame" });
-        }
-      } else if (imageMode === "firstLastFrame") {
+      // 首尾帧模式: 1 张 = 首帧, 2 张 = 首+尾帧。frame pipeline 自动适配。
+      if (imageMode === "firstLastFrame") {
         for (let i = 0; i < frames.length; i++) {
           const dataUrl = await getBase64ForApi(frames[i]!.url);
           referenceImages.push({ url: dataUrl, role: i === 0 ? "firstFrame" : "lastFrame" });
@@ -541,13 +605,12 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
             referenceAudios.push({ url: dataUrl, role: "referenceAudio" });
           }
         }
-        // Seedance 上游 (Dale) 硬约束: fast/标准都拒绝 video reference.
-        // 这里在打包数据前先拦下来, 省一趟无意义的 base64 编码 + 网关往返.
-        if (isSeedanceModel(currentModel) && data.refVideos?.length) {
+        // Seedance/Grok 上游硬约束: 拒绝 video reference.
+        if ((isSeedanceModel(currentModel) || isGrokVideoModel(currentModel)) && data.refVideos?.length) {
           useUIStore.getState().addToast({
             type: "warning",
-            title: "Seedance 不支持参考视频",
-            description: "Seedance 2.0 当前不接受 video_file 引用，请改用参考图 / 参考音频，或切换到 Veo 模型",
+            title: "该模型不支持参考视频",
+            description: "请改用参考图，或切换到其他模型",
             duration: 5000,
           });
           setCardProgress(card.id, null);
@@ -564,7 +627,6 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
           referenceAudios.length > 0 &&
           referenceImages.length === 0
         ) {
-          // referenceVideos 在 Seedance 永远为空 (上面已 guard), 只剩 audio+image 组合校验.
           useUIStore.getState().addToast({
             type: "warning",
             title: "参考音频不能单独使用",
@@ -574,21 +636,45 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
           setCardProgress(card.id, null);
           return;
         }
+        // Grok 不支持参考音频,如果有的话直接清空(不打断生成流程)
+        if (isGrokVideoModel(currentModel)) {
+          referenceAudios.length = 0;
+        }
       }
 
       // 把卡片本身的 projectId 作为本次任务的归属，整个异步链都用这个快照。
       const ownerProjectId = card.projectId;
 
+      // Veo: canvas 只存 canonical "veo3.1",提交前按 (mode, tier) 解析真实 SKU。
+      // Seedance: canvas 也只存 canonical "seedance",按 tier 解析成 "seedance" / "seedance-fast"。
+      // Grok: canvas 只存 "grok-video",按时长档解析成 "grok-video-12s" / -16s / -20s。
+      const effectiveModel = isVeo
+        ? resolveVeoVariantForMode(imageMode, effectiveTier)
+        : isSeedance
+          ? resolveSeedanceVariantForTier(currentSeedanceTier)
+          : isGrok
+            ? resolveGrokVariant(currentGrokTier)
+            : currentModel;
+      // Veo 参考模式 (image-asset) 上游强制 8s,前端就直接传 8 避免被 resolver 默默纠正。
+      // Grok 时长编码在 model SKU 里,不传 duration。
+      const effectiveDuration = isVeo
+        ? (isVeoRefMode ? 8 : currentDuration)
+        : isSeedance
+          ? currentDuration
+          : undefined;
+
       const result = await provider.generateVideo({
         prompt,
-        model: currentModel || undefined,
+        model: effectiveModel || undefined,
         size: currentSize,
         referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
         referenceAudios: referenceAudios.length > 0 ? referenceAudios : undefined,
         referenceVideos: referenceVideos.length > 0 ? referenceVideos : undefined,
-        duration: isSeedance ? currentDuration : undefined,
-        resolution: isSeedance ? currentResolution : undefined,
-        generateAudio: isSeedance ? currentAudio : undefined,
+        duration: effectiveDuration,
+        // Veo/Grok: resolution 已编码在 model id 中,不再单独发送。
+        // Seedance: UI 改造后画质走 tier,实际分辨率统一 720p (2.0 系列上限)。
+        resolution: isSeedance ? "720p" : undefined,
+        generateAudio: (isSeedance || isVeo || isGrok) ? currentAudio : undefined,
         projectId: ownerProjectId,
         onProgress: (p) => {
           setCardProgress(card.id, { percent: p.percent, label: p.label });
@@ -625,7 +711,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, generating, updateCard, currentModel, currentSize, currentResolution, currentDuration, currentAudio, setCardProgress, frames, imageMode, refSlots]);
+  }, [data, card.id, generating, updateCard, currentModel, currentSize, effectiveTier, currentSeedanceTier, currentGrokTier, currentDuration, currentAudio, setCardProgress, frames, imageMode, refSlots, isVeo, isVeoRefMode, isSeedance, isGrok]);
 
   const isLocked = !!data._locked;
 
@@ -657,32 +743,10 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
                   generating && "opacity-50",
                 )}
               >
-                {{ text: "文生", firstFrame: "首帧", firstLastFrame: "首尾帧", reference: "参考" }[mode]}
+                {{ firstLastFrame: "首尾帧", reference: "参考" }[mode]}
               </button>
             ))}
           </div>
-
-          {imageMode === "firstFrame" && frames.length > 0 && (
-            <div className="flex shrink-0 flex-wrap gap-2">
-              {frames.slice(0, 1).map((frame, idx) => (
-                <div key={frame.sourceCardId || idx} className="relative">
-                  <img
-                    src={getDisplayUrl(frame.url)}
-                    alt="首帧"
-                    className="h-16 w-auto rounded border border-border object-cover"
-                  />
-                  <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-px text-[9px] text-white">首帧</span>
-                  <button
-                    onClick={() => removeFrame(idx)}
-                    disabled={generating}
-                    className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white shadow-sm transition-opacity hover:opacity-80 disabled:opacity-40"
-                  >
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
 
           {imageMode === "firstLastFrame" && frames.length > 0 && (
             <div className="flex shrink-0 flex-wrap gap-2">
@@ -736,7 +800,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
             </div>
           )}
 
-          {imageMode === "reference" && data.refAudios && data.refAudios.length > 0 && (
+          {imageMode === "reference" && !isGrok && data.refAudios && data.refAudios.length > 0 && (
             <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
               <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
                 <Music className="h-3 w-3" />
@@ -778,8 +842,8 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
             </div>
           )}
 
-          {/* Seedance 上游不接受 video reference, 直接隐藏 UI (即使留有历史连线) */}
-          {imageMode === "reference" && !isSeedance && data.refVideos && data.refVideos.length > 0 && (
+          {/* Seedance/Grok 上游不接受 video reference, 直接隐藏 UI */}
+          {imageMode === "reference" && !isSeedance && !isGrok && data.refVideos && data.refVideos.length > 0 && (
             <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
               <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
                 <Video className="h-3 w-3" />
@@ -894,38 +958,57 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
             value={currentSize}
             onChange={handleSizeChange}
             sizeOptions={VIDEO_SIZE_OPTIONS}
-            allowedSizes={allowedVideoSizes}
-            resolution={videoResolutionOptions ? currentResolution : undefined}
-            onResolutionChange={videoResolutionOptions ? handleResolutionChange : undefined}
-            resolutionOptions={videoResolutionOptions ?? undefined}
+            allowedSizes={effectiveAllowedSizes}
+            resolution={
+              isVeo
+                ? effectiveTier
+                : isSeedance
+                  ? currentSeedanceTier
+                  : isGrok
+                    ? currentGrokTier
+                    : undefined
+            }
+            onResolutionChange={
+              isVeo
+                ? (tier: string) => handleTierChange(tier as VeoQualityTier)
+                : isSeedance
+                  ? (tier: string) => handleSeedanceTierChange(tier as SeedanceQualityTier)
+                  : isGrok
+                    ? (tier: string) => handleGrokTierChange(tier as GrokDurationTier)
+                    : undefined
+            }
+            resolutionOptions={
+              isVeo
+                ? veoTierOptions.map((t) => ({ value: t.value, label: t.label }))
+                : isSeedance
+                  ? SEEDANCE_TIERS.map((t) => ({ value: t.value, label: t.label }))
+                  : isGrok
+                    ? GROK_DURATION_TIERS.map((t) => ({ value: t.value, label: t.label }))
+                    : undefined
+            }
+            duration={(isSeedance || isVeo) ? (isVeoRefMode ? 8 : currentDuration) : undefined}
+            onDurationChange={(isSeedance || isVeo) ? (n) => handleDurationChange(String(n)) : undefined}
+            durationOptions={(isSeedance || isVeo) ? effectiveDurationOptions : undefined}
+            durationDisabled={isVeoRefMode}
             disabled={generating}
           />
         )}
-        {isSeedance && !isLocked && (
-          <>
-            <PortalSelect
-              value={String(currentDuration)}
-              onChange={handleDurationChange}
-              options={DURATION_OPTIONS}
-              disabled={generating}
-              className="rounded-lg border-border bg-transparent font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-            />
-            <button
-              type="button"
-              onClick={handleAudioToggle}
-              disabled={generating}
-              className={cn(
-                "flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
-                currentAudio
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
-                generating && "cursor-not-allowed opacity-40",
-              )}
-            >
-              {currentAudio ? <Volume2 className="h-3 w-3" /> : <VolumeX className="h-3 w-3" />}
-              {currentAudio ? "有声" : "无声"}
-            </button>
-          </>
+        {(isSeedance || isVeo || isGrok) && !isLocked && (
+          <button
+            type="button"
+            onClick={handleAudioToggle}
+            disabled={generating}
+            className={cn(
+              "flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
+              currentAudio
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+              generating && "cursor-not-allowed opacity-40",
+            )}
+          >
+            {currentAudio ? <Volume2 className="h-3 w-3" /> : <VolumeX className="h-3 w-3" />}
+            {currentAudio ? "有声" : "无声"}
+          </button>
         )}
         <div className="flex-1" />
         <button

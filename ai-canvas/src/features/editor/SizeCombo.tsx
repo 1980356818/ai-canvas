@@ -21,6 +21,12 @@ interface SizeComboProps {
   resolutionOptions?: readonly { value: string; label: string }[];
   /** Override the full option list. Defaults to IMAGE_SIZE_OPTIONS. */
   sizeOptions?: readonly ImageSizeOption[];
+  /** 视频卡专用:把时长(秒)也内嵌到这个下拉里。 */
+  duration?: number;
+  onDurationChange?: (sec: number) => void;
+  durationOptions?: readonly { value: string; label: string }[];
+  /** 时长是否禁用(如 Veo 参考模式锁 8s)。 */
+  durationDisabled?: boolean;
 }
 
 function RatioIcon({
@@ -69,6 +75,10 @@ export default function SizeCombo({
   allowedSizes,
   resolutionOptions,
   sizeOptions,
+  duration,
+  onDurationChange,
+  durationOptions,
+  durationDisabled,
 }: SizeComboProps) {
   const allOptions = sizeOptions ?? IMAGE_SIZE_OPTIONS;
   const baseOptions = allowedSizes
@@ -140,7 +150,8 @@ export default function SizeCombo({
         <RatioIcon ratio={current.ratio} active={false} size={12} isAuto={isAuto} />
         <span>
           {current.label}
-          {resolution && ` · ${resolution}`}
+          {resolution && ` · ${resolutionOptions?.find((r) => r.value === resolution)?.label ?? resolution}`}
+          {duration != null && ` · ${duration}s`}
           {currentUnsupported && " ⚠"}
         </span>
         <ChevronUp className={cn("h-3 w-3 transition-transform", open && "rotate-180")} />
@@ -161,7 +172,7 @@ export default function SizeCombo({
             <>
               <div className="mb-2.5">
                 <div className="mb-1.5 text-[10px] font-medium text-muted-foreground">
-                  分辨率
+                  画质
                 </div>
                 <div className="flex gap-1.5">
                   {(resolutionOptions ?? RESOLUTION_OPTIONS).map((res) => {
@@ -180,6 +191,38 @@ export default function SizeCombo({
                         )}
                       >
                         {res.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="mb-2.5 h-px bg-border" />
+            </>
+          )}
+
+          {onDurationChange && durationOptions && (
+            <>
+              <div className="mb-2.5">
+                <div className="mb-1.5 text-[10px] font-medium text-muted-foreground">
+                  时长
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {durationOptions.map((d) => {
+                    const active = String(duration) === d.value;
+                    return (
+                      <button
+                        key={d.value}
+                        disabled={disabled || durationDisabled}
+                        onClick={() => onDurationChange(Number(d.value))}
+                        className={cn(
+                          "min-w-[44px] flex-1 rounded-lg py-1.5 text-center text-xs font-medium transition-colors",
+                          active
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                          (disabled || durationDisabled) && "cursor-not-allowed opacity-40",
+                        )}
+                      >
+                        {d.label}
                       </button>
                     );
                   })}

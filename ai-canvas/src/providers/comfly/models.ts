@@ -18,17 +18,11 @@ export const COMFLY_IMAGE_MODELS: ModelInfo[] = [
   { id: "nano-banana-pro", display_name: "Nanobanana Pro", capability: "IMAGE" },
 ];
 
-// 统一别名 "veo3.1" / "seedance" 与 JiJing 后端路由对齐:
-// veo3.1   → JiJing model_route 2200 (走 Comfly Gemini 优质渠道 1081)
-// seedance → JiJing model_route 2201 (走 Comfly 普通渠道       1080)
+// dropdown 只露 canonical alias,与 JIJING_VIDEO_MODELS 对齐。变体 (Fast/4K/Ref) 由
+// VideoEditor 在提交前根据模式/分辨率 resolve,见 resolveVeoVariantForMode。
 export const COMFLY_VIDEO_MODELS: ModelInfo[] = [
   { id: "veo3.1", display_name: "Veo 3.1", capability: "VIDEO" },
-  { id: "veo3.1-fast", display_name: "Veo 3.1 Fast", capability: "VIDEO" },
-  { id: "veo3.1-4k", display_name: "Veo 3.1 (4K)", capability: "VIDEO" },
-  { id: "veo3.1-pro-4k", display_name: "Veo 3.1 Pro (4K)", capability: "VIDEO" },
   { id: "seedance", display_name: "Seedance 2.0", capability: "VIDEO" },
-  { id: "doubao-seedance-2-0-260128", display_name: "Seedance 2.0", capability: "VIDEO" },
-  { id: "doubao-seedance-2-0-fast-260128", display_name: "Seedance 2.0 Fast", capability: "VIDEO" },
 ];
 
 export const ALL_COMFLY_MODELS: ModelInfo[] = [

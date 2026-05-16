@@ -19,7 +19,7 @@ export function sizeFromRatio(ratio: number): { width: number; height: number } 
 
 export type { ImageSizeOption, QuickCreateItem, WorkflowCardPreset, WorkflowConnectionPreset, WorkflowTemplate } from "@/types";
 import type { ImageSizeOption } from "@/types";
-import { isSeedanceModel, isVeoModel, isVeoRefModel } from "@/providers/shared/video";
+import { isSeedanceModel, isVeoModel, isGrokVideoModel } from "@/providers/shared/video";
 
 export const IMAGE_SIZE_OPTIONS: ImageSizeOption[] = [
   { value: "1:1",   label: "1:1",   ratio: 1 },
@@ -78,57 +78,22 @@ export function getAllowedSizesForModel(modelId: string): string[] | null {
 
 // 视频模型可选比例 (上游 API 明确支持的). 不在此列表的会被 SizeCombo 标灰。
 //   Seedance 2.0 / 2.0 fast: 16:9 4:3 1:1 3:4 9:16 21:9 + adaptive (auto)
-//   Veo 3.1 (Google):        16:9 9:16 1:1
+//   Veo 3.1 (Google):        16:9 9:16 1:1 (参考图模式由 VideoEditor 在 UI 层锁 16:9)
 const SEEDANCE_RATIOS = ["auto", "16:9", "9:16", "1:1", "4:3", "3:4", "21:9"] as const;
 const VEO_RATIOS = ["16:9", "9:16", "1:1"] as const;
-// Veo 参考图模式 (image-asset) 上游硬约束: 只支持 16:9
-const VEO_REF_RATIOS = ["16:9"] as const;
+const GROK_VIDEO_RATIOS = ["16:9", "9:16", "3:2", "2:3", "1:1"] as const;
+export const VEO_REF_RATIOS = ["16:9"] as const;
 
 export function getAllowedVideoSizesForModel(modelId: string): string[] | null {
   if (isSeedanceModel(modelId)) return [...SEEDANCE_RATIOS];
-  if (isVeoRefModel(modelId)) return [...VEO_REF_RATIOS];
   if (isVeoModel(modelId)) return [...VEO_RATIOS];
+  if (isGrokVideoModel(modelId)) return [...GROK_VIDEO_RATIOS];
   return null;
 }
 
-export interface VideoResolutionOption {
-  readonly value: string;
-  readonly label: string;
-}
-
-// Seedance 2.0 / 2.0 fast 仅支持 480p / 720p (1080p 在 2.0 系列不支持).
-const SEEDANCE_RESOLUTIONS: VideoResolutionOption[] = [
-  { value: "480p", label: "480p" },
-  { value: "720p", label: "720p" },
-];
-
-// Veo 的分辨率由变体 ID 决定 (fast=720p, 4k/pro-4k=4K),
-// canonical "veo3.1" 别名让用户在 fast 与 4K 间切换。
-const VEO_FAST_RESOLUTIONS: VideoResolutionOption[] = [
-  { value: "720p", label: "720P" },
-];
-const VEO_4K_RESOLUTIONS: VideoResolutionOption[] = [
-  { value: "4K", label: "4K" },
-];
-const VEO_UNIFIED_RESOLUTIONS: VideoResolutionOption[] = [
-  { value: "720p", label: "Fast 720P" },
-  { value: "4K", label: "4K" },
-];
-
-export function getVideoResolutionsForModel(modelId: string): VideoResolutionOption[] | null {
-  if (isSeedanceModel(modelId)) return SEEDANCE_RESOLUTIONS;
-  if (modelId === "veo3.1") return VEO_UNIFIED_RESOLUTIONS;
-  if (modelId === "veo3.1-fast") return VEO_FAST_RESOLUTIONS;
-  if (modelId === "veo3.1-4k" || modelId === "veo3.1-pro-4k") return VEO_4K_RESOLUTIONS;
-  return null;
-}
-
-export function getDefaultResolutionForModel(modelId: string): string | null {
-  if (isSeedanceModel(modelId)) return "720p";
-  if (modelId === "veo3.1" || modelId === "veo3.1-fast") return "720p";
-  if (modelId === "veo3.1-4k" || modelId === "veo3.1-pro-4k") return "4K";
-  return null;
-}
+// Seedance / Veo 3.1: 分辨率+速度档合并为画质档 (SeedanceQualityTier / VeoQualityTier)，
+// 由 VideoEditor 复用 SizeCombo.resolutionOptions 槽位渲染胶囊，不再单独提供分辨率下拉。
+// Seedance 2.0 实际分辨率统一固定为 720p (480p 在画布场景几乎无用),由 VideoEditor 出站时硬编码。
 
 export function getDefaultVideoSizeForModel(modelId: string): string {
   if (isSeedanceModel(modelId)) return "auto"; // seedance 默认 adaptive

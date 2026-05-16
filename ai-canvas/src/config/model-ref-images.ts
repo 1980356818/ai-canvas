@@ -1,5 +1,5 @@
 import type { CanvasCard } from "@/types";
-import { isSeedanceModel, isVeoModel, isVeoRefModel } from "@/providers/shared/video";
+import { isSeedanceModel, isVeoModel, isGrokVideoModel } from "@/providers/shared/video";
 
 export interface RefImageSlot {
   key: string;
@@ -77,17 +77,21 @@ const SEEDANCE_VIDEO_REF_SLOTS: RefImageSlot[] = Array.from({ length: 9 }, (_, i
   required: false,
 }));
 
-// Veo 3.1 普通 (非 ref): 单张参考 (frame 模式由 VideoEditor 单独走 firstLastFrame, 此处仅作 reference 兜底)
-const VEO_VIDEO_REF_SLOTS: RefImageSlot[] = [
-  { key: "refImage0", label: "参考图", description: "Veo 首帧参考图", required: false },
-];
-
-// Veo 3.1 参考图模式 (veo3.1-ref / veo3.1-ref-hd): 1-3 张参考图, 上游 image-asset 模式
+// Veo 3.1 参考模式 (image-asset): 1-3 张参考图, 上游 dbgoc veo31-ref / veo31-ref-HD
+// 由 resolveVeoVariantForMode 根据 (mode=reference, resolution) 决定真实变体。
 const VEO_REF_VIDEO_REF_SLOTS: RefImageSlot[] = [
   { key: "refImage0", label: "参考图 1", description: "角色 / 道具 / 场景参考", required: false },
   { key: "refImage1", label: "参考图 2", description: "角色 / 道具 / 场景参考", required: false },
   { key: "refImage2", label: "参考图 3", description: "角色 / 道具 / 场景参考", required: false },
 ];
+
+// Grok Video: 上游 PearNo 支持最多 7 张参考图
+const GROK_VIDEO_REF_SLOTS: RefImageSlot[] = Array.from({ length: 7 }, (_, i) => ({
+  key: `refImage${i}`,
+  label: `参考图${i + 1}`,
+  description: "Grok 视频参考图",
+  required: false,
+}));
 
 // 兜底: 通用视频参考图槽位
 const VIDEO_REF_SLOTS: RefImageSlot[] = Array.from({ length: 9 }, (_, i) => ({
@@ -121,8 +125,8 @@ export function getRefSlotsForVideoModel(
 ): RefImageSlot[] {
   if (imageMode !== "reference") return [];
   if (isSeedanceModel(modelId)) return SEEDANCE_VIDEO_REF_SLOTS;
-  if (isVeoRefModel(modelId)) return VEO_REF_VIDEO_REF_SLOTS;
-  if (isVeoModel(modelId)) return VEO_VIDEO_REF_SLOTS;
+  if (isVeoModel(modelId)) return VEO_REF_VIDEO_REF_SLOTS;
+  if (isGrokVideoModel(modelId)) return GROK_VIDEO_REF_SLOTS;
   return VIDEO_REF_SLOTS;
 }
 

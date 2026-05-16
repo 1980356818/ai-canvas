@@ -33,6 +33,15 @@ import mf6Result2 from "@/assets/templates/multimodal-fusion-6/result-2.jpg";
 import mf6Result3 from "@/assets/templates/multimodal-fusion-6/result-3.jpg";
 import mf6Result4 from "@/assets/templates/multimodal-fusion-6/result-4.jpg";
 import mf6Result5 from "@/assets/templates/multimodal-fusion-6/result-5.jpg";
+import mf2Person from "@/assets/templates/multimodal-fusion-2/person.png";
+import mf2Garment from "@/assets/templates/multimodal-fusion-2/garment.jpg";
+import mf2Tone from "@/assets/templates/multimodal-fusion-2/tone.jpg";
+import mf2Scene from "@/assets/templates/multimodal-fusion-2/scene.jpg";
+import mf2Result1 from "@/assets/templates/multimodal-fusion-2/result-1.png";
+import mf2Result2 from "@/assets/templates/multimodal-fusion-2/result-2.png";
+import mf2Result3 from "@/assets/templates/multimodal-fusion-2/result-3.jpg";
+import mf2Result4 from "@/assets/templates/multimodal-fusion-2/result-4.png";
+import mf2Result5 from "@/assets/templates/multimodal-fusion-2/result-5.png";
 import studioLookPerson from "@/assets/templates/studio-look/person.jpg";
 import studioLookGarment from "@/assets/templates/studio-look/garment.png";
 import studioLookScene from "@/assets/templates/studio-look/scene.jpg";
@@ -58,6 +67,7 @@ import coverMultimodalFusion6 from "@/assets/templates/covers/multimodal-fusion-
 import coverStudioLook from "@/assets/templates/covers/studio-look.jpg";
 import coverMirrorSelfie from "@/assets/templates/covers/mirror-selfie.jpg";
 import coverMirrorSelfie1 from "@/assets/templates/covers/mirror-selfie-1.jpg";
+import coverMultimodalFusion2 from "@/assets/templates/covers/multimodal-fusion-2.jpg";
 
 // ── card sizes derived from actual template-image pixel ratios ──
 const sz = (w: number, h: number) => sizeFromRatio(w / h);
@@ -75,7 +85,7 @@ const I_3314x3072  = sz(3314, 3072);   // 340×315  refined
 const I_5504x3072  = sz(5504, 3072);   // 340×190  multi-angle
 const I_1970x2626  = sz(1970, 2626);   // 255×340  ≈3:4
 const I_4936x6581  = sz(4936, 6581);   // 255×340  mf6 garment (3:4 exact)
-// @ts-expect-error reserved for future use
+const I_390x340    = sz(390, 340);      // 340×296  person landscape
 const SQUARE       = sz(1, 1);          // 340×340  1:1
 const PORTRAIT     = sz(3, 4);          // 255×340  3:4
 
@@ -1292,6 +1302,276 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       { sourceIndex: 1, targetIndex: 6 },
       { sourceIndex: 2, targetIndex: 6 },
       { sourceIndex: 3, targetIndex: 6 },
+    ],
+  },
+  {
+    id: "wf-multimodal-fusion-2",
+    name: "多模态融合2",
+    description:
+      "上传模特、服装、影调与环境参考图，AI 生成5组差异化商业摄影灵感方案",
+    icon: "Combine",
+    category: "composite",
+    coverImage: coverMultimodalFusion2,
+    cards: (() => {
+      const GAP = 60;
+      const IMG_P = I_390x340;
+      const IMG_G = SQUARE;
+      const IMG_REF = PORTRAIT;
+      const IMG_RES = PORTRAIT;
+      const ROW1_H = Math.max(IMG_P.height, IMG_G.height);
+      const COL_W = Math.max(IMG_P.width, IMG_G.width, IMG_REF.width);
+      const CHAT_W = CARD_DEFAULTS.ai_chat.width;
+      const CHAT_H = ROW1_H + GAP + IMG_REF.height;
+      const CHAT_X = COL_W * 2 + GAP * 2;
+      const RESULT_X = CHAT_X + CHAT_W + GAP;
+      const ROW_STEP = IMG_RES.width + GAP;
+      const TOP_ROW_W = IMG_RES.width * 3 + GAP * 2;
+      const BTM_ROW_W = IMG_RES.width * 2 + GAP;
+      const BTM_OFFSET = Math.round((TOP_ROW_W - BTM_ROW_W) / 2);
+
+      const fusionPrompt = [
+        "你是一位资深服装商业摄影导演。请基于用户上传的多张参考图，完成「模特 + 服装 + 影调 + 环境 + 动作神态」的多模态融合任务，并一次性输出 5 个差异化商业摄影灵感方案。",
+        "",
+        "核心目标：",
+        "你不是直接出图，而是为 Nanobanana 准备 5 条独立可用的单图出图提示词。每个灵感必须输出 display_prompt、nanobanana_prompt、negative_prompt。",
+        "",
+        "最重要原则：",
+        "nanobanana_prompt 只写正向摄影描述，只描述最终画面应该出现什么。不要在 nanobanana_prompt 中写负面视觉词，例如拼图、四宫格、排版页、标题文字、水印、乱码等。这些只能写入 negative_prompt。",
+        "",
+        "一、参考图角色",
+        "",
+        "严禁跨图串用：",
+        "图1只做主体人物参考。",
+        "图2是唯一服装与配饰来源。",
+        "图3只做影调参考。",
+        "图4是唯一环境来源。",
+        "图5只做灵感1的动作、姿态、神态、景别和裁切参考。",
+        "",
+        "图1：只提取人物五官、脸型、发型、妆容、肤色、身材比例、年龄感和气质。最终主体人物必须保持图1同一位模特，不得换脸或改变年龄感。图1中的服装、配饰、姿态、背景、光线不得继承。",
+        "",
+        "图2：唯一服装与配饰来源。最终画面里所有服装、鞋履、帽子、包袋、眼镜、首饰、图案、logo、颜色、层叠关系都只能来自图2。图1、图3、图4、图5里的任何服装和配饰都视为噪声，不得继承。",
+        "",
+        "若图2只提供一件单品，例如只有卫衣、裤子或鞋，则只强制还原该单品。缺失单品用低存在感、基础款、无品牌、无图案、中性色自然补全，不得从其他图借用。",
+        "",
+        "若图2没有外套，不得写外套、夹克、西装、风衣、大衣。若图2没有墨镜，不得写墨镜。若图2没有鞋履或裤装，只能写基础中性鞋履/下装自然补全。",
+        "",
+        "若图2包含多件上身单品，先判断是否为合理层叠穿搭，例如内搭+外套、衬衫+马甲、连衣裙+外套。只有同一层级且无法同时穿着时才视为冲突。",
+        "",
+        "图3：只提取色温、明暗、对比度、饱和度、光线方向、阴影、颗粒感和镜头质感。不得继承人物、服装、环境和道具。",
+        "",
+        "图4：唯一环境来源。只提取图4中的空间结构、地面、墙面、窗户、家具、植物、建筑、主体可站立或坐卧区域、前中后景和镜头视角。不得从图1、图2、图3、图5提取环境。",
+        "",
+        "图4环境描述必须包含相对位置，例如「人物后方的白色窗框」「画面右侧的沙发靠垫」「下方浅色座面」「窗外绿色树景」，不能只写「室内、草地、花丛、街道」这种泛化词。",
+        "",
+        "图5：灵感1专属动作神态参考，可选。若提供图5，灵感1必须参考图5的动作、姿态、神态、景别和裁切。图5是半身，灵感1就是半身；图5是近景，灵感1就是近景；图5是坐姿、躺姿、倚靠，就按该动作转译。不得强行改成全身。图5不得提供人物身份、服装、环境、影调。",
+        "",
+        "二、五个灵感",
+        "",
+        "5 个灵感不能都是半身或中景，必须形成清楚的远近变化。",
+        "",
+        "灵感1：如果有图5，就按图5的景别和动作来；如果没有图5，就做全身图。",
+        "灵感2：做七分身或近全身，至少看到头部到小腿。",
+        "灵感3：做半身图，只看到头部到腰部或胸口。",
+        "灵感4：做全身或近全身环境互动图。如果灵感1不是全身，灵感4必须补一张全身或近全身。",
+        "灵感5：做近景或半身 editorial 图，不能做普通全身站立图。",
+        "",
+        "三、景别约束",
+        "",
+        "每条提示词必须写清人物裁切范围，例如头到鞋完整入镜、头到小腿、头到腰部、胸口以上近景。",
+        "",
+        "全身图：可以描述完整穿搭。",
+        "七分身/中景：描述上衣、腰线、部分下装，不强制鞋履。",
+        "半身图：只描述脸部、领口、肩线、上衣、胸前结构、袖口和手部趋势。",
+        "近景：只描述画面内可见的脸、头发、领口、面料、扣件、配饰或局部手势。",
+        "",
+        "不得为了展示完整服装或完整环境而破坏当前景别。",
+        "",
+        "四、人物角度与神态",
+        "",
+        "如果某个灵感不是正面直视，必须明确写出身体朝向、肩线方向、脸部方向、眼神方向，以及是否看镜头。避免只写「轻微转头」「看向远处」等模糊描述。",
+        "",
+        "示例写法：",
+        "人物身体为三分之二侧身，肩线朝向画面左侧，脸部转向画面右侧窗外，视线不看镜头，鼻梁方向与镜头形成约45度夹角。",
+        "",
+        "5 个灵感必须保持图1同一人物身份，但表情和神态需要有细微差异。表情高级、克制、自然。避免夸张大笑、过度甜美、网红摆拍、戏剧化表情和低级媚态。",
+        "",
+        "五、Nanobanana 提示词要求",
+        "",
+        "nanobanana_prompt 只写正向摄影描述，不写「不要、禁止、不得」，不写负面词，不写分析过程，不写「生成灵感X」。",
+        "",
+        "nanobanana_prompt 结构：",
+        "「一张单幅、连续、完整的真实商业摄影照片，[景别 + 动作 + 神态 + 构图目标]。画面为[裁切范围]，[身体朝向/肩线方向/脸部方向/眼神方向/手部动作]，整体干净自然。主体模特严格参考图1，[人物关键特征]；服装严格参考图2，[只写图2中存在的服装与配饰，缺失单品用基础中性款自然补全]；影调参考图3，[光线与色调]；环境严格参考图4，[按当前景别可见的图4环境锚点和相对位置]。」",
+        "",
+        "negative_prompt 写负面限制，不能拼到 nanobanana_prompt。",
+        "",
+        "六、输出前自检",
+        "",
+        "输出前检查：",
+        "1. clothing_analysis 和 nanobanana_prompt 中的服装、配饰、logo、颜色、层叠关系都必须来自图2。",
+        "2. 如果图2没有外套、夹克、墨镜、帽子、包袋，不得在正向字段出现这些词。",
+        "3. environment_anchors 和 nanobanana_prompt 的环境只能来自图4。",
+        "4. 若提供图5，只有灵感1可参考图5；灵感2-5不得引用图5。",
+        "5. 若图5不是全身，灵感1不得写全身、完整全身、头到脚、完整展示比例。",
+        "6. 整组必须至少有一张全身或近全身图；不能 5 张都裁成半身。",
+        "7. 灵感2不得是半身；灵感3不得是全身；灵感5不得是普通全身站立图。",
+        "8. nanobanana_prompt 不得出现负面视觉词。",
+        "9. 半身和近景不得强制展示鞋履、完整下装或完整环境。",
+        "",
+        "七、输出格式",
+        "",
+        "只输出可被 JSON.parse 解析的 JSON，不要 Markdown，不要解释文字。",
+        "",
+        "{",
+        '  "clothing_analysis": {',
+        '    "top_length": "",',
+        '    "bottom_length": "",',
+        '    "outerwear_length": "",',
+        '    "shoes_accessories": "",',
+        '    "layering_relation": "",',
+        '    "uncertain_items": ""',
+        "  },",
+        '  "environment_anchors": {',
+        '    "scene_type": "",',
+        '    "anchors": ["", "", "", "", ""],',
+        '    "spatial_relation": "",',
+        '    "composition_relation": "",',
+        '    "do_not_replace_with": ""',
+        "  },",
+        '  "inspirations": [',
+        "    {",
+        '      "id": 1,',
+        '      "title": "",',
+        '      "shot_type": "",',
+        '      "expression": "",',
+        '      "pose_expression_reference": "",',
+        '      "display_prompt": "",',
+        '      "nanobanana_prompt": "",',
+        '      "negative_prompt": ""',
+        "    },",
+        "    ... (共5个)",
+        "  ]",
+        "}",
+        "",
+        "negative_prompt 统一包含但不限于：改款，改色，换脸，第二清晰主角，遮挡服装，其他参考图服装，外套，夹克，西装，风衣，大衣，墨镜，白底商品图，服装贴片，拼图，四宫格，多图排版，标题文字，水印，后期文字，乱码，平台标识，畸形肢体，错误手指，过度磨皮，卡通插画风，正脸直视镜头，证件照角度，头部正对镜头，双肩完全平行镜头。",
+      ].join("\n");
+
+      return [
+        {
+          type: "ai_image" as const,
+          title: "模特图（图1）",
+          relativeX: 0,
+          relativeY: 0,
+          ...IMG_P,
+          data: { content: "", size: "3:4", imageUrl: mf2Person },
+        },
+        {
+          type: "ai_image" as const,
+          title: "服装图（图2）",
+          relativeX: COL_W + GAP,
+          relativeY: 0,
+          ...IMG_G,
+          data: { content: "", size: "1:1", imageUrl: mf2Garment },
+        },
+        {
+          type: "ai_image" as const,
+          title: "影调参考（图3）",
+          relativeX: 0,
+          relativeY: ROW1_H + GAP,
+          ...IMG_REF,
+          data: { content: "", size: "3:4", imageUrl: mf2Tone },
+        },
+        {
+          type: "ai_image" as const,
+          title: "环境参考（图4）",
+          relativeX: COL_W + GAP,
+          relativeY: ROW1_H + GAP,
+          ...IMG_REF,
+          data: { content: "", size: "3:4", imageUrl: mf2Scene },
+        },
+        {
+          type: "ai_chat" as const,
+          title: "融合提示词",
+          relativeX: CHAT_X,
+          relativeY: 0,
+          width: CHAT_W,
+          height: CHAT_H,
+          data: {
+            content: fusionPrompt,
+            result: "",
+          },
+        },
+        {
+          type: "ai_image" as const,
+          title: "效果图1",
+          relativeX: RESULT_X,
+          relativeY: 0,
+          ...IMG_RES,
+          data: { content: "效果图1 正向：{{inspirations[0].nanobanana_prompt}}\n效果图1 负向：{{inspirations[0].negative_prompt}}\n4k画质", size: "3:4", imageUrl: mf2Result1 },
+        },
+        {
+          type: "ai_image" as const,
+          title: "效果图2",
+          relativeX: RESULT_X + ROW_STEP,
+          relativeY: 0,
+          ...IMG_RES,
+          data: { content: "效果图2 正向：{{inspirations[1].nanobanana_prompt}}\n效果图2 负向：{{inspirations[1].negative_prompt}}\n4k画质", size: "3:4", imageUrl: mf2Result2 },
+        },
+        {
+          type: "ai_image" as const,
+          title: "效果图3",
+          relativeX: RESULT_X + ROW_STEP * 2,
+          relativeY: 0,
+          ...IMG_RES,
+          data: { content: "效果图3 正向：{{inspirations[2].nanobanana_prompt}}\n效果图3 负向：{{inspirations[2].negative_prompt}}\n4k画质", size: "3:4", imageUrl: mf2Result3 },
+        },
+        {
+          type: "ai_image" as const,
+          title: "效果图4",
+          relativeX: RESULT_X + BTM_OFFSET,
+          relativeY: IMG_RES.height + GAP,
+          ...IMG_RES,
+          data: { content: "效果图4 正向：{{inspirations[3].nanobanana_prompt}}\n效果图4 负向：{{inspirations[3].negative_prompt}}\n4k画质", size: "3:4", imageUrl: mf2Result4 },
+        },
+        {
+          type: "ai_image" as const,
+          title: "效果图5",
+          relativeX: RESULT_X + BTM_OFFSET + ROW_STEP,
+          relativeY: IMG_RES.height + GAP,
+          ...IMG_RES,
+          data: { content: "效果图5 正向：{{inspirations[4].nanobanana_prompt}}\n效果图5 负向：{{inspirations[4].negative_prompt}}\n4k画质", size: "3:4", imageUrl: mf2Result5 },
+        },
+      ];
+    })(),
+    connections: [
+      { sourceIndex: 0, targetIndex: 4 },
+      { sourceIndex: 1, targetIndex: 4 },
+      { sourceIndex: 2, targetIndex: 4 },
+      { sourceIndex: 3, targetIndex: 4 },
+      { sourceIndex: 0, targetIndex: 5 },
+      { sourceIndex: 1, targetIndex: 5 },
+      { sourceIndex: 2, targetIndex: 5 },
+      { sourceIndex: 3, targetIndex: 5 },
+      { sourceIndex: 4, targetIndex: 5 },
+      { sourceIndex: 0, targetIndex: 6 },
+      { sourceIndex: 1, targetIndex: 6 },
+      { sourceIndex: 2, targetIndex: 6 },
+      { sourceIndex: 3, targetIndex: 6 },
+      { sourceIndex: 4, targetIndex: 6 },
+      { sourceIndex: 0, targetIndex: 7 },
+      { sourceIndex: 1, targetIndex: 7 },
+      { sourceIndex: 2, targetIndex: 7 },
+      { sourceIndex: 3, targetIndex: 7 },
+      { sourceIndex: 4, targetIndex: 7 },
+      { sourceIndex: 0, targetIndex: 8 },
+      { sourceIndex: 1, targetIndex: 8 },
+      { sourceIndex: 2, targetIndex: 8 },
+      { sourceIndex: 3, targetIndex: 8 },
+      { sourceIndex: 4, targetIndex: 8 },
+      { sourceIndex: 0, targetIndex: 9 },
+      { sourceIndex: 1, targetIndex: 9 },
+      { sourceIndex: 2, targetIndex: 9 },
+      { sourceIndex: 3, targetIndex: 9 },
+      { sourceIndex: 4, targetIndex: 9 },
     ],
   },
 ];
