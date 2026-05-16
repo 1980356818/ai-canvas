@@ -1,6 +1,6 @@
 {
   "name": "ai-canvas",
-  "version": "0.5.8",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "scripts": {

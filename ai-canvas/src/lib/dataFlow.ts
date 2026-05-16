@@ -665,11 +665,21 @@ export function propagateFromCard(sourceCardId: string): number {
   const sourceCard = useCardStore.getState().getCard(sourceCardId);
   if (!sourceCard) return 0;
 
-  const output = extractOutput(sourceCard);
-  if (output.kind === "none") return 0;
-
   const downstream = getDownstreamCards(sourceCardId);
   if (downstream.length === 0) return 0;
+
+  const output = extractOutput(sourceCard);
+
+  if (output.kind === "none") {
+    for (const { targetCard } of downstream) {
+      removeRefImageForSource(targetCard.id, sourceCardId);
+      removeUpstreamTextForSource(targetCard.id, sourceCardId);
+      removeVideoFrameForSource(targetCard.id, sourceCardId);
+      removeAudioForSource(targetCard.id, sourceCardId);
+      removeVideoRefForSource(targetCard.id, sourceCardId);
+    }
+    return 0;
+  }
 
   let count = 0;
   const flowedConnIds: string[] = [];

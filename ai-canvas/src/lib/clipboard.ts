@@ -9,6 +9,10 @@ import { useUIStore } from "@/stores/uiStore";
 import { clipboardWriteText, clipboardReadText, updateProjectMeta } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
 import { recordBatchCreate } from "@/lib/history";
+import {
+  cleanupDanglingReferencesInCards,
+  cleanupDanglingReferencesInStore,
+} from "@/lib/referenceConsistency";
 
 const CLIPBOARD_KIND = "ai-canvas-card/v2";
 const CLIPBOARD_KIND_V1 = "ai-canvas-card/v1";
@@ -47,6 +51,7 @@ export function collectSelected(cardIds: Set<string>): {
     if (c) cards.push(c);
   }
 
+  // Only keep connections whose BOTH ends are in the copy set
   const connections: Connection[] = [];
   for (const conn of useConnectionStore.getState().connections.values()) {
     if (cardIds.has(conn.sourceCardId) && cardIds.has(conn.targetCardId)) {
@@ -54,7 +59,14 @@ export function collectSelected(cardIds: Set<string>): {
     }
   }
 
-  return { cards, connections };
+  // Strip connection-derived references (refImages, upstreamTexts, etc.) whose
+  // source card is NOT included in the copy set. This ensures the clipboard
+  // payload only carries "owned" data; connection-injected data will be
+  // re-populated by the onConnectionsAdded lifecycle hook when connections are
+  // recreated at paste time.
+  const { cards: cleanedCards } = cleanupDanglingReferencesInCards(cards, connections);
+
+  return { cards: cleanedCards, connections };
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +244,10 @@ function materialize(
   syncNodeCount(projectId);
   useCanvasStore.getState().setSelectedCardIds(newCardIds);
   recordBatchCreate(newCardIds);
+
+  // Defense-in-depth: refs are already stripped at copy time by collectSelected(),
+  // but external clipboard payloads or older formats may still carry stale refs.
+  cleanupDanglingReferencesInStore({ cardIds: newCardIds });
 
   return newCardIds;
 }
