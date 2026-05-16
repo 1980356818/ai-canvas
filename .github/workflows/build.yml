@@ -167,3 +167,4 @@ jobs:
           PKG="${{ env.APP_NAME }}_${APP_VERSION}_universal.pkg"
           gh release create "$TAG" --draft --title "${{ env.APP_NAME }} $TAG" --notes "See the assets below to download the installer." 2>/dev/null || true
           gh release upload "$TAG" "$PKG" --clobber
+# end
