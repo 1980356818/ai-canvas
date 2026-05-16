@@ -68,8 +68,8 @@ jobs:
           releaseDraft: true
           prerelease: false
 
-  # ─── macOS Apple Silicon (aarch64) ───────────────────────
-  build-macos-arm:
+  # ─── macOS Universal (single job, no artifacts) ──────────
+  build-macos:
     if: >-
       github.event_name == 'push' ||
       contains(fromJSON('["all","macos"]'), github.event.inputs.build_targets)
@@ -84,10 +84,10 @@ jobs:
           cache: npm
           cache-dependency-path: ai-canvas/package-lock.json
 
-      - name: Setup Rust (aarch64)
+      - name: Setup Rust (both targets)
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -97,158 +97,57 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Tauri
+      - name: Build Tauri (aarch64)
         run: npm run tauri build -- --target aarch64-apple-darwin
 
-      - name: Archive app bundle
-        run: |
-          cd src-tauri/target/aarch64-apple-darwin/release/bundle/macos
-          tar czf "${{ env.APP_NAME }}-arm64.tar.gz" "${{ env.APP_NAME }}.app"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-arm-app
-          path: ai-canvas/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}-arm64.tar.gz
-
-  # ─── macOS Intel (x86_64) ────────────────────────────────
-  build-macos-intel:
-    if: >-
-      github.event_name == 'push' ||
-      contains(fromJSON('["all","macos"]'), github.event.inputs.build_targets)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: ai-canvas/package-lock.json
-
-      - name: Setup Rust (x86_64)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin
-
-      - name: Activate Rust toolchain
-        run: |
-          rustup default stable
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-          which cargo
-          cargo --version
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: ai-canvas/src-tauri -> target
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Build Tauri
+      - name: Build Tauri (x86_64)
         run: npm run tauri build -- --target x86_64-apple-darwin
-
-      - name: Archive app bundle
-        run: |
-          cd src-tauri/target/x86_64-apple-darwin/release/bundle/macos
-          tar czf "${{ env.APP_NAME }}-x64.tar.gz" "${{ env.APP_NAME }}.app"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-intel-app
-          path: ai-canvas/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}-x64.tar.gz
-
-  # ─── macOS Universal Package ─────────────────────────────
-  package-macos:
-    needs: [build-macos-arm, build-macos-intel]
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download ARM app
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-arm-app
-          path: artifacts
-
-      - name: Download Intel app
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-intel-app
-          path: artifacts
 
       - name: Read version
         id: version
-        working-directory: ai-canvas
         run: |
           VERSION=$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Detected version: $VERSION"
 
       - name: Create universal binary & pkg
-        working-directory: .
+        working-directory: ai-canvas
         env:
           APP_VERSION: ${{ steps.version.outputs.value }}
         run: |
-          echo "=== Debug: pwd and listing artifacts ==="
-          pwd
-          ls -la artifacts/ || echo "artifacts/ not found"
-
-          mkdir -p arm64 x64
-          tar xzf "artifacts/${{ env.APP_NAME }}-arm64.tar.gz" -C arm64
-          tar xzf "artifacts/${{ env.APP_NAME }}-x64.tar.gz" -C x64
-
-          echo "=== Debug: listing extracted dirs ==="
-          ls -la arm64/
-          ls -la arm64/${{ env.APP_NAME }}.app/Contents/MacOS/ || echo "ARM MacOS dir not found"
-          ls -la x64/${{ env.APP_NAME }}.app/Contents/MacOS/ || echo "Intel MacOS dir not found"
-          find arm64/ -name "AICat*" -o -name "ai-canvas*" -o -name "ai_canvas*" | head -20
-
-          ARM_APP="arm64/${{ env.APP_NAME }}.app"
-          INTEL_APP="x64/${{ env.APP_NAME }}.app"
+          ARM_APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
+          INTEL_APP="src-tauri/target/x86_64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
           UNIVERSAL_APP="${{ env.APP_NAME }}.app"
-
-          BINARY_NAME=$(ls "$ARM_APP/Contents/MacOS/" | head -1)
-          echo "=== Detected binary name: $BINARY_NAME ==="
 
           cp -R "$ARM_APP" "$UNIVERSAL_APP"
 
-          echo "=== Merging main executable ==="
+          BINARY_NAME=$(ls "$ARM_APP/Contents/MacOS/" | head -1)
+          echo "=== Detected binary: $BINARY_NAME ==="
+
           lipo -create \
             "$ARM_APP/Contents/MacOS/$BINARY_NAME" \
             "$INTEL_APP/Contents/MacOS/$BINARY_NAME" \
             -output "$UNIVERSAL_APP/Contents/MacOS/$BINARY_NAME"
 
-          echo "=== Merging dylibs (if any) ==="
           find "$ARM_APP/Contents" -name "*.dylib" -type f | while read arm_dylib; do
             rel="${arm_dylib#$ARM_APP/}"
             intel_dylib="$INTEL_APP/$rel"
             if [ -f "$intel_dylib" ]; then
-              echo "  Merging $rel"
               lipo -create "$arm_dylib" "$intel_dylib" -output "$UNIVERSAL_APP/$rel"
             fi
           done
 
-          echo "=== Verifying universal binary ==="
           file "$UNIVERSAL_APP/Contents/MacOS/$BINARY_NAME"
           lipo -info "$UNIVERSAL_APP/Contents/MacOS/$BINARY_NAME"
 
-          echo "=== Patching ATS ==="
           PLIST="$UNIVERSAL_APP/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" "$PLIST"
 
-          echo "=== Codesigning ==="
           codesign --force --deep --sign - "$UNIVERSAL_APP"
           codesign --verify --verbose "$UNIVERSAL_APP"
 
-          echo "=== Creating pkg installer ==="
           PKG="${{ env.APP_NAME }}_${APP_VERSION}_universal.pkg"
-
           pkgbuild \
             --component "$UNIVERSAL_APP" \
             --install-location /Applications \
@@ -258,19 +157,13 @@ jobs:
 
           ls -lh "$PKG"
 
-      - name: Upload pkg as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-universal-pkg
-          path: ${{ env.APP_NAME }}_${{ steps.version.outputs.value }}_universal.pkg
-
       - name: Upload to release
-        working-directory: .
+        working-directory: ai-canvas
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APP_VERSION: ${{ steps.version.outputs.value }}
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="v${APP_VERSION}"
           PKG="${{ env.APP_NAME }}_${APP_VERSION}_universal.pkg"
           gh release create "$TAG" --draft --title "${{ env.APP_NAME }} $TAG" --notes "See the assets below to download the installer." 2>/dev/null || true
           gh release upload "$TAG" "$PKG" --clobber
