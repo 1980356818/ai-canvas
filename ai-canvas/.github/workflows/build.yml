@@ -62,8 +62,8 @@ jobs:
           releaseDraft: true
           prerelease: false
 
-  # ─── macOS Apple Silicon (aarch64) ───────────────────────
-  build-macos-arm:
+  # ─── macOS Universal (single job, no artifacts) ──────────
+  build-macos:
     if: >-
       github.event_name == 'push' ||
       contains(fromJSON('["all","macos"]'), github.event.inputs.build_targets)
@@ -77,10 +77,10 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Setup Rust (aarch64)
+      - name: Setup Rust (both targets)
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -90,98 +90,24 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Tauri
+      - name: Build Tauri (aarch64)
         run: npm run tauri build -- --target aarch64-apple-darwin
 
-      - name: Archive app bundle
-        run: |
-          cd src-tauri/target/aarch64-apple-darwin/release/bundle/macos
-          tar czf "${{ env.APP_NAME }}-arm64.tar.gz" "${{ env.APP_NAME }}.app"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-arm-app
-          path: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}-arm64.tar.gz
-
-  # ─── macOS Intel (x86_64) ────────────────────────────────
-  build-macos-intel:
-    if: >-
-      github.event_name == 'push' ||
-      contains(fromJSON('["all","macos"]'), github.event.inputs.build_targets)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Setup Rust (x86_64)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Build Tauri
+      - name: Build Tauri (x86_64)
         run: npm run tauri build -- --target x86_64-apple-darwin
 
-      - name: Archive app bundle
-        run: |
-          cd src-tauri/target/x86_64-apple-darwin/release/bundle/macos
-          tar czf "${{ env.APP_NAME }}-x64.tar.gz" "${{ env.APP_NAME }}.app"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-intel-app
-          path: src-tauri/target/x86_64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}-x64.tar.gz
-
-  # ─── macOS Universal Package ─────────────────────────────
-  package-macos:
-    needs: [build-macos-arm, build-macos-intel]
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download ARM app
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-arm-app
-          path: artifacts
-
-      - name: Download Intel app
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-intel-app
-          path: artifacts
-
-      - name: Read version from package.json (single source of truth)
+      - name: Read version
         id: version
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Detected version: $VERSION"
 
       - name: Create universal binary & pkg
         env:
           APP_VERSION: ${{ steps.version.outputs.value }}
         run: |
-          mkdir -p arm64 x64
-          tar xzf "artifacts/${{ env.APP_NAME }}-arm64.tar.gz" -C arm64
-          tar xzf "artifacts/${{ env.APP_NAME }}-x64.tar.gz" -C x64
-
-          ARM_APP="arm64/${{ env.APP_NAME }}.app"
-          INTEL_APP="x64/${{ env.APP_NAME }}.app"
+          ARM_APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
+          INTEL_APP="src-tauri/target/x86_64-apple-darwin/release/bundle/macos/${{ env.APP_NAME }}.app"
           UNIVERSAL_APP="${{ env.APP_NAME }}.app"
 
           cp -R "$ARM_APP" "$UNIVERSAL_APP"
@@ -233,7 +159,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APP_VERSION: ${{ steps.version.outputs.value }}
         run: |
-          TAG="${{ github.ref_name }}"
+          TAG="v${APP_VERSION}"
           PKG="${{ env.APP_NAME }}_${APP_VERSION}_universal.pkg"
           gh release create "$TAG" --draft --title "${{ env.APP_NAME }} $TAG" --notes "See the assets below to download the installer." 2>/dev/null || true
           gh release upload "$TAG" "$PKG" --clobber
