@@ -6,3 +6,4 @@ pub mod device;
 pub mod gateway;
 pub mod http_util;
 pub mod project;
+pub mod tasks;

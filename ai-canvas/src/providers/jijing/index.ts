@@ -75,6 +75,8 @@ export class JiJingProvider extends OpenAICompatProvider {
       failedFallbackMessage: "视频生成失败",
       projectId: req.projectId,
       title: req.prompt,
+      cardId: req.cardId,
+      kind: "video_gen",
     });
   }
 

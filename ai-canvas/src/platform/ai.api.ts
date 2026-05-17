@@ -359,13 +359,33 @@ function extractNestedUrl(raw: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
-function parseProgressValue(v: unknown): number {
-  if (typeof v === "number") return v;
+/**
+ * 上游响应里的 progress 字段规范化。
+ *
+ * 设计要点：**"没给进度"和"进度真的是 0"必须区分开**——后端经常返回
+ * `progress: null` / 字段缺失 / `progress: 0`（用作占位），如果都塌缩成数字 0，
+ * 客户端就拿不到"该用时间外推"的信号，UI 会卡死在 0%。
+ *
+ * 规则：
+ *   - null / undefined / 缺失   → undefined
+ *   - 数字 > 0                  → 透传
+ *   - 数字 <= 0 / NaN           → undefined
+ *   - 字符串里抓到的数字 > 0    → 透传
+ *   - 其他                      → undefined
+ */
+function parseProgressValue(v: unknown): number | undefined {
+  if (v == null) return undefined;
+  if (typeof v === "number") {
+    return Number.isFinite(v) && v > 0 ? v : undefined;
+  }
   if (typeof v === "string") {
     const m = v.match(/-?\d+(\.\d+)?/);
-    if (m) return Number(m[0]);
+    if (m) {
+      const n = Number(m[0]);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    }
   }
-  return 0;
+  return undefined;
 }
 
 function parseFirstUrl(raw: string | undefined): string | undefined {

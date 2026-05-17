@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { Sparkles, Loader2, RefreshCw, X, Eye, EyeOff, ArrowDownLeft, Lock, AlertCircle, ZoomIn } from "lucide-react";
+import { Sparkles, Loader2, RefreshCw, X, ArrowDownLeft, Lock, AlertCircle, ZoomIn } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -100,7 +100,6 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     () => (card.data as MediaData).resolution || "2K",
   );
   const [error, setError] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
   const data = card.data as MediaData;
 
   const upstreamEntries = useMemo(
@@ -481,6 +480,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           model: resolvedModel,
           quality: isEnhancer ? undefined : "standard",
           referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+          cardId: card.id,
           projectId: ownerProjectId,
           onProgress: (p) => {
             logElapsed("generateImage progress", { percent: p.percent, phase: p.phase, label: p.label });
@@ -756,16 +756,6 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             onHoverRef={setHoveredRefId}
           />
 
-          {showPreview && canGenerate && (
-            <div className="shrink-0 rounded-lg border border-border bg-muted/50 p-2">
-              <div className="mb-1 text-[10px] font-medium text-muted-foreground">
-                最终提示词预览
-              </div>
-              <p className="max-h-[4rem] overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-foreground/80">
-                {finalPrompt}
-              </p>
-            </div>
-          )}
         </>
       )}
 
@@ -820,18 +810,6 @@ export default function MediaEditor({ card }: MediaEditorProps) {
               </button>
             ))}
           </div>
-        )}
-        {!enhancer && !isLocked && hasUpstream && (
-          <button
-            onClick={() => setShowPreview((v) => !v)}
-            className="flex items-center gap-1 rounded bg-muted px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-            title={showPreview ? "隐藏预览" : "预览最终提示词"}
-          >
-            {showPreview
-              ? <><EyeOff className="h-3 w-3" />隐藏</>
-              : <><Eye className="h-3 w-3" />预览</>
-            }
-          </button>
         )}
         <div className="flex-1" />
         <button

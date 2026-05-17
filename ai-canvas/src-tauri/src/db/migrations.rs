@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: u32 = 6;
+const CURRENT_VERSION: u32 = 7;
 
 pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     let version: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -23,6 +23,9 @@ pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     }
     if version < 6 {
         migrate_v6(conn)?;
+    }
+    if version < 7 {
+        migrate_v7(conn)?;
     }
 
     Ok(())
@@ -168,6 +171,59 @@ fn migrate_v6(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
         CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, created_at);
 
         PRAGMA user_version = 6;
+        ",
+    )?;
+
+    Ok(())
+}
+
+fn migrate_v7(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::info!("running migration v7: unified async tasks");
+
+    // tasks 表是异步任务的"权威记录"：UI 通过它判断卡片是否在跑、是否失败、
+    // 能不能恢复。每个 card 可能有多个历史 task（重试/恢复会留痕），UI 看
+    // 最近一条 active 即可。
+    //
+    // status 枚举（与前端 TaskStatus 一一对应）:
+    //   queued     —— 已创建本地记录，尚未发起 submit
+    //   submitting —— submit 请求在途
+    //   polling    —— 已拿到 external_task_id，轮询中
+    //   success    —— 终态，结果落 result_payload
+    //   failed     —— 终态，error_kind/error_message 写明原因
+    //   canceled   —— 终态，用户主动取消
+    //   orphaned   —— 重试/项目恢复时把旧的活动任务标记为孤儿，便于追溯
+    //
+    // error_kind 枚举（前端 TaskError 的 discriminator）:
+    //   network | timeout | server_5xx       —— transient（不打死卡片）
+    //   client_4xx | business_failed | parse —— permanent
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS tasks (
+            id                  TEXT PRIMARY KEY,
+            card_id             TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+            project_id          TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            provider            TEXT NOT NULL,
+            kind                TEXT NOT NULL,
+            submit_endpoint     TEXT NOT NULL,
+            poll_endpoint       TEXT,
+            external_task_id    TEXT,
+            status              TEXT NOT NULL DEFAULT 'queued',
+            progress            REAL NOT NULL DEFAULT 0,
+            request_payload     TEXT NOT NULL DEFAULT '{}',
+            result_payload      TEXT,
+            error_kind          TEXT,
+            error_message       TEXT,
+            key_tag             TEXT,
+            retry_count         INTEGER NOT NULL DEFAULT 0,
+            created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
+            last_polled_at      TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_tasks_card ON tasks(card_id);
+        CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
+        CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+
+        PRAGMA user_version = 7;
         ",
     )?;
 

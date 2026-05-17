@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useCallback } from "react";
-import { ImageIcon, Loader2, Shirt, Video, RotateCw, AlertCircle, Cloud, Music } from "lucide-react";
+import { ImageIcon, Loader2, Shirt, Video, RotateCw, Cloud, Music } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -9,6 +9,7 @@ import { autoSave } from "@/lib/autoSave";
 import AIChatCard from "./AIChatCard";
 import TextCard from "./TextCard";
 import StickyNoteCard from "./StickyNoteCard";
+import { CardErrorWithRetry } from "./CardErrorWithRetry";
 
 const IMG_DEFER_MS = 50;
 
@@ -108,13 +109,7 @@ function ImagePreview({ card }: { card: CanvasCard }) {
   }
 
   if (cardError && !displayUrl) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
-        <AlertCircle className="h-8 w-8 text-destructive/60" />
-        <p className="line-clamp-3 text-xs leading-relaxed text-destructive/80">{cardError}</p>
-        <span className="text-[10px] text-muted-foreground">点击卡片查看详情</span>
-      </div>
-    );
+    return <CardErrorWithRetry cardId={card.id} message={cardError} variant="panel" />;
   }
 
   if (displayUrl) {
@@ -135,9 +130,7 @@ function ImagePreview({ card }: { card: CanvasCard }) {
           </span>
         )}
         {cardError && (
-          <div className="absolute inset-x-0 bottom-0 bg-destructive/90 px-2 py-1">
-            <p className="truncate text-[10px] text-white">{cardError}</p>
-          </div>
+          <CardErrorWithRetry cardId={card.id} message={cardError} variant="ribbon" />
         )}
         {results.length > 1 && (
           <div className="absolute inset-x-0 bottom-0 flex items-end justify-center gap-1 bg-gradient-to-t from-black/50 to-transparent px-2 pb-1.5 pt-6">
@@ -209,13 +202,7 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
   }
 
   if (cardError && !displayUrl) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
-        <AlertCircle className="h-8 w-8 text-destructive/60" />
-        <p className="line-clamp-3 text-xs leading-relaxed text-destructive/80">{cardError}</p>
-        <span className="text-[10px] text-muted-foreground">点击卡片查看详情</span>
-      </div>
-    );
+    return <CardErrorWithRetry cardId={card.id} message={cardError} variant="panel" />;
   }
 
   if (displayUrl) {
@@ -229,9 +216,7 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
           </span>
         )}
         {cardError && (
-          <div className="absolute inset-x-0 bottom-0 bg-destructive/90 px-2 py-1">
-            <p className="truncate text-[10px] text-white">{cardError}</p>
-          </div>
+          <CardErrorWithRetry cardId={card.id} message={cardError} variant="ribbon" />
         )}
       </div>
     );
@@ -279,13 +264,7 @@ function VideoPreview({ card }: { card: CanvasCard }) {
   }
 
   if (cardError && !displayUrl) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center">
-        <AlertCircle className="h-8 w-8 text-destructive/60" />
-        <p className="line-clamp-3 text-xs leading-relaxed text-destructive/80">{cardError}</p>
-        <span className="text-[10px] text-muted-foreground">点击卡片查看详情</span>
-      </div>
-    );
+    return <CardErrorWithRetry cardId={card.id} message={cardError} variant="panel" />;
   }
 
   if (displayUrl) {
@@ -304,9 +283,7 @@ function VideoPreview({ card }: { card: CanvasCard }) {
           </span>
         )}
         {cardError && (
-          <div className="absolute inset-x-0 bottom-0 bg-destructive/90 px-2 py-1">
-            <p className="truncate text-[10px] text-white">{cardError}</p>
-          </div>
+          <CardErrorWithRetry cardId={card.id} message={cardError} variant="ribbon" />
         )}
       </div>
     );

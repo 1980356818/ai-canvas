@@ -246,6 +246,8 @@ export abstract class OpenAICompatProvider implements AIProvider {
       failedFallbackMessage: "图片生成失败",
       projectId: req.projectId,
       title: req.prompt,
+      cardId: req.cardId,
+      kind: "image_gen",
       trySyncResult: (data) => {
         // OpenAI 兼容图像 API 经常一次性返回 URL (data[0].url + revised_prompt)
         const d = data as { data?: Array<{ url?: string; revised_prompt?: string }> };
@@ -282,6 +284,8 @@ export abstract class OpenAICompatProvider implements AIProvider {
       failedFallbackMessage: "视频生成失败",
       projectId: req.projectId,
       title: req.prompt,
+      cardId: req.cardId,
+      kind: "video_gen",
     });
   }
 }

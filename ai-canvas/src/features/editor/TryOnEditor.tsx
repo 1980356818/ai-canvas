@@ -149,6 +149,8 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
         size: "1024x1024",
         model: currentModel || undefined,
         quality: "standard",
+        cardId: card.id,
+        projectId: card.projectId,
         onProgress: (p) => {
           setCardProgress(card.id, { percent: p.percent, label: p.label });
         },

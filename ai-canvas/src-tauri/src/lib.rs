@@ -44,11 +44,6 @@ pub struct AppState {
     stream_client: OnceLock<reqwest::Client>,
     pub active_streams: Mutex<HashMap<String, Arc<AtomicBool>>>,
     pub data_dir: std::path::PathBuf,
-    /// 文件自动保存的**默认目录**。当 `settings.file_auto_save_path` 为空时，
-    /// 所有自动保存/导出回退都落到这里。规则参见 [`resolve_auto_save_default_dir`]。
-    pub auto_save_default_dir: std::path::PathBuf,
-    /// 数据库备份目录（`~/Documents/AICat Data/backups/`）。
-    /// 故意放在 Documents 而非 app_data_dir，规避卸载工具清理。
     pub backup_dir: std::path::PathBuf,
 }
 
@@ -89,9 +84,9 @@ impl AppState {
 
 /// 解析数据存储目录。策略：
 ///
-/// - **Windows release**：优先使用 exe 同级 `data/` 目录（便携模式），
-///   但如果旧版 AppData 中已有数据库而 exe/data 中没有，继续使用 AppData（升级兼容）。
-///   Program Files 下安装或 exe 目录不可写时自动回退到 AppData。
+/// - **Windows release**：始终使用 exe 同级 `data/` 目录，所有产生的文件跟随安装目录。
+///   如果旧版 AppData 中有数据但 exe/data 中没有，自动迁移过来。
+///   Program Files 下安装或 exe 目录不可写时回退到 AppData。
 /// - **Windows debug / Linux**：始终使用系统 app_data_dir。
 /// - **macOS**：系统 `Application Support/com.ai-canvas.desktop/`；如果当前位置
 ///   没有 data.db 但旧版 `com.ai-canvas.app/` 下有，自动迁移过来。
@@ -114,17 +109,21 @@ fn resolve_data_dir(app: &tauri::App) -> Result<std::path::PathBuf, Box<dyn std:
                 }
 
                 let candidate = exe_dir.join("data");
-                let app_data_has_db = app_data.join("data.db").exists();
-                let exe_data_has_db = candidate.join("data.db").exists();
-
-                if app_data_has_db && !exe_data_has_db {
-                    tracing::info!(
-                        "upgrade detected: AppData has data.db but exe/data does not, staying with AppData"
-                    );
-                    return Ok(app_data);
-                }
-
                 if std::fs::create_dir_all(&candidate).is_ok() {
+                    // 旧版数据在 AppData 而安装目录还没有 → 迁移过来
+                    let app_data_has_db = app_data.join("data.db").exists();
+                    let exe_data_has_db = candidate.join("data.db").exists();
+                    if app_data_has_db && !exe_data_has_db {
+                        tracing::info!(
+                            "migrating data from AppData {:?} to install dir {:?}",
+                            app_data, candidate
+                        );
+                        if let Err(e) = migrate_dir_contents(&app_data, &candidate) {
+                            tracing::warn!("AppData migration failed: {}, data may remain in AppData", e);
+                        } else {
+                            tracing::info!("AppData migration succeeded");
+                        }
+                    }
                     return Ok(candidate);
                 }
 
@@ -161,6 +160,37 @@ fn resolve_data_dir(app: &tauri::App) -> Result<std::path::PathBuf, Box<dyn std:
     }
 
     Ok(app_data)
+}
+
+/// 把旧目录的内容迁移到新目录（Windows 升级场景：AppData → exe/data）。
+/// 拷贝成功后保留旧目录不删，写 `.migrated-to` 标记防止重复迁移。
+#[cfg(target_os = "windows")]
+fn migrate_dir_contents(
+    src: &std::path::Path,
+    dst: &std::path::Path,
+) -> std::io::Result<()> {
+    let marker = src.join(".migrated-to");
+    if marker.exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let name = entry.file_name();
+        if name == ".migrated-to" {
+            continue;
+        }
+        let dst_path = dst.join(&name);
+        if file_type.is_dir() {
+            std::fs::create_dir_all(&dst_path)?;
+            migrate_dir_contents(&entry.path(), &dst_path)?;
+        } else if file_type.is_file() && !dst_path.exists() {
+            std::fs::copy(entry.path(), &dst_path)?;
+        }
+    }
+    let _ = std::fs::write(&marker, dst.to_string_lossy().as_bytes());
+    Ok(())
 }
 
 /// 把 macOS 旧 identifier 目录（`com.ai-canvas.app`）下的所有内容拷贝到新目录。
@@ -291,6 +321,21 @@ fn migrate_legacy_auto_save_dir(
 }
 
 fn boot_log_path() -> std::path::PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        if !cfg!(debug_assertions) {
+            if let Ok(exe) = std::env::current_exe() {
+                if let Some(exe_dir) = exe.parent() {
+                    let exe_dir_str = exe_dir.to_string_lossy().to_lowercase();
+                    if !exe_dir_str.contains("program files") {
+                        let dir = exe_dir.join("data");
+                        let _ = std::fs::create_dir_all(&dir);
+                        return dir.join("startup.log");
+                    }
+                }
+            }
+        }
+    }
     #[cfg(target_os = "macos")]
     {
         if let Some(home) = std::env::var_os("HOME") {
@@ -302,9 +347,23 @@ fn boot_log_path() -> std::path::PathBuf {
 }
 
 /// 在不依赖 Tauri context 的情况下尽量预测 data_dir，仅用于日志落盘目录。
+/// Windows release 下跟随安装目录（exe/data/logs），避免写到 C 盘。
 fn predict_log_dir() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "windows")]
     {
+        if !cfg!(debug_assertions) {
+            if let Ok(exe) = std::env::current_exe() {
+                if let Some(exe_dir) = exe.parent() {
+                    let exe_dir_str = exe_dir.to_string_lossy().to_lowercase();
+                    if !exe_dir_str.contains("program files") {
+                        let candidate = exe_dir.join("data").join("logs");
+                        if std::fs::create_dir_all(&candidate).is_ok() {
+                            return Some(candidate);
+                        }
+                    }
+                }
+            }
+        }
         if let Some(appdata) = std::env::var_os("APPDATA") {
             return Some(
                 std::path::PathBuf::from(appdata)
@@ -597,29 +656,13 @@ pub fn run() {
             std::fs::create_dir_all(data_dir.join("media/images"))?;
             std::fs::create_dir_all(data_dir.join("media/thumbnails"))?;
 
-            let auto_save_default_dir = resolve_auto_save_default_dir(&data_dir);
-            boot_log(&format!("auto_save_default_dir = {:?}", auto_save_default_dir));
-            migrate_legacy_auto_save_dir(&data_dir, &auto_save_default_dir);
-            std::fs::create_dir_all(&auto_save_default_dir)?;
-            boot_log("directories created");
-
             if let Err(e) = app.asset_protocol_scope().allow_directory(&data_dir, true) {
                 boot_log(&format!("asset scope warn: {}", e));
             }
-            if auto_save_default_dir.starts_with(&data_dir) {
-                // 已经在 data_dir 下，asset 协议作用域已覆盖
-            } else if let Err(e) = app
-                .asset_protocol_scope()
-                .allow_directory(&auto_save_default_dir, true)
-            {
-                boot_log(&format!("asset scope warn (auto_save_default): {}", e));
-            }
+            boot_log("directories created");
 
-            // 备份目录：故意放在 ~/Documents/AICat Data/backups/ 而非 data_dir，
-            // AppCleaner / Windows 卸载器都不会动 Documents，是"重装数据丢失"的最后防线。
-            let doc_dir = app.path().document_dir().ok();
-            let backup_dir = backup::resolve_backup_dir(doc_dir.as_deref())
-                .unwrap_or_else(|| data_dir.join("backups"));
+            // 备份目录跟随安装目录，所有文件统一在同一位置。
+            let backup_dir = data_dir.join("backups");
             boot_log(&format!("backup_dir = {:?}", backup_dir));
 
             let db_path = data_dir.join("data.db");
@@ -671,6 +714,34 @@ pub fn run() {
             let conn = db::init(&db_path)?;
             boot_log("database ready");
 
+            // file_auto_save_path 为空时写入默认值，确保 DB 始终有可用路径。
+            {
+                let auto_save_dir = resolve_auto_save_default_dir(&data_dir);
+                migrate_legacy_auto_save_dir(&data_dir, &auto_save_dir);
+                std::fs::create_dir_all(&auto_save_dir)?;
+                let existing: Option<String> = conn
+                    .query_row(
+                        "SELECT value FROM settings WHERE key = 'file_auto_save_path'",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .ok()
+                    .filter(|v: &String| !v.trim().is_empty());
+                if existing.is_none() {
+                    conn.execute(
+                        "INSERT OR REPLACE INTO settings (key, value) VALUES ('file_auto_save_path', ?1)",
+                        rusqlite::params![auto_save_dir.to_string_lossy().as_ref()],
+                    )?;
+                    boot_log(&format!("file_auto_save_path defaulted to {:?}", auto_save_dir));
+                }
+                // asset 协议放行自动保存目录
+                if !auto_save_dir.starts_with(&data_dir) {
+                    if let Err(e) = app.asset_protocol_scope().allow_directory(&auto_save_dir, true) {
+                        boot_log(&format!("asset scope warn (auto_save): {}", e));
+                    }
+                }
+            }
+
             // 启动后立即备份一份。失败仅 warn，不阻塞启动。
             match backup::create_backup(&conn, &backup_dir, backup::DEFAULT_MAX_KEEP) {
                 Ok(p) => boot_log(&format!("startup backup created: {:?}", p)),
@@ -683,7 +754,6 @@ pub fn run() {
                 stream_client: OnceLock::new(),
                 active_streams: Mutex::new(HashMap::new()),
                 data_dir: data_dir.clone(),
-                auto_save_default_dir,
                 backup_dir: backup_dir.clone(),
             });
             boot_log("state managed (http clients deferred)");
@@ -780,6 +850,12 @@ pub fn run() {
             commands::backup::prepare_restore,
             commands::backup::cancel_pending_restore,
             commands::backup::get_pending_restore,
+            commands::tasks::tasks_upsert,
+            commands::tasks::tasks_get,
+            commands::tasks::tasks_list_pending,
+            commands::tasks::tasks_list_by_card,
+            commands::tasks::tasks_delete,
+            commands::tasks::tasks_cleanup_terminal,
         ])
         .run(tauri::generate_context!());
 

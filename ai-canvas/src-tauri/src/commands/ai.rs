@@ -737,11 +737,7 @@ fn detect_image_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 /// Save media from a remote URL, base64 data-URL, or local path into
 /// `{data_dir}/media/images/{uuid}.{ext}`, plus a friendly auto-save copy.
 ///
-/// 自动保存副本目录解析：
-/// 1. `settings.file_auto_save_path`（用户在设置里填的路径），非空时优先；
-/// 2. 否则回退到 [`AppState::auto_save_default_dir`]——启动时解析的
-///    "程序运行目录/文件自动保存"。
-///
+/// 自动保存副本目录：读 DB `settings.file_auto_save_path`（启动时已确保有默认值）。
 /// 副本最终路径为 `<base>/<project_folder>/<friendly_filename>`；项目子目录
 /// 命名 `<sanitized_title>_<project_id_short>`。
 /// Returns a **relative** path like `media/images/{uuid}.{ext}`.
@@ -892,7 +888,7 @@ pub async fn save_media(
 
     tracing::info!("[save_media] acquiring db lock (auto_save_base)…");
     let lock1_start = Instant::now();
-    let auto_save_base = resolve_auto_save_base(&state);
+    let auto_save_base = resolve_save_dir(&state);
     tracing::info!(
         "[save_media] auto_save_base resolved: {:?}, total_lock1_block_ms={}",
         auto_save_base,
@@ -982,8 +978,7 @@ pub async fn get_media_base_path(state: State<'_, AppState>) -> Result<String, S
 ///
 /// 导出目录解析（优先级从高到低）：
 /// 1. `settings.file_export_path`（用户手动导出路径）；
-/// 2. `settings.file_auto_save_path`（用户的自动保存路径）；
-/// 3. [`AppState::auto_save_default_dir`]（启动时解析的"程序运行目录/文件自动保存"）。
+/// 2. `settings.file_auto_save_path`（启动时已确保有默认值）。
 #[tauri::command]
 pub async fn export_file(
     state: State<'_, AppState>,
@@ -998,13 +993,7 @@ pub async fn export_file(
         return Err(format!("源文件不存在: {}", source_path));
     }
 
-    let base_dir = {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
-        read_nonempty_setting(&db, "file_export_path")
-            .or_else(|| read_nonempty_setting(&db, "file_auto_save_path"))
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| state.auto_save_default_dir.clone())
-    };
+    let base_dir = resolve_export_dir(&state);
 
     let target_dir = if let Some(ref pid) = project_id {
         let folder = {
@@ -1091,20 +1080,7 @@ fn resolve_user_media_path(
         .map(|t| build_project_folder_name(&t, pid))
     });
 
-    let mut candidate_dirs: Vec<std::path::PathBuf> = Vec::new();
-
-    if let Ok(db) = state.db.lock() {
-        for key in &["file_export_path", "file_auto_save_path"] {
-            if let Some(val) = read_nonempty_setting(&db, key) {
-                candidate_dirs.push(std::path::PathBuf::from(val));
-            }
-        }
-    }
-
-    // 兜底：新版默认目录（"程序运行目录/文件自动保存"），以及旧版 `auto-save/`
-    // 兼容已存在的历史数据。后续 release 中老用户数据已迁移，但保留兜底无害。
-    candidate_dirs.push(state.auto_save_default_dir.clone());
-    candidate_dirs.push(data_dir.join("auto-save"));
+    let candidate_dirs = candidate_save_dirs(state);
 
     for base in &candidate_dirs {
         if !base.is_dir() {
@@ -1315,18 +1291,53 @@ pub(crate) fn read_nonempty_setting(
     .filter(|v| !v.is_empty())
 }
 
-/// 解析自动保存的"基目录"（用户配置优先，否则回退到 `AppState::auto_save_default_dir`）。
-/// 不拼项目子目录——调用方按需自己拼。
-pub(crate) fn resolve_auto_save_base(state: &AppState) -> std::path::PathBuf {
-    let user_path = state
+/// 自动保存目录（生成图片/视频后自动写入的位置）。
+/// 唯一数据源：DB `file_auto_save_path`（启动时已确保有值）。
+pub(crate) fn resolve_save_dir(state: &AppState) -> std::path::PathBuf {
+    state
         .db
         .lock()
         .ok()
-        .and_then(|db| read_nonempty_setting(&db, "file_auto_save_path"));
-    match user_path {
-        Some(p) => std::path::PathBuf::from(p),
-        None => state.auto_save_default_dir.clone(),
+        .and_then(|db| read_nonempty_setting(&db, "file_auto_save_path"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| state.data_dir.join("文件自动保存"))
+}
+
+/// 导出目录（用户手动"下载/导出"时的目标位置）。
+/// 优先 `file_export_path`，没设则回退到自动保存目录。
+pub(crate) fn resolve_export_dir(state: &AppState) -> std::path::PathBuf {
+    state
+        .db
+        .lock()
+        .ok()
+        .and_then(|db| {
+            read_nonempty_setting(&db, "file_export_path")
+                .or_else(|| read_nonempty_setting(&db, "file_auto_save_path"))
+        })
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| state.data_dir.join("文件自动保存"))
+}
+
+/// 所有可能存有用户友好副本的候选目录（用于"在文件夹中打开"搜索）。
+pub(crate) fn candidate_save_dirs(state: &AppState) -> Vec<std::path::PathBuf> {
+    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(db) = state.db.lock() {
+        if let Some(v) = read_nonempty_setting(&db, "file_export_path") {
+            dirs.push(std::path::PathBuf::from(v));
+        }
+        if let Some(v) = read_nonempty_setting(&db, "file_auto_save_path") {
+            let p = std::path::PathBuf::from(v);
+            if !dirs.contains(&p) {
+                dirs.push(p);
+            }
+        }
     }
+    // 旧版兼容
+    let legacy = state.data_dir.join("auto-save");
+    if legacy.is_dir() && !dirs.contains(&legacy) {
+        dirs.push(legacy);
+    }
+    dirs
 }
 
 fn ext_from_content_type(headers: &reqwest::header::HeaderMap) -> Option<String> {

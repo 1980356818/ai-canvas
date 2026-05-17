@@ -77,9 +77,10 @@ export function getAllowedSizesForModel(modelId: string): string[] | null {
 }
 
 // 视频模型可选比例 (上游 API 明确支持的). 不在此列表的会被 SizeCombo 标灰。
-//   Seedance 2.0 / 2.0 fast: 16:9 4:3 1:1 3:4 9:16 21:9 + adaptive (auto)
+//   Seedance 2.0 / 2.0 fast: 16:9 4:3 1:1 3:4 9:16 21:9 (UI 不再暴露 adaptive,
+//     用户需明确选一个比例,避免 Dale 上游默认行为带来的不可预测尺寸)
 //   Veo 3.1 (Google):        16:9 9:16 1:1 (参考图模式由 VideoEditor 在 UI 层锁 16:9)
-const SEEDANCE_RATIOS = ["auto", "16:9", "9:16", "1:1", "4:3", "3:4", "21:9"] as const;
+const SEEDANCE_RATIOS = ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"] as const;
 const VEO_RATIOS = ["16:9", "9:16", "1:1"] as const;
 const GROK_VIDEO_RATIOS = ["16:9", "9:16", "3:2", "2:3", "1:1"] as const;
 export const VEO_REF_RATIOS = ["16:9"] as const;
@@ -96,7 +97,7 @@ export function getAllowedVideoSizesForModel(modelId: string): string[] | null {
 // Seedance 2.0 实际分辨率统一固定为 720p (480p 在画布场景几乎无用),由 VideoEditor 出站时硬编码。
 
 export function getDefaultVideoSizeForModel(modelId: string): string {
-  if (isSeedanceModel(modelId)) return "auto"; // seedance 默认 adaptive
+  if (isSeedanceModel(modelId)) return "16:9"; // seedance 不再默认 adaptive, 与 DEFAULT_VIDEO_SIZE 一致
   return DEFAULT_VIDEO_SIZE;
 }
 

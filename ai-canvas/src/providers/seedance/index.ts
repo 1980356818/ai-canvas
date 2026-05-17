@@ -54,6 +54,8 @@ export class SeedanceProvider implements AIProvider {
       failedFallbackMessage: "视频生成失败",
       projectId: req.projectId,
       title: req.prompt,
+      cardId: req.cardId,
+      kind: "video_gen",
     });
   }
 }

@@ -73,3 +73,12 @@ export {
   getPendingRestore,
 } from "./backup.api";
 export type { BackupInfo } from "./backup.api";
+
+export {
+  upsertTask,
+  getTask,
+  listPendingTasks,
+  listTasksByCard,
+  deleteTask,
+  cleanupTerminalTasks,
+} from "./tasks.api";

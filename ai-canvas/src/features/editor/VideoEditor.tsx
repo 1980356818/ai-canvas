@@ -675,6 +675,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         // Seedance: UI 改造后画质走 tier,实际分辨率统一 720p (2.0 系列上限)。
         resolution: isSeedance ? "720p" : undefined,
         generateAudio: (isSeedance || isVeo || isGrok) ? currentAudio : undefined,
+        cardId: card.id,
         projectId: ownerProjectId,
         onProgress: (p) => {
           setCardProgress(card.id, { percent: p.percent, label: p.label });

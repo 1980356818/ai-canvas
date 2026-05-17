@@ -10,7 +10,7 @@ import {
 } from "@/platform/auth.api";
 import { isTauri } from "@/platform/runtime";
 import { cn } from "@/lib/utils";
-import loginBrand from "@/assets/login-brand.png";
+import loginBrand from "@/assets/login-brand.jpg";
 
 async function getMachineCode(): Promise<string> {
   if (!isTauri) throw new Error("非桌面客户端，无法获取设备标识");

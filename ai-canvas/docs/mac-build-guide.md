@@ -51,14 +51,16 @@ macOS 版本通过 GitHub Actions 分别在 ARM 和 Intel 原生 runner 上编�
 ### 方式一：手动触发（推荐）
 
 ```bash
+export GH_TOKEN=<GH_TOKEN>
+
 # 仅构建 macOS（Universal pkg）
-gh workflow run "Build & Release" --ref master --field build_targets=macos --repo XYB0217/ai-canvas
+gh workflow run build.yml --ref master -f build_targets=macos --repo 1980356818/ai-canvas
 
 # 全平台（Win + macOS Universal）
-gh workflow run "Build & Release" --ref master --field build_targets=all --repo XYB0217/ai-canvas
+gh workflow run build.yml --ref master -f build_targets=all --repo 1980356818/ai-canvas
 
 # 仅 Windows
-gh workflow run "Build & Release" --ref master --field build_targets=windows --repo XYB0217/ai-canvas
+gh workflow run build.yml --ref master -f build_targets=windows --repo 1980356818/ai-canvas
 ```
 
 可选构建目标：`all`、`windows`、`macos`
@@ -67,7 +69,7 @@ gh workflow run "Build & Release" --ref master --field build_targets=windows --r
 
 ```bash
 git tag v0.2.0
-git push github v0.2.0
+git push github2 v0.2.0
 ```
 
 推送 `v*` 格式的 tag 会自动触发全平台构建。
@@ -76,17 +78,17 @@ git push github v0.2.0
 
 ```bash
 # 查看最新运行
-gh run list --repo XYB0217/ai-canvas --limit 3
+gh run list --repo 1980356818/ai-canvas --limit 3
 
 # 查看详情
-gh run view <RUN_ID> --repo XYB0217/ai-canvas
+gh run view <RUN_ID> --repo 1980356818/ai-canvas
 ```
 
 ### 下载产物
 
 ```bash
 # 下载 macOS Universal pkg
-gh release download <TAG> --repo XYB0217/ai-canvas --pattern "AICat*universal.pkg"
+gh release download <TAG> --repo 1980356818/ai-canvas --pattern "AICat*universal.pkg"
 ```
 
 ---
@@ -295,6 +297,11 @@ const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
 ## 6. GitHub 仓库信息
 
-- 仓库地址：https://github.com/XYB0217/ai-canvas（私有）
+| 账号 | 仓库地址 | 用途 | 备注 |
+|------|---------|------|------|
+| 1980356818 | https://github.com/1980356818/ai-canvas | **当前主构建** | PAT: `<GH_TOKEN>` (repo+workflow) |
+| XYB0217 | https://github.com/XYB0217/ai-canvas | 旧账号（已停用） | Actions 额度用完，账单受限 |
+
 - 默认分支：`master`
-- Release 页面：https://github.com/XYB0217/ai-canvas/releases
+- Git remote 配置：`github` → XYB0217（旧），`github2` → 1980356818（当前）
+- 日常推送用 `git push github2 master`

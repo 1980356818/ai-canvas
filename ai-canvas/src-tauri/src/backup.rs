@@ -9,9 +9,7 @@
 //!
 //! ## 关键决策
 //!
-//! - **备份位置在 `~/Documents/AICat Data/backups/`**：故意放在用户文档目录，
-//!   是因为 AppCleaner、Windows 卸载器都不会动 Documents。即使应用数据目录
-//!   被清空，备份仍在。
+//! - **备份位置在 `{data_dir}/backups/`**：跟随安装目录，所有产生文件统一位置。
 //! - **用 `VACUUM INTO` 取一致性快照**：SQLite 在 WAL 模式下 main db 文件
 //!   不一定包含最新写入，普通的 `fs::copy` 可能丢数据；`VACUUM INTO` 会等
 //!   到事务边界并生成完整快照，不需要 checkpoint。
@@ -26,48 +24,12 @@ use rusqlite::Connection;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// 备份目录名（在 Documents 下）。
-pub const BACKUP_ROOT_NAME: &str = "AICat Data";
-
 /// 备份文件名前缀。
 const BACKUP_FILE_PREFIX: &str = "data-";
 const BACKUP_FILE_EXT: &str = "db";
 
 /// 保留的最大备份份数。超过会删除最早的。
 pub const DEFAULT_MAX_KEEP: usize = 10;
-
-/// 解析备份目录。优先取 Tauri 给的 document_dir，回退到 HOME/Documents。
-/// 失败返回 None — 调用方应只 warn 不 panic，备份非关键路径。
-pub fn resolve_backup_dir(document_dir: Option<&Path>) -> Option<PathBuf> {
-    if let Some(dir) = document_dir {
-        return Some(dir.join(BACKUP_ROOT_NAME).join("backups"));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(userprofile) = std::env::var_os("USERPROFILE") {
-            return Some(
-                PathBuf::from(userprofile)
-                    .join("Documents")
-                    .join(BACKUP_ROOT_NAME)
-                    .join("backups"),
-            );
-        }
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        if let Some(home) = std::env::var_os("HOME") {
-            return Some(
-                PathBuf::from(home)
-                    .join("Documents")
-                    .join(BACKUP_ROOT_NAME)
-                    .join("backups"),
-            );
-        }
-    }
-
-    None
-}
 
 /// 一份备份的元数据。
 #[derive(Debug, Clone, serde::Serialize)]

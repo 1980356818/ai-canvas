@@ -196,6 +196,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
         model: MULTIANGLE_MODEL_ID,
         quality: "standard",
         referenceImages,
+        cardId: card.id,
         projectId: card.projectId,
         onProgress: (p) => {
           setCardProgress(card.id, { percent: p.percent, label: p.label });

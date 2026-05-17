@@ -172,16 +172,7 @@ pub fn rename_project(state: State<AppState>, id: String, title: String) -> Resu
             let new_folder = super::ai::build_project_folder_name_pub(&title, &id);
 
             if old_folder != new_folder {
-                // 用户配置的自动保存路径 + 默认目录都要尝试 rename。
-                // 同一项目可能在不同基目录都留有子文件夹（比如先没配后又配了路径，
-                // 或者配置切换过），所以我们对所有候选基目录做 best-effort rename。
-                let mut bases: Vec<std::path::PathBuf> = Vec::new();
-                if let Some(p) = super::ai::read_nonempty_setting(&db, "file_auto_save_path") {
-                    bases.push(std::path::PathBuf::from(p));
-                }
-                if !bases.iter().any(|p| p == &state.auto_save_default_dir) {
-                    bases.push(state.auto_save_default_dir.clone());
-                }
+                let bases = super::ai::candidate_save_dirs(&state);
 
                 for base in &bases {
                     let old_path = base.join(&old_folder);

@@ -138,6 +138,11 @@ export interface ImageGenRequest {
    * store 读取，否则用户在生成期间切换项目会导致结果保存到错误的项目目录。
    */
   projectId?: string;
+  /**
+   * 卡片 ID。**提供时启用 TaskManager 持久化路径**（断网/重启可恢复）。
+   * 不提供则走 legacy 直连路径（一次性、不可恢复，适用于 chatStore / agent tools）。
+   */
+  cardId?: string;
 }
 
 export interface ImageGenResponse {
@@ -184,6 +189,11 @@ export interface VideoGenRequest {
    * store 读取，否则用户在生成期间切换项目会导致结果保存到错误的项目目录。
    */
   projectId?: string;
+  /**
+   * 卡片 ID。**提供时启用 TaskManager 持久化路径**（断网/重启可恢复）。
+   * 不提供则走 legacy 直连路径（一次性、不可恢复，适用于 chatStore / agent tools）。
+   */
+  cardId?: string;
 }
 
 export interface VideoGenResponse {

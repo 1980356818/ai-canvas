@@ -47,6 +47,20 @@ export type {
 
 export type { TaskInfo, TaskResult } from "./task";
 
+export type {
+  TaskStatus,
+  TaskErrorKind,
+  AsyncTask,
+  AsyncTaskRow,
+} from "./asyncTask";
+export {
+  TRANSIENT_ERROR_KINDS,
+  TERMINAL_STATUSES,
+  ACTIVE_STATUSES,
+  rowToTask,
+  taskToRow,
+} from "./asyncTask";
+
 export type { ModelInfo } from "./model";
 
 export type {
