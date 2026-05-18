@@ -9,7 +9,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { useChatStore } from "@/stores/chatStore";
 import { listProjects, deleteProject, loadCards, createProject } from "@/platform";
 import { getDisplayUrl } from "@/lib/media";
-import catPawImg from "@/assets/cat-paw.jpg";
+import catPawImg from "@/assets/cat-paw.png";
 
 
 function formatRelativeTime(iso: string): string {
