@@ -102,6 +102,7 @@ export default defineConfig({
       process.env.TAURI_ENV_PLATFORM === "windows"
         ? "chrome90"
         : "safari15",
+    emptyOutDir: true,
   },
   clearScreen: false,
   server: {
