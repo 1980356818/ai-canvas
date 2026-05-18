@@ -119,7 +119,8 @@ export const modelService = {
 
   async getDefaultChatModel(): Promise<ModelRef> {
     const models = await aggregateModels("CHAT");
-    return toRef(models[0], "gemini-3.1-pro-preview-thinking-high", "comfly");
+    // 聊天默认走极境,Comfly 不再暴露 chat 模型。
+    return toRef(models[0], "gemini-3.1-pro-preview", "jijing");
   },
 
   async getDefaultImageModel(): Promise<ModelRef> {
@@ -129,7 +130,9 @@ export const modelService = {
 
   async getDefaultVideoModel(): Promise<ModelRef> {
     const models = await aggregateModels("VIDEO");
-    return toRef(models[0], "veo3.1-fast", "comfly");
+    // 视频默认走极境的 canonical alias "veo3.1";VideoEditor 加载时会通过
+    // normalizeVeoModelToCanonical 把任何 legacy sku (-fast/-4k/-ref) 收敛到这里。
+    return toRef(models[0], "veo3.1", "jijing");
   },
 
   // ── Resolution helpers ───────────────────────────────────

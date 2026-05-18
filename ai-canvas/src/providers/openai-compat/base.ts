@@ -22,6 +22,7 @@ import { aiProxy, aiProxyStream, isTauri, listModels as platformListModels } fro
 import { compressDataUrlForApi } from "@/lib/imageCompression";
 import { executeAsyncMediaTask } from "../shared/asyncMediaTask";
 import { PROGRESS_EXPECTED_SEC } from "../shared/progress";
+import { normalizeResolution } from "@/shared/constants";
 import type { ModelInfo } from "@/types";
 
 function gcd(a: number, b: number): number {
@@ -198,7 +199,15 @@ export abstract class OpenAICompatProvider implements AIProvider {
   async generateImage(req: ImageGenRequest): Promise<ImageGenResponse> {
     const imageField = this.imageRefField();
     const requestId = makeRequestId();
-    const modelId = req.model ?? this.defaultImageModel();
+    const baseModelId = req.model ?? this.defaultImageModel();
+    const baseModelLower = baseModelId.toLowerCase();
+    const isGptImage2 = baseModelLower.startsWith("gpt-image-2") || baseModelLower.startsWith("gpt-image-1");
+    // 调用方(chat / agent 工具调用 / 卡片编辑器)可能传:裸 baseId ("gpt-image-2"/"nano-banana-2")、
+    // 已 resolved 的 sku ("gpt-image-2-2k")、或不传 model。JiJing 后端 ModelRouter 没有裸路由,
+    // 只认精确 sku。这里把 resolution 收敛到 "2K"/"4K"(缺省 2K),再走 provider 的 id 映射。
+    // resolveImageModelId 对已 resolved 的 sku 幂等返回,所以 MediaEditor 已 resolve 的路径也安全。
+    const resolution = normalizeResolution(req.resolution);
+    const modelId = this.resolveImageModelId(baseModelId, resolution);
 
     const body: Record<string, unknown> = {
       model: modelId,
@@ -210,10 +219,7 @@ export abstract class OpenAICompatProvider implements AIProvider {
     if (req.prompt) {
       body.prompt = req.prompt;
       const baseSize = req.size || "1024x1024";
-      const modelLower = modelId.toLowerCase();
-      const isGptImage2 = modelLower.startsWith("gpt-image-2") || modelLower.startsWith("gpt-image-1");
-      const resolution = isGptImage2 ? (req.resolution || "2K") : req.resolution;
-      const pixelSize = resolution ? toGptImage2Size(baseSize, resolution) : undefined;
+      const pixelSize = isGptImage2 ? toGptImage2Size(baseSize, resolution) : undefined;
       body.size = pixelSize ?? toAspectRatio(baseSize);
       // gpt-image-* 只接受 low/medium/high/auto；DALL-E 用 standard/hd。映射兜底。
       if (isGptImage2) {

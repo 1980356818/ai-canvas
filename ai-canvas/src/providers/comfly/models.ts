@@ -6,11 +6,10 @@ import {
 
 export { isSeedanceModel, isVeoModel } from "../shared/video";
 
-export const COMFLY_CHAT_MODELS: ModelInfo[] = [
-  { id: "gpt-5.4", display_name: "GPT-5.4", capability: "CHAT" },
-  { id: "gemini-3.1-pro-preview-thinking-high", display_name: "Gemini 3.1 Pro (Thinking)", capability: "CHAT" },
-  { id: "gemini-3.1-pro-preview", display_name: "Gemini 3.1 Pro", capability: "CHAT" },
-];
+// AI 聊天框统一走极境 (jijing) 的 chat 模型;Comfly 不再暴露 chat 入口,
+// 仅保留图像/视频路径。老卡片里若还存了 comfly chat ref,streamChat 仍会
+// 透传 model id 给 Comfly 后端,不主动迁移。
+export const COMFLY_CHAT_MODELS: ModelInfo[] = [];
 
 export const COMFLY_IMAGE_MODELS: ModelInfo[] = [
   { id: "gpt-image-2", display_name: "GPT Image 2", capability: "IMAGE" },
@@ -18,12 +17,9 @@ export const COMFLY_IMAGE_MODELS: ModelInfo[] = [
   { id: "nano-banana-pro", display_name: "Nanobanana Pro", capability: "IMAGE" },
 ];
 
-// dropdown 只露 canonical alias,与 JIJING_VIDEO_MODELS 对齐。变体 (Fast/4K/Ref) 由
-// VideoEditor 在提交前根据模式/分辨率 resolve,见 resolveVeoVariantForMode。
-export const COMFLY_VIDEO_MODELS: ModelInfo[] = [
-  { id: "veo3.1", display_name: "Veo 3.1", capability: "VIDEO" },
-  { id: "seedance", display_name: "Seedance 2.0", capability: "VIDEO" },
-];
+// 视频统一走极境 (JIJING_VIDEO_MODELS), Comfly 不再暴露 video 入口。
+// ComflyProvider.generateVideo 的 seedance/veo override 保留,作老卡片透传兼容。
+export const COMFLY_VIDEO_MODELS: ModelInfo[] = [];
 
 export const ALL_COMFLY_MODELS: ModelInfo[] = [
   ...COMFLY_CHAT_MODELS,

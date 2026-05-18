@@ -17,7 +17,13 @@ import { useProviderStore, parseModelRef } from "@/stores/providerStore";
 import { getAccumulatedToolCalls } from "@/providers/openai-compat/formatter";
 import { getBase64ForApi, persistImage } from "@/lib/media";
 import { useProjectStore } from "@/stores/projectStore";
-import { getAllowedSizesForModel, coerceToAllowedSize } from "@/shared/constants";
+import {
+  getAllowedSizesForModel,
+  coerceToAllowedSize,
+  normalizeResolution,
+  SUPPORTED_RESOLUTIONS,
+  type ImageResolution,
+} from "@/shared/constants";
 import type { StreamEvent, UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 
 export type { ChatSession, ChatMessage } from "@/types";
@@ -40,6 +46,12 @@ const CHAT_TOOLS = [
             type: "string",
             description: "图像比例",
             enum: ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"],
+          },
+          resolution: {
+            type: "string",
+            description:
+              "图像画质档位。用户明确说出 4K / 4k / 超清 / ultra HD 时填 \"4K\"；其它情况省略此字段，系统会默认 2K。",
+            enum: [...SUPPORTED_RESOLUTIONS],
           },
         },
         required: ["prompt"],
@@ -689,7 +701,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const unifiedMessages = await historyToUnified(history);
       const streamResult = await new Promise<{
         textParts: ChatContentPart[];
-        imageJobs: { prompt: string; size?: string }[];
+        imageJobs: { prompt: string; size?: string; resolution: ImageResolution }[];
         videoJobs: { prompt: string }[];
       }>((resolve, reject) => {
         let settled = false;
@@ -740,16 +752,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   if (fullReasoning) textParts.push({ type: "reasoning", text: fullReasoning });
                   if (fullText) textParts.push({ type: "text", text: fullText });
 
-                  const imageJobs: { prompt: string; size?: string }[] = [];
+                  const imageJobs: { prompt: string; size?: string; resolution: ImageResolution }[] = [];
                   const videoJobs: { prompt: string }[] = [];
                   const toolCalls = getAccumulatedToolCalls();
                   for (const tc of toolCalls) {
                     try {
                       const args = JSON.parse(tc.arguments || "{}");
                       if (tc.name === "generate_image") {
+                        // resolution 由模型决定:用户明确说 4K 时模型会传 "4K";
+                        // 否则缺省 / 不识别 → normalizeResolution 兜底 2K。
                         imageJobs.push({
                           prompt: String(args.prompt ?? ""),
                           size: args.size as string | undefined,
+                          resolution: normalizeResolution(args.resolution as string | undefined),
                         });
                       } else if (tc.name === "generate_video") {
                         videoJobs.push({ prompt: String(args.prompt ?? "") });
@@ -874,6 +889,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 prompt: job.prompt,
                 model: imgModId,
                 size: finalSize,
+                // resolution 来自 LLM tool call (用户明确说 4K 才会是 "4K",否则 2K)。
+                // base.ts 的 resolveImageModelId 会据此把 imgModId 翻成精确 sku。
+                resolution: job.resolution,
                 referenceImages: refImages && refImages.length > 0 ? refImages : undefined,
                 projectId: lockedPid,
                 onProgress: (p) => {
@@ -1010,6 +1028,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         prompt,
         model: modelId,
         size: size || undefined,
+        // UI 暂未暴露分辨率选择,统一兜底 2K (与 base.ts normalize 一致)。
+        resolution: normalizeResolution(undefined),
         projectId: lockedPid,
         onProgress: (p) =>
           set((s) => patchSessionGenerationIfVisible(s, sid, {

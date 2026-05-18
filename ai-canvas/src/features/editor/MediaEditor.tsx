@@ -22,7 +22,14 @@ import {
 } from "@/config/model-ref-images";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { disconnectCardPairAndCleanup } from "@/lib/referenceConsistency";
-import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize, getAllowedSizesForModel, coerceToAllowedSize } from "@/shared/constants";
+import {
+  IMAGE_SIZE_OPTIONS,
+  sizeFromRatio,
+  normalizeImageSize,
+  getAllowedSizesForModel,
+  coerceToAllowedSize,
+  normalizeResolution,
+} from "@/shared/constants";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
 import { type InlineImageRef, toDisplayText, remapInlineRefs, reorderInlineRefs } from "@/lib/promptSerializer";
 import ModelSelector from "./ModelSelector";
@@ -97,7 +104,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     () => normalizeImageSize((card.data as MediaData).size) || useSettingsStore.getState().lastImageSize,
   );
   const [currentResolution, setCurrentResolution] = useState(
-    () => (card.data as MediaData).resolution || "2K",
+    () => normalizeResolution((card.data as MediaData).resolution),
   );
   const [error, setError] = useState<string | null>(null);
   const data = card.data as MediaData;
@@ -208,8 +215,10 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
   const handleResolutionChange = useCallback(
     (res: string) => {
-      setCurrentResolution(res);
-      updateCard(card.id, { data: { ...data, resolution: res } });
+      // 收敛到 "2K" | "4K",避免 SizeCombo 等上游传入未规范化值导致 state 漂移。
+      const next = normalizeResolution(res);
+      setCurrentResolution(next);
+      updateCard(card.id, { data: { ...data, resolution: next } });
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],

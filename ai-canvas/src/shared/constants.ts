@@ -43,6 +43,24 @@ export const VIDEO_SIZE_OPTIONS: ImageSizeOption[] = [
 export const DEFAULT_IMAGE_SIZE = IMAGE_SIZE_OPTIONS[0]!.value;
 export const DEFAULT_VIDEO_SIZE = "16:9";
 
+// ── Image resolution (画质档) ────────────────────────────────
+//
+// 项目里唯一合法的分辨率档位 = "2K" | "4K" (与 SizeCombo RESOLUTION_OPTIONS 一致)。
+// 任何入口 (chat 工具调用 / agent 工具 / 卡片旧数据 / UI 选择) 拿到的 resolution
+// 字符串都应该过 `normalizeResolution()`,统一收敛到这两个值之一;
+// 缺省 / 不识别一律走 `DEFAULT_IMAGE_RESOLUTION` (2K),与 GPT_IMAGE_2_SIZE_MAP
+// 默认档、resolveJiJingImageModelId 默认分支保持对齐。
+export const SUPPORTED_RESOLUTIONS = ["2K", "4K"] as const;
+export type ImageResolution = (typeof SUPPORTED_RESOLUTIONS)[number];
+export const DEFAULT_IMAGE_RESOLUTION: ImageResolution = "2K";
+
+export function normalizeResolution(raw: string | undefined | null): ImageResolution {
+  if (raw == null) return DEFAULT_IMAGE_RESOLUTION;
+  const s = String(raw).trim().toUpperCase().replace(/\s+/g, "");
+  if (s === "4K" || s === "4096" || s === "3840") return "4K";
+  return DEFAULT_IMAGE_RESOLUTION;
+}
+
 const LEGACY_SIZE_MAP: Record<string, string> = {
   "auto": "1:1",
   "1024x1024": "1:1",

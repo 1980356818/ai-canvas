@@ -188,6 +188,118 @@ fn build_auth_request(
     apply_auth_headers(request, provider, api_key)
 }
 
+/// 单个 String value 在 dump 里超过这个长度就截断为 `"<truncated NNN bytes>"`。
+/// base64 内联图通常几 MB 起，原样保存只会塞满磁盘而且诊断价值低（知道有图就够了）。
+const DUMP_MAX_STRING_LEN: usize = 256;
+
+/// dump 目录下最多保留这么多个最近文件，更早的自动清理，防止长期累积。
+const DUMP_KEEP_RECENT: usize = 20;
+
+/// 递归把 outgoing JSON 里的「特长字符串」替换成长度摘要，再写盘。
+/// 保持结构和短字段原样，便于人类对比 outgoing 跟 DTO 期望的字段是否对得上。
+fn truncate_long_strings(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::String(s) if s.len() > DUMP_MAX_STRING_LEN => {
+            serde_json::Value::String(format!(
+                "<truncated {} bytes, head={:?}>",
+                s.len(),
+                &s[..DUMP_MAX_STRING_LEN.min(s.len())]
+            ))
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(truncate_long_strings).collect())
+        }
+        serde_json::Value::Object(obj) => {
+            let mut out = serde_json::Map::with_capacity(obj.len());
+            for (k, v) in obj {
+                out.insert(k.clone(), truncate_long_strings(v));
+            }
+            serde_json::Value::Object(out)
+        }
+        other => other.clone(),
+    }
+}
+
+/// 保留 dump_dir 里最近的 DUMP_KEEP_RECENT 个 `*_fail_*.json` 文件，其余删除。
+fn prune_old_dumps(dump_dir: &Path) {
+    let read = match std::fs::read_dir(dump_dir) {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+    let mut files: Vec<(std::time::SystemTime, PathBuf)> = read
+        .filter_map(Result::ok)
+        .filter_map(|e| {
+            let name = e.file_name();
+            let s = name.to_string_lossy();
+            if !s.contains("_fail_") || !s.ends_with(".json") {
+                return None;
+            }
+            let mtime = e.metadata().and_then(|m| m.modified()).ok()?;
+            Some((mtime, e.path()))
+        })
+        .collect();
+    if files.len() <= DUMP_KEEP_RECENT {
+        return;
+    }
+    files.sort_by(|a, b| b.0.cmp(&a.0)); // 新→旧
+    for (_, path) in files.into_iter().skip(DUMP_KEEP_RECENT) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// 把失败请求 (status >= 400) 的 outgoing body + upstream response 一起落地到
+/// `<data_dir>/debug/`，方便诊断网关层屏蔽掉的 deserialization 错误
+/// （典型例子：极境 10002 "请求体格式错误" 只透出笼统 message，要靠对比
+/// outgoing body 才能定位是哪个字段触发 Jackson 失败）。
+///
+/// 写盘前的两个安全阀：
+/// - {@link truncate_long_strings} 把 base64 图等超长字段截断
+/// - {@link prune_old_dumps} 保留最近若干个文件，避免无人清理时磁盘塞满
+fn dump_failed_request(
+    data_dir: &Path,
+    tag: &str,
+    url: &str,
+    provider: &str,
+    status: u16,
+    outgoing: &serde_json::Value,
+    response_body: &str,
+) {
+    let dump_dir = data_dir.join("debug");
+    if std::fs::create_dir_all(&dump_dir).is_err() {
+        return;
+    }
+    let ts = Local::now().format("%Y%m%d_%H%M%S_%3f");
+    let out_path = dump_dir.join(format!("{}_fail_{}_{}.json", tag, ts, status));
+    let outgoing_truncated = truncate_long_strings(outgoing);
+    let resp_for_dump = if response_body.len() > DUMP_MAX_STRING_LEN * 16 {
+        format!(
+            "<truncated {} bytes, head={:?}>",
+            response_body.len(),
+            &response_body[..(DUMP_MAX_STRING_LEN * 16).min(response_body.len())]
+        )
+    } else {
+        response_body.to_string()
+    };
+    let dump = serde_json::json!({
+        "url": url,
+        "status": status,
+        "provider": provider,
+        "outgoing_body_bytes": approx_json_bytes(outgoing),
+        "response_body_bytes": response_body.len(),
+        "outgoing_body": outgoing_truncated,
+        "response_body": resp_for_dump,
+    });
+    if let Ok(s) = serde_json::to_string_pretty(&dump) {
+        if std::fs::write(&out_path, s).is_ok() {
+            tracing::warn!(
+                "[{}] dumped failed request → {} (status={}, outgoing≈{} bytes, response≈{} bytes)",
+                tag, out_path.display(), status, approx_json_bytes(outgoing), response_body.len()
+            );
+            prune_old_dumps(&dump_dir);
+        }
+    }
+}
+
 #[derive(Serialize)]
 pub struct AiProxyResponse {
     pub body: String,
@@ -341,6 +453,9 @@ pub async fn ai_proxy(
             } else {
                 None
             };
+            if status >= 400 {
+                dump_failed_request(&state.data_dir, "ai_proxy", &url, &provider, status, &body, &resp_body);
+            }
             tracing::info!(
                 "[ai_proxy:{}] finished total_elapsed_ms={}",
                 request_id,
@@ -577,8 +692,11 @@ async fn do_stream(
     );
 
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(format!("API 错误 (HTTP {}): {}", status, body));
+        let resp_body = resp.text().await.unwrap_or_default();
+        if let Some(state) = app.try_state::<AppState>() {
+            dump_failed_request(&state.data_dir, "stream", url, provider, status, body, &resp_body);
+        }
+        return Err(format!("API 错误 (HTTP {}): {}", status, resp_body));
     }
 
     let mut buffer = String::new();

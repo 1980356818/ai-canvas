@@ -389,7 +389,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     setError(null);
     useUIStore.getState().setCardError(card.id, null);
 
-    const model = currentModel || "gemini-3.1-pro-preview-thinking-high";
+    const model = currentModel || "gemini-3.1-pro-preview";
 
     if (data.result) {
       updateCard(card.id, { data: { ...data, _resultStale: true } });
