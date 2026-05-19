@@ -137,9 +137,9 @@ export const modelService = {
 
   // ── Resolution helpers ───────────────────────────────────
 
-  resolveImageModelId(baseId: string, resolution: string, providerId?: string): string {
+  resolveImageModelId(baseId: string, resolution: string, quality?: string, providerId?: string): string {
     const provider = providerId ? registry.tryGet(providerId) : undefined;
-    return provider?.resolveImageModelId?.(baseId, resolution) ?? baseId;
+    return provider?.resolveImageModelId?.(baseId, resolution, quality) ?? baseId;
   },
 
   /**

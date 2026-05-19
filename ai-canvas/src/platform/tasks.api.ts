@@ -74,6 +74,27 @@ export async function listTasksByCard(cardId: string): Promise<AsyncTask[]> {
     .map(rowToTask);
 }
 
+/**
+ * 列出某个项目下的所有任务（含终态），按 created_at DESC。
+ * 任务记录页面打开时调一次，把历史任务灌入 tasksStore 内存 Map。
+ */
+export async function listTasksByProject(
+  projectId: string,
+): Promise<AsyncTask[]> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    const rows = await getInvoke()<AsyncTaskRow[]>("tasks_list_by_project", {
+      projectId,
+    });
+    return rows.map(rowToTask);
+  }
+  const all = lsGet<AsyncTaskRow[]>(BROWSER_LS_KEY, []);
+  return all
+    .filter((t) => t.project_id === projectId)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .map(rowToTask);
+}
+
 export async function deleteTask(id: string): Promise<void> {
   if (isTauri) {
     await ensureTauriAPIs();

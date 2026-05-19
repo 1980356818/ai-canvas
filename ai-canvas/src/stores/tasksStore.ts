@@ -6,6 +6,7 @@ import {
   deleteTask as persistDelete,
   listPendingTasks,
   listTasksByCard,
+  listTasksByProject,
 } from "@/platform";
 
 interface TasksState {
@@ -48,6 +49,12 @@ interface TasksState {
    * 按需拉某张卡片的全部历史任务（包括终态），用于"重试"按钮判断 / 展示历史。
    */
   hydrateForCard: (cardId: string) => Promise<AsyncTask[]>;
+
+  /**
+   * 拉某个项目下的所有任务（含终态）塞进内存。任务记录页面打开时调一次。
+   * 已存在于内存中的活跃任务不会被覆盖（活跃任务的内存版本更新）。
+   */
+  hydrateByProject: (projectId: string) => Promise<AsyncTask[]>;
 
   /** 全清内存。切换项目时调，避免上个项目的任务残留。 */
   clear: () => void;
@@ -117,6 +124,20 @@ export const useTasksStore = create<TasksState>((set, get) => ({
     set((s) => {
       const next = new Map(s.tasks);
       for (const t of rows) next.set(t.id, t);
+      return { tasks: next };
+    });
+    return rows;
+  },
+
+  hydrateByProject: async (projectId) => {
+    const rows = await listTasksByProject(projectId);
+    set((s) => {
+      const next = new Map(s.tasks);
+      for (const t of rows) {
+        const existing = next.get(t.id);
+        if (existing && ACTIVE_STATUSES.has(existing.status)) continue;
+        next.set(t.id, t);
+      }
       return { tasks: next };
     });
     return rows;

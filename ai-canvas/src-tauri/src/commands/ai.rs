@@ -1094,6 +1094,9 @@ pub async fn get_media_base_path(state: State<'_, AppState>) -> Result<String, S
 
 /// Copy an image or video from internal storage to the user's export directory.
 ///
+/// 文件名由 `build_friendly_filename` 统一生成（与自动保存一致），
+/// 始终包含 UUID 短码，确保 `find_file_by_id` 可定位。
+///
 /// 导出目录解析（优先级从高到低）：
 /// 1. `settings.file_export_path`（用户手动导出路径）；
 /// 2. `settings.file_auto_save_path`（启动时已确保有默认值）。
@@ -1101,7 +1104,7 @@ pub async fn get_media_base_path(state: State<'_, AppState>) -> Result<String, S
 pub async fn export_file(
     state: State<'_, AppState>,
     source_path: String,
-    export_name: String,
+    title: Option<String>,
     project_id: Option<String>,
 ) -> Result<String, String> {
     let data_dir = &state.data_dir;
@@ -1110,6 +1113,18 @@ pub async fn export_file(
     if !abs_source.exists() {
         return Err(format!("源文件不存在: {}", source_path));
     }
+
+    let file_id = abs_source
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("export")
+        .to_string();
+    let ext = abs_source
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("png");
+
+    let export_name = build_friendly_filename(&title, &file_id, ext);
 
     let base_dir = resolve_export_dir(&state);
 
@@ -1154,8 +1169,29 @@ pub async fn open_in_explorer(
     let data_dir = &state.data_dir;
 
     let abs_path = if path.starts_with("media/") {
-        let user_path = resolve_user_media_path(&state, data_dir, &path, &project_id);
-        user_path.unwrap_or_else(|| data_dir.join(&path))
+        if let Some(user_path) = resolve_user_media_path(&state, data_dir, &path, &project_id) {
+            user_path
+        } else {
+            // Friendly copy not found — try opening the auto-save project directory
+            let save_dir = resolve_save_dir(&state);
+            let proj_dir = project_id.as_ref().and_then(|pid| {
+                let db = state.db.lock().ok()?;
+                db.query_row(
+                    "SELECT title FROM projects WHERE id = ?1",
+                    rusqlite::params![pid],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok()
+                .map(|t| save_dir.join(build_project_folder_name(&t, pid)))
+            });
+            if let Some(ref dir) = proj_dir {
+                if dir.is_dir() {
+                    return reveal_path(dir);
+                }
+            }
+            // Last resort: internal storage
+            data_dir.join(&path)
+        }
     } else {
         std::path::PathBuf::from(&path)
     };
@@ -1182,6 +1218,10 @@ fn resolve_user_media_path(
         return None;
     }
     let short_id = &internal_stem[..8.min(internal_stem.len())];
+    let internal_ext = internal_abs
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
 
     let short_pid = project_id
         .as_ref()
@@ -1200,26 +1240,39 @@ fn resolve_user_media_path(
 
     let candidate_dirs = candidate_save_dirs(state);
 
-    for base in &candidate_dirs {
-        if !base.is_dir() {
-            continue;
-        }
-
-        let search_dir = if let Some(ref folder) = project_folder {
-            let proj_dir = base.join(folder);
-            if proj_dir.exists() {
-                proj_dir
-            } else if let Some(sid) = short_pid {
-                find_dir_containing(base, sid).unwrap_or_else(|| base.to_path_buf())
+    let search_dirs: Vec<std::path::PathBuf> = candidate_dirs
+        .iter()
+        .filter(|base| base.is_dir())
+        .map(|base| {
+            if let Some(ref folder) = project_folder {
+                let proj_dir = base.join(folder);
+                if proj_dir.exists() {
+                    proj_dir
+                } else if let Some(sid) = short_pid {
+                    find_dir_containing(base, sid).unwrap_or_else(|| base.to_path_buf())
+                } else {
+                    base.to_path_buf()
+                }
             } else {
                 base.to_path_buf()
             }
-        } else {
-            base.to_path_buf()
-        };
+        })
+        .collect();
 
-        if let Some(found) = find_file_by_id(&search_dir, short_id) {
+    // Phase 1: match by UUID short-id substring in filename
+    for dir in &search_dirs {
+        if let Some(found) = find_file_by_id(dir, short_id) {
             return Some(found);
+        }
+    }
+
+    // Phase 2: fallback for old files without UUID in name — match by file size + extension
+    let internal_size = std::fs::metadata(&internal_abs).ok().map(|m| m.len()).unwrap_or(0);
+    if internal_size > 0 {
+        for dir in &search_dirs {
+            if let Some(found) = find_file_by_size(dir, internal_size, internal_ext) {
+                return Some(found);
+            }
         }
     }
 
@@ -1240,6 +1293,30 @@ fn find_file_by_id(dir: &std::path::Path, short_id: &str) -> Option<std::path::P
     for entry in std::fs::read_dir(dir).ok()?.flatten() {
         if entry.file_name().to_string_lossy().contains(short_id) {
             return Some(entry.path());
+        }
+    }
+    None
+}
+
+fn find_file_by_size(dir: &std::path::Path, target_size: u64, target_ext: &str) -> Option<std::path::PathBuf> {
+    if !dir.is_dir() {
+        return None;
+    }
+    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if !target_ext.is_empty() {
+            let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+            if !ext.eq_ignore_ascii_case(target_ext) {
+                continue;
+            }
+        }
+        if let Ok(meta) = path.metadata() {
+            if meta.len() == target_size {
+                return Some(path);
+            }
         }
     }
     None
@@ -1353,15 +1430,18 @@ pub fn build_project_folder_name_pub(title: &str, project_id: &str) -> String {
     build_project_folder_name(title, project_id)
 }
 
-fn build_friendly_filename(title: &Option<String>, fallback_id: &str, ext: &str) -> String {
+fn build_friendly_filename(title: &Option<String>, file_id: &str, ext: &str) -> String {
     let timestamp = Local::now().format("%Y%m%d_%H%M%S");
-    let base = title
+    let short_id = &file_id[..8.min(file_id.len())];
+    match title
         .as_deref()
         .filter(|s| !s.trim().is_empty())
         .map(sanitize_filename)
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| fallback_id[..8.min(fallback_id.len())].to_string());
-    format!("{}_{}.{}", base, timestamp, ext)
+    {
+        Some(name) => format!("{}_{}_{}.{}", name, short_id, timestamp, ext),
+        None => format!("{}_{}.{}", short_id, timestamp, ext),
+    }
 }
 
 /// 最长字符数（按 Unicode `char` 计）。Windows MAX_PATH 是 260 字节，

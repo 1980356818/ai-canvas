@@ -6,10 +6,10 @@ import {
 
 export { isSeedanceModel, isVeoModel } from "../shared/video";
 
-// AI 聊天框统一走极境 (jijing) 的 chat 模型;Comfly 不再暴露 chat 入口,
-// 仅保留图像/视频路径。老卡片里若还存了 comfly chat ref,streamChat 仍会
-// 透传 model id 给 Comfly 后端,不主动迁移。
-export const COMFLY_CHAT_MODELS: ModelInfo[] = [];
+export const COMFLY_CHAT_MODELS: ModelInfo[] = [
+  { id: "gpt-5.4", display_name: "GPT-5.4", capability: "CHAT" },
+  { id: "gemini-3.1-pro-preview", display_name: "Gemini 3.1 Pro", capability: "CHAT" },
+];
 
 export const COMFLY_IMAGE_MODELS: ModelInfo[] = [
   { id: "gpt-image-2", display_name: "GPT Image 2", capability: "IMAGE" },

@@ -3,7 +3,7 @@ import type { CanvasCard } from "@/types";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
-import { getRefSlotsForModel, getRefSlotsForChatModel, getRefSlotsForVideoModel, compactRefImages, type RefImageEntry } from "@/config/model-ref-images";
+import { getRefSlotsForModel, getRefSlotsForChatModel, getRefSlotsForVideoModel, compactRefImages, resolveVideoImageMode, type RefImageEntry } from "@/config/model-ref-images";
 import { isSeedanceModel } from "@/providers/shared/video";
 
 const DEBUG = import.meta.env.DEV;
@@ -83,8 +83,8 @@ export function canAcceptConnection(
 
   // audio → ai_video
   if (kind === "audio") {
-    if ((td.imageMode as string ?? "reference") !== "reference")
-      return { title: "当前模式不支持音频输入", description: "请将视频卡片切换到"参考图"模式" };
+    if (resolveVideoImageMode(td.imageMode as string) !== "reference")
+      return { title: "当前模式不支持音频输入", description: "请将视频卡片切换到「参考图」模式" };
     type AudioRef = { sourceCardId: string };
     const audios = (td.refAudios as AudioRef[]) || [];
     if (audios.some((a) => a.sourceCardId === sourceCardId)) return true;
@@ -95,11 +95,11 @@ export function canAcceptConnection(
 
   // image/video → ai_video
   if (target.type === "ai_video") {
-    const mode = (td.imageMode as string) ?? "reference";
+    const mode = resolveVideoImageMode(td.imageMode as string);
 
     if (kind === "video") {
       if (mode !== "reference")
-        return { title: "当前模式不支持参考视频", description: "请切换到"参考图"模式" };
+        return { title: "当前模式不支持参考视频", description: "请切换到「参考图」模式" };
       if (isSeedanceModel((td.model as string) || ""))
         return { title: "Seedance 模型不支持参考视频" };
       type VideoRef = { sourceCardId: string };
@@ -111,9 +111,6 @@ export function canAcceptConnection(
     }
 
     // kind === "image"
-    if (mode === "text")
-      return { title: "文本模式不接受图片输入", description: "请切换到其他模式" };
-
     if (mode === "reference") {
       const slots = getRefSlotsForVideoModel((td.model as string) || "", "reference");
       const refImages = (td.refImages || {}) as Record<string, RefImageEntry>;
@@ -125,14 +122,13 @@ export function canAcceptConnection(
         : { title: "参考图已满", description: "请先移除已有参考图或断开连线" };
     }
 
-    // firstFrame / lastFrame
+    // firstLastFrame: 首帧 + 尾帧,最多 2 张
     type FrameRef = { url: string; sourceCardId: string };
     const frames = (td.refFrames as FrameRef[]) || [];
     if (frames.some((f) => f.sourceCardId === sourceCardId)) return true;
-    const maxFrames = mode === "firstFrame" ? 1 : 2;
-    return frames.length < maxFrames
+    return frames.length < 2
       ? true
-      : { title: "参考帧已满", description: `最多 ${maxFrames} 帧，请先断开已有连线` };
+      : { title: "参考帧已满", description: "最多 2 帧，请先断开已有连线" };
   }
 
   // video → ai_chat
@@ -167,15 +163,14 @@ export function canAcceptConnection(
 function hasRefImages(target: { type: string; data: Record<string, unknown> }): boolean {
   if (REF_IMAGE_TARGETS.has(target.type)) return true;
   if (target.type === "ai_tryon") return true;
-  const videoMode = target.type === "ai_video" ? (target.data.imageMode as string | undefined) ?? "reference" : null;
+  const videoMode = target.type === "ai_video" ? resolveVideoImageMode(target.data.imageMode as string | undefined) : null;
   if (videoMode === "reference") return true;
   return false;
 }
 
 function getRefSlotsAny(target: { type: string; data: Record<string, unknown> }) {
   if (target.type === "ai_video") {
-    const mode = (target.data.imageMode as string) ?? "reference";
-    return getRefSlotsForVideoModel((target.data.model as string) || "", mode);
+    return getRefSlotsForVideoModel((target.data.model as string) || "", target.data.imageMode as string);
   }
   return getRefSlots(target);
 }
@@ -576,11 +571,9 @@ function injectIntoCard(
           changed = true;
         }
       } else if (payload.kind === "image") {
-        const imageMode = (d.imageMode as string) ?? "reference";
+        const imageMode = resolveVideoImageMode(d.imageMode as string);
 
-        if (imageMode === "text") {
-          // text mode rejects images
-        } else if (imageMode === "reference") {
+        if (imageMode === "reference") {
           const slots = getRefSlotsForVideoModel((d.model as string) || "", "reference");
           const refImages = {
             ...((d.refImages || {}) as Record<string, RefImageEntry>),
@@ -609,7 +602,7 @@ function injectIntoCard(
             }
           }
         } else {
-          const maxFrames = imageMode === "firstFrame" ? 1 : 2;
+          const maxFrames = 2;
           type FrameRef = { url: string; sourceCardId: string };
           const frames = [...((d.refFrames as FrameRef[]) || [])];
 
@@ -629,7 +622,7 @@ function injectIntoCard(
           }
         }
       } else if (payload.kind === "audio") {
-        if ((d.imageMode as string ?? "reference") === "reference") {
+        if (resolveVideoImageMode(d.imageMode as string) === "reference") {
           const MAX_AUDIOS = 3;
           type AudioRef = { url: string; filename: string; sourceCardId: string };
           const audios = [...((d.refAudios as AudioRef[]) || [])];
@@ -651,7 +644,7 @@ function injectIntoCard(
         // Seedance 上游不支持 video reference, 不要把 refVideos 注入到 Seedance 视频卡里.
         // (canConnect 已经拦住新连线; 这里再防一道历史连线被重新触发注入的情况.)
         if (
-          (d.imageMode as string ?? "reference") === "reference"
+          resolveVideoImageMode(d.imageMode as string) === "reference"
           && !isSeedanceModel((d.model as string) || "")
         ) {
           const MAX_VIDEOS = 3;

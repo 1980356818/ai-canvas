@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
 import { type InlineImageRef, toDisplayText } from "@/lib/promptSerializer";
-import { getRefSlotsForVideoModel, compactRefImages, type RefImageEntry } from "@/config/model-ref-images";
+import { getRefSlotsForVideoModel, compactRefImages, resolveVideoImageMode, type VideoImageMode, type RefImageEntry } from "@/config/model-ref-images";
 import { disconnectCardPairAndCleanup } from "@/lib/referenceConsistency";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
@@ -78,19 +78,8 @@ function formatDuration(sec: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-// 模式只剩 2 个 — 首尾帧(用图当帧)/ 参考(用图当风格素材)。
-// "文生" 不再是显式按钮:任何模式下不传图就是文生,handleGenerate 自动适配。
-// 上游 dbgoc/Dale 的 frame pipeline 同一个 (role=firstFrame / lastFrame),
-// 1 张图自动当首帧,2 张图当首+尾帧。
-type VideoImageMode = "firstLastFrame" | "reference";
-
-function resolveImageMode(data: { imageMode?: string; refFrames?: unknown[] }): VideoImageMode {
-  const raw = data.imageMode;
-  if (raw === "firstLastFrame" || raw === "reference") return raw;
-  // 历史卡片兼容: firstFrame / frame 归并到 firstLastFrame;text 也归到 firstLastFrame
-  // (空状态下首尾帧 = 文生,无差别)。
-  return "firstLastFrame";
-}
+// VideoImageMode 类型和 resolveVideoImageMode 统一从 @/config/model-ref-images 导入,
+// 禁止在此重复定义,避免默认值漂移。
 
 interface VideoData {
   content?: string;
@@ -186,7 +175,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const availableModes: VideoImageMode[] = (isSeedance || isVeo || isGrok)
     ? ["firstLastFrame", "reference"]
     : ["firstLastFrame"];
-  const imageMode: VideoImageMode = resolveImageMode(data);
+  const imageMode: VideoImageMode = resolveVideoImageMode(data.imageMode);
   // Veo 参考模式 (image-asset): dbgoc 上游硬约束 16:9 + 8s,UI 强制锁
   const isVeoRefMode = isVeo && imageMode === "reference";
   const veoTierOptions = isVeoRefMode ? VEO_REF_TIERS : VEO_NON_REF_TIERS;

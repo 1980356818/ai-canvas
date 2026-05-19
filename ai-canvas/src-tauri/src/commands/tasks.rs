@@ -174,6 +174,27 @@ pub fn tasks_list_by_card(
     Ok(tasks)
 }
 
+/// 列出某个项目下的所有任务（含终态），按 created_at DESC 排序。
+/// 任务记录页面打开时一次性灌入内存 store。
+#[tauri::command]
+pub fn tasks_list_by_project(
+    state: State<AppState>,
+    project_id: String,
+) -> Result<Vec<TaskRow>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let sql = format!(
+        "SELECT {} FROM tasks WHERE project_id = ?1 ORDER BY created_at DESC",
+        SELECT_COLS
+    );
+    let mut stmt = db.prepare(&sql).map_err(|e| e.to_string())?;
+    let tasks = stmt
+        .query_map(rusqlite::params![project_id], row_to_task)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(tasks)
+}
+
 /// 硬删一个任务记录。一般不用，保留作为兜底（比如用户手动清理）。
 /// 卡片删除会通过 FK CASCADE 自动连带删除关联 tasks，这里不需要再调。
 #[tauri::command]

@@ -43,6 +43,20 @@ export const VIDEO_SIZE_OPTIONS: ImageSizeOption[] = [
 export const DEFAULT_IMAGE_SIZE = IMAGE_SIZE_OPTIONS[0]!.value;
 export const DEFAULT_VIDEO_SIZE = "16:9";
 
+// ── Image quality (质量档) ────────────────────────────────────
+
+export const IMAGE_QUALITY_OPTIONS = [
+  { value: "low",    label: "低" },
+  { value: "medium", label: "中" },
+  { value: "high",   label: "高" },
+] as const;
+export type ImageQuality = (typeof IMAGE_QUALITY_OPTIONS)[number]["value"];
+export const DEFAULT_IMAGE_QUALITY: ImageQuality = "medium";
+
+export function supportsImageQuality(modelId: string, providerId?: string): boolean {
+  return modelId === "gpt-image-2" && providerId !== "comfly";
+}
+
 // ── Image resolution (画质档) ────────────────────────────────
 //
 // 项目里唯一合法的分辨率档位 = "2K" | "4K" (与 SizeCombo RESOLUTION_OPTIONS 一致)。

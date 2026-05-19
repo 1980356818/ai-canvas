@@ -1,5 +1,6 @@
 import { memo, useCallback, useRef, useEffect } from "react";
 import { Loader2, AlertTriangle, MessageSquareText } from "lucide-react";
+import { ElapsedTimer } from "./CardContent";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useCardStore } from "@/stores/cardStore";
@@ -96,6 +97,9 @@ export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
           </div>
           <p className="text-center text-[10px] text-muted-foreground">
             {genProgress.label}
+          </p>
+          <p className="text-center text-[10px] text-muted-foreground/60">
+            <ElapsedTimer />
           </p>
         </div>
       </div>

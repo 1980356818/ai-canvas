@@ -37,8 +37,8 @@ export class JiJingProvider extends OpenAICompatProvider {
     return "images";
   }
 
-  resolveImageModelId(baseId: string, resolution: string): string {
-    return resolveJiJingImageModelId(baseId, resolution);
+  resolveImageModelId(baseId: string, resolution: string, quality?: string): string {
+    return resolveJiJingImageModelId(baseId, resolution, quality);
   }
 
   async generateVideo(req: VideoGenRequest): Promise<VideoGenResponse> {

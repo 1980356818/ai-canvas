@@ -52,7 +52,10 @@ export default function PortalSelect({
     }
     if (top < 8) top = 8;
 
-    setPos({ top, left, minW, zoom });
+    setPos((prev) => {
+      if (prev && prev.top === top && prev.left === left && prev.minW === minW && prev.zoom === zoom) return prev;
+      return { top, left, minW, zoom };
+    });
   }, [options.length]);
 
   useEffect(() => {
@@ -67,10 +70,15 @@ export default function PortalSelect({
       setOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("scroll", reposition, true);
+    let rafId = 0;
+    const loop = () => {
+      reposition();
+      rafId = requestAnimationFrame(loop);
+    };
+    rafId = requestAnimationFrame(loop);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("scroll", reposition, true);
+      cancelAnimationFrame(rafId);
     };
   }, [open, reposition, options, value]);
 

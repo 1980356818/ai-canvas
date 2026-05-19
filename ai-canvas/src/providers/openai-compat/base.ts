@@ -104,7 +104,7 @@ export abstract class OpenAICompatProvider implements AIProvider {
     return "/v2/videos/generations";
   }
 
-  resolveImageModelId(baseId: string, _resolution: string): string {
+  resolveImageModelId(baseId: string, _resolution: string, _quality?: string): string {
     return baseId;
   }
 
@@ -207,7 +207,7 @@ export abstract class OpenAICompatProvider implements AIProvider {
     // 只认精确 sku。这里把 resolution 收敛到 "2K"/"4K"(缺省 2K),再走 provider 的 id 映射。
     // resolveImageModelId 对已 resolved 的 sku 幂等返回,所以 MediaEditor 已 resolve 的路径也安全。
     const resolution = normalizeResolution(req.resolution);
-    const modelId = this.resolveImageModelId(baseModelId, resolution);
+    const modelId = this.resolveImageModelId(baseModelId, resolution, req.quality);
 
     const body: Record<string, unknown> = {
       model: modelId,

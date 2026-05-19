@@ -29,6 +29,8 @@ import {
   getAllowedSizesForModel,
   coerceToAllowedSize,
   normalizeResolution,
+  DEFAULT_IMAGE_QUALITY,
+  supportsImageQuality,
 } from "@/shared/constants";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
 import { type InlineImageRef, toDisplayText, remapInlineRefs, reorderInlineRefs } from "@/lib/promptSerializer";
@@ -52,6 +54,7 @@ interface MediaData {
   provider?: string;
   size?: string;
   resolution?: string;
+  quality?: string;
   refImages?: Record<string, RefImageEntry>;
   inlineRefs?: InlineImageRef[];
   upstreamTexts?: Record<string, string>;
@@ -106,6 +109,9 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   const [currentResolution, setCurrentResolution] = useState(
     () => normalizeResolution((card.data as MediaData).resolution),
   );
+  const [currentQuality, setCurrentQuality] = useState(
+    () => (card.data as MediaData).quality || DEFAULT_IMAGE_QUALITY,
+  );
   const [error, setError] = useState<string | null>(null);
   const data = card.data as MediaData;
 
@@ -145,6 +151,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   );
 
   const enhancer = isEnhancerModel(currentModel);
+  const qualitySupported = useMemo(() => supportsImageQuality(currentModel, (data as MediaData).provider), [currentModel, data]);
   const supportsResolution = useMemo(() => {
     const provider = (data as MediaData).provider;
     return modelService.supportsImageResolution(currentModel, provider);
@@ -219,6 +226,15 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       const next = normalizeResolution(res);
       setCurrentResolution(next);
       updateCard(card.id, { data: { ...data, resolution: next } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const handleQualityChange = useCallback(
+    (q: string) => {
+      setCurrentQuality(q);
+      updateCard(card.id, { data: { ...data, quality: q } });
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
@@ -472,7 +488,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       });
 
       const resolvedModel = currentModel
-        ? modelService.resolveImageModelId(currentModel, currentResolution, (data as MediaData).provider)
+        ? modelService.resolveImageModelId(currentModel, currentResolution, qualitySupported ? currentQuality : undefined, (data as MediaData).provider)
         : undefined;
 
       const count = data.batchSize ?? 1;
@@ -487,7 +503,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           size: isEnhancer ? undefined : currentSize,
           resolution: supportsResolution ? currentResolution : undefined,
           model: resolvedModel,
-          quality: isEnhancer ? undefined : "standard",
+          quality: isEnhancer ? undefined : (qualitySupported ? currentQuality : "standard"),
           referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
           cardId: card.id,
           projectId: ownerProjectId,
@@ -528,7 +544,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
               size: isEnhancer ? undefined : currentSize,
               resolution: supportsResolution ? currentResolution : undefined,
               model: resolvedModel,
-              quality: isEnhancer ? undefined : "standard",
+              quality: isEnhancer ? undefined : (qualitySupported ? currentQuality : "standard"),
               referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
               projectId: ownerProjectId,
               onProgress: (p) => {
@@ -605,7 +621,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, generating, updateCard, currentModel, currentSize, currentResolution, supportsResolution, setCardProgress, refSlots]);
+  }, [data, card.id, generating, updateCard, currentModel, currentSize, currentResolution, currentQuality, qualitySupported, supportsResolution, setCardProgress, refSlots]);
 
   const isLocked = !!data._locked;
   const currentBatchSize = data.batchSize ?? 1;
@@ -795,6 +811,8 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             resolution={supportsResolution ? currentResolution : undefined}
             onChange={handleSizeChange}
             onResolutionChange={supportsResolution ? handleResolutionChange : undefined}
+            quality={qualitySupported ? currentQuality : undefined}
+            onQualityChange={qualitySupported ? handleQualityChange : undefined}
             disabled={generating}
             allowedSizes={allowedSizes}
           />

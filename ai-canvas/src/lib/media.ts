@@ -325,25 +325,10 @@ export async function getBase64ForApi(rawUrl: string): Promise<string> {
   return readMediaBase64(rawUrl);
 }
 
-function sanitizeFilename(raw: string, maxLen = 80): string {
-  return raw
-    .replace(/[\x00-\x1f<>:"/\\|?*\n\r\t]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^[_.\s]+|[_.\s]+$/g, "")
-    .slice(0, maxLen) || "AI文件";
-}
-
-function makeTimestamp(): string {
-  return new Date()
-    .toISOString()
-    .replace(/[-:T]/g, "")
-    .slice(0, 15)
-    .replace(/\.$/, "");
-}
-
 /**
- * Export an image or video to the user's configured save directory.
- * Saves to `file_auto_save_path/{project_folder}/filename`.
+ * Export an image or video to the user's configured export directory.
+ * Filename is built by the Rust side (`build_friendly_filename`), always
+ * includes a UUID short-id so `find_file_by_id` / "在文件夹中显示" can locate it.
  */
 export async function exportFile(
   storedPath: string,
@@ -353,13 +338,9 @@ export async function exportFile(
   if (!isTauri) return storedPath;
 
   const invoke = await ensureInvoke();
-  const ext = storedPath.split(".").pop() || "png";
-  const safeName = sanitizeFilename(cardTitle);
-  const exportName = `${safeName}_${makeTimestamp()}.${ext}`;
-
   return invoke<string>("export_file", {
     sourcePath: storedPath,
-    exportName,
+    title: cardTitle || null,
     projectId: projectId ?? null,
   });
 }
@@ -386,16 +367,11 @@ export async function batchExportFiles(
   let success = 0;
   let failed = 0;
 
-  for (let i = 0; i < items.length; i++) {
-    const { storedPath, cardTitle, projectId } = items[i]!;
+  for (const { storedPath, cardTitle, projectId } of items) {
     try {
-      const ext = storedPath.split(".").pop() || "png";
-      const safeName = sanitizeFilename(cardTitle);
-      const exportName = `${safeName}_${makeTimestamp()}_${i + 1}.${ext}`;
-
       await invoke<string>("export_file", {
         sourcePath: storedPath,
-        exportName,
+        title: cardTitle || null,
         projectId: projectId ?? null,
       });
       success++;

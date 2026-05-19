@@ -25,12 +25,10 @@ const DEFAULT_CHAT_REF = "jijing:gemini-3.1-pro-preview";
 const DEFAULT_IMAGE_REF = "comfly:gemini-3.1-flash-image-preview";
 const DEFAULT_VIDEO_REF = "jijing:veo3.1";
 
-// 老用户 localStorage 里可能存了 comfly chat ref;这些模型已下线,
+// 老用户 localStorage 里可能存了已下线的 comfly chat ref,
 // 强制迁移到极境默认,避免 dropdown 显示不存在的选项。
 const STALE_CHAT_REFS = new Set([
-  "comfly:gpt-5.4",
   "comfly:gemini-3.1-pro-preview-thinking-high",
-  "comfly:gemini-3.1-pro-preview",
 ]);
 
 // Comfly video 也已下线;`comfly:veo*` / `comfly:seedance*` 一律视为失效,

@@ -81,4 +81,5 @@ export {
   listTasksByCard,
   deleteTask,
   cleanupTerminalTasks,
+  listTasksByProject,
 } from "./tasks.api";

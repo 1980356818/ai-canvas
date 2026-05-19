@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useCallback } from "react";
-import { ImageIcon, Loader2, Shirt, Video, RotateCw, Cloud, Music } from "lucide-react";
+import { ImageIcon, Loader2, Shirt, Video, RotateCw, Cloud, Music, Timer } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
@@ -12,6 +12,22 @@ import StickyNoteCard from "./StickyNoteCard";
 import { CardErrorWithRetry } from "./CardErrorWithRetry";
 
 const IMG_DEFER_MS = 50;
+
+export function ElapsedTimer() {
+  const [s, setS] = useState(0);
+  useEffect(() => {
+    const t0 = Date.now();
+    const id = setInterval(() => setS(Math.floor((Date.now() - t0) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const text = s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  return (
+    <span className="inline-flex items-center gap-0.5 tabular-nums">
+      <Timer className="h-2.5 w-2.5" />
+      {text}
+    </span>
+  );
+}
 
 function useDeferredMount(delayMs: number, skipDelay: boolean): boolean {
   const [ready, setReady] = useState(skipDelay);
@@ -97,12 +113,10 @@ function ImagePreview({ card }: { card: CanvasCard }) {
               )}
             </div>
           )}
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] text-muted-foreground">{genProgress.label}</p>
-            {genProgress.percent > 0 && (
-              <p className="text-[10px] tabular-nums text-muted-foreground">{genProgress.percent}%</p>
-            )}
-          </div>
+          <p className="text-center text-[10px] text-muted-foreground">{genProgress.label}</p>
+          <p className="text-center text-[10px] text-muted-foreground/60">
+            <ElapsedTimer />
+          </p>
         </div>
       </div>
     );
@@ -190,12 +204,10 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
               <div className="h-full w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full bg-primary/60" />
             )}
           </div>
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] text-muted-foreground">{genProgress.label}</p>
-            {genProgress.percent > 0 && (
-              <p className="text-[10px] tabular-nums text-muted-foreground">{genProgress.percent}%</p>
-            )}
-          </div>
+          <p className="text-center text-[10px] text-muted-foreground">{genProgress.label}</p>
+          <p className="text-center text-[10px] text-muted-foreground/60">
+            <ElapsedTimer />
+          </p>
         </div>
       </div>
     );
@@ -252,12 +264,10 @@ function VideoPreview({ card }: { card: CanvasCard }) {
               <div className="h-full w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] rounded-full bg-primary/60" />
             )}
           </div>
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] text-muted-foreground">{genProgress.label}</p>
-            {genProgress.percent > 0 && (
-              <p className="text-[10px] tabular-nums text-muted-foreground">{genProgress.percent}%</p>
-            )}
-          </div>
+          <p className="text-center text-[10px] text-muted-foreground">{genProgress.label}</p>
+          <p className="text-center text-[10px] text-muted-foreground/60">
+            <ElapsedTimer />
+          </p>
         </div>
       </div>
     );

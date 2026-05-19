@@ -37,17 +37,20 @@ export const ALL_JIJING_MODELS: ModelInfo[] = [
   ...JIJING_VIDEO_MODELS,
 ];
 
-export function resolveJiJingImageModelId(baseId: string, resolution: string): string {
+export function resolveJiJingImageModelId(baseId: string, resolution: string, quality?: string): string {
   if (baseId === "nano-banana-2") {
     return resolution === "4K" ? "nano-banana-2-4k" : "nano-banana-2-2k";
   }
   if (baseId === "nano-banana-pro") {
     return resolution === "4K" ? "nano-banana-pro-4k" : "nano-banana-pro-2k";
   }
-  // JiJing 后端没有 "gpt-image-2" 这个裸路由, 实际只有 gpt-image-2-1k / -2k / -4k / -hd。
-  // 与 canvas 的分辨率选择器联动, 默认 2K (与 OpenAICompat base size map 默认值一致)。
   if (baseId === "gpt-image-2") {
-    return resolution === "4K" ? "gpt-image-2-4k" : "gpt-image-2-2k";
+    const res = resolution === "4K" ? "4k" : "2k";
+    const q = quality?.toLowerCase();
+    if (q && ["low", "medium", "high"].includes(q)) {
+      return `gpt-image-2-${q}-${res}`;
+    }
+    return `gpt-image-2-medium-${res}`;
   }
   return baseId;
 }

@@ -223,7 +223,7 @@ export interface AIProvider {
 
   generateVideo?(req: VideoGenRequest): Promise<VideoGenResponse>;
 
-  resolveImageModelId?(baseId: string, resolution: string): string;
+  resolveImageModelId?(baseId: string, resolution: string, quality?: string): string;
 
   getDisplayName?(modelId: string): string | undefined;
 }

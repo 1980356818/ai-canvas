@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ChevronUp } from "lucide-react";
-import { IMAGE_SIZE_OPTIONS } from "@/shared/constants";
+import { IMAGE_SIZE_OPTIONS, IMAGE_QUALITY_OPTIONS } from "@/shared/constants";
 import type { ImageSizeOption } from "@/types";
 import { cn } from "@/lib/utils";
 import { getEditorZoom } from "./editorUtils";
@@ -27,6 +27,8 @@ interface SizeComboProps {
   durationOptions?: readonly { value: string; label: string }[];
   /** 时长是否禁用(如 Veo 参考模式锁 8s)。 */
   durationDisabled?: boolean;
+  quality?: string;
+  onQualityChange?: (q: string) => void;
 }
 
 function RatioIcon({
@@ -79,6 +81,8 @@ export default function SizeCombo({
   onDurationChange,
   durationOptions,
   durationDisabled,
+  quality,
+  onQualityChange,
 }: SizeComboProps) {
   const allOptions = sizeOptions ?? IMAGE_SIZE_OPTIONS;
   const baseOptions = allowedSizes
@@ -107,7 +111,11 @@ export default function SizeCombo({
       left = window.innerWidth - 8 - panelW;
     }
     const gap = 4 * zoom;
-    setPos({ bottom: window.innerHeight - rect.top + gap, left, zoom });
+    const bottom = window.innerHeight - rect.top + gap;
+    setPos((prev) => {
+      if (prev && prev.bottom === bottom && prev.left === left && prev.zoom === zoom) return prev;
+      return { bottom, left, zoom };
+    });
   }, []);
 
   useEffect(() => {
@@ -119,10 +127,15 @@ export default function SizeCombo({
       setOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("scroll", reposition, true);
+    let rafId = 0;
+    const loop = () => {
+      reposition();
+      rafId = requestAnimationFrame(loop);
+    };
+    rafId = requestAnimationFrame(loop);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("scroll", reposition, true);
+      cancelAnimationFrame(rafId);
     };
   }, [open, reposition]);
 
@@ -150,6 +163,7 @@ export default function SizeCombo({
         <RatioIcon ratio={current.ratio} active={false} size={12} isAuto={isAuto} />
         <span>
           {current.label}
+          {quality && ` · ${IMAGE_QUALITY_OPTIONS.find((q) => q.value === quality)?.label ?? quality}`}
           {resolution && ` · ${resolutionOptions?.find((r) => r.value === resolution)?.label ?? resolution}`}
           {duration != null && ` · ${duration}s`}
           {currentUnsupported && " ⚠"}
@@ -168,6 +182,38 @@ export default function SizeCombo({
             transformOrigin: '0 100%',
           }}
         >
+          {onQualityChange && (
+            <>
+              <div className="mb-2.5">
+                <div className="mb-1.5 text-[10px] font-medium text-muted-foreground">
+                  质量
+                </div>
+                <div className="flex gap-1.5">
+                  {IMAGE_QUALITY_OPTIONS.map((opt) => {
+                    const active = quality === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        disabled={disabled}
+                        onClick={() => onQualityChange(opt.value)}
+                        className={cn(
+                          "flex-1 rounded-lg py-1.5 text-center text-xs font-medium transition-colors",
+                          active
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+                          disabled && "cursor-not-allowed opacity-40",
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="mb-2.5 h-px bg-border" />
+            </>
+          )}
+
           {onResolutionChange && (
             <>
               <div className="mb-2.5">

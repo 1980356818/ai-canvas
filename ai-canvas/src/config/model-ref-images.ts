@@ -119,11 +119,26 @@ export function getRefSlotsForChatModel(modelId: string): RefImageSlot[] {
   return CHAT_REF_SLOTS;
 }
 
+// ─── Video imageMode: single source of truth ────────────────────────────────
+//
+// 视频卡片有且仅有两种图片输入模式。所有读取 imageMode 的代码（dataFlow 注入 /
+// canAcceptConnection 验证 / VideoEditor 渲染）必须统一走这里,禁止内联默认值。
+// 历史卡片可能存有 "firstFrame" / "frame" / "text" 等废弃值,一律归并到 firstLastFrame。
+
+export type VideoImageMode = "firstLastFrame" | "reference";
+
+export const DEFAULT_VIDEO_IMAGE_MODE: VideoImageMode = "firstLastFrame";
+
+export function resolveVideoImageMode(raw: string | undefined | null): VideoImageMode {
+  if (raw === "firstLastFrame" || raw === "reference") return raw;
+  return DEFAULT_VIDEO_IMAGE_MODE;
+}
+
 export function getRefSlotsForVideoModel(
   modelId: string,
-  imageMode: string = "reference",
+  imageMode?: string,
 ): RefImageSlot[] {
-  if (imageMode !== "reference") return [];
+  if (resolveVideoImageMode(imageMode) !== "reference") return [];
   if (isSeedanceModel(modelId)) return SEEDANCE_VIDEO_REF_SLOTS;
   if (isVeoModel(modelId)) return VEO_REF_VIDEO_REF_SLOTS;
   if (isGrokVideoModel(modelId)) return GROK_VIDEO_REF_SLOTS;
