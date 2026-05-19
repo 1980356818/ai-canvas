@@ -162,6 +162,95 @@ export async function persistFrontendAsset(
   return persistImage(dataUrl, title, projectId);
 }
 
+// ── URL 格式约定 ────────────────────────────────────────────
+//
+//   存储层 (storagePath)   media/images/xxx.jpg          相对路径，落盘 / 持久化后的唯一标准格式
+//   显示层 (displayUrl)    asset://localhost/<encoded>    Tauri webview 零拷贝加载；或 data:/http:/blob:
+//   API 层 (apiValue)      local://media/images/xxx.jpg  IPC 占位符，Rust ai_proxy 在发请求前内联为 base64
+//
+//   所有对外存储（card.data、chatMessage.content、refImages）只允许 storagePath。
+//   normalizeToStoragePath() 是唯一的"脏 URL → storagePath"入口。
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * **统一归一化入口** — 把任意格式的媒体 URL 转成 storagePath。
+ *
+ * - `asset://localhost/...`  → 反解为相对路径  (`media/images/xxx.jpg`)
+ * - 已经是相对路径            → 原样返回
+ * - 需要落盘的格式 (data: / blob: / http(s):)  → 返回 `null`，调用方应走 `persistImage()`
+ * - Vite 前端 asset (`/assets/...`)             → 返回 `null`
+ *
+ * 设计原则：只做无副作用的字符串变换，不读文件、不写盘。
+ */
+export function normalizeToStoragePath(url: string): string | null {
+  if (!url) return null;
+
+  // asset:// → 反解
+  if (url.startsWith("asset://")) {
+    return assetUrlToRelPath(url);
+  }
+
+  // 已经是干净的相对存储路径
+  if (isRelativeStoragePath(url)) {
+    return url;
+  }
+
+  // local:// 占位符 — 剥掉前缀取相对路径
+  if (url.startsWith("local://")) {
+    const rel = url.slice("local://".length);
+    return isRelativeStoragePath(rel) ? rel : null;
+  }
+
+  // 需要落盘才能变成 storagePath
+  return null;
+}
+
+/**
+ * 判断字符串是否已经是合法的相对存储路径。
+ * 合法条件：不含协议前缀 / 不以 `/` 或 `\` 开头。
+ */
+function isRelativeStoragePath(s: string): boolean {
+  if (!s) return false;
+  if (
+    s.startsWith("data:") ||
+    s.startsWith("blob:") ||
+    s.startsWith("http://") ||
+    s.startsWith("https://") ||
+    s.startsWith("asset://") ||
+    s.startsWith("local://") ||
+    s.startsWith("/") ||
+    s.startsWith("\\")
+  ) {
+    return false;
+  }
+  // Vite 前端 asset
+  if (isFrontendAssetUrl(s)) return false;
+  return true;
+}
+
+/**
+ * asset://localhost/<encoded-abs-path> → 相对路径 (media/images/xxx.jpg)。
+ * 不在 _basePath 内则返回 null。
+ */
+function assetUrlToRelPath(assetUrl: string): string | null {
+  if (!_basePath) return null;
+  try {
+    const decoded = decodeURIComponent(new URL(assetUrl).pathname);
+    const normBase = _basePath.replace(/\\/g, "/");
+    const normDecoded = decoded.replace(/\\/g, "/");
+    const prefix = normDecoded.startsWith(normBase + "/")
+      ? normBase + "/"
+      : normDecoded.startsWith("/" + normBase + "/")
+        ? "/" + normBase + "/"
+        : null;
+    if (!prefix) return null;
+    const rel = normDecoded.slice(prefix.length);
+    return rel || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Convert a stored relative path to a URL that `<img src>` can display.
  * Uses Tauri's asset protocol for zero-copy file loading.
@@ -169,6 +258,9 @@ export async function persistFrontendAsset(
  */
 export function getDisplayUrl(storedPath: string): string {
   if (!storedPath) return "";
+
+  // 防御：如果入参是 asset:// 显示 URL，直接原样返回（不二次转换）
+  if (storedPath.startsWith("asset://")) return storedPath;
 
   if (
     storedPath.startsWith("blob:") ||
@@ -192,52 +284,45 @@ export function getDisplayUrl(storedPath: string): string {
 /**
  * Returns a value that can be embedded in an AI API request body.
  *
- * In Tauri mode this avoids shuttling base64 over IPC (which has a strict
- * payload ceiling that breaks at ~10MB and silently kills `invoke()`).
- * Instead it returns a `local://<relative_path>` placeholder; the Rust side's
- * `ai_proxy` walks the JSON body and inlines the file as a base64 data URL
- * just before the HTTP request is sent. The AI service still receives a
- * normal data URL, so this is fully transparent to providers.
+ * 输入允许任意 URL 格式（storagePath / asset:// / data: / http: / 前端 asset）。
+ * 内部先经过 normalizeToStoragePath() 归一化，再按格式分发。
  *
- * In browser mode it falls back to base64 (no IPC to worry about).
+ * Tauri 模式下返回 `local://<relPath>` 占位符；Rust ai_proxy 在真正发请求前
+ * 读文件并内联为 base64 data URL，对 provider 完全透明。
  */
-export async function getBase64ForApi(storedPath: string): Promise<string> {
-  if (!storedPath) return "";
+export async function getBase64ForApi(rawUrl: string): Promise<string> {
+  if (!rawUrl) return "";
 
-  if (storedPath.startsWith("local://")) {
-    return storedPath;
+  if (rawUrl.startsWith("local://")) return rawUrl;
+
+  if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+    return rawUrl;
   }
 
-  if (storedPath.startsWith("http://") || storedPath.startsWith("https://")) {
-    return storedPath;
+  // ① 尝试归一化为相对存储路径
+  const storagePath = normalizeToStoragePath(rawUrl);
+  if (storagePath) {
+    if (isTauri) return `local://${storagePath}`;
+    return readMediaBase64(storagePath);
   }
 
-  if (storedPath.startsWith("data:")) {
-    if (!isTauri) return storedPath;
-    // 大 dataUrl 仍会撑爆 IPC，统一在 persistImage 入口压一次再落盘
-    const { localPath } = await persistImage(storedPath);
+  // ② data: URL — 大体积先落盘
+  if (rawUrl.startsWith("data:")) {
+    if (!isTauri) return rawUrl;
+    const { localPath } = await persistImage(rawUrl);
     return `local://${localPath}`;
   }
 
-  if (isFrontendAssetUrl(storedPath)) {
-    // Vite 打包的前端 asset（模板预设图、UI 内置素材）。
-    //
-    // 历史上这里走 `persistFrontendAsset` 把 asset fetch 成 dataUrl 再 IPC 落盘，
-    // 但落盘那一步会撑爆 `save_media` IPC（asset 经常 1-3MB，base64 后膨胀更大）。
-    // Rust 端也读不到 vite dev server 或打包后的 asset 路径，没法走 local:// 协议。
-    //
-    // 务实做法：webview 内 fetch 拿 dataUrl（这一步走的是 Chromium 内部 fetch，
-    // 不走 IPC），然后 ensureIpcSafeDataUrl 保证 < SAFE_IPC_PAYLOAD_LIMIT 再返回。
-    // 这个 dataUrl 后续会进入 `ai_proxy` 的 body，走 IPC 但大小可控。
-    const dataUrl = await urlToDataUrl(storedPath);
+  // ③ Vite 前端 asset — webview 内 fetch 转 dataUrl
+  if (isFrontendAssetUrl(rawUrl)) {
+    const dataUrl = await urlToDataUrl(rawUrl);
     if (!isTauri) return dataUrl;
     return ensureIpcSafeDataUrl(dataUrl);
   }
 
-  if (isTauri) {
-    return `local://${storedPath}`;
-  }
-  return readMediaBase64(storedPath);
+  // ④ 兜底：当作相对路径（向后兼容）
+  if (isTauri) return `local://${rawUrl}`;
+  return readMediaBase64(rawUrl);
 }
 
 function sanitizeFilename(raw: string, maxLen = 80): string {

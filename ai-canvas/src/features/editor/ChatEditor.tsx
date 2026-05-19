@@ -10,7 +10,7 @@ import { CHAT_EDITOR_DEFAULT_SYSTEM_PROMPT } from "@/lib/systemPrompts";
 import { hasApiKey } from "@/platform";
 import type { UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 import "@/providers";
-import { persistImage, getDisplayUrl, getBase64ForApi } from "@/lib/media";
+import { persistImage, getDisplayUrl, getBase64ForApi, normalizeToStoragePath } from "@/lib/media";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
@@ -146,10 +146,10 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       if (generating) return;
       const pid = card.projectId;
       try {
-        const isLocal = !!src && !src.startsWith("data:") && !src.startsWith("http") && !src.startsWith("blob:");
+        const storagePath = normalizeToStoragePath(src);
         let url: string;
-        if (isLocal) {
-          url = src;
+        if (storagePath) {
+          url = storagePath;
         } else {
           const { localPath } = await persistImage(src, undefined, pid);
           url = localPath;

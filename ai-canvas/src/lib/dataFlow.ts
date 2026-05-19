@@ -8,10 +8,46 @@ import { isSeedanceModel } from "@/providers/shared/video";
 
 const DEBUG = import.meta.env.DEV;
 
-const IMAGE_SOURCE_TYPES = new Set(["ai_image", "ai_multiangle", "ai_tryon", "ai_video"]);
-const AUDIO_SOURCE_TYPES = new Set(["audio"]);
-
 const REF_IMAGE_TARGETS = new Set(["ai_image", "ai_multiangle", "ai_chat"]);
+
+// ─── Connection compatibility: single source of truth ───
+// outputKindOf 和 canKindFlowInto 是验证(canAcceptConnection)与注入(injectIntoCard)的
+// 共同基准。新增节点类型时必须同步更新这两个函数，否则会出现"能连线但没反应"的 bug。
+
+type PayloadKind = "text" | "image" | "video" | "audio";
+
+function outputKindOf(sourceType: string): PayloadKind | null {
+  switch (sourceType) {
+    case "ai_video": return "video";
+    case "ai_image": case "ai_multiangle": case "ai_tryon": return "image";
+    case "text": case "sticky_note": case "ai_chat": return "text";
+    case "audio": return "audio";
+    default: return null;
+  }
+}
+
+function canKindFlowInto(kind: PayloadKind, targetType: string): boolean {
+  switch (targetType) {
+    case "text": case "sticky_note": return kind === "text";
+    case "ai_chat": return kind === "text" || kind === "image" || kind === "video";
+    case "ai_image": case "ai_multiangle": return kind === "text" || kind === "image";
+    case "ai_video": return true;
+    case "ai_tryon": return kind === "image";
+    default: return true;
+  }
+}
+
+function targetTypeLabel(type: string): string {
+  switch (type) {
+    case "text": case "sticky_note": return "文本节点";
+    case "ai_chat": return "对话节点";
+    case "ai_image": return "图片节点";
+    case "ai_multiangle": return "多角度节点";
+    case "ai_video": return "视频节点";
+    case "ai_tryon": return "试衣节点";
+    default: return "该节点";
+  }
+}
 
 function getRefSlots(target: { type: string; data: Record<string, unknown> }) {
   const model = (target.data.model as string) || "";
@@ -20,82 +56,112 @@ function getRefSlots(target: { type: string; data: Record<string, unknown> }) {
     : getRefSlotsForModel(model);
 }
 
-export function canAcceptImageConnection(
+export type ConnectionReject = { title: string; description?: string };
+
+export function canAcceptConnection(
   targetCardId: string,
   sourceCardId: string,
-): boolean {
+): true | ConnectionReject {
   const cardStore = useCardStore.getState();
   const target = cardStore.getCard(targetCardId);
   if (!target) return true;
-
   const source = cardStore.getCard(sourceCardId);
   if (!source) return true;
 
-  const isAudioSource = AUDIO_SOURCE_TYPES.has(source.type);
-  const isImageSource = IMAGE_SOURCE_TYPES.has(source.type);
-  if (!isImageSource && !isAudioSource) return true;
+  const kind = outputKindOf(source.type);
+  if (!kind || kind === "text") return true;
 
-  if (isAudioSource) {
-    if (target.type !== "ai_video") return true;
-    const d = target.data as Record<string, unknown>;
-    if ((d.imageMode as string ?? "reference") !== "reference") return false;
-    type AudioRef = { sourceCardId: string };
-    const audios = (d.refAudios as AudioRef[]) || [];
-    if (audios.some((a) => a.sourceCardId === sourceCardId)) return true;
-    return audios.length < 3;
+  const td = target.data as Record<string, unknown>;
+
+  // ── Step 1: kind 兼容性（来自 canKindFlowInto 真值表）──
+  if (!canKindFlowInto(kind, target.type)) {
+    const kindLabel: Record<string, string> = { image: "图片", video: "视频", audio: "音频" };
+    return { title: `${kindLabel[kind]}节点不能连入${targetTypeLabel(target.type)}` };
   }
 
-  if (target.type === "ai_video") {
-    const d = target.data as Record<string, unknown>;
-    const mode = (d.imageMode as string) ?? "reference";
+  // ── Step 2: 槽位 / 模式 / 模型容量检查 ──
 
-    if (source.type === "ai_video") {
-      if (mode !== "reference") return false;
-      // Dale Seedance 上游硬约束: fast/标准都不接受 video reference (2026-05-16 实测).
-      // 提前拒掉 video → Seedance 的连线, 避免无效的 refVideos 状态污染.
-      if (isSeedanceModel((d.model as string) || "")) return false;
+  // audio → ai_video
+  if (kind === "audio") {
+    if ((td.imageMode as string ?? "reference") !== "reference")
+      return { title: "当前模式不支持音频输入", description: "请将视频卡片切换到"参考图"模式" };
+    type AudioRef = { sourceCardId: string };
+    const audios = (td.refAudios as AudioRef[]) || [];
+    if (audios.some((a) => a.sourceCardId === sourceCardId)) return true;
+    return audios.length < 3
+      ? true
+      : { title: "参考音频已满", description: "最多 3 段，请先断开已有连线" };
+  }
+
+  // image/video → ai_video
+  if (target.type === "ai_video") {
+    const mode = (td.imageMode as string) ?? "reference";
+
+    if (kind === "video") {
+      if (mode !== "reference")
+        return { title: "当前模式不支持参考视频", description: "请切换到"参考图"模式" };
+      if (isSeedanceModel((td.model as string) || ""))
+        return { title: "Seedance 模型不支持参考视频" };
       type VideoRef = { sourceCardId: string };
-      const videos = (d.refVideos as VideoRef[]) || [];
+      const videos = (td.refVideos as VideoRef[]) || [];
       if (videos.some((v) => v.sourceCardId === sourceCardId)) return true;
-      return videos.length < 3;
+      return videos.length < 3
+        ? true
+        : { title: "参考视频已满", description: "最多 3 段，请先断开已有连线" };
     }
 
-    if (mode === "text") return false;
+    // kind === "image"
+    if (mode === "text")
+      return { title: "文本模式不接受图片输入", description: "请切换到其他模式" };
 
     if (mode === "reference") {
-      const slots = getRefSlotsForVideoModel((d.model as string) || "", "reference");
-      const refImages = (d.refImages || {}) as Record<string, RefImageEntry>;
+      const slots = getRefSlotsForVideoModel((td.model as string) || "", "reference");
+      const refImages = (td.refImages || {}) as Record<string, RefImageEntry>;
       for (const slot of slots) {
         if (refImages[slot.key]?.sourceCardId === sourceCardId) return true;
       }
-      return slots.some((s) => !refImages[s.key]);
+      return slots.some((s) => !refImages[s.key])
+        ? true
+        : { title: "参考图已满", description: "请先移除已有参考图或断开连线" };
     }
 
+    // firstFrame / lastFrame
     type FrameRef = { url: string; sourceCardId: string };
-    const frames = (d.refFrames as FrameRef[]) || [];
+    const frames = (td.refFrames as FrameRef[]) || [];
     if (frames.some((f) => f.sourceCardId === sourceCardId)) return true;
     const maxFrames = mode === "firstFrame" ? 1 : 2;
-    return frames.length < maxFrames;
+    return frames.length < maxFrames
+      ? true
+      : { title: "参考帧已满", description: `最多 ${maxFrames} 帧，请先断开已有连线` };
   }
 
-  if (target.type === "ai_chat" && source.type === "ai_video") {
-    const d = target.data as Record<string, unknown>;
+  // video → ai_chat
+  if (target.type === "ai_chat" && kind === "video") {
     type VideoRef = { sourceCardId: string };
-    const videos = (d.refVideos as VideoRef[]) || [];
+    const videos = (td.refVideos as VideoRef[]) || [];
     if (videos.some((v) => v.sourceCardId === sourceCardId)) return true;
-    return videos.length < 3;
+    return videos.length < 3
+      ? true
+      : { title: "参考视频已满", description: "最多 3 段，请先断开已有连线" };
   }
 
-  if (!REF_IMAGE_TARGETS.has(target.type)) return true;
+  // image → ai_tryon
+  if (target.type === "ai_tryon") {
+    const refImages = (td.refImages || {}) as Record<string, RefImageEntry>;
+    if (!td.personImageUrl || refImages.person?.sourceCardId === sourceCardId) return true;
+    if (!td.garmentImageUrl || refImages.garment?.sourceCardId === sourceCardId) return true;
+    return { title: "参考图已满", description: "人物图和服装图都已占用，请先断开已有连线" };
+  }
 
-  const d = target.data as Record<string, unknown>;
-  const slots = getRefSlots({ type: target.type, data: d });
-  const refImages = (d.refImages || {}) as Record<string, RefImageEntry>;
-
+  // image → ai_image / ai_multiangle / ai_chat
+  const slots = getRefSlots({ type: target.type, data: td });
+  const refImages = (td.refImages || {}) as Record<string, RefImageEntry>;
   for (const slot of slots) {
     if (refImages[slot.key]?.sourceCardId === sourceCardId) return true;
   }
-  return slots.some((s) => !refImages[s.key]);
+  return slots.some((s) => !refImages[s.key])
+    ? true
+    : { title: "参考图已满", description: "请先移除已有参考图或断开连线" };
 }
 
 function hasRefImages(target: { type: string; data: Record<string, unknown> }): boolean {
@@ -328,6 +394,13 @@ function injectIntoCard(
   sourceCardId: string,
 ): boolean {
   if (payload.kind === "none") return false;
+  if (payload.kind !== "text" && !canKindFlowInto(payload.kind as PayloadKind, target.type)) {
+    if (DEBUG) console.error(
+      `[DataFlow] BUG: payload "${payload.kind}" → target "${target.type}" 不兼容,`,
+      `canAcceptConnection 应该已拦截此连线。源卡: ${sourceCardId}`,
+    );
+    return false;
+  }
   const d = { ...(target.data as Record<string, unknown>) };
   let changed = false;
 

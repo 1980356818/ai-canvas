@@ -8,7 +8,7 @@ import {
   type RefImageEntry,
 } from "@/config/model-ref-images";
 import { cn } from "@/lib/utils";
-import { persistImage, getDisplayUrl } from "@/lib/media";
+import { persistImage, getDisplayUrl, normalizeToStoragePath } from "@/lib/media";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
 
 const REF_REORDER_MIME = "application/x-ref-slot-reorder";
@@ -64,7 +64,7 @@ export default function RefImageSlot({
     };
     const onCardDrop = (e: Event) => {
       const { cardId, imageUrl } = (e as CustomEvent).detail;
-      onImage({ url: imageUrl, sourceCardId: cardId, sourceType: "card" });
+      onImage({ url: normalizeToStoragePath(imageUrl) ?? imageUrl, sourceCardId: cardId, sourceType: "card" });
       setCardDragOver(false);
     };
 
@@ -106,7 +106,7 @@ export default function RefImageSlot({
           const payload: CardRefPayload = JSON.parse(cardRefJson);
           if (payload.imageUrl) {
             onImage({
-              url: payload.imageUrl,
+              url: normalizeToStoragePath(payload.imageUrl) ?? payload.imageUrl,
               sourceCardId: payload.cardId,
               sourceType: "card",
             });

@@ -14,7 +14,7 @@ import {
   type ChatInputMedia,
 } from "@/stores/chatStore";
 import { useProviderStore, parseModelRef } from "@/stores/providerStore";
-import { persistImage, getDisplayUrl } from "@/lib/media";
+import { persistImage, getDisplayUrl, normalizeToStoragePath } from "@/lib/media";
 import { CARD_REF_MIME, type CardRefPayload } from "@/config/model-ref-images";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { cn } from "@/lib/utils";
@@ -86,27 +86,17 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
   const chatModelId = parseModelRef(activeChatRef).modelId;
   const chatProviderId = parseModelRef(activeChatRef).providerId;
 
-  const isAlreadyPersisted = useCallback((src: string) => {
-    return (
-      !!src &&
-      !src.startsWith("data:") &&
-      !src.startsWith("http://") &&
-      !src.startsWith("https://") &&
-      !src.startsWith("blob:")
-    );
-  }, []);
-
   const addMediaFromUrl = useCallback(async (src: string, kind: "image" | "video") => {
     if (generating) return;
     try {
-      if (isAlreadyPersisted(src)) {
+      const storagePath = normalizeToStoragePath(src);
+      if (storagePath) {
         setMedia((prev) => [
           ...prev,
-          { url: src, displayUrl: getDisplayUrl(src), kind },
+          { url: storagePath, displayUrl: getDisplayUrl(storagePath), kind },
         ]);
         return;
       }
-      // 用 chat 已锁定的 projectId（chat 在 openProjectChat 时同步锁定），不再 fallback 到全局当前项目。
       const pid = currentProjectId ?? undefined;
       const { localPath } = await persistImage(src, undefined, pid);
       setMedia((prev) => [
@@ -116,7 +106,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
     } catch (err) {
       console.error(`Failed to add ${kind}:`, err);
     }
-  }, [generating, isAlreadyPersisted, setMedia, currentProjectId]);
+  }, [generating, setMedia, currentProjectId]);
 
   const addImageFromUrl = useCallback(
     (src: string) => addMediaFromUrl(src, "image"),

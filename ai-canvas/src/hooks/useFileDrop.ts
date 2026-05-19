@@ -7,7 +7,7 @@ import type { CanvasCard } from "@/types";
 import { CARD_DEFAULTS, sizeFromRatio } from "@/shared/constants";
 import { autoSave } from "@/lib/autoSave";
 import { updateProjectMeta, onTauriFileDrop, isTauri } from "@/platform";
-import { persistImage, getDisplayUrl, type PersistImageResult } from "@/lib/media";
+import { persistImage, getDisplayUrl, normalizeToStoragePath, type PersistImageResult } from "@/lib/media";
 import { ensureDisplayableImage, isHeicFile, convertHeicPath } from "@/lib/heicConverter";
 
 // Utility helpers
@@ -339,9 +339,10 @@ export function useFileDrop(
           }
 
           const { maxZIndex } = useCardStore.getState();
+          const safeUrl = normalizeToStoragePath(media.url) ?? media.url;
           const card = createMediaCard(
             currentProjectId, dropPos.x, dropPos.y,
-            maxZIndex + 1, cardW, cardH, isVideo, media.url, media.prompt ?? "",
+            maxZIndex + 1, cardW, cardH, isVideo, safeUrl, media.prompt ?? "",
           );
           useCardStore.getState().addCard(card);
           autoSave.markDirty(card.id);
