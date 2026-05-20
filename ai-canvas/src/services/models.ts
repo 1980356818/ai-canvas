@@ -152,7 +152,7 @@ export const modelService = {
   supportsImageResolution(baseId: string, providerId?: string): boolean {
     if (!baseId) return false;
     if (baseId.toLowerCase().startsWith("gpt-image-2")) return true;
-    return modelService.resolveImageModelId(baseId, "4K", providerId) !== baseId;
+    return modelService.resolveImageModelId(baseId, "4K", undefined, providerId) !== baseId;
   },
 
   getDisplayName(modelId: string, providerId?: string): string {
