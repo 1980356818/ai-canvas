@@ -24,12 +24,21 @@ export function getBrowserApiConfig(): { apiKey: string; baseUrl: string } {
   };
 }
 
+import { getJiJingDevProxyPrefix } from "@/providers/jijing/baseUrl";
+
+// Provider → dev 模式下 vite proxy 的静态前缀映射。
+// 极境的 cn / global 双线路在 src/providers/jijing/baseUrl.ts 单点决策, 不进此表。
 const PROXY_PREFIX: Record<string, string> = {
   comfly: "/v1-proxy",
-  jijing: "/v1-jijing",
 };
 
+/**
+ * Dev / 浏览器模式下,把 endpoint 拼到该 provider 在 vite 配置中的代理前缀上。
+ * 真正的 Tauri 生产路径走 invoke("ai_proxy", ...), 由 Rust 端直连后端,
+ * 不会走到本函数。
+ */
 export function buildProxyUrl(endpoint: string, provider?: string): string {
+  if (provider === "jijing") return getJiJingDevProxyPrefix() + endpoint;
   const prefix = (provider && PROXY_PREFIX[provider]) || "/v1-proxy";
   return prefix + endpoint;
 }

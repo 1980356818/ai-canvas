@@ -286,6 +286,7 @@ file_export_path → file_auto_save_path → state.auto_save_default_dir
 | `jijing_api_keys` | 所有极境 key 列表（JSON 数组） | 前端设置保存 |
 | `jijing_active_key_id` | 当前选中的极境 key ID | 前端设置保存 |
 | `jijing_enabled` | 是否启用极境 | 前端设置保存 |
+| `jijing_overseas` | 极境「海外用户」开关（`"true"` / `"false"`）。开启后所有极境请求改走 `global.snoworangekeji.cn` 香港线路；前端 `buildProxyUrl` 与 Rust `resolve_base_url` 都从此 key 读取。真相源:`src/providers/jijing/baseUrl.ts` | 前端设置保存 |
 
 ### 4.2 文件路径相关
 

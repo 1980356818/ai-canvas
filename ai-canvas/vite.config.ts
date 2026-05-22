@@ -7,7 +7,10 @@ import pkg from "./package.json" with { type: "json" };
 const host = process.env.TAURI_DEV_HOST;
 
 const COMFLY_API = "https://ai.comfly.chat";
+// 极境双线路常量。真相源在 src/providers/jijing/baseUrl.ts (JIJING_API_CN / JIJING_API_GLOBAL),
+// 修改这里两个字符串必须同步修改该文件以及 src-tauri/src/commands/config.rs::resolve_base_url。
 const JIJING_API = "https://api.snoworangekeji.cn";
+const JIJING_API_GLOBAL = "https://global.snoworangekeji.cn";
 
 /**
  * Strip CSS `@layer` wrappers from production output so the app renders
@@ -116,6 +119,8 @@ export default defineConfig({
     proxy: {
       "/v1-proxy": proxyConfig(COMFLY_API, "\\/v1-proxy"),
       "/v1-jijing": proxyConfig(JIJING_API, "\\/v1-jijing"),
+      // 极境海外线路。前缀字符串与 src/providers/jijing/baseUrl.ts::JIJING_DEV_PROXY_GLOBAL 一致。
+      "/v1-jijing-global": proxyConfig(JIJING_API_GLOBAL, "\\/v1-jijing-global"),
     },
   },
 });

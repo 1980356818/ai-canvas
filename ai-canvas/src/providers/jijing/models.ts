@@ -39,10 +39,7 @@ export const JIJING_IMAGE_MODELS: ModelInfo[] = [
 // Nexus 上游 (V138): duration 固定 15 秒 (form 不暴露), quality 字段废弃.
 export const JIJING_VIDEO_MODELS: ModelInfo[] = [
   { id: "veo3.1", display_name: "Veo 3.1", capability: "VIDEO" },
-  { id: "seedance", display_name: "Seedance 2.0", capability: "VIDEO" },
-  { id: "seedance-2-0", display_name: "Seedance 2.0 VIP", capability: "VIDEO" },
-  { id: "seedance-2-0-720p-15s-no-person", display_name: "Seedance 2.0 经济(不支持真人)", capability: "VIDEO" },
-  { id: "grok-video", display_name: "Grok Video", capability: "VIDEO" },
+  { id: "seedance", display_name: "Seedance 2.0 按秒计费", capability: "VIDEO" },
 ];
 
 export const ALL_JIJING_MODELS: ModelInfo[] = [

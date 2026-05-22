@@ -136,7 +136,7 @@ pub fn read_full_api_config(db: &Connection, provider: &str) -> Result<FullApiCo
     }
 
     let base_url = normalize_base_url(
-        &raw_url.or(legacy_url).unwrap_or_else(|| default_base_url(provider)),
+        &raw_url.or(legacy_url).unwrap_or_else(|| resolve_base_url(provider, db)),
     );
 
     let auto_rotate = auto_rotate_str.map_or(true, |v| v != "false");
@@ -180,10 +180,25 @@ pub fn apply_auth_headers(
     }
 }
 
-fn default_base_url(provider: &str) -> String {
+/// 取 provider 的默认 base URL。
+///
+/// 极境 (jijing) 双线路:「海外用户」开关 (settings 表 `jijing_overseas`) 为 "true" 时
+/// 走香港线路 global.snoworangekeji.cn, 否则走国内 api.snoworangekeji.cn。
+/// 真相源是前端的 src/providers/jijing/baseUrl.ts; 修改 URL 字面量必须三处同步:
+///   - 本函数
+///   - src/providers/jijing/baseUrl.ts (JIJING_API_CN / JIJING_API_GLOBAL)
+///   - vite.config.ts (JIJING_API / JIJING_API_GLOBAL)
+fn resolve_base_url(provider: &str, db: &Connection) -> String {
     match provider {
         "openai" | "comfly" => "https://ai.comfly.chat".to_string(),
-        "jijing" => "https://api.snoworangekeji.cn".to_string(),
+        "jijing" => {
+            let overseas = get_setting(db, "jijing_overseas").as_deref() == Some("true");
+            if overseas {
+                "https://global.snoworangekeji.cn".to_string()
+            } else {
+                "https://api.snoworangekeji.cn".to_string()
+            }
+        }
         "anthropic" => "https://api.anthropic.com".to_string(),
         _ => String::new(),
     }

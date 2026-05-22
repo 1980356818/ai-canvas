@@ -52,6 +52,11 @@ import { apiChangePassword, apiGetDeviceInfo, apiUnbindDevice, type DeviceInfo }
 import { isTauri } from "@/platform/runtime";
 import { invoke } from "@tauri-apps/api/core";
 import { isPlatformVisible } from "@/config/platforms";
+import {
+  JIJING_OVERSEAS_SETTING_KEY,
+  JIJING_API_CN,
+  JIJING_API_GLOBAL,
+} from "@/providers/jijing/baseUrl";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "./ConfirmDialog";
 
@@ -70,7 +75,8 @@ interface PlatformState {
   id: string;
   name: string;
   // API baseUrl 由代码硬编码、不展示给用户也不允许编辑。仅用于 registry.setConfig
-  // 与 Tauri 校验调用——实际生效路径在 Rust 端 default_base_url() / Vite dev proxy。
+  // 与 Tauri 校验调用——实际生效路径在 Rust 端 resolve_base_url() / Vite dev proxy。
+  // 极境会在 handleSave 时根据 overseas 字段动态选 cn / global URL。
   apiBaseUrl: string;
   // 平台用户官网（登录 / 充值入口），仅在 UI 展示为可点击/可复制链接。
   homepageUrl: string;
@@ -83,6 +89,9 @@ interface PlatformState {
   connStatus: ConnStatus;
   connError: string;
   autoRotate: boolean;
+  // 「海外用户」开关。仅极境 (id === "jijing") 使用; 其他 provider 该字段恒为 false。
+  // 持久化 key 在 baseUrl.ts::JIJING_OVERSEAS_SETTING_KEY, Rust 端 resolve_base_url 同步消费。
+  overseas: boolean;
 }
 
 function genId() {
@@ -190,7 +199,7 @@ export default function SettingsDialog() {
 
         const states: PlatformState[] = [];
         for (const p of PLATFORMS) {
-          const [keysJson, activeId, legacyKey, enabledStr, autoRotateStr] =
+          const [keysJson, activeId, legacyKey, enabledStr, autoRotateStr, overseasStr] =
             await Promise.all([
               getSetting(`${p.id}_api_keys`),
               getSetting(`${p.id}_active_key_id`),
@@ -199,6 +208,8 @@ export default function SettingsDialog() {
                 : getSetting(`${p.id}_api_key`),
               getSetting(`${p.id}_enabled`),
               getSetting(`${p.id}_auto_rotate`),
+              // 仅极境读取「海外用户」开关; 其他 provider 拿 null, 字段保持 false。
+              p.id === "jijing" ? getSetting(JIJING_OVERSEAS_SETTING_KEY) : Promise.resolve(null),
             ]);
 
           let keys: KeyEntry[] = [];
@@ -240,6 +251,8 @@ export default function SettingsDialog() {
             connStatus: "idle",
             connError: "",
             autoRotate: autoRotateStr !== "false",
+            // 默认 false (国内). 仅极境会从 setting 读真实值;其他 provider 该字段无意义。
+            overseas: overseasStr === "true",
           });
         }
         setPlatforms(states);
@@ -315,12 +328,24 @@ export default function SettingsDialog() {
           await setSetting("openai_api_key", activeKey);
         }
 
-        // baseUrl 永远使用代码硬编码值，不读 storage、不允许用户覆盖。
+        // 极境「海外用户」开关持久化。Rust 端 resolve_base_url 与 dev 模式
+        // buildProxyUrl 都从 JIJING_OVERSEAS_SETTING_KEY 读取该值决定最终线路。
+        if (p.id === "jijing") {
+          await setSetting(JIJING_OVERSEAS_SETTING_KEY, String(p.overseas));
+        }
+
+        // 极境的 baseUrl 由 overseas 开关派生 (cn / global 两选一), 其他 provider
+        // 仍用 ALL_PLATFORMS 表里的硬编码值。这里把派生结果同步写入 ProviderConfig,
+        // 保持 registry 与 settings 一致。
+        const effectiveBaseUrl =
+          p.id === "jijing"
+            ? (p.overseas ? JIJING_API_GLOBAL : JIJING_API_CN)
+            : p.apiBaseUrl;
         const existingExtra = registry.getConfig(p.id)?.extra ?? {};
         registry.setConfig(p.id, {
           id: p.id,
           apiKey: activeKey,
-          baseUrl: p.apiBaseUrl,
+          baseUrl: effectiveBaseUrl,
           extra: existingExtra,
           enabled: p.enabled,
         });
@@ -646,6 +671,30 @@ function PlatformCard({
       {/* Expanded */}
       {p.expanded && (
         <div className="space-y-4 border-t border-border/50 px-4 pb-4 pt-3">
+          {/* 极境「海外用户」线路开关。开启后所有极境请求改走香港线路。 */}
+          {p.id === "jijing" && (
+            <div className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2.5">
+              <div className="min-w-0 flex-1 pr-3">
+                <p className="text-xs font-semibold text-foreground">海外用户</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  开启后所有请求走香港线路，国内用户请保持关闭
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onUpdate({ overseas: !p.overseas })}
+                className="flex-shrink-0"
+                title={p.overseas ? "关闭海外线路" : "开启海外线路"}
+              >
+                {p.overseas ? (
+                  <ToggleRight className="h-7 w-7 text-primary" />
+                ) : (
+                  <ToggleLeft className="h-7 w-7 text-muted-foreground" />
+                )}
+              </button>
+            </div>
+          )}
+
           {/* Auto-rotate toggle */}
           {p.keys.length > 1 && (
             <div className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2.5">
