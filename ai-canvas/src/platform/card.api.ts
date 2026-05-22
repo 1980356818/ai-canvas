@@ -1,6 +1,7 @@
 import type { CardRow } from "@/types";
 import { isTauri, ensureTauriAPIs, getInvoke } from "./runtime";
 import { lsGet, lsSet } from "./storage";
+import { invokeBatched } from "@/lib/ipcBatch";
 
 export async function loadCards(projectId: string): Promise<CardRow[]> {
   if (isTauri) {
@@ -11,14 +12,24 @@ export async function loadCards(projectId: string): Promise<CardRow[]> {
   return lsGet<CardRow[]>("cards_" + projectId, []);
 }
 
+/**
+ * 批量持久化卡片。Tauri 路径强制走 [`invokeBatched`](@/lib/ipcBatch.ts)
+ * 守门 —— 单次 invoke 不会超出 WebView2 的 ~3MB IPC 雷区。
+ *
+ * 历史：曾把整个 dirty 集合一次性塞给 `save_cards_batch`，5000+ 张卡片
+ * 一次 flush 时静默崩 WebView2 渲染进程，Rust 日志干净。
+ */
 export async function saveCardsBatch(cards: CardRow[]): Promise<void> {
+  if (cards.length === 0) return;
   if (isTauri) {
-    await ensureTauriAPIs();
-    await getInvoke()("save_cards_batch", { cards });
+    await invokeBatched({
+      command: "save_cards_batch",
+      items: cards,
+      buildArgs: (chunk) => ({ cards: chunk }),
+    });
     return;
   }
 
-  if (cards.length === 0) return;
   const projectId = cards[0]!.project_id;
   const existing = lsGet<CardRow[]>("cards_" + projectId, []);
   const map = new Map(existing.map((c) => [c.id, c]));

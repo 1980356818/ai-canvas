@@ -220,6 +220,8 @@ export default function RefImageSlot({
             src={displayUrl}
             alt={label}
             className="h-full w-full object-contain"
+            loading="lazy"
+            decoding="async"
           />
         </div>
         {index != null && (

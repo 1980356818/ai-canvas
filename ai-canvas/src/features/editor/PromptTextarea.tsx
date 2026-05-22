@@ -92,7 +92,7 @@ function rawToHtml(
 
     html += `<span ${REF_ATTR}="${esc(id)}" contenteditable="false" class="${CHIP_CLS}">`;
     if (thumb) {
-      html += `<img src="${esc(thumb)}" class="${CHIP_IMG_CLS}" />`;
+      html += `<img src="${esc(thumb)}" class="${CHIP_IMG_CLS}" loading="lazy" decoding="async" />`;
     }
     html += `<span>${esc(label)}</span></span>`;
     last = m.index + m[0].length;

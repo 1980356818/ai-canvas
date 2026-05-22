@@ -629,6 +629,8 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
                 src={src}
                 alt=""
                 className="h-14 w-14 rounded-lg border border-border object-cover"
+                loading="lazy"
+                decoding="async"
               />
               <button
                 onClick={() => removeDirectMedia(idx)}

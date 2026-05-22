@@ -317,7 +317,7 @@ export default function AIPromptInput() {
                       <video
                         src={item.displayUrl}
                         className="h-full w-full object-cover"
-                        preload="metadata"
+                        preload="none"
                         muted
                       />
                       <div className="absolute inset-0 flex items-center justify-center">
@@ -329,6 +329,8 @@ export default function AIPromptInput() {
                       src={item.displayUrl}
                       alt={MEDIA_LABELS[i] ?? `附件${i + 1}`}
                       className="h-16 w-16 object-cover"
+                      loading="lazy"
+                      decoding="async"
                     />
                   )}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-1 pb-0.5 pt-3">

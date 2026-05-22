@@ -61,9 +61,12 @@ function hasValidConnection(
   return !!sourceCardId && validConnectionKeys.has(connectionKey(sourceCardId, targetCardId));
 }
 
-function sameData(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
+// v5：旧的 `sameData(a, b)` 用 `JSON.stringify(a) === JSON.stringify(b)` 做
+// deep-equal，对含 base64 / 长 prompt 的 `card.data` 是 O(2N) + 字符串比较。
+// 已删除——下面 `cleanupDanglingReferencesForCard` 仅在自身设的 `changed`
+// 为 true 时返回新对象，调用方 `diffDataPatch` 会再做 shallow key-diff，
+// 而 `updateCardData` 内部对每个 patch 字段做 `merged[key] !== next` 短路，
+// 三层兜底保证"无实际变化时不触发下游 watcher"，stringify 完全冗余。
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -235,7 +238,7 @@ export function cleanupDanglingReferencesForCard(
     changed = true;
   }
 
-  if (!changed || sameData(originalData, data)) {
+  if (!changed) {
     return { data: originalData, changed: false };
   }
 

@@ -40,46 +40,52 @@ fn resize_window(
 
 pub struct AppState {
     pub db: Mutex<rusqlite::Connection>,
-    http_client: OnceLock<reqwest::Client>,
-    stream_client: OnceLock<reqwest::Client>,
+    http_client: reqwest::Client,
+    stream_client: reqwest::Client,
     pub active_streams: Mutex<HashMap<String, Arc<AtomicBool>>>,
     pub data_dir: std::path::PathBuf,
     pub backup_dir: std::path::PathBuf,
+    /// 数据库文件绝对路径。备份任务用它独立打开只读连接，避免持有主 db 锁。
+    pub db_path: std::path::PathBuf,
 }
 
 impl AppState {
     pub fn http_client(&self) -> &reqwest::Client {
-        self.http_client.get_or_init(|| {
-            reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(600))
-                .connect_timeout(std::time::Duration::from_secs(120))
-                .tcp_keepalive(std::time::Duration::from_secs(30))
-                // 反代/边缘节点常在 ~30s 主动关闭 idle 连接；
-                // 我们把客户端 idle 超时设得短一些，避免拿到一个对端已 RST 的"僵尸连接"复用，
-                // 否则下次请求会以 "unexpected EOF during handshake" / "broken pipe" 报错。
-                .pool_idle_timeout(std::time::Duration::from_secs(15))
-                .pool_max_idle_per_host(4)
-                .tcp_nodelay(true)
-                .build()
-                .expect("failed to create http client")
-        })
+        &self.http_client
     }
 
     pub fn stream_client(&self) -> &reqwest::Client {
-        self.stream_client.get_or_init(|| {
-            reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(300))
-                .connect_timeout(std::time::Duration::from_secs(120))
-                .tcp_keepalive(std::time::Duration::from_secs(30))
-                // 同 http_client：避免复用对端已关闭的连接
-                .pool_idle_timeout(std::time::Duration::from_secs(10))
-                .pool_max_idle_per_host(2)
-                .tcp_nodelay(true)
-                .http1_only()
-                .build()
-                .expect("failed to create stream client")
-        })
+        &self.stream_client
     }
+}
+
+/// 构造一对 reqwest::Client（普通 + 流式）。setup() 阶段调一次，失败 ↑ 给 Tauri，
+/// 由 Tauri 报启动错给用户，比 lazy init + .expect() 隐式 panic 安全得多。
+fn build_http_clients() -> Result<(reqwest::Client, reqwest::Client), reqwest::Error> {
+    let http_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(600))
+        .connect_timeout(std::time::Duration::from_secs(120))
+        .tcp_keepalive(std::time::Duration::from_secs(30))
+        // 反代/边缘节点常在 ~30s 主动关闭 idle 连接；
+        // 我们把客户端 idle 超时设得短一些，避免拿到一个对端已 RST 的"僵尸连接"复用，
+        // 否则下次请求会以 "unexpected EOF during handshake" / "broken pipe" 报错。
+        .pool_idle_timeout(std::time::Duration::from_secs(15))
+        .pool_max_idle_per_host(4)
+        .tcp_nodelay(true)
+        .build()?;
+
+    let stream_client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .connect_timeout(std::time::Duration::from_secs(120))
+        .tcp_keepalive(std::time::Duration::from_secs(30))
+        // 同 http_client：避免复用对端已关闭的连接
+        .pool_idle_timeout(std::time::Duration::from_secs(10))
+        .pool_max_idle_per_host(2)
+        .tcp_nodelay(true)
+        .http1_only()
+        .build()?;
+
+    Ok((http_client, stream_client))
 }
 
 /// 解析数据存储目录。策略：
@@ -743,43 +749,57 @@ pub fn run() {
             }
 
             // 启动后立即备份一份。失败仅 warn，不阻塞启动。
-            match backup::create_backup(&conn, &backup_dir, backup::DEFAULT_MAX_KEEP) {
+            // 不通过主 conn 跑 VACUUM INTO（备份函数会自己独立 open 只读连接）。
+            match backup::create_backup(&db_path, &backup_dir, backup::DEFAULT_MAX_KEEP) {
                 Ok(p) => boot_log(&format!("startup backup created: {:?}", p)),
                 Err(e) => boot_log(&format!("startup backup failed: {}", e)),
             }
 
+            let (http_client, stream_client) = match build_http_clients() {
+                Ok(pair) => pair,
+                Err(e) => {
+                    boot_log(&format!("FATAL: build_http_clients failed: {}", e));
+                    return Err(format!(
+                        "无法创建 HTTP 客户端：{}。请检查系统 TLS 根证书库是否完整。",
+                        e
+                    )
+                    .into());
+                }
+            };
+            boot_log("http clients ready (eager init)");
+
             app.manage(AppState {
                 db: Mutex::new(conn),
-                http_client: OnceLock::new(),
-                stream_client: OnceLock::new(),
+                http_client,
+                stream_client,
                 active_streams: Mutex::new(HashMap::new()),
                 data_dir: data_dir.clone(),
                 backup_dir: backup_dir.clone(),
+                db_path: db_path.clone(),
             });
-            boot_log("state managed (http clients deferred)");
+            boot_log("state managed");
 
             // 定时备份：每 30 分钟一份，跟随保留策略自动清理旧份。
-            let handle = app.handle().clone();
+            // 不持有 state.db 锁；在 spawn_blocking 内独立 open 只读 connection
+            // 跑 VACUUM INTO，WAL 模式保证与主连接并发互不阻塞。
+            let backup_dir_for_task = backup_dir.clone();
+            let db_path_for_task = db_path.clone();
             tauri::async_runtime::spawn(async move {
                 let mut ticker =
                     tokio::time::interval(std::time::Duration::from_secs(30 * 60));
                 ticker.tick().await; // 跳过首次（启动时已备份）
                 loop {
                     ticker.tick().await;
-                    if let Some(state) = handle.try_state::<AppState>() {
-                        let conn_guard = state.db.lock();
-                        if let Ok(conn) = conn_guard {
-                            match backup::create_backup(
-                                &conn,
-                                &state.backup_dir,
-                                backup::DEFAULT_MAX_KEEP,
-                            ) {
-                                Ok(p) => {
-                                    tracing::info!("periodic backup created: {:?}", p)
-                                }
-                                Err(e) => tracing::warn!("periodic backup failed: {}", e),
-                            }
-                        }
+                    let db_path = db_path_for_task.clone();
+                    let backup_dir = backup_dir_for_task.clone();
+                    let result = tauri::async_runtime::spawn_blocking(move || {
+                        backup::create_backup(&db_path, &backup_dir, backup::DEFAULT_MAX_KEEP)
+                    })
+                    .await;
+                    match result {
+                        Ok(Ok(p)) => tracing::info!("periodic backup created: {:?}", p),
+                        Ok(Err(e)) => tracing::warn!("periodic backup failed: {}", e),
+                        Err(e) => tracing::warn!("periodic backup task join failed: {}", e),
                     }
                 }
             });
@@ -844,6 +864,7 @@ pub fn run() {
             commands::chat::save_chat_message,
             commands::chat::clear_chat_messages,
             commands::device::get_machine_code,
+            commands::diag::js_log,
             commands::backup::list_backups,
             commands::backup::get_backup_dir,
             commands::backup::create_backup_now,

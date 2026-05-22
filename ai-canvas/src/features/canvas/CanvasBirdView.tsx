@@ -28,9 +28,12 @@ export default function CanvasBirdView({
     });
   }
 
-  const cards = useCardStore((s) => s.cards);
+  // 不订阅整个 cards Map：updateCardData（数据变化）会改 cards 引用但 layoutVersion 不变，
+  // 旧写法会让鸟瞰图每次数据更新都重画 canvas。layoutVersion 仅在新增/删除/移动/缩放时递增，
+  // 配合 imgVersion（图片加载完）足够触发必要的重绘，effect 内 imperative 读取最新 cards。
+  // connections 同理：订 connectionsVersion 数字，effect 内 imperative 取 Map（v5 规范）。
   const layoutVersion = useCardStore((s) => s.layoutVersion);
-  const connections = useConnectionStore((s) => s.connections);
+  const connectionsVersion = useConnectionStore((s) => s.connectionsVersion);
   const selectedCardIds = useCanvasStore((s) => s.selectedCardIds);
   const selectedConnectionId = useConnectionStore((s) => s.selectedConnectionId);
   const projectId = useProjectStore((s) => s.currentProjectId);
@@ -83,6 +86,10 @@ export default function CanvasBirdView({
       ctx.translate(viewport.x, viewport.y);
       ctx.scale(viewport.zoom, viewport.zoom);
 
+      // imperative 取最新快照，避免把整个 cards/connections Map 放进订阅与 deps
+      const cards = useCardStore.getState().cards;
+      const connections = useConnectionStore.getState().connections;
+
       drawGrid(ctx, viewport);
       drawConnections(ctx, connections, cards, projectId, selectedConnectionId, viewport.zoom);
       drawCards(ctx, cards, selectedCardIds, viewport.zoom, projectId, imageCacheRef.current ?? undefined);
@@ -105,8 +112,7 @@ export default function CanvasBirdView({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewport, cards, connections, selectedCardIds, selectedConnectionId, projectId, selBox, layoutVersion, imgVersion]);
+  }, [viewport, connectionsVersion, selectedCardIds, selectedConnectionId, projectId, selBox, layoutVersion, imgVersion]);
 
   // --- pointer interactions ---
   // Matches original CanvasContainer behavior:

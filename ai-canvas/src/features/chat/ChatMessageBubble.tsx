@@ -1,4 +1,5 @@
-import { memo, useState, useCallback, useEffect, useRef } from "react";
+import { memo, useState, useCallback, useEffect } from "react";
+import { useElapsedTimer } from "@/hooks/useElapsedTimer";
 import {
   Download,
   Copy,
@@ -138,15 +139,8 @@ function MediaLoadingCard({ mediaType }: { mediaType: "image" | "video" }) {
   const progress = useChatStore((s) => s.generatingProgress);
   const status = useChatStore((s) => s.generatingStatus);
   const startedAt = useChatStore((s) => s.generatingStartedAt);
-  const [elapsed, setElapsed] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval>>(undefined);
-
-  useEffect(() => {
-    if (!startedAt) { setElapsed(0); return; }
-    setElapsed(Date.now() - startedAt);
-    timerRef.current = setInterval(() => setElapsed(Date.now() - startedAt), 1000);
-    return () => clearInterval(timerRef.current);
-  }, [startedAt]);
+  // v5：共享全局 tick，不再每个气泡起一个 setInterval（见 useElapsedTimer 文件头注释）
+  const elapsed = useElapsedTimer(startedAt);
 
   const isImage = mediaType === "image";
   const label = status ? (STATUS_MAP[status.toLowerCase()] ?? status) : "准备中";
@@ -191,6 +185,7 @@ function UserImageThumb({ url }: { url: string }) {
       alt=""
       className="h-16 w-16 rounded-md border border-white/20 object-cover"
       loading="lazy"
+      decoding="async"
     />
   );
 }
@@ -240,6 +235,7 @@ function ImageBlock({
         draggable
         onDragStart={handleDragStart}
         loading="lazy"
+        decoding="async"
       />
       <div className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
         {prompt && (
@@ -300,7 +296,7 @@ function VideoBlock({
         src={displayUrl}
         className="max-w-full w-full rounded-lg"
         controls={playing}
-        preload="metadata"
+        preload="none"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onClick={(e) => {

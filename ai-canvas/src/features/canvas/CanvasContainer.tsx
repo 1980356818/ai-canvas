@@ -245,6 +245,7 @@ export default function CanvasContainer() {
           {currentProjectId && (
             <ConnectionLayer
               projectId={currentProjectId}
+              viewport={viewport}
               onConnectionContextMenu={handleConnectionContextMenu}
             />
           )}

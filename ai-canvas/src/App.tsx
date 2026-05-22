@@ -75,29 +75,41 @@ function AuthenticatedApp() {
   }, []);
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
-      <TitleBar />
-      <ErrorBoundary>
-        {appView === "home" ? (
-          <HomePage />
-        ) : appView === "projects" ? (
-          <ProjectsPage />
-        ) : (
-          <div className="relative flex flex-1 overflow-hidden">
-            <CanvasContainer />
-            <SidebarContainer />
-            {agentPanelVisible && <AgentPanel />}
-            {chatPanelVisible && <ChatPanel />}
-          </div>
-        )}
-      </ErrorBoundary>
-      <SideCapsule />
-      <Toast />
-      <ContextMenu />
-      <SettingsDialog />
-      <TaskRecordDialog />
-      <CropDialog />
-    </div>
+    <ErrorBoundary>
+      <div className="flex h-screen flex-col bg-background text-foreground">
+        <TitleBar />
+        <ErrorBoundary>
+          {appView === "home" ? (
+            <HomePage />
+          ) : appView === "projects" ? (
+            <ProjectsPage />
+          ) : (
+            <div className="relative flex flex-1 overflow-hidden">
+              <CanvasContainer />
+              <SidebarContainer />
+              {agentPanelVisible && <AgentPanel />}
+              {chatPanelVisible && <ChatPanel />}
+            </div>
+          )}
+        </ErrorBoundary>
+        <SideCapsule />
+        {/* Toast 不能放进 ErrorBoundary：它本身就是错误兜底的展示出口，
+            要是它自己崩了，至少别把整个 app 一起带走 */}
+        <Toast />
+        <ErrorBoundary fallback={null}>
+          <ContextMenu />
+        </ErrorBoundary>
+        <ErrorBoundary fallback={null}>
+          <SettingsDialog />
+        </ErrorBoundary>
+        <ErrorBoundary fallback={null}>
+          <TaskRecordDialog />
+        </ErrorBoundary>
+        <ErrorBoundary fallback={null}>
+          <CropDialog />
+        </ErrorBoundary>
+      </div>
+    </ErrorBoundary>
   );
 }
 

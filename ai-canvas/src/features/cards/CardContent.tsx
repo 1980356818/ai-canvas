@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useCallback } from "react";
+import { memo, useState, useEffect, useCallback, useRef } from "react";
 import { ImageIcon, Loader2, Shirt, Video, RotateCw, Cloud, Music, Timer } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
@@ -6,6 +6,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { getDisplayUrl } from "@/lib/media";
 import { isPreloaded } from "@/lib/imagePreloader";
 import { autoSave } from "@/lib/autoSave";
+import { useElapsedTimer } from "@/hooks/useElapsedTimer";
 import AIChatCard from "./AIChatCard";
 import TextCard from "./TextCard";
 import StickyNoteCard from "./StickyNoteCard";
@@ -14,12 +15,11 @@ import { CardErrorWithRetry } from "./CardErrorWithRetry";
 const IMG_DEFER_MS = 50;
 
 export function ElapsedTimer() {
-  const [s, setS] = useState(0);
-  useEffect(() => {
-    const t0 = Date.now();
-    const id = setInterval(() => setS(Math.floor((Date.now() - t0) / 1000)), 1000);
-    return () => clearInterval(id);
-  }, []);
+  // v5：共享全局 tick；这里"挂载即开始"的语义改成：第一次 render 拿到 mount 时刻，
+  // 后续 tick 由全局 useElapsedTimer 统一驱动。
+  const startedAtRef = useRef(Date.now());
+  const elapsedMs = useElapsedTimer(startedAtRef.current);
+  const s = Math.floor(elapsedMs / 1000);
   const text = s < 60 ? `${s}s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   return (
     <span className="inline-flex items-center gap-0.5 tabular-nums">
@@ -131,9 +131,12 @@ function ImagePreview({ card }: { card: CanvasCard }) {
     const isRemote = activeUrl!.startsWith("http://") || activeUrl!.startsWith("https://");
     return (
       <div className="relative h-full w-full">
+        {/* 画布上同屏可能有多张主图，必须 lazy + async 解码：
+            同步解码会和 GPU 抢内存，4 张 2K+ 图同时解码足以让 WebView2 渲染端 OOM 崩溃。 */}
         <img
           src={displayUrl}
           alt=""
+          loading="lazy"
           decoding="async"
           className="h-full w-full object-cover"
         />
@@ -147,6 +150,10 @@ function ImagePreview({ card }: { card: CanvasCard }) {
           <CardErrorWithRetry cardId={card.id} message={cardError} variant="ribbon" />
         )}
         {results.length > 1 && (
+          // 批量结果缩略图条：每个 <img> 解码独立占用 GPU bitmap，
+          // 4 张 5MP 图同时强制解码 ≈ 80MB GPU 内存，是 WebView2 渲染端崩溃的常见诱因。
+          // loading="lazy" 让 WebView 推迟到真正可见才解码，
+          // decoding="async" 把解码从主线程剥离到 worker。
           <div className="absolute inset-x-0 bottom-0 flex items-end justify-center gap-1 bg-gradient-to-t from-black/50 to-transparent px-2 pb-1.5 pt-6">
             {results.map((r, i) => (
               <button
@@ -162,6 +169,8 @@ function ImagePreview({ card }: { card: CanvasCard }) {
                 <img
                   src={getDisplayUrl(r.url)}
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover"
                 />
               </button>
@@ -221,7 +230,13 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
     if (!imgReady) return <div className="h-full w-full bg-muted/20" />;
     return (
       <div className="relative h-full w-full">
-        <img src={displayUrl} alt="" decoding="async" className="h-full w-full object-cover" />
+        <img
+          src={displayUrl}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover"
+        />
         {data.resultImageUrl && (
           <span className="absolute left-2 top-2 rounded bg-black/50 px-1.5 py-0.5 text-[10px] text-white">
             换装结果
@@ -280,11 +295,15 @@ function VideoPreview({ card }: { card: CanvasCard }) {
   if (displayUrl) {
     return (
       <div className="relative h-full w-full">
+        {/* preload="none" 关键：画布上多视频卡同时 mount 时，默认 metadata 会让 WebView2
+            同时拉远程视频元数据 + 启动 N 个解码器，叠加图片解码就会 OOM。
+            用户点击 controls 播放时才真正拉数据。 */}
         <video
           src={displayUrl}
           className="h-full w-full object-cover"
           controls
           muted
+          preload="none"
         />
         {isRemote && (
           <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-amber-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm">

@@ -491,7 +491,14 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         ? modelService.resolveImageModelId(currentModel, currentResolution, qualitySupported ? currentQuality : undefined, (data as MediaData).provider)
         : undefined;
 
-      const count = data.batchSize ?? 1;
+      // batchSize 防御性 clamp 到 [1, 4]：
+      // - UI 只暴露 1/2/4，但 data.batchSize 是持久化的，老项目/手动编辑可能塞进来更大的值
+      // - 4 张并行的 RGBA 解码已经接近 WebView2 GPU 进程容量上限，再多就是白屏崩溃风险
+      const requestedCount = Math.max(1, Math.floor(data.batchSize ?? 1));
+      const count = Math.min(requestedCount, 4);
+      if (count !== requestedCount) {
+        console.warn(`[MediaEditor] batchSize ${requestedCount} clamped to ${count} (max 4 to avoid GPU pressure)`);
+      }
       // 把卡片自身的 projectId 作为本次任务的归属，整个异步链都用这个快照。
       const ownerProjectId = card.projectId;
       let results: ImageResult[];

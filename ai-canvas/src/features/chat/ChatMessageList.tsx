@@ -1,6 +1,7 @@
-import { useRef, useEffect, useState } from "react";
-import { MessageSquare, Loader2, ImageIcon, Video } from "lucide-react";
+import { useRef, useEffect, useState, useMemo } from "react";
+import { MessageSquare, Loader2, ImageIcon, Video, ChevronUp } from "lucide-react";
 import { useChatStore } from "@/stores/chatStore";
+import { useElapsedTimer } from "@/hooks/useElapsedTimer";
 import ChatMessageBubble from "./ChatMessageBubble";
 import ReasoningBlock from "./ReasoningBlock";
 
@@ -13,6 +14,17 @@ const STATUS_LABELS: Record<string, string> = {
   pending: "等待中",
   done: "完成",
 };
+
+/**
+ * 一次只渲染最近 N 条消息。chatStore 单会话已经 cap 在 500 条，
+ * 这里再做一层"按需展开"——绝大多数场景只看最近的 100 条，没必要把整段
+ * markdown 一起塞进 DOM。用户点顶部按钮可向前再拉 INCREMENT 条。
+ *
+ * 不用 react-window 之类的虚拟化方案：markdown 渲染高度难以预估，
+ * 列表抖动严重；分页按钮简单、可控、对聊天行为很自然。
+ */
+const INITIAL_VISIBLE_COUNT = 100;
+const LOAD_MORE_INCREMENT = 100;
 
 function statusLabel(status: string): string {
   return STATUS_LABELS[status.toLowerCase()] ?? status;
@@ -36,6 +48,8 @@ export default function ChatMessageList() {
   const streamingText = useChatStore((s) => s.streamingText);
   const streamingReasoning = useChatStore((s) => s.streamingReasoning);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const currentSessionId = useChatStore((s) => s.currentSessionId);
 
   const hasAnyStream = !!streamingText || !!streamingReasoning;
   const isMediaGenerating = generating && !hasAnyStream && (generatingType === "image" || generatingType === "video");
@@ -44,28 +58,45 @@ export default function ChatMessageList() {
   // 纯"正在思考..."占位：什么流都还没来
   const isThinking = generating && !hasAnyStream && !isMediaGenerating;
 
-  const [elapsed, setElapsed] = useState(0);
+  // 当前展开渲染的消息数；会话切换时重置回初始窗口
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_COUNT);
+  }, [currentSessionId]);
+
+  const visibleMessages = useMemo(() => {
+    if (messages.length <= visibleCount) return messages;
+    return messages.slice(messages.length - visibleCount);
+  }, [messages, visibleCount]);
+  const hiddenOlderCount = messages.length - visibleMessages.length;
 
   const showTimer = (isMediaGenerating || isThinking) && generatingStartedAt > 0;
+  // v5：共享全局 tick（见 useElapsedTimer 文件头注释）；showTimer=false 时传 null 即停。
+  const elapsed = useElapsedTimer(showTimer ? generatingStartedAt : null);
+
+  // Scroll-to-bottom 节流：rAF 合并连续触发；流式期间用 `auto` 避免浏览器
+  // 不停 cancel/restart smooth 动画（每个 token 都触发会让主线程被 scroll 占住）。
+  useEffect(() => {
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = scrollRef.current;
+      if (!el) return;
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: generating ? "auto" : "smooth",
+      });
+    });
+  }, [visibleMessages.length, streamingText, streamingReasoning, generatingProgress, generating]);
 
   useEffect(() => {
-    if (!showTimer) {
-      setElapsed(0);
-      return;
-    }
-    setElapsed(Date.now() - generatingStartedAt);
-    const timer = setInterval(() => {
-      setElapsed(Date.now() - generatingStartedAt);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [showTimer, generatingStartedAt]);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    }
-  }, [messages.length, streamingText, streamingReasoning, generatingProgress]);
+    return () => {
+      if (scrollRafRef.current !== null) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3">
@@ -77,7 +108,24 @@ export default function ChatMessageList() {
         </div>
       )}
 
-      {messages.map((msg) => (
+      {hiddenOlderCount > 0 && (
+        <div className="mb-3 flex justify-center">
+          <button
+            type="button"
+            onClick={() =>
+              setVisibleCount((n) =>
+                Math.min(messages.length, n + LOAD_MORE_INCREMENT),
+              )
+            }
+            className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-[11px] text-muted-foreground hover:bg-muted transition-colors"
+          >
+            <ChevronUp className="h-3 w-3" />
+            查看更早的 {Math.min(hiddenOlderCount, LOAD_MORE_INCREMENT)} 条
+          </button>
+        </div>
+      )}
+
+      {visibleMessages.map((msg) => (
         <ChatMessageBubble key={msg.id} message={msg} />
       ))}
 

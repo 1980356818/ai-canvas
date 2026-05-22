@@ -1,12 +1,14 @@
 import { memo, useMemo, useCallback } from "react";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useCardStore } from "@/stores/cardStore";
-import type { CanvasCard, Connection } from "@/types";
+import type { CanvasCard, Connection, Viewport } from "@/types";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { TYPE_COLORS } from "@/shared/constants";
 import { disconnectConnectionAndCleanup } from "@/lib/referenceConsistency";
 
 const CURVE_OFFSET = 80;
+/** 视口外多少世界像素仍渲染——给曲线弧线和滚动惯性留缓冲 */
+const CONN_VIEWPORT_MARGIN = 300;
 
 function bezierPath(x1: number, y1: number, x2: number, y2: number): string {
   const dx = Math.abs(x2 - x1);
@@ -108,7 +110,9 @@ const Wire = memo(function Wire({
         onContextMenu={(e) => onContextMenu(e, id)}
       />
 
-      {/* Soft glow — visible on hover/select/flow */}
+      {/* Soft glow — 仅在 active（hover/select/flow）时显示。
+          `filter:blur` 触发 GPU 合成层，500+ 条连线常驻 blur 会逼近显存上限，
+          所以 idle 状态绝不能开。 */}
       {active && (
         <path
           d={d}
@@ -172,12 +176,17 @@ const Wire = memo(function Wire({
 
 function DraftWirePath() {
   const draft = useConnectionStore((s) => s.draftWire);
-  const cards = useCardStore((s) => s.cards);
+  // v5：订阅 layoutVersion 而非 cards Map。本组件只在拖拽端口期间挂载
+  // （draft != null），位置变化由 layoutVersion 触发；data 变化无需重渲。
+  // 旧写法 `useCardStore((s) => s.cards)` 会让任意 updateCardData 都重
+  // evaluate 本组件（即使 draft === null 直接 return null 也白白做一次
+  // hook diff + render 调用）。
+  useCardStore((s) => s.layoutVersion);
   const dragOffsets = useCanvasStore((s) => s.dragOffsets);
 
   if (!draft) return null;
 
-  const sourceCard = cards.get(draft.sourceCardId);
+  const sourceCard = useCardStore.getState().cards.get(draft.sourceCardId);
   if (!sourceCard) return null;
 
   const ports = getPortPositions(sourceCard, dragOffsets);
@@ -219,14 +228,18 @@ function DraftWirePath() {
 
 interface ConnectionLayerProps {
   projectId: string;
+  viewport: Viewport;
   onConnectionContextMenu?: (e: React.MouseEvent, connectionId: string) => void;
 }
 
 export default memo(function ConnectionLayer({
   projectId,
+  viewport,
   onConnectionContextMenu,
 }: ConnectionLayerProps) {
-  const connections = useConnectionStore((s) => s.connections);
+  // v5：订阅 connectionsVersion 而非 connections Map 引用。Map 引用每次 add/remove
+  // 都换新，旧写法会让 projectConns useMemo deps 触发，但实际上靠数字 deps 等价。
+  const connectionsVersion = useConnectionStore((s) => s.connectionsVersion);
   const layoutVersion = useCardStore((s) => s.layoutVersion);
   const dragOffsets = useCanvasStore((s) => s.dragOffsets);
   const selectedId = useConnectionStore((s) => s.selectedConnectionId);
@@ -234,8 +247,20 @@ export default memo(function ConnectionLayer({
   const flowingIds = useConnectionStore((s) => s.flowingConnectionIds);
   const setHovered = useConnectionStore((s) => s.setHoveredConnectionId);
 
+  // 视口边界（world 坐标），带 margin 给曲线弧线 + 滚动惯性留缓冲。
+  // 仅保留 bbox 与 viewport 相交的连线，避免画布外几百条线常驻 SVG 树。
+  const vpBounds = useMemo(() => {
+    if (viewport.width === 0 || viewport.height === 0) return null;
+    const left = -viewport.x / viewport.zoom - CONN_VIEWPORT_MARGIN;
+    const top = -viewport.y / viewport.zoom - CONN_VIEWPORT_MARGIN;
+    const right = left + viewport.width / viewport.zoom + CONN_VIEWPORT_MARGIN * 2;
+    const bottom = top + viewport.height / viewport.zoom + CONN_VIEWPORT_MARGIN * 2;
+    return { left, top, right, bottom };
+  }, [viewport.x, viewport.y, viewport.zoom, viewport.width, viewport.height]);
+
   const projectConns = useMemo(() => {
     const cards = useCardStore.getState().cards;
+    const connections = useConnectionStore.getState().connections;
     const result: Array<{
       conn: Connection;
       d: string;
@@ -255,6 +280,24 @@ export default memo(function ConnectionLayer({
 
       const srcPort = getPortPositions(src, dragOffsets).output;
       const tgtPort = getPortPositions(tgt, dragOffsets).input;
+
+      // 视口剔除：连线的 bbox 与视口 bbox 不相交 → 跳过。
+      // 用 source/target 端点构造 bbox（贝塞尔控制点不会超出 |x1-x2| × max(|y1-y2|, CURVE_OFFSET)）
+      if (vpBounds) {
+        const minX = Math.min(srcPort.x, tgtPort.x);
+        const maxX = Math.max(srcPort.x, tgtPort.x);
+        const minY = Math.min(srcPort.y, tgtPort.y);
+        const maxY = Math.max(srcPort.y, tgtPort.y);
+        if (
+          maxX < vpBounds.left ||
+          minX > vpBounds.right ||
+          maxY < vpBounds.top ||
+          minY > vpBounds.bottom
+        ) {
+          continue;
+        }
+      }
+
       const d = bezierPath(srcPort.x, srcPort.y, tgtPort.x, tgtPort.y);
       const srcColor = TYPE_COLORS[src.type] || "#6B7280";
       const tgtColor = TYPE_COLORS[tgt.type] || END_COLOR;
@@ -271,7 +314,7 @@ export default memo(function ConnectionLayer({
     }
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connections, layoutVersion, projectId, dragOffsets]);
+  }, [connectionsVersion, layoutVersion, projectId, dragOffsets, vpBounds]);
 
   const handleDelete = useCallback((id: string) => {
     disconnectConnectionAndCleanup(id);

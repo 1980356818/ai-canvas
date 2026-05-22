@@ -121,7 +121,7 @@ function ImageCollage({ images }: { images: string[] }) {
 
   if (count === 1) {
     return (
-      <img src={images[0]} alt="" className="h-full w-full object-cover" />
+      <img src={images[0]} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
     );
   }
 
@@ -129,7 +129,7 @@ function ImageCollage({ images }: { images: string[] }) {
     return (
       <div className="grid h-full grid-cols-2 gap-px bg-border/40">
         {images.slice(0, 2).map((src, i) => (
-          <img key={i} src={src} alt="" className="h-full w-full object-cover" />
+          <img key={i} src={src} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
         ))}
       </div>
     );
@@ -138,10 +138,10 @@ function ImageCollage({ images }: { images: string[] }) {
   if (count === 3) {
     return (
       <div className="grid h-full grid-cols-2 gap-px bg-border/40">
-        <img src={images[0]} alt="" className="row-span-2 h-full w-full object-cover" />
+        <img src={images[0]} alt="" className="row-span-2 h-full w-full object-cover" loading="lazy" decoding="async" />
         <div className="grid grid-rows-2 gap-px bg-border/40">
-          <img src={images[1]} alt="" className="h-full w-full object-cover" />
-          <img src={images[2]} alt="" className="h-full w-full object-cover" />
+          <img src={images[1]} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+          <img src={images[2]} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
         </div>
       </div>
     );
@@ -150,7 +150,7 @@ function ImageCollage({ images }: { images: string[] }) {
   return (
     <div className="grid h-full grid-cols-2 grid-rows-2 gap-px bg-border/40">
       {images.slice(0, 4).map((src, i) => (
-        <img key={i} src={src} alt="" className="h-full w-full object-cover" />
+        <img key={i} src={src} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
       ))}
     </div>
   );

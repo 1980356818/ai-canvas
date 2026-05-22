@@ -45,7 +45,7 @@ function ImageCollage({ images }: { images: string[] }) {
 
   if (count === 1) {
     return (
-      <img src={images[0]} alt="" className="h-full w-full object-cover" />
+      <img src={images[0]} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
     );
   }
 
@@ -53,7 +53,7 @@ function ImageCollage({ images }: { images: string[] }) {
     return (
       <div className="grid h-full grid-cols-2 gap-px bg-border/40">
         {images.slice(0, 2).map((src, i) => (
-          <img key={i} src={src} alt="" className="h-full w-full object-cover" />
+          <img key={i} src={src} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
         ))}
       </div>
     );
@@ -62,10 +62,10 @@ function ImageCollage({ images }: { images: string[] }) {
   if (count === 3) {
     return (
       <div className="grid h-full grid-cols-2 gap-px bg-border/40">
-        <img src={images[0]} alt="" className="row-span-2 h-full w-full object-cover" />
+        <img src={images[0]} alt="" className="row-span-2 h-full w-full object-cover" loading="lazy" decoding="async" />
         <div className="grid grid-rows-2 gap-px bg-border/40">
-          <img src={images[1]} alt="" className="h-full w-full object-cover" />
-          <img src={images[2]} alt="" className="h-full w-full object-cover" />
+          <img src={images[1]} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+          <img src={images[2]} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
         </div>
       </div>
     );
@@ -74,7 +74,7 @@ function ImageCollage({ images }: { images: string[] }) {
   return (
     <div className="grid h-full grid-cols-2 grid-rows-2 gap-px bg-border/40">
       {images.slice(0, 4).map((src, i) => (
-        <img key={i} src={src} alt="" className="h-full w-full object-cover" />
+        <img key={i} src={src} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
       ))}
     </div>
   );
@@ -376,7 +376,7 @@ export default function HomePage() {
       {/* Hero */}
       <div className="hero-glow flex flex-[8] flex-col items-center justify-center px-6 pt-20 pb-4">
         <h1 className="-mt-20 mb-4 flex items-end gap-3 text-5xl font-bold tracking-tight">
-          <img src={catPawImg} alt="" className="h-16 w-16 object-contain dark:invert" />
+          <img src={catPawImg} alt="" className="h-16 w-16 object-contain dark:invert" decoding="async" />
           <span className="text-shimmer tracking-[0.15em]">致力于解决电商行业的所有需求</span>
         </h1>
         <p className="mt-4 mb-12 max-w-md text-center text-base tracking-wide text-muted-foreground/80">

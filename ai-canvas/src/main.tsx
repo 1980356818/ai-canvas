@@ -13,7 +13,11 @@ if (typeof crypto !== "undefined" && !crypto.randomUUID) {
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { installGlobalDiag } from "@/lib/diag";
 import "./main.css";
+
+// 必须在 React 挂载之前装，否则极早期的 import/eval 报错会漏掉。
+installGlobalDiag();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

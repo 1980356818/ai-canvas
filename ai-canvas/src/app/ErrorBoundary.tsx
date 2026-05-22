@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import { diagLog } from "@/lib/diag";
 
 interface Props {
   children: ReactNode;
@@ -21,7 +22,13 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error("ErrorBoundary caught:", error, info.componentStack);
+    diagLog({
+      level: "error",
+      source: "react-boundary",
+      message: error.message,
+      stack: error.stack,
+      extra: { componentStack: info.componentStack },
+    });
   }
 
   render() {

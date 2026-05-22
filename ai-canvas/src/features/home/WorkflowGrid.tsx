@@ -49,6 +49,8 @@ function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
             src={workflow.coverImage}
             alt={workflow.name}
             className="block w-full transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="flex aspect-[3/2] items-center justify-center bg-gradient-to-br from-muted to-muted/60">

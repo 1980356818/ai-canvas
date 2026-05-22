@@ -99,24 +99,16 @@ async function sendOnce<T>(opts: HttpRequestOpts): Promise<T> {
   const timeoutMs = opts.timeoutMs ?? 60_000;
 
   // aiProxy 自己不支持 AbortSignal（Tauri invoke 没法中途断），
-  // 所以这里用 Promise.race 实现"前端层超时"，但请求本身可能还在跑。
+  // 所以这里实现"前端层超时"，但请求本身可能还在跑。
   // 真正的取消依赖 TaskManager 上层判断 signal 后丢弃结果。
   const proxyPromise = invokeProxyWithClassification(opts);
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    const id = setTimeout(() => {
-      reject(new TaskError("timeout", `request timeout after ${timeoutMs}ms`));
-    }, timeoutMs);
-    opts.signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(id);
-        reject(new TaskError("network", "request canceled"));
-      },
-      { once: true },
-    );
-  });
-
-  const resp = await Promise.race([proxyPromise, timeoutPromise]);
+  const resp = await raceWithTimeoutAndSignal(
+    proxyPromise,
+    timeoutMs,
+    opts.signal,
+    () => new TaskError("timeout", `request timeout after ${timeoutMs}ms`),
+    () => new TaskError("network", "request canceled"),
+  );
   return parseAndValidate<T>(resp);
 }
 
@@ -182,14 +174,87 @@ function truncate(s: string, n: number): string {
 
 async function sleepCancelable(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const id = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(id);
-        reject(new TaskError("network", "sleep canceled"));
+    let settled = false;
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(id);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new TaskError("network", "sleep canceled"));
+    };
+    const id = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    signal?.addEventListener("abort", onAbort);
+  });
+}
+
+/**
+ * 用 timeout + 外部 AbortSignal 包装 Promise，保证 race 出胜者后**立即**清理
+ * setTimeout 和 signal listener。直接 `Promise.race` 的写法会让赢家之外的定时器
+ * 和监听器残留——长任务 / 频繁调用会累积成 OOM 隐患。
+ *
+ * - `buildTimeoutError`：超时触发时构造抛出的 Error
+ * - `buildAbortError`：signal abort 触发时构造抛出的 Error
+ * - 若 signal 在调用前已 aborted，直接抛 abort error，不启 timer
+ */
+function raceWithTimeoutAndSignal<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  signal: AbortSignal | undefined,
+  buildTimeoutError: () => Error,
+  buildAbortError: () => Error,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(buildAbortError());
+    };
+
+    const cleanup = () => {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", onAbort);
+    };
+
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+
+    timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(buildTimeoutError());
+    }, timeoutMs);
+
+    signal?.addEventListener("abort", onAbort);
+
+    promise.then(
+      (v) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(v);
       },
-      { once: true },
+      (e) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(e);
+      },
     );
   });
 }

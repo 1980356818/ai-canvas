@@ -22,6 +22,8 @@ function renderContent(parts: ContentPart[], isUser: boolean) {
           src={part.url}
           alt=""
           className="mt-1 max-h-48 rounded-lg object-cover"
+          loading="lazy"
+          decoding="async"
         />
       );
     }

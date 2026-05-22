@@ -9,6 +9,7 @@ import { autoSave } from "@/lib/autoSave";
 import { updateProjectMeta, onTauriFileDrop, isTauri } from "@/platform";
 import { persistImage, getDisplayUrl, normalizeToStoragePath, type PersistImageResult } from "@/lib/media";
 import { ensureDisplayableImage, isHeicFile, convertHeicPath } from "@/lib/heicConverter";
+import { runWithLimit } from "@/lib/concurrency";
 
 // Utility helpers
 
@@ -398,7 +399,15 @@ export function useFileDrop(
         const mediaRawFiles = rawFiles.filter((f) => !isAudioFile(f));
         if (mediaRawFiles.length === 0) return;
 
-        const files = await Promise.all(mediaRawFiles.map(ensureDisplayableImage));
+        // 用户一次拖 N 个 HEIC：libheif decode 走 wasm/canvas，N 个并发会同时
+        // 占满 N 张全分辨率 RGBA bitmap。限到 4 并发避免 GPU/JS heap 暴涨。
+        const heicSettled = await runWithLimit(
+          mediaRawFiles.map((f) => () => ensureDisplayableImage(f)),
+          4,
+        );
+        const files = heicSettled.map((r, i) =>
+          r.status === "fulfilled" ? r.value : mediaRawFiles[i]!,
+        );
         let startIdx = 0;
 
         if (targetCardId) {
@@ -455,6 +464,10 @@ export function useFileDrop(
     let cancelled = false;
     let unlisten: (() => void) | undefined;
 
+    // 注意：onTauriFileDrop 返回 Promise，如果在它 resolve **之前** useEffect cleanup
+    // 先跑了（用户快速切走/重 mount），unlisten 还是 undefined → 调不到。等 then 拿到
+    // 真正 unlisten 时再判断 cancelled，已经晚的就立刻 unlisten 兜底，否则就保存它供
+    // 后续 cleanup 用。
     onTauriFileDrop(async (paths, sx, sy) => {
       if (cancelled) return;
       if (Date.now() - dropHandledAt.current < 1000) return;
@@ -547,7 +560,14 @@ export function useFileDrop(
       }
 
       updateNodeCount(pid);
-    }).then((fn) => { unlisten = fn; });
+    }).then((fn) => {
+      if (cancelled) {
+        // useEffect 已经清理过了：立即 unlisten，别让监听器泄漏
+        try { fn(); } catch { /* ignore */ }
+      } else {
+        unlisten = fn;
+      }
+    });
 
     return () => {
       cancelled = true;

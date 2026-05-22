@@ -326,6 +326,109 @@ export function toSeedanceRatio(size: string | undefined): string | undefined {
   return `${w / d}:${h / d}`;
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// Seedance 2.0 VIP — 极境 Nexus 网关 (V138 重构)
+// ═══════════════════════════════════════════════════════════════════
+// 与旧 Seedance (Dale channel 1094, Volcano content[] 协议) 完全隔离.
+// V138 把后端 route 拆成 5 个独立 model_name:
+//   seedance-2-0-720p-15s-no-person  (sd-2-vip, 720P, 不支持真人)
+//   seedance-2-0-720p-15s            (Seedance2.0-720P-15S, 720P, 支持真人)
+//   seedance-2-0-720p-video          (720P + 视频参考)
+//   seedance-2-0-1080p               (1080P, 支持真人)
+//   seedance-2-0-1080p-video         (1080P + 视频参考)
+// duration 后端固定 15 秒 (form 不暴露), quality 字段废弃.
+//
+// canvas UI 把 5 个上游收敛成 2 个下拉项:
+//   - alias `seedance-2-0`: 内部按 (分辨率, 是否传视频) resolve 到 4 个主上游
+//   - economy `seedance-2-0-720p-15s-no-person`: 单独项 (因为不支持真人)
+// ═══════════════════════════════════════════════════════════════════
+
+/** alias 项 (覆盖 4 个主上游): 用户在 UI 选分辨率, 提交时按是否有视频参考 resolve. */
+export const SEEDANCE_VIP_ALIAS_ID = "seedance-2-0";
+
+/** economy 项: 独立 model_name, 不进 alias resolve. */
+export const SEEDANCE_VIP_ECONOMY_ID = "seedance-2-0-720p-15s-no-person";
+
+/** 4 个主上游 model_name (alias resolve 的目标值域). */
+const SEEDANCE_VIP_ALIAS_TARGETS = new Set<string>([
+  "seedance-2-0-720p-15s",
+  "seedance-2-0-720p-video",
+  "seedance-2-0-1080p",
+  "seedance-2-0-1080p-video",
+]);
+
+/**
+ * VIP 系列模型判定 — alias + economy + 4 个主上游全部识别.
+ * 旧 `seedance-2-0-vip` 字符串不再识别; 老卡片若残留该 model id 会走 combo
+ * 默认 fallback 路径 (ModelSelector 不在 list 中即重置), 不在此处特殊映射.
+ */
+const SEEDANCE_VIP_MODEL_IDS = new Set<string>([
+  SEEDANCE_VIP_ALIAS_ID,
+  SEEDANCE_VIP_ECONOMY_ID,
+  ...SEEDANCE_VIP_ALIAS_TARGETS,
+]);
+
+export function isSeedanceVipModel(modelId: string | undefined | null): boolean {
+  if (!modelId) return false;
+  return SEEDANCE_VIP_MODEL_IDS.has(modelId);
+}
+
+/** alias 项判定 (区别于 economy / 主上游). 用于 UI 是否渲染分辨率胶囊 + 视频插槽. */
+export function isSeedanceVipAliasModel(modelId: string | undefined | null): boolean {
+  return modelId === SEEDANCE_VIP_ALIAS_ID;
+}
+
+/** economy 项判定. UI 不渲染分辨率胶囊, 不暴露视频插槽. */
+export function isSeedanceVipEconomyModel(modelId: string | undefined | null): boolean {
+  return modelId === SEEDANCE_VIP_ECONOMY_ID;
+}
+
+/** 分辨率档 — 仅 alias 项暴露 (economy 固定 720P). */
+export type SeedanceVipResolution = "720p" | "1080p";
+
+/** 分辨率选项, 给 SizeCombo.resolutionOptions 槽位用 (复用 Veo/Seedance 的胶囊位). */
+export const SEEDANCE_VIP_RESOLUTION_TIERS: readonly { value: SeedanceVipResolution; label: string }[] = [
+  { value: "720p",  label: "720P" },
+  { value: "1080p", label: "1080P" },
+];
+
+/**
+ * V138 核心 resolve: alias `seedance-2-0` 提交时按 (分辨率, 是否传视频) 选具体上游.
+ *   720P + 无视频 → seedance-2-0-720p-15s        (¥12, 支持真人)
+ *   720P + 有视频 → seedance-2-0-720p-video      (¥15, 支持视频参考)
+ *   1080P + 无视频 → seedance-2-0-1080p          (¥26, 支持真人)
+ *   1080P + 有视频 → seedance-2-0-1080p-video    (¥32, 支持视频参考)
+ */
+export function resolveSeedanceVipModelId(
+  resolution: SeedanceVipResolution,
+  hasVideos: boolean,
+): string {
+  if (resolution === "1080p") {
+    return hasVideos ? "seedance-2-0-1080p-video" : "seedance-2-0-1080p";
+  }
+  return hasVideos ? "seedance-2-0-720p-video" : "seedance-2-0-720p-15s";
+}
+
+/**
+ * 把 (分辨率, ratio) 翻译成后端 form_schema 期望的具体像素 size 字符串.
+ *   720P + 16:9 → "1280x720"
+ *   720P + 9:16 → "720x1280"
+ *   1080P + 16:9 → "1920x1080"
+ *   1080P + 9:16 → "1080x1920"
+ * 后端 NexusVideoAdapter.resolveSize 在 size 缺省时只能推断 720P 比例,
+ * 1080P 必须前端显式发具体像素值, 故所有 VIP 提交都走这个 helper.
+ */
+export function resolveSeedanceVipSize(
+  resolution: SeedanceVipResolution,
+  ratio: string,
+): string {
+  const is1080 = resolution === "1080p";
+  const isPortrait = ratio === "9:16" || ratio === "720x1280" || ratio === "1080x1920";
+  if (isPortrait) return is1080 ? "1080x1920" : "720x1280";
+  return is1080 ? "1920x1080" : "1280x720";
+}
+
+
 /**
  * Veo doesn't support `adaptive`, so canvas "auto" is dropped (caller
  * should omit aspect_ratio and let the upstream default kick in).

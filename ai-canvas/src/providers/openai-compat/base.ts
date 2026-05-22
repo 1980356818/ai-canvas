@@ -272,7 +272,9 @@ export abstract class OpenAICompatProvider implements AIProvider {
       model: req.model ?? this.defaultVideoModel(),
     };
     if (req.referenceImages?.length) {
-      body.images = req.referenceImages.map((ref) => ref.url);
+      body.images = await Promise.all(
+        req.referenceImages.map((ref) => compressDataUrlForApi(ref.url)),
+      );
     }
     if (req.size && req.size !== "auto") {
       body.aspect_ratio = toAspectRatio(req.size);

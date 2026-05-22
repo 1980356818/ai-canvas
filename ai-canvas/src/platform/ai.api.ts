@@ -2,6 +2,12 @@ import type { AiProxyResponse, StreamCallbacks, ModelInfo, TaskInfo } from "@/ty
 import { isTauri, ensureTauriAPIs, getInvoke, getListen } from "./runtime";
 import { buildProxyUrl, getProviderAuthHeaders, lsGet, lsSet } from "./storage";
 import { getComflyKeyTag } from "@/providers/comfly/models";
+import { diagError, diagWarn } from "@/lib/diag";
+
+// 跨次流式调用累计的"活监听器"计数。监听器泄漏是历史 bug 的根源
+// （done/error/onDone 抛错时旧实现会漏 unlisten），现在每个 stream 都进/出
+// 这个 Set，diag 通过它能在出错时拉到现场。
+const _activeStreamListeners = new Set<string>();
 
 const DEBUG = import.meta.env.DEV;
 
@@ -168,44 +174,83 @@ export async function aiProxyStream(
       data: string;
     }
 
-    const unlisten = await getListen()<StreamEvent>("ai-stream", (event) => {
+    // ── 统一 cleanup：done / error / abort / 用户回调抛错都走这里。
+    // 旧版只在 done 分支调 unlisten，error 路径直接漏；连发几次生成就攒一堆
+    // 监听器，每个 chunk 触发 N 个回调，最终 WebView 渲染进程 OOM 白屏。
+    let cleaned = false;
+    let unlistenFn: (() => void) | null = null;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      _activeStreamListeners.delete(streamId);
+      try {
+        unlistenFn?.();
+      } catch (err) {
+        diagWarn("ai-stream", "unlisten failed", { streamId, err: String(err) });
+      }
+    };
+
+    unlistenFn = await getListen()<StreamEvent>("ai-stream", (event) => {
+      if (cleaned) return;
       const payload = event.payload;
       if (payload.stream_id !== streamId) return;
-      switch (payload.event) {
-        case "chunk":
-          callbacks.onChunk(payload.data);
-          break;
-        case "key_switched": {
-          try {
-            const info = JSON.parse(payload.data);
-            notifyKeyRotation(info.key_name);
-            callbacks.onKeySwitched?.(info.key_name, info.tried_count);
-          } catch { /* ignore parse error */ }
-          break;
+
+      // 用户回调抛错不能影响 cleanup —— 全部包 try/catch，错误转交 diag。
+      try {
+        switch (payload.event) {
+          case "chunk":
+            callbacks.onChunk(payload.data);
+            break;
+          case "key_switched": {
+            try {
+              const info = JSON.parse(payload.data);
+              notifyKeyRotation(info.key_name);
+              callbacks.onKeySwitched?.(info.key_name, info.tried_count);
+            } catch { /* ignore parse error */ }
+            break;
+          }
+          case "done":
+            try { callbacks.onDone(); } finally { cleanup(); }
+            break;
+          case "error":
+            try { callbacks.onError(payload.data); } finally { cleanup(); }
+            break;
         }
-        case "done":
-          callbacks.onDone();
-          unlisten();
-          break;
-        case "error":
-          console.error("[Stream][Tauri] error:", payload.data.slice(0, 500));
-          callbacks.onError(payload.data);
-          break;
+      } catch (err) {
+        diagError("ai-stream", err, { streamId, event: payload.event });
+        // 回调炸了照样要释放监听器
+        cleanup();
       }
     });
 
-    await getInvoke()("ai_proxy_stream", {
-      provider,
-      endpoint,
-      body: { ...body, stream: true },
-      streamId,
-    });
+    _activeStreamListeners.add(streamId);
+    if (_activeStreamListeners.size > 8) {
+      diagWarn("ai-stream", `${_activeStreamListeners.size} active listeners (possible leak)`, {
+        ids: Array.from(_activeStreamListeners),
+      });
+    }
+
+    // 后端 invoke 失败也要 cleanup，否则监听器永远挂着
+    try {
+      await getInvoke()("ai_proxy_stream", {
+        provider,
+        endpoint,
+        body: { ...body, stream: true },
+        streamId,
+      });
+    } catch (err) {
+      cleanup();
+      throw err;
+    }
 
     return {
       streamId,
       abort: async () => {
-        await getInvoke()("ai_proxy_stream_abort", { streamId });
-        unlisten();
+        try {
+          await getInvoke()("ai_proxy_stream_abort", { streamId });
+        } finally {
+          cleanup();
+        }
       },
     };
   }

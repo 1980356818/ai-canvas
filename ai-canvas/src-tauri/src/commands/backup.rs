@@ -22,9 +22,16 @@ pub fn get_backup_dir(state: State<'_, AppState>) -> String {
 }
 
 #[tauri::command]
-pub fn create_backup_now(state: State<'_, AppState>) -> Result<String, String> {
-    let conn = state.db.lock().map_err(|e| format!("db lock poisoned: {}", e))?;
-    let path = backup::create_backup(&conn, &state.backup_dir, backup::DEFAULT_MAX_KEEP)?;
+pub async fn create_backup_now(state: State<'_, AppState>) -> Result<String, String> {
+    // 不持主 db 锁；备份函数内部独立 open 只读 connection。VACUUM I/O 同步阻塞，
+    // 放进 spawn_blocking 避免卡住 tokio runtime。
+    let db_path = state.db_path.clone();
+    let backup_dir = state.backup_dir.clone();
+    let path = tauri::async_runtime::spawn_blocking(move || {
+        backup::create_backup(&db_path, &backup_dir, backup::DEFAULT_MAX_KEEP)
+    })
+    .await
+    .map_err(|e| format!("backup task join failed: {}", e))??;
     Ok(path.to_string_lossy().to_string())
 }
 

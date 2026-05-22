@@ -769,14 +769,25 @@ export function propagateFromCard(sourceCardId: string): number {
   return count;
 }
 
-let prevSnapshots = new Map<string, string>();
-
+/**
+ * v5：dataFlow watcher 不再做 per-card JSON.stringify 快照对比。
+ *
+ * 旧实现：每次 cardStore subscribe 触发都遍历 **所有** cards 做 stringify，
+ *         对 50 张卡 × 50 token/s 的流式期间是主线程持续被 stringify 占满
+ *         （v4 漏修的高频累积卡顿源，见 docs/性能与IPC规范.md v5 章节）。
+ *
+ * 新实现：cardStore 在每次 data 真改动时维护 `dataVersion`（+1）和
+ *         `lastMutatedDataIds`（本次涉及的 cardId 集合，原子写入）。watcher
+ *         只需比 dataVersion 数字、对 lastMutatedDataIds 跑 propagate，
+ *         单卡编辑只 propagate 单卡，根除 stringify。
+ *
+ * propagate 链式 / 死循环防护：`propagateFromCard` 内部调 `injectIntoCard`
+ *         调 `updateCardData`，但 cardStore.updateCardData 内部有"实质性
+ *         changed 检测"短路（patch 跟当前 data 等同则 return s 不触发
+ *         setState），所以"父注入子但子的字段已是该值"不会再触发新一轮
+ *         watcher，链式传播自然收敛。
+ */
 export function startDataFlowWatcher(): () => void {
-  prevSnapshots.clear();
-  for (const [id, card] of useCardStore.getState().cards) {
-    prevSnapshots.set(id, JSON.stringify(card.data));
-  }
-
   // 启动时一次性同步：把已有输出注入到下游卡片的空槽位
   const conns = useConnectionStore.getState().connections;
   if (DEBUG) console.log("[DataFlow] 初始同步开始, 连接数:", conns.size);
@@ -801,28 +812,14 @@ export function startDataFlowWatcher(): () => void {
       if (DEBUG) console.log("[DataFlow] 初始同步注入结果:", injected, "→", target.title);
     }
   }
-  // 同步后刷新快照，避免订阅器重复触发
-  for (const [id, card] of useCardStore.getState().cards) {
-    prevSnapshots.set(id, JSON.stringify(card.data));
-  }
 
-  const unsubCards = useCardStore.subscribe((state) => {
+  // 订阅 dataVersion：每次有卡片真改 data，对 lastMutatedDataIds 跑 propagate。
+  const unsubCards = useCardStore.subscribe((state, prev) => {
+    if (state.dataVersion === prev.dataVersion) return;
     const generating = useUIStore.getState().generatingCards;
-
-    for (const [id, card] of state.cards) {
+    for (const id of state.lastMutatedDataIds) {
       if (generating.has(id)) continue;
-
-      const newSnap = JSON.stringify(card.data);
-      const oldSnap = prevSnapshots.get(id);
-
-      if (oldSnap !== undefined && oldSnap !== newSnap) {
-        propagateFromCard(id);
-      }
-      prevSnapshots.set(id, newSnap);
-    }
-
-    for (const id of prevSnapshots.keys()) {
-      if (!state.cards.has(id)) prevSnapshots.delete(id);
+      propagateFromCard(id);
     }
   });
 
@@ -832,11 +829,8 @@ export function startDataFlowWatcher(): () => void {
     const currentIds = new Set(state.generatingCards.keys());
     for (const id of prevGeneratingIds) {
       if (!currentIds.has(id)) {
-        const card = useCardStore.getState().getCard(id);
-        if (card) {
-          prevSnapshots.set(id, JSON.stringify(card.data));
-          propagateFromCard(id);
-        }
+        // 生成结束的瞬间：现在再 propagate 上游输出到下游空槽。
+        propagateFromCard(id);
       }
     }
     prevGeneratingIds = currentIds;
@@ -845,7 +839,6 @@ export function startDataFlowWatcher(): () => void {
   return () => {
     unsubCards();
     unsubUI();
-    prevSnapshots.clear();
   };
 }
 
@@ -862,10 +855,8 @@ export function injectOnConnect(
   if (output.kind === "none") return;
 
   injectIntoCard(target, output, sourceCardId);
-
-  prevSnapshots.set(targetCardId, JSON.stringify(
-    cardStore.getCard(targetCardId)?.data,
-  ));
+  // v5：不再维护 stringify 快照。updateCardData 内部 changed 短路保证
+  // "注入相同值不会再触发 watcher"，无需额外快照。
 }
 
 /**

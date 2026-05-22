@@ -105,6 +105,8 @@ export default function AttachmentPicker({
                   src={getDisplayUrl(att.url)}
                   alt=""
                   className="h-10 w-10 rounded-md border border-border object-cover"
+                  loading="lazy"
+                  decoding="async"
                 />
                 <button
                   type="button"

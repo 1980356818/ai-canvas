@@ -88,9 +88,9 @@ export default function TaskRecordCard({ task, projectName, onLocate, onRetry }:
         {isSuccess && thumbUrl ? (
           <>
             {isVideo ? (
-              <video src={thumbUrl} className="h-full w-full object-cover" muted preload="metadata" />
+              <video src={thumbUrl} className="h-full w-full object-cover" muted preload="none" />
             ) : (
-              <img src={thumbUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+              <img src={thumbUrl} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
             )}
             {isVideo && (
               <div className="absolute inset-0 flex items-center justify-center">

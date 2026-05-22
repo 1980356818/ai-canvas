@@ -185,6 +185,12 @@ export interface VideoGenRequest {
   /** 状态变更回调地址。 */
   callbackUrl?: string;
   /**
+   * 通用画质/模式字符串, 当前用于 Seedance 2.0 VIP (极境 Nexus 网关) 区分
+   * fast/standard — Nexus 协议是 model 名固定 + body.quality 切上游 SKU.
+   * 旧 Seedance/Veo/Grok 不读这个字段, 它们各自用 model 名后缀或 line_tag.
+   */
+  quality?: string;
+  /**
    * 任务所属项目 ID。**调用方必须在发起请求前快照**，禁止在异步回调里从全局
    * store 读取，否则用户在生成期间切换项目会导致结果保存到错误的项目目录。
    */

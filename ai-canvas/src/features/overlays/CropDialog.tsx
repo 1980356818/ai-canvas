@@ -526,6 +526,7 @@ export function CropDialog() {
                     alt="裁剪预览"
                     className="block max-h-[calc(90vh-7rem)] max-w-full select-none"
                     draggable={false}
+                    decoding="async"
                     onLoad={handleImgLoad}
                     onError={handleImgError}
                   />

@@ -261,7 +261,7 @@ export default function SizeCombo({
                         disabled={disabled || durationDisabled}
                         onClick={() => onDurationChange(Number(d.value))}
                         className={cn(
-                          "min-w-[44px] flex-1 rounded-lg py-1.5 text-center text-xs font-medium transition-colors",
+                          "min-w-[44px] rounded-lg px-2 py-1.5 text-center text-xs font-medium transition-colors",
                           active
                             ? "bg-primary text-primary-foreground shadow-sm"
                             : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",

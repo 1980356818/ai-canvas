@@ -16,6 +16,7 @@ import { providerService } from "@/services/provider.service";
 import { useProviderStore, parseModelRef } from "@/stores/providerStore";
 import { getAccumulatedToolCalls } from "@/providers/openai-compat/formatter";
 import { getBase64ForApi, persistImage } from "@/lib/media";
+import { runWithLimit } from "@/lib/concurrency";
 import { useProjectStore } from "@/stores/projectStore";
 import {
   getAllowedSizesForModel,
@@ -163,10 +164,68 @@ const DEFAULT_GENERATION: GenerationState = {
   generatingType: null,
   generatingProgress: 0,
   generatingStatus: "",
-  generatingStartedAt: 0,
   streamingText: "",
   streamingReasoning: "",
+  generatingStartedAt: 0,
 };
+
+// ── 内存防 OOM：单会话消息上限 + LRU 驻留会话上限 ───────────
+//
+// SQLite 仍保存全量历史；这里仅控制 store 的 messagesBySession 缓存大小，
+// 避免连续聊几小时累积出几百 MB 的 ChatMessage 数组（每条可能挂 base64
+// 图、模型 reasoning 块等大字段）。
+const MESSAGES_PER_SESSION_CAP = 500;
+const RESIDENT_SESSIONS_CAP = 8;
+
+/** 仅保留尾部最近 N 条；不到上限原样返回。 */
+function capMessages(msgs: ChatMessage[]): ChatMessage[] {
+  if (msgs.length <= MESSAGES_PER_SESSION_CAP) return msgs;
+  return msgs.slice(msgs.length - MESSAGES_PER_SESSION_CAP);
+}
+
+// 访问顺序 ring：末尾 = 最近用过的 sessionId。
+// 放 module-level 是因为它只是"内存缓存淘汰策略"，不属于业务状态——
+// 进 zustand state 会触发不必要的 re-render。
+const sessionAccessOrder: string[] = [];
+
+function touchSessionAccess(sid: string): void {
+  const idx = sessionAccessOrder.indexOf(sid);
+  if (idx >= 0) sessionAccessOrder.splice(idx, 1);
+  sessionAccessOrder.push(sid);
+}
+
+function forgetSessionAccess(sid: string): void {
+  const idx = sessionAccessOrder.indexOf(sid);
+  if (idx >= 0) sessionAccessOrder.splice(idx, 1);
+}
+
+/**
+ * 收敛 messagesBySession 到 RESIDENT_SESSIONS_CAP 以内。
+ * 按 sessionAccessOrder 倒序保留最近访问的若干个，强制保留 keepSid（即便从未触过）。
+ * 被驱逐的 session 切回时由 switchSession 重新从 DB load。
+ */
+function pruneResidentSessions(
+  messagesBySession: Record<string, ChatMessage[]>,
+  keepSid: string | null,
+): Record<string, ChatMessage[]> {
+  const keys = Object.keys(messagesBySession);
+  if (keys.length <= RESIDENT_SESSIONS_CAP) return messagesBySession;
+  const recent = new Set<string>();
+  for (
+    let i = sessionAccessOrder.length - 1;
+    i >= 0 && recent.size < RESIDENT_SESSIONS_CAP;
+    i--
+  ) {
+    const sid = sessionAccessOrder[i];
+    if (sid !== undefined) recent.add(sid);
+  }
+  if (keepSid) recent.add(keepSid);
+  const next = { ...messagesBySession };
+  for (const k of keys) {
+    if (!recent.has(k)) delete next[k];
+  }
+  return next;
+}
 
 // ── 输入草稿（含未发送的文本与参考图，按会话隔离） ─────────
 //
@@ -345,10 +404,10 @@ function patchSessionMessagesIfVisible(
   updater: (prev: ChatMessage[]) => ChatMessage[],
 ): Partial<ChatState> {
   const prev = state.messagesBySession[sid] ?? [];
-  const nextMessagesBySession = {
-    ...state.messagesBySession,
-    [sid]: updater(prev),
-  };
+  const updated = capMessages(updater(prev));
+  touchSessionAccess(sid);
+  const merged = { ...state.messagesBySession, [sid]: updated };
+  const nextMessagesBySession = pruneResidentSessions(merged, state.currentSessionId);
   const patch: Partial<ChatState> = { messagesBySession: nextMessagesBySession };
   if (state.currentSessionId === sid) {
     const next = { ...state, messagesBySession: nextMessagesBySession };
@@ -467,6 +526,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const pid = projectId ?? get().currentProjectId ?? useProjectStore.getState().currentProjectId ?? undefined;
     const row = await createChatSession(id, "新对话", pid);
     const session = rowToSession(row);
+    touchSessionAccess(id);
     set((s) => {
       const messagesBySession = { ...s.messagesBySession, [id]: [] };
       const generationBySession = { ...s.generationBySession, [id]: { ...DEFAULT_GENERATION } };
@@ -527,8 +587,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const rows = await loadChatMessages(id);
       msgs = rows.map(rowToMessage);
     }
+    // 加载历史与切换可见态一起做：cap + LRU 在 helper 内统一处理。
+    touchSessionAccess(id);
     set((s) => {
-      const messagesBySession = { ...s.messagesBySession, [id]: msgs };
+      const cappedMsgs = capMessages(msgs);
+      const merged = { ...s.messagesBySession, [id]: cappedMsgs };
+      const messagesBySession = pruneResidentSessions(merged, id);
       const session = s.sessions.find((item) => item.id === id);
       const currentProjectId = session ? session.projectId ?? null : s.currentProjectId;
       const next = { ...s, currentProjectId, currentSessionId: id, messagesBySession };
@@ -551,6 +615,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       abortControllers.delete(id);
     }
 
+    forgetSessionAccess(id);
     set((s) => {
       const sessions = s.sessions.filter((x) => x.id !== id);
       const isCurrent = s.currentSessionId === id;
@@ -868,6 +933,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             )
           : undefined;
 
+        // jobCount 来源于 LLM tool call 输出，模型可能一次性要求 N 张图。
+        // 无界并发 → 多张高分图 RGBA 同时解码 → WebView2 GPU OOM。
+        // 用 runWithLimit 限到 4 个 in-flight，其余排队。
+        const IMAGE_GEN_CONCURRENCY = 4;
         const jobCount = streamResult.imageJobs.length;
         const perProgress = new Array<number>(jobCount).fill(0);
 
@@ -880,8 +949,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }));
         };
 
-        const settled = await Promise.allSettled(
-          streamResult.imageJobs.map((job, i) => {
+        const settled = await runWithLimit(
+          streamResult.imageJobs.map((job, i) => () => {
             const partIdx = imageLoadingIndices[i]!;
             const finalSize = coerceToAllowedSize(job.size || "1:1", allowedSizes);
             return (async () => {
@@ -917,6 +986,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ));
             })();
           }),
+          IMAGE_GEN_CONCURRENCY,
         );
 
         for (let i = 0; i < settled.length; i++) {

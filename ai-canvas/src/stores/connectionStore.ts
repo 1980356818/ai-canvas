@@ -21,8 +21,24 @@ export function setConnectionLifecycleHooks(hooks: ConnectionLifecycleHooks) {
   lifecycleHooks = hooks;
 }
 
+/**
+ * `connectionsVersion` —— 仅在 `connections` Map 的**集合内容**变化时自增
+ * （add / remove / setConnections / removeConnectionsForCard / clear）。
+ *
+ * 订阅"连线列表派生数据"（如 ImageRefSources / ConnectionLayer 视口剔除）
+ * 的下游 **必须** 订它，**禁止** 直接 `useConnectionStore((s) => s.connections)`
+ * 当作 useMemo deps —— Map 引用每次 add/remove 都新建，比对开销随 N 线性
+ * 增长，且 useMemo deps 浅比较会因 Map 引用变更触发完整重算。
+ *
+ * 例外：`ConnectionLayer` 主组件本身在 render 阶段需要 iterate connections
+ * 来生成 <path>，那里订 `s.connections` 是必需的（不是 useMemo deps）。
+ *
+ * `selectedConnectionId` / `hoveredConnectionId` / `draftWire` / `flowingConnectionIds`
+ * 是局部 UI 状态，不影响 connections 集合，不入 connectionsVersion。
+ */
 interface ConnectionState {
   connections: Map<string, Connection>;
+  connectionsVersion: number;
   selectedConnectionId: string | null;
   hoveredConnectionId: string | null;
   draftWire: DraftWire | null;
@@ -45,6 +61,7 @@ interface ConnectionState {
 
 export const useConnectionStore = create<ConnectionState>((set, get) => ({
   connections: new Map(),
+  connectionsVersion: 0,
   selectedConnectionId: null,
   hoveredConnectionId: null,
   draftWire: null,
@@ -55,7 +72,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     const prev = get().connections;
     const map = new Map<string, Connection>();
     for (const c of list) map.set(c.id, c);
-    set({ connections: map });
+    set((s) => ({ connections: map, connectionsVersion: s.connectionsVersion + 1 }));
 
     const removed: Connection[] = [];
     for (const [id, conn] of prev) {
@@ -75,7 +92,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
     set((s) => {
       const next = new Map(s.connections);
       next.set(conn.id, conn);
-      return { connections: next };
+      return { connections: next, connectionsVersion: s.connectionsVersion + 1 };
     });
     lifecycleHooks.onConnectionsAdded?.([conn]);
   },
@@ -88,6 +105,7 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       next.delete(id);
       return {
         connections: next,
+        connectionsVersion: s.connectionsVersion + 1,
         selectedConnectionId:
           s.selectedConnectionId === id ? null : s.selectedConnectionId,
       };
@@ -112,7 +130,11 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
         removed.some((c) => c.id === s.selectedConnectionId)
           ? null
           : s.selectedConnectionId;
-      return { connections: next, selectedConnectionId: stillSelected };
+      return {
+        connections: next,
+        connectionsVersion: s.connectionsVersion + 1,
+        selectedConnectionId: stillSelected,
+      };
     });
     lifecycleHooks.onConnectionsRemoved?.(removed);
   },
@@ -136,12 +158,13 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
   setPendingDrop: (drop) => set({ pendingDrop: drop }),
   setFlowingConnectionIds: (ids) => set({ flowingConnectionIds: ids }),
   clear: () =>
-    set({
+    set((s) => ({
       connections: new Map(),
+      connectionsVersion: s.connectionsVersion + 1,
       selectedConnectionId: null,
       hoveredConnectionId: null,
       draftWire: null,
       pendingDrop: null,
       flowingConnectionIds: new Set(),
-    }),
+    })),
 }));

@@ -356,7 +356,7 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
                   <video
                     src={item.displayUrl}
                     className="h-full w-full object-cover"
-                    preload="metadata"
+                    preload="none"
                     muted
                   />
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -368,6 +368,8 @@ const ChatInput = forwardRef<ChatInputHandle>(function ChatInput(_props, ref) {
                   src={item.displayUrl}
                   alt=""
                   className="h-14 w-14 rounded-lg border border-border object-cover"
+                  loading="lazy"
+                  decoding="async"
                 />
               )}
               <button

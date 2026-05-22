@@ -248,6 +248,8 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
                 src={getDisplayUrl(data.refImages!.refImage0!.url)}
                 alt="参考图"
                 className="h-full w-full object-cover"
+                loading="lazy"
+                decoding="async"
               />
             </div>
             <span className="text-xs text-muted-foreground">参考图已设置</span>

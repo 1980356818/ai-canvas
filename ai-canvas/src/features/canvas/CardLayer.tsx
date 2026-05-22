@@ -71,7 +71,10 @@ interface CardLayerProps {
 }
 
 export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) {
-  const cards = useCardStore((s) => s.cards);
+  // 关键：**不**订阅 cards Map —— cardStore 每次 mutation 都复制出新 Map，
+  // 而 `updateCardData`（编辑器改 prompt / 改 imageUrl 等非几何字段）
+  // 不应导致整层重算。只订阅 layoutVersion；effect 内 imperative 取 cards。
+  // bringToFront / sendToBack 也走 layoutVersion 通道，覆盖层级变化。
   const layoutVersion = useCardStore((s) => s.layoutVersion);
   const selectedCardIds = useCanvasStore((s) => s.selectedCardIds);
 
@@ -83,7 +86,6 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
   // 保存上一次重算时的 viewport / 内容版本，用于阈值判断
   const lastVpRef = useRef<{ x: number; y: number; zoom: number; w: number; h: number } | null>(null);
   const lastLayoutRef = useRef(-1);
-  const lastCardsRef = useRef<typeof cards | null>(null);
   const lastPidRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -95,7 +97,6 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
 
     const last = lastVpRef.current;
     const layoutChanged = lastLayoutRef.current !== layoutVersion;
-    const cardsChanged = lastCardsRef.current !== cards;
     const pidChanged = lastPidRef.current !== projectId;
     const sizeChanged =
       !last || last.w !== viewport.width || last.h !== viewport.height;
@@ -110,9 +111,11 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
       }
     }
 
-    if (!vpSignificant && !layoutChanged && !cardsChanged && !pidChanged && !sizeChanged) {
+    if (!vpSignificant && !layoutChanged && !pidChanged && !sizeChanged) {
       return;
     }
+
+    const cards = useCardStore.getState().cards;
 
     const worldLeft = -viewport.x / viewport.zoom - VIEWPORT_MARGIN;
     const worldTop = -viewport.y / viewport.zoom - VIEWPORT_MARGIN;
@@ -161,7 +164,6 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
       h: viewport.height,
     };
     lastLayoutRef.current = layoutVersion;
-    lastCardsRef.current = cards;
     lastPidRef.current = projectId;
     setVisible({ fullCards: full, thumbCards: thumb });
   }, [
@@ -172,7 +174,6 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
     viewport.height,
     projectId,
     layoutVersion,
-    cards,
   ]);
 
   const prevVp = useRef({ x: viewport.x, y: viewport.y });
@@ -199,6 +200,8 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
     const pBottom = baseBottom + margin + (dirY > 0 ? dirY * margin : 0);
 
     const ids = spatialIndex.query(pLeft, pTop, pRight, pBottom);
+    // imperative 取 cards：避免订阅整个 Map 导致非几何变更也触发预加载
+    const cards = useCardStore.getState().cards;
     const urls: string[] = [];
     for (const id of ids) {
       const card = cards.get(id);
@@ -207,7 +210,7 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
       if (imgUrl) urls.push(getDisplayUrl(imgUrl));
     }
     if (urls.length > 0) preloadImages(urls);
-  }, [viewport.x, viewport.y, viewport.zoom, viewport.width, viewport.height, projectId, cards]);
+  }, [viewport.x, viewport.y, viewport.zoom, viewport.width, viewport.height, projectId, layoutVersion]);
 
   return (
     <>

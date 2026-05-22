@@ -221,7 +221,7 @@ export default function LoginWindow() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left — brand area */}
         <div className="w-[280px] shrink-0 overflow-hidden">
-          <img src={loginBrand} alt="AI猫" className="h-full w-full object-cover" />
+          <img src={loginBrand} alt="AI猫" className="h-full w-full object-cover" decoding="async" />
         </div>
 
         {/* Right — form */}

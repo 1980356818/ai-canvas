@@ -18,7 +18,7 @@ function isTerminal(status: string): boolean {
 }
 
 const INITIAL_DELAY = 1000;
-const MAX_DELAY = 10000;
+const MAX_DELAY = 3000;
 const BACKOFF_FACTOR = 2;
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -48,17 +48,28 @@ export async function waitForTask(
   keyTag?: string,
 ): Promise<TaskResult> {
   let delay = INITIAL_DELAY;
+  const startMs = Date.now();
+  let pollCount = 0;
 
   for (;;) {
     if (signal?.aborted) {
       throw new DOMException("Aborted", "AbortError");
     }
 
+    const pollStartMs = Date.now();
     const info: TaskInfo = await pollTask(taskId, endpoint, provider, keyTag);
+    const httpMs = Date.now() - pollStartMs;
+    pollCount += 1;
+    console.log(
+      `[task] poll #${pollCount} taskId=${taskId} httpMs=${httpMs} status=${info.status} progress=${info.progress ?? 0} totalMs=${Date.now() - startMs}`,
+    );
 
     onProgress?.(info.progress ?? 0, info.status);
 
     if (isTerminal(info.status)) {
+      console.log(
+        `[task] done taskId=${taskId} polls=${pollCount} totalMs=${Date.now() - startMs} status=${info.status}`,
+      );
       return {
         status: info.status,
         resultUrl: info.resultUrl,

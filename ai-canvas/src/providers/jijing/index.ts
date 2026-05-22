@@ -5,6 +5,7 @@ import {
   isJiJingSeedanceModel,
   isJiJingVeoModel,
   isJiJingGrokVideoModel,
+  isJiJingSeedanceVipModel,
 } from "./models";
 import { toSeedanceRatio, toVeoAspectRatio } from "../shared/video";
 import { executeAsyncMediaTask } from "../shared/asyncMediaTask";
@@ -43,6 +44,11 @@ export class JiJingProvider extends OpenAICompatProvider {
 
   async generateVideo(req: VideoGenRequest): Promise<VideoGenResponse> {
     const model = req.model ?? "";
+    // VIP 独立分支: 协议简化 (无 Volcano content[] / reference_mode), 优先匹配
+    // 避免落到 isSeedanceModel — 后者只识别旧 Dale 系 SKU, 跟 VIP 互斥.
+    if (isJiJingSeedanceVipModel(model)) {
+      return this.generateSeedanceVipVideo(req);
+    }
     if (isJiJingVeoModel(model) || isJiJingSeedanceModel(model) || isJiJingGrokVideoModel(model)) {
       if (isJiJingSeedanceModel(model) && req.referenceVideos?.length) {
         throw new Error(
@@ -52,6 +58,65 @@ export class JiJingProvider extends OpenAICompatProvider {
       return this.generateGatewayVideo(req);
     }
     return super.generateVideo(req);
+  }
+
+  /**
+   * Seedance 2.0 VIP (极境 Nexus 网关) 专用生成路径 — V138 重构.
+   *
+   * 协议跟 jijing-server NexusVideoAdapter (V138) 对齐:
+   *   POST /v1/videos/generations
+   *     {model, prompt, size, images?, videos?}
+   *
+   * V138 变化:
+   *   - quality 字段废弃 (model_name 已细到具体上游, 不再需要二级开关)
+   *   - duration 不传 (后端固定 15 秒)
+   *   - size 必须是具体像素 (1280x720 / 1920x1080 / 720x1280 / 1080x1920),
+   *     1080P 路径不能只发 aspect_ratio 否则后端会推断成 720P.
+   *
+   * model 字段由 VideoEditor.handleGenerate 先经 resolveSeedanceVipModelId
+   * resolve 到 4 个主上游之一, 或直接是 economy 项 model_name.
+   * 这里只负责扁平化, 不再做 model 选择.
+   */
+  private async generateSeedanceVipVideo(req: VideoGenRequest): Promise<VideoGenResponse> {
+    return await executeAsyncMediaTask({
+      providerId: this.descriptor.id,
+      submitEndpoint: JIJING_VIDEO_ENDPOINT,
+      body: this.buildSeedanceVipBody(req),
+      emit: req.onProgress,
+      expectedSec: PROGRESS_EXPECTED_SEC.videoSeedance,
+      generatingLabel: "视频生成中…",
+      submittingLabel: "正在提交视频请求…",
+      savingLabel: "正在保存视频…",
+      failedFallbackMessage: "视频生成失败",
+      projectId: req.projectId,
+      title: req.prompt,
+      cardId: req.cardId,
+      kind: "video_gen",
+    });
+  }
+
+  private buildSeedanceVipBody(req: VideoGenRequest): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+      prompt: req.prompt,
+      model: req.model,
+    };
+    // V138: 后端 form_schema size 字段是具体像素 (1280x720/720x1280/1920x1080/1080x1920).
+    // canvas 上层已经 resolve 完 (resolveSeedanceVipSize), 这里若 req.size 形如 NxN 直接透传;
+    // 否则退化到 aspect_ratio 让后端 resolveSize 推断 720P (兜底, 不应到这里).
+    if (req.size && /^\d+x\d+$/.test(req.size)) {
+      body.size = req.size;
+    } else {
+      const aspect = req.ratio ?? toSeedanceRatio(req.size);
+      if (aspect) body.aspect_ratio = aspect;
+    }
+    if (req.referenceImages?.length) {
+      body.images = req.referenceImages.map((ref) => ({ url: ref.url, role: ref.role }));
+    }
+    if (req.referenceVideos?.length) {
+      body.videos = req.referenceVideos.map((ref) => ({ url: ref.url, role: ref.role }));
+    }
+    // 不传 duration (后端固定 15s), 不传 quality (V138 废弃).
+    return body;
   }
 
   private async generateGatewayVideo(req: VideoGenRequest): Promise<VideoGenResponse> {

@@ -338,6 +338,24 @@ export default memo(
           }
         }
 
+        // 拖动期间 store 写入用 rAF 合并：原生 pointermove 在高刷屏可达 120fps，
+        // 每次都直接 setDragOffsets 会推动 ConnectionLayer / CanvasBirdView 重渲染。
+        // 用一个 pendingFrame 把同帧多次更新合并成一次提交，稳定 ≤60fps。
+        let pendingFrame = 0;
+        let latestGroupOffsets: Map<string, { dx: number; dy: number }> | null = null;
+        let latestSingleOffset: { dx: number; dy: number } | null = null;
+        const flushDragOffsets = () => {
+          pendingFrame = 0;
+          const store = useCanvasStore.getState();
+          if (latestGroupOffsets) {
+            store.setDragOffsets(latestGroupOffsets);
+            latestGroupOffsets = null;
+          } else if (latestSingleOffset) {
+            store.setDragOffset(card.id, latestSingleOffset);
+            latestSingleOffset = null;
+          }
+        };
+
         const onMove = (ev: PointerEvent) => {
           if (ev.pointerId !== pid || !dragging.current) return;
           const dx = (ev.clientX - dragStart.current.mx) / zoom;
@@ -345,6 +363,7 @@ export default memo(
           const screenDx = ev.clientX - dragStart.current.mx;
           const screenDy = ev.clientY - dragStart.current.my;
           if (Math.abs(screenDx) > 5 || Math.abs(screenDy) > 5) didDrag.current = true;
+          // DOM transform 立刻 imperative 更新，跟手手感不受 rAF 节流影响
           el.style.transform = `translate(${dx}px, ${dy}px)`;
 
           if (isGroupDrag) {
@@ -354,9 +373,14 @@ export default memo(
               if (peer.el) peer.el.style.transform = `translate(${dx}px, ${dy}px)`;
               offsets.set(sid, { dx, dy });
             }
-            useCanvasStore.getState().setDragOffsets(offsets);
+            latestGroupOffsets = offsets;
+            latestSingleOffset = null;
           } else {
-            useCanvasStore.getState().setDragOffset(card.id, { dx, dy });
+            latestSingleOffset = { dx, dy };
+            latestGroupOffsets = null;
+          }
+          if (!pendingFrame) {
+            pendingFrame = requestAnimationFrame(flushDragOffsets);
           }
 
           const slotEl = findSlotBelow(ev.clientX, ev.clientY);
@@ -406,6 +430,14 @@ export default memo(
           el.removeEventListener("pointermove", onMove);
           el.removeEventListener("pointerup", onUp);
           el.removeEventListener("lostpointercapture", onUp);
+
+          // 取消任何 pending rAF 提交，避免在 clearDragOffsets 之后再写入残留 offset
+          if (pendingFrame) {
+            cancelAnimationFrame(pendingFrame);
+            pendingFrame = 0;
+          }
+          latestGroupOffsets = null;
+          latestSingleOffset = null;
 
           if (isGroupDrag) {
             for (const [, peer] of peerStarts) {

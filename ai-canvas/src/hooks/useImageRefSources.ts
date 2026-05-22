@@ -42,10 +42,18 @@ export function useImageRefSources(
   refAudios?: AudioEntry[],
   refVideos?: VideoEntry[],
 ): ImageRefOption[] {
-  const cards = useCardStore((s) => s.cards);
-  const connections = useConnectionStore((s) => s.connections);
+  // v5：订阅 version 信号（数字）而不是整 Map 引用。每次任意卡片 updateCardData
+  // 都会让旧写法 `useCardStore((s) => s.cards)` 把 Map 引用换新，进而让本
+  // useMemo deps 触发整段重算 + 产出新 array → 上游编辑器整组件树重渲。
+  // 现在只在"有卡片真改 data"或"连线集合变化"时触发；effect/useMemo 内
+  // imperative 取最新 cards/connections。
+  const dataVersion = useCardStore((s) => s.dataVersion);
+  const layoutVersion = useCardStore((s) => s.layoutVersion);
+  const connectionsVersion = useConnectionStore((s) => s.connectionsVersion);
 
   return useMemo(() => {
+    const cards = useCardStore.getState().cards;
+    const connections = useConnectionStore.getState().connections;
     const options: ImageRefOption[] = [];
     const seenUrls = new Set<string>();
 
@@ -127,7 +135,11 @@ export function useImageRefSources(
     }
 
     return options;
-  }, [cardId, refSlots, refImages, refAudios, refVideos, cards, connections]);
+    // 数字 deps：浅比较快，且只在真实"卡片 data / 增减 / 连线"变化时重算。
+    // 注意：cards / connections 是 imperative 取 (getState)，故意不在 deps 里——
+    // version 数字才是合法的触发信号。eslint-disable 仅针对此行。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardId, refSlots, refImages, refAudios, refVideos, dataVersion, layoutVersion, connectionsVersion]);
 }
 
 function getCardTypeLabel(type: string): string {

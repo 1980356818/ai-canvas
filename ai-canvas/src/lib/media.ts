@@ -1,5 +1,6 @@
 import { saveMedia, readMediaBase64 } from "@/platform/media.api";
 import { isTauri } from "@/platform/runtime";
+import { IPC_PAYLOAD_HARD_LIMIT_BYTES } from "@/lib/ipcLimits";
 
 let _basePath: string | null = null;
 let _convertFileSrc: ((path: string, protocol?: string) => string) | null = null;
@@ -33,18 +34,13 @@ export interface PersistImageResult {
   height?: number;
 }
 
-// Tauri 2 在 Windows/WebView2 上的 IPC 通道（ipc.localhost custom protocol +
-// postMessage fallback）对单次 invoke 的 payload 大小没有官方上限，但 dev 模式
-// 下实测 3-4MB 就开始随机 ERR_CONNECTION_REFUSED / "Failed to fetch"。
-// 阈值留足余量，超过就先在前端压到 IPC 能扛得住的大小。
-const SAFE_IPC_PAYLOAD_LIMIT = 3 * 1024 * 1024;
-
 /**
- * 把 dataUrl 压到 IPC 安全大小。返回的 dataUrl 总长度保证 ≤ `SAFE_IPC_PAYLOAD_LIMIT`。
- * 用于所有"前端构造 dataUrl 后必须送给 Rust"的场景。
+ * 把 dataUrl 压到 IPC 安全大小。返回的 dataUrl 总长度保证 ≤ `IPC_PAYLOAD_HARD_LIMIT_BYTES`。
+ * 用于所有"前端构造 dataUrl 后必须送给 Rust"的场景。常量来源见
+ * `@/lib/ipcLimits`。
  */
 async function ensureIpcSafeDataUrl(dataUrl: string): Promise<string> {
-  if (dataUrl.length <= SAFE_IPC_PAYLOAD_LIMIT) return dataUrl;
+  if (dataUrl.length <= IPC_PAYLOAD_HARD_LIMIT_BYTES) return dataUrl;
 
   const { compressDataUrlForApi } = await import("@/lib/imageCompression");
 
@@ -55,7 +51,7 @@ async function ensureIpcSafeDataUrl(dataUrl: string): Promise<string> {
     forceJpeg: true,
   });
 
-  if (safe.length > SAFE_IPC_PAYLOAD_LIMIT) {
+  if (safe.length > IPC_PAYLOAD_HARD_LIMIT_BYTES) {
     safe = await compressDataUrlForApi(safe, {
       maxDim: 1280,
       maxBytes: 1 * 1024 * 1024,
