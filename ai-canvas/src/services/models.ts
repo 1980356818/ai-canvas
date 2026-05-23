@@ -130,9 +130,9 @@ export const modelService = {
 
   async getDefaultVideoModel(): Promise<ModelRef> {
     const models = await aggregateModels("VIDEO");
-    // 视频默认走极境的 canonical alias "veo3.1";VideoEditor 加载时会通过
-    // normalizeVeoModelToCanonical 把任何 legacy sku (-fast/-4k/-ref) 收敛到这里。
-    return toRef(models[0], "veo3.1", "jijing");
+    // 视频默认走极境 seedance (Veo 已从 dropdown 隐藏, 2026-05-24)。
+    // 后端仍保留 veo3.1 路由 + normalizeVeoModelToCanonical, 老卡片可重生成。
+    return toRef(models[0], "seedance", "jijing");
   },
 
   // ── Resolution helpers ───────────────────────────────────

@@ -24,9 +24,6 @@ export const JIJING_IMAGE_MODELS: ModelInfo[] = [
 ];
 
 // 视频模型经 JiJing 网关路由,UI dropdown 露出的 canonical alias:
-//   veo3.1            → 后端 model_route 2200..2204,前端按 (mode, resolution) resolve 成
-//                       veo3.1-fast / veo3.1-1080p / veo3.1-pro-1080p / veo3.1-ref / veo3.1-ref-hd 再发请求,
-//                       见 resolveVeoVariantForMode + VideoEditor.handleGenerate。
 //   seedance          → 后端 model_route 2201/2205/2206 → Dale AI Seedance (channel 1094)。
 //   seedance-2-0      → V138/V145 alias: 后端 model_route 2223/2224/2225/2226 (Nexus 1095, 4 个上游).
 //                       VideoEditor 按 (分辨率 720P/1080P, 是否传参考视频) resolve 到具体 model_name,
@@ -35,10 +32,15 @@ export const JIJING_IMAGE_MODELS: ModelInfo[] = [
 //                                   不支持真人形象, 故跟 alias 拆开避免误导.
 //   grok-video        → 后端 PearNo channel.
 //
+// veo3.1 已从 UI dropdown 隐藏 (2026-05-24)。
+// 后端 model_route 2200..2204 + isVeoModel / resolveVeoVariantForMode 等 helper 仍在,
+// 用于兼容历史卡片 (model="veo3.1" 的老卡片仍能重新生成、回放),
+// 但新建视频卡 / 新选模型不再露出 Veo。要重新启用,把 veo3.1 加回下面数组,
+// 并把 services/models.ts getDefaultVideoModel + providerStore DEFAULT_VIDEO_REF 改回 veo3.1 即可。
+//
 // Dale 上游硬约束 (2026-05-16): seedance 系列不支持参考视频,UI 已屏蔽。
 // Nexus 上游 (V145): duration 5-15 秒, 缺省 15 (canvas 暂不暴露控件); quality 字段废弃.
 export const JIJING_VIDEO_MODELS: ModelInfo[] = [
-  { id: "veo3.1", display_name: "Veo 3.1", capability: "VIDEO" },
   { id: "seedance", display_name: "Seedance 2.0 按秒计费", capability: "VIDEO" },
   // V145: Nexus VIP alias, UI 上分辨率胶囊切 720P/1080P, 自动按是否有参考视频 resolve 到 4 个上游.
   { id: "seedance-2-0", display_name: "Seedance 2.0 VIP", capability: "VIDEO" },
