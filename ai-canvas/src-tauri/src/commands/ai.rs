@@ -1,11 +1,6 @@
 use crate::AppState;
 use super::config::{provider_display_name, read_full_api_config, set_active_key, is_retryable_status, apply_auth_headers, resolve_key_tag, filter_keys_by_tag};
 use super::http_util::{root_cause_chain, send_with_retry};
-use super::ipc_limits::{
-    IPC_RESPONSE_BODY_HARD_LIMIT_BYTES,
-    IPC_STREAM_CHUNK_HARD_LIMIT_BYTES,
-    STREAM_LINE_BUFFER_HARD_LIMIT_BYTES,
-};
 use base64::Engine as _;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -17,38 +12,10 @@ use chrono::Local;
 
 const BASE64_ENGINE: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 
-/// 把同步阻塞闭包（典型 std::fs / rusqlite / base64 decode 等）扔到
-/// tokio 的 blocking thread pool 上跑，避免占住主 runtime worker。
-/// 所有 `async fn` 内调到 std::fs::* / std::fs::read_dir / std::process::Command
-/// 等的位置都应该走这里，规范统一。
-async fn run_blocking<T, F>(f: F) -> Result<T, String>
-where
-    F: FnOnce() -> Result<T, String> + Send + 'static,
-    T: Send + 'static,
-{
-    tauri::async_runtime::spawn_blocking(f)
-        .await
-        .map_err(|e| format!("blocking task join failed: {}", e))?
-}
-
 #[derive(Default)]
 struct InlineLocalStats {
     files: usize,
     total_bytes: usize,
-}
-
-/// `inline_local_files` 的 async 包装：把整棵 JSON 树 move 到 blocking pool
-/// 跑文件读取 + base64 编码，避免在 tokio worker 上同步 std::fs::read 大文件。
-async fn inline_local_files_async(
-    mut body: serde_json::Value,
-    data_dir: std::path::PathBuf,
-) -> Result<(serde_json::Value, InlineLocalStats), String> {
-    run_blocking(move || {
-        let mut stats = InlineLocalStats::default();
-        inline_local_files(&mut body, &data_dir, &mut stats)?;
-        Ok((body, stats))
-    })
-    .await
 }
 
 fn debug_request_id(body: &serde_json::Value) -> Option<String> {
@@ -228,35 +195,6 @@ const DUMP_MAX_STRING_LEN: usize = 256;
 /// dump 目录下最多保留这么多个最近文件，更早的自动清理，防止长期累积。
 const DUMP_KEEP_RECENT: usize = 20;
 
-// IPC 体积常量统一放在 `super::ipc_limits`，见该文件头部说明。
-// 历史踩坑：曾用 SOFT(4MB)/HARD(8MB) 两层，SOFT 区间只 warn 不落盘
-// 正好踩在 WebView2 3-4MB 雷区 → 渲染端随机崩溃半年。
-// 现在统一只有一个 HARD 上限，超过必落盘。
-
-/// 把超大 response body 落盘到 debug/oversize_response/ 并返回相对路径占位。
-/// 失败时只 warn-log，不 propagate（出错也得让原请求收尾）。
-fn spill_oversize_response(
-    data_dir: &Path,
-    tag: &str,
-    request_id: &str,
-    status: u16,
-    body: &str,
-) -> Option<PathBuf> {
-    let dir = data_dir.join("debug").join("oversize_response");
-    if std::fs::create_dir_all(&dir).is_err() {
-        return None;
-    }
-    let ts = Local::now().format("%Y%m%d_%H%M%S_%3f");
-    let path = dir.join(format!("{}_{}_{}.{}.body", tag, request_id, ts, status));
-    match std::fs::write(&path, body) {
-        Ok(_) => Some(path),
-        Err(e) => {
-            tracing::warn!("[oversize_response] write failed {:?}: {}", path, e);
-            None
-        }
-    }
-}
-
 /// 递归把 outgoing JSON 里的「特长字符串」替换成长度摘要，再写盘。
 /// 保持结构和短字段原样，便于人类对比 outgoing 跟 DTO 期望的字段是否对得上。
 fn truncate_long_strings(value: &serde_json::Value) -> serde_json::Value {
@@ -392,8 +330,8 @@ pub async fn ai_proxy(
     scrub_debug_fields(&mut body);
 
     let inline_start = Instant::now();
-    let (body, inline_stats) =
-        inline_local_files_async(body, state.data_dir.clone()).await?;
+    let mut inline_stats = InlineLocalStats::default();
+    inline_local_files(&mut body, &state.data_dir, &mut inline_stats)?;
     tracing::info!(
         "[ai_proxy:{}] local inline finished: files={}, source_bytes={}, elapsed_ms={}, outgoing_body≈{} bytes",
         request_id,
@@ -502,45 +440,6 @@ pub async fn ai_proxy(
             total_start.elapsed().as_millis()
         );
 
-        // ── IPC payload 守门 ──
-        // 单一 HARD 上限，超过必落盘到 debug/oversize_response/，前端只收到
-        // 简短 error 占位。绝对不允许 >IPC_RESPONSE_BODY_HARD_LIMIT_BYTES 的
-        // 字符串通过 invoke 回传，会被 WebView2 杀掉渲染进程。
-        let resp_body = if resp_body.len() > IPC_RESPONSE_BODY_HARD_LIMIT_BYTES {
-            let original_len = resp_body.len();
-            let data_dir = state.data_dir.clone();
-            let req_id = request_id.clone();
-            let body_for_spill = resp_body;
-            // 落盘走 spawn_blocking：写一个 3MB+ 文件最坏几百毫秒，不能阻塞 runtime。
-            let spilled = run_blocking(move || {
-                Ok(spill_oversize_response(
-                    &data_dir, "ai_proxy", &req_id, status, &body_for_spill,
-                ))
-            })
-            .await
-            .ok()
-            .flatten();
-            tracing::error!(
-                "[ai_proxy:{}] OVERSIZED response body {} bytes (>{}) — spilled to {:?}, replacing with stub to protect IPC",
-                request_id, original_len, IPC_RESPONSE_BODY_HARD_LIMIT_BYTES, spilled
-            );
-            let spilled_str = spilled.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "<spill failed>".into());
-            serde_json::json!({
-                "error": {
-                    "code": "response_too_large",
-                    "message": format!(
-                        "上游响应过大 ({} bytes，> {} MB 上限)，已落盘到 {}，请联系开发者诊断",
-                        original_len,
-                        IPC_RESPONSE_BODY_HARD_LIMIT_BYTES / (1024 * 1024),
-                        spilled_str
-                    ),
-                    "spilled_path": spilled_str,
-                }
-            }).to_string()
-        } else {
-            resp_body
-        };
-
         if status < 400 || !can_rotate || !is_retryable_status(status) {
             let rotated = if i > 0 {
                 if let Ok(db) = state.db.lock() {
@@ -555,20 +454,7 @@ pub async fn ai_proxy(
                 None
             };
             if status >= 400 {
-                let data_dir = state.data_dir.clone();
-                let url_clone = url.clone();
-                let provider_clone = provider.clone();
-                let body_clone = body.clone();
-                let resp_body_clone = resp_body.clone();
-                // dump 落盘可能写几 MB JSON：放进 spawn_blocking 避免阻塞 runtime
-                let _ = run_blocking(move || {
-                    dump_failed_request(
-                        &data_dir, "ai_proxy", &url_clone, &provider_clone, status,
-                        &body_clone, &resp_body_clone,
-                    );
-                    Ok(())
-                })
-                .await;
+                dump_failed_request(&state.data_dir, "ai_proxy", &url, &provider, status, &body, &resp_body);
             }
             tracing::info!(
                 "[ai_proxy:{}] finished total_elapsed_ms={}",
@@ -624,8 +510,8 @@ pub async fn ai_proxy_stream(
 ) -> Result<(), String> {
     let request_id = debug_request_id(&body).unwrap_or_else(|| stream_id.chars().take(8).collect());
     scrub_debug_fields(&mut body);
-    let (body, inline_stats) =
-        inline_local_files_async(body, state.data_dir.clone()).await?;
+    let mut inline_stats = InlineLocalStats::default();
+    inline_local_files(&mut body, &state.data_dir, &mut inline_stats)?;
     tracing::info!(
         "[ai_proxy_stream:{}] local inline finished: files={}, source_bytes={}, outgoing_body≈{} bytes",
         request_id,
@@ -808,34 +694,12 @@ async fn do_stream(
     if !resp.status().is_success() {
         let resp_body = resp.text().await.unwrap_or_default();
         if let Some(state) = app.try_state::<AppState>() {
-            let data_dir = state.data_dir.clone();
-            let url_clone = url.to_string();
-            let provider_clone = provider.to_string();
-            let body_clone = body.clone();
-            let resp_body_clone = resp_body.clone();
-            let _ = run_blocking(move || {
-                dump_failed_request(
-                    &data_dir, "stream", &url_clone, &provider_clone, status,
-                    &body_clone, &resp_body_clone,
-                );
-                Ok(())
-            })
-            .await;
+            dump_failed_request(&state.data_dir, "stream", url, provider, status, body, &resp_body);
         }
         return Err(format!("API 错误 (HTTP {}): {}", status, resp_body));
     }
 
-    // ── 流式行缓冲：用 Vec<u8> + drain 避免每次拿到 \n 都 to_string() 整段重分配 ──
-    //
-    // 旧版 `buffer = buffer[newline_pos+1..].to_string()` 每个换行都把剩余
-    // 字符串重新分配一遍，对长行 / 高频换行流式是 O(n²)。新版用 Vec<u8> + drain，
-    // drain 内部 ptr::copy 把剩余字节往前挪，不再分配。
-    //
-    // 同时加两道闸门：
-    //   1) line buffer 单次堆积超过 STREAM_LINE_BUFFER_HARD_LIMIT_BYTES 直接放弃（上游异常）
-    //   2) 单个 chunk emit 超过 IPC_STREAM_CHUNK_HARD_LIMIT_BYTES 视为 error 终止流
-    //      （IPC 通道扛不住这种大小，硬塞过去就是渲染端白屏）
-    let mut buffer: Vec<u8> = Vec::with_capacity(8 * 1024);
+    let mut buffer = String::new();
 
     let mut stream = resp;
     loop {
@@ -866,33 +730,11 @@ async fn do_stream(
             }
         };
 
-        buffer.extend_from_slice(&chunk);
+        buffer.push_str(&String::from_utf8_lossy(&chunk));
 
-        // 没换行但 buffer 已经撑爆：上游异常输出，放弃流避免无限增长 → OOM
-        if buffer.len() > STREAM_LINE_BUFFER_HARD_LIMIT_BYTES
-            && !buffer.iter().any(|&b| b == b'\n')
-        {
-            tracing::error!(
-                "[stream] line buffer exceeded {} bytes without newline — aborting stream",
-                STREAM_LINE_BUFFER_HARD_LIMIT_BYTES
-            );
-            return Err(format!(
-                "上游流式响应异常：单行超过 {}MB 仍未换行，已中断",
-                STREAM_LINE_BUFFER_HARD_LIMIT_BYTES / (1024 * 1024)
-            ));
-        }
-
-        loop {
-            let newline_pos = match buffer.iter().position(|&b| b == b'\n') {
-                Some(p) => p,
-                None => break,
-            };
-
-            // 取出 [..newline_pos]（不含 \n 本身）作为一行；\n 本身也丢掉。
-            // String::from_utf8_lossy 可以容忍坏字节，避免上游偶尔吐出半个 utf-8 字符就 panic。
-            let raw_line: Vec<u8> = buffer.drain(..=newline_pos).take(newline_pos).collect();
-            let line_cow = String::from_utf8_lossy(&raw_line);
-            let line = line_cow.trim_end_matches('\r');
+        while let Some(newline_pos) = buffer.find('\n') {
+            let line = buffer[..newline_pos].trim_end_matches('\r').to_string();
+            buffer = buffer[newline_pos + 1..].to_string();
 
             if line.is_empty() || line.starts_with(':') {
                 continue;
@@ -902,20 +744,6 @@ async fn do_stream(
                 if data.trim() == "[DONE]" {
                     return Ok(());
                 }
-
-                // chunk 大小守门：IPC 单条 emit 太大会拖崩 WebView 渲染端。
-                if data.len() > IPC_STREAM_CHUNK_HARD_LIMIT_BYTES {
-                    tracing::error!(
-                        "[stream] chunk data {} bytes > {} hard limit — aborting stream to protect IPC",
-                        data.len(),
-                        IPC_STREAM_CHUNK_HARD_LIMIT_BYTES
-                    );
-                    return Err(format!(
-                        "上游单条 chunk {}MB 超过 IPC 安全上限，已中断流",
-                        data.len() / (1024 * 1024)
-                    ));
-                }
-
                 let _ = app.emit("ai-stream", StreamEvent {
                     stream_id: stream_id.to_string(),
                     event: "chunk".into(),
@@ -1055,14 +883,8 @@ pub async fn save_media(
         project_id
     );
     let media_dir = data_dir.join("media/images");
-    {
-        let media_dir = media_dir.clone();
-        run_blocking(move || {
-            std::fs::create_dir_all(&media_dir)
-                .map_err(|e| format!("创建媒体目录失败: {}", e))
-        })
-        .await?;
-    }
+    std::fs::create_dir_all(&media_dir)
+        .map_err(|e| format!("创建媒体目录失败: {}", e))?;
 
     let mut ext = detect_extension(&source, &filename);
     let file_id = uuid::Uuid::new_v4().to_string();
@@ -1162,10 +984,7 @@ pub async fn save_media(
         };
         tracing::info!("[save_media] local-file branch: abs_path={:?}", abs);
         let read_start = Instant::now();
-        let data = run_blocking(move || {
-            std::fs::read(&abs).map_err(|e| format!("读取文件失败: {}", e))
-        })
-        .await?;
+        let data = std::fs::read(&abs).map_err(|e| format!("读取文件失败: {}", e))?;
         tracing::info!(
             "[save_media] local file read: bytes={}, elapsed_ms={}",
             data.len(),
@@ -1177,14 +996,7 @@ pub async fn save_media(
     let dest = media_dir.join(format!("{}.{}", file_id, ext));
 
     let write_start = Instant::now();
-    {
-        let dest = dest.clone();
-        let bytes_ref = bytes.clone();
-        run_blocking(move || {
-            std::fs::write(&dest, &bytes_ref).map_err(|e| format!("写入文件失败: {}", e))
-        })
-        .await?;
-    }
+    std::fs::write(&dest, &bytes).map_err(|e| format!("写入文件失败: {}", e))?;
     tracing::info!(
         "[save_media] 写入内部媒体文件完成: bytes={}, elapsed_ms={}, path={:?}",
         bytes.len(),
@@ -1237,28 +1049,19 @@ pub async fn save_media(
         target_dir, friendly_name
     );
 
-    {
-        let target_dir = target_dir.clone();
-        let dest = dest.clone();
-        let user_dest = user_dest.clone();
-        // 失败仅 warn，不打断主路径；放进 spawn_blocking 避免在 runtime 上做 dir/copy IO
-        let _ = run_blocking::<(), _>(move || {
-            if let Err(e) = std::fs::create_dir_all(&target_dir) {
-                tracing::warn!("创建自动保存目录失败: {}", e);
-                return Ok(());
-            }
-            let copy_start = Instant::now();
-            match std::fs::copy(&dest, &user_dest) {
-                Err(e) => tracing::warn!("复制文件到自动保存目录失败: {}", e),
-                Ok(_) => tracing::info!(
-                    "文件已自动保存: {:?}, copy_elapsed_ms={}",
-                    user_dest,
-                    copy_start.elapsed().as_millis()
-                ),
-            }
-            Ok(())
-        })
-        .await;
+    if let Err(e) = std::fs::create_dir_all(&target_dir) {
+        tracing::warn!("创建自动保存目录失败: {}", e);
+    } else {
+        let copy_start = Instant::now();
+        if let Err(e) = std::fs::copy(&dest, &user_dest) {
+            tracing::warn!("复制文件到自动保存目录失败: {}", e);
+        } else {
+            tracing::info!(
+                "文件已自动保存: {:?}, copy_elapsed_ms={}",
+                user_dest,
+                copy_start.elapsed().as_millis()
+            );
+        }
     }
 
     let dims_start = Instant::now();
@@ -1344,20 +1147,12 @@ pub async fn export_file(
         base_dir
     };
 
+    std::fs::create_dir_all(&target_dir)
+        .map_err(|e| format!("创建导出目录失败: {}", e))?;
+
     let dest = target_dir.join(&export_name);
-    {
-        let target_dir = target_dir.clone();
-        let abs_source = abs_source.clone();
-        let dest_clone = dest.clone();
-        run_blocking(move || {
-            std::fs::create_dir_all(&target_dir)
-                .map_err(|e| format!("创建导出目录失败: {}", e))?;
-            std::fs::copy(&abs_source, &dest_clone)
-                .map_err(|e| format!("导出文件失败: {}", e))?;
-            Ok(())
-        })
-        .await?;
-    }
+    std::fs::copy(&abs_source, &dest)
+        .map_err(|e| format!("导出文件失败: {}", e))?;
 
     tracing::info!("文件已导出: {:?}", dest);
     Ok(dest.to_string_lossy().to_string())
@@ -1586,14 +1381,8 @@ pub async fn read_media_base64(state: State<'_, AppState>, path: String) -> Resu
         std::path::PathBuf::from(&path)
     };
 
-    let bytes = {
-        let abs_path = abs_path.clone();
-        run_blocking(move || {
-            std::fs::read(&abs_path)
-                .map_err(|e| format!("读取文件失败 '{}': {}", abs_path.display(), e))
-        })
-        .await?
-    };
+    let bytes =
+        std::fs::read(&abs_path).map_err(|e| format!("读取文件失败 '{}': {}", abs_path.display(), e))?;
 
     let mime = match abs_path
         .extension()

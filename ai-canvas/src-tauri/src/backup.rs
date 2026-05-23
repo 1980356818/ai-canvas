@@ -20,7 +20,7 @@
 //!   保留最近 10 份，保证至少能回溯几天前的状态。
 
 use chrono::Local;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -85,14 +85,9 @@ pub fn list_backups(backup_dir: &Path) -> Vec<BackupInfo> {
 
 /// 创建一份新备份。使用 `VACUUM INTO` 取一致性快照，绕过 WAL 不一致问题。
 ///
-/// **不接收主 Connection**：定时备份历史上曾在 async 任务里持有主 db 的
-/// `Mutex<Connection>` guard 跑 VACUUM INTO，整个数据库被锁住几十秒，前端所有
-/// IPC 卡死。这里改为**独立打开一个只读 connection**，WAL 模式保证并发读写
-/// 互不阻塞。调用方必须用 `spawn_blocking` 包裹（SQLite I/O 同步）。
-///
 /// 返回新备份的绝对路径。失败时调用方应 warn，不 panic。
 pub fn create_backup(
-    db_path: &Path,
+    conn: &Connection,
     backup_dir: &Path,
     max_keep: usize,
 ) -> Result<PathBuf, String> {
@@ -106,15 +101,6 @@ pub fn create_backup(
     if target.exists() {
         return Ok(target);
     }
-
-    let conn = Connection::open_with_flags(
-        db_path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .map_err(|e| format!("open db for backup failed: {}", e))?;
-    // 与主 connection 一致的等待策略，VACUUM 取读快照短暂遇到 writer 时会等而非立即失败。
-    conn.busy_timeout(std::time::Duration::from_secs(5))
-        .map_err(|e| format!("set busy_timeout failed: {}", e))?;
 
     // VACUUM INTO 需要绝对路径，且单引号转义路径
     let target_str = target.to_string_lossy().replace('\'', "''");

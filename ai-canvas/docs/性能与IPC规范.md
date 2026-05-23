@@ -7,7 +7,8 @@
 - v1 (2026-05-15)：IPC 阈值首次落地
 - v2 (2026-05-22)：[`project_ai_canvas_crash_fixes.md`](../../../../Users/Administrator/.claude/projects/D--Project/memory/project_ai_canvas_crash_fixes.md) v3 — 异步阻塞 + 内存累积 + 拖拽性能
 - v3 (2026-05-22)：性能精细化 + 规范化（本文档 v1）
-- **v5 (2026-05-23)**：data 派生订阅根治 + 共享 tick + ESLint 兜底（本文档当前版本）
+- v5 (2026-05-23)：data 派生订阅根治 + 共享 tick + ESLint 兜底
+- **v6 (2026-05-23)**：Rust `std::sync::Mutex` 二次 lock 死锁根治 + lock-acquiring helper 类型签名重构（本文档当前版本）
 
 ---
 
@@ -300,3 +301,93 @@ connections）需要写 `// eslint-disable-next-line no-restricted-syntax` 并�
 6. **共享全局 tick `useElapsedTimer`**：ChatMessageBubble / ChatMessageList / CardContent
    三处独立 setInterval 合并成一个。([src/hooks/useElapsedTimer.ts](../src/hooks/useElapsedTimer.ts))
 7. **ESLint 四条 `no-restricted-syntax` 规则**：把上面这些反模式从"靠人 review"升级为"自动拦截"。
+
+---
+
+## 10. Rust `std::sync::Mutex` 二次 lock —— 同线程死锁
+
+> v6 (2026-05-23) 新增。**踩过的坑**：双击 tab 改项目名 + 回车，整个程序卡死 ——
+> [`rename_project`](../src-tauri/src/commands/project.rs) 在持着 `state.db.lock()` guard
+> 时调用 [`candidate_save_dirs(&state)`](../src-tauri/src/commands/ai.rs)，后者内部
+> `state.db.lock()` 又来一次，**同线程递归 lock `std::sync::Mutex` = 永久死锁**。
+> 接着 autosave / 切 tab / 任何 DB 操作全部跟着阻塞，UI 表现为"程序冻住"。
+
+### 10.1 std::sync::Mutex 二次 lock 不会 panic / 不返回 Err —— 直接死锁
+
+不要被 `state.db.lock().ok()` 的写法骗了。`std::sync::Mutex::lock()` 的 `Err` 只代表
+**Poison**（持锁线程 panic 留下的）。**同线程二次 lock 不会 Err、不会 panic，直接
+block 等自己**。意味着：
+
+```rust
+// ❌ 死锁陷阱（外层已持锁）
+let db = state.db.lock()?;
+let dirs = candidate_save_dirs(&state); // 内部又 lock —— 永久 hang
+
+// ❌ .ok() 不能救你 —— 二次 lock 不返回 Err
+if let Ok(db2) = state.db.lock() { ... } // 这行直接 hang，永远到不了 if
+```
+
+`parking_lot::Mutex` 同理（默认不可重入）；要可重入得显式用 `ReentrantMutex` —— 项目
+没用。
+
+### 10.2 单一规则：辅助函数不取锁，调用方负责持锁
+
+所有"会读 DB 设置 / 配置"的 helper 一律改成显式接 `&rusqlite::Connection`：
+
+```rust
+// ✅ 正确：函数签名暴露"我需要 db"，调用方持锁
+pub(crate) fn resolve_save_dir(
+    data_dir: &Path,
+    db: &Connection,
+) -> PathBuf { ... }
+
+// ❌ 错误：函数签名里看不出会取锁，调用方不知道自己不能持锁就调
+pub(crate) fn resolve_save_dir(state: &AppState) -> PathBuf {
+    state.db.lock()...; // 隐式取锁
+}
+```
+
+调用方必须显式 `let db = state.db.lock()?;` 才能拿到 `&Connection`，所以**在已持锁的
+scope 里再调辅助函数变成编译期 borrow checker 直接报"can't borrow db twice"**——
+死锁从运行时不可见的偶发崩溃变成编译错误，本质消除。
+
+已按此模式重构的辅助（v6）：
+
+| 辅助 | 签名（新） | 调用点（已更新）|
+|------|-----------|----------------|
+| [`resolve_save_dir`](../src-tauri/src/commands/ai.rs) | `(data_dir: &Path, db: &Connection) -> PathBuf` | save_media / open_in_explorer |
+| [`resolve_export_dir`](../src-tauri/src/commands/ai.rs) | `(data_dir: &Path, db: &Connection) -> PathBuf` | export_file |
+| [`candidate_save_dirs`](../src-tauri/src/commands/ai.rs) | `(data_dir: &Path, db: &Connection) -> Vec<PathBuf>` | resolve_user_media_path / rename_project |
+| [`resolve_endpoint`/`_with_tag`](../src-tauri/src/commands/gateway.rs) | `(db: &Connection, provider, [key_tag]) -> Result<(String, String)>` | list_models / poll_task / validate_connection |
+| [`resolve_base_url`](../src-tauri/src/commands/gateway.rs) | `(db: &Connection, provider) -> Result<String>` | validate_connection |
+
+例外：[`resolve_user_media_path`](../src-tauri/src/commands/ai.rs) 内部要先 lock 读
+title + candidate_dirs，再 **释放锁** 做 FS 搜索，把 `&Connection` 提到外层反而强迫
+锁覆盖 FS I/O。该函数保留 `&AppState` 签名，**doc 注释明确"调用方不得已持锁"**，
+是受控例外。
+
+### 10.3 持锁期间一律不做 FS I/O / 网络 / 跨 IPC
+
+把锁的持续时间压到只覆盖 SQL，scope 包起来确保提前 drop：
+
+```rust
+// ✅ 正确：SQL 一个 scope，FS 在 scope 外
+let (info, bases) = {
+    let db = state.db.lock()?;
+    let info = db.query_row(...)?;
+    let bases = candidate_save_dirs(&state.data_dir, &db);
+    (info, bases)
+};
+// 此处 db guard 已 drop —— 后面随便阻塞
+run_blocking(move || std::fs::rename(...)).await?;
+```
+
+`std::fs::*` / `reqwest` / `await` 在持锁期间出现 = 把全局 DB 锁的尾巴拖到秒级，
+其他所有 DB 操作排队，体感是"程序卡了一下"。
+
+### 10.4 同步 `pub fn` 命令做 IO 也算阻塞
+
+Tauri 2 的 sync `pub fn` 命令跑在 async runtime worker 上。一个 worker 卡住相当于
+减少一个并发槽位 —— 不一定 freeze UI，但会让其他 IPC 排队。**任何命令体里**有
+`std::fs::*` / 慢 SQL（VACUUM / 跨表 join） / 网络的，都应该是 `pub async fn` +
+`super::ai::run_blocking(...)`。`rename_project` 是这次踩坑后改的样板。

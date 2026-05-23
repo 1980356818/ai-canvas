@@ -72,6 +72,9 @@ const VEO_DURATION_OPTIONS = [
   { value: "6", label: "6s" },
   { value: "8", label: "8s" },
 ];
+// V145 VIP: 后端 NexusVideoAdapter.resolveSeconds 支持 5-15s, 暂只放出 15s 单选保产品节奏.
+// 后续放开范围只需扩这个数组 + 在 handleModelChange 里允许更宽的默认值.
+const SEEDANCE_VIP_DURATION_OPTIONS = [{ value: "15", label: "15s" }];
 
 interface AudioRefEntry {
   url: string;
@@ -203,8 +206,11 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   );
   const effectiveDurationOptions = isVeo
     ? VEO_DURATION_OPTIONS
-    : SEEDANCE_DURATION_OPTIONS;
-  // VIP (V138) duration 固定 15 秒, UI 不暴露 duration 控件.
+    : isSeedanceVip
+      ? SEEDANCE_VIP_DURATION_OPTIONS
+      : SEEDANCE_DURATION_OPTIONS;
+  // VIP (V145): UI 暴露 duration 控件但只放 15s 单选, 切到 VIP 时强制 currentDuration=15
+  //              (见 handleModelChange + applyAndSet). 后端支持 5-15, 后续放开只需扩选项数组.
   // Grok 时长已编码在 tier(SKU) 里, 不需要独立 duration 控件.
 
   const refSlots = useMemo(
@@ -243,11 +249,20 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
 
     // V138: VIP 不再用 quality (fast/standard) 字段, 只用 model_name + size 决定上游.
     // alias 项 `seedance-2-0` 需要 seedanceVipResolution 字段决定 720P / 1080P.
-    // economy 项 `seedance-2-0-720p-15s-no-person` 固定 720P, 不需要这个字段.
-    const migrateSeedanceVipFields = (modelId: string): { seedanceVipResolution?: SeedanceVipResolution } => {
-      if (!isSeedanceVipAliasModel(modelId)) return {};
-      if (!data.seedanceVipResolution) return { seedanceVipResolution: "720p" };
-      return {};
+    // economy 项 `seedance-2-0-720p-no-person` 固定 720P, 不需要这个字段.
+    // V145: 5 个 VIP 模型 (alias + economy) 都强制 duration=15 (UI 单选).
+    const migrateSeedanceVipFields = (modelId: string): {
+      seedanceVipResolution?: SeedanceVipResolution;
+      duration?: number;
+    } => {
+      const patch: { seedanceVipResolution?: SeedanceVipResolution; duration?: number } = {};
+      if (isSeedanceVipAliasModel(modelId) && !data.seedanceVipResolution) {
+        patch.seedanceVipResolution = "720p";
+      }
+      if (isSeedanceVipModel(modelId) && data.duration !== 15) {
+        patch.duration = 15;
+      }
+      return patch;
     };
 
     const migrateGrokFields = (modelId: string): { model?: string; grokTier?: GrokDurationTier } => {
@@ -291,6 +306,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         if (patch.seedanceVipResolution) setCurrentSeedanceVipResolution(patch.seedanceVipResolution as SeedanceVipResolution);
         if (patch.grokTier) setCurrentGrokTier(patch.grokTier as GrokDurationTier);
         if (typeof patch.size === "string") setCurrentSize(patch.size);
+        if (typeof patch.duration === "number") setCurrentDuration(patch.duration);
       }
     };
 
@@ -482,6 +498,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       }
       // V138 VIP: economy 项不支持视频参考, 切到 economy 时清空 refVideos.
       // alias 项首次进入时确保 seedanceVipResolution 有值 (默认 720P).
+      // V145: 切到任意 VIP 模型时把 duration 强制 15 (UI 只放 15s 选项).
       if (isSeedanceVipEconomyModel(modelId)) {
         if (Array.isArray(newData.refVideos) && (newData.refVideos as unknown[]).length > 0) {
           newData.refVideos = undefined;
@@ -490,6 +507,10 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       if (isSeedanceVipAliasModel(modelId) && !data.seedanceVipResolution) {
         newData.seedanceVipResolution = "720p";
         setCurrentSeedanceVipResolution("720p");
+      }
+      if (isSeedanceVipModel(modelId) && currentDuration !== 15) {
+        setCurrentDuration(15);
+        newData.duration = 15;
       }
 
       updateCard(card.id, { data: newData });
@@ -703,9 +724,9 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       // Veo: canvas 只存 canonical "veo3.1",提交前按 (mode, tier) 解析真实 SKU。
       // Seedance: canvas 也只存 canonical "seedance",按 tier 解析成 "seedance" / "seedance-fast"。
       // Grok: canvas 只存 "grok-video",按时长档解析成 "grok-video-12s" / -16s / -20s。
-      // VIP alias (V138): canvas 存 "seedance-2-0", 按 (分辨率, 是否传视频) resolve 到
-      //   seedance-2-0-720p-15s / -720p-video / -1080p / -1080p-video 之一.
-      // VIP economy: 单独 model_name `seedance-2-0-720p-15s-no-person`, 原样透传.
+      // VIP alias (V138/V145): canvas 存 "seedance-2-0", 按 (分辨率, 是否传视频) resolve 到
+      //   seedance-2-0-720p / -720p-video / -1080p / -1080p-video 之一.
+      // VIP economy: 单独 model_name `seedance-2-0-720p-no-person`, 原样透传.
       const hasReferenceVideos = referenceVideos.length > 0;
       const effectiveModel = isVeo
         ? resolveVeoVariantForMode(imageMode, effectiveTier)
@@ -726,12 +747,14 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
           : currentSize;
       // Veo 参考模式 (image-asset) 上游强制 8s,前端就直接传 8 避免被 resolver 默默纠正。
       // Grok 时长编码在 model SKU 里,不传 duration。
-      // VIP (V138): 后端固定 15 秒, 不传 duration.
+      // VIP (V145): UI 只放 15s 选项, currentDuration 经 handleModelChange/applyAndSet 强制 15.
       const effectiveDuration = isVeo
         ? (isVeoRefMode ? 8 : currentDuration)
         : isSeedance
           ? currentDuration
-          : undefined;
+          : isSeedanceVip
+            ? currentDuration
+            : undefined;
 
       const result = await provider.generateVideo({
         prompt,
@@ -1068,9 +1091,9 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
                       ? GROK_DURATION_TIERS.map((t) => ({ value: t.value, label: t.label }))
                       : undefined
             }
-            duration={(isSeedance || isVeo) ? (isVeoRefMode ? 8 : currentDuration) : undefined}
-            onDurationChange={(isSeedance || isVeo) ? (n) => handleDurationChange(String(n)) : undefined}
-            durationOptions={(isSeedance || isVeo) ? effectiveDurationOptions : undefined}
+            duration={(isSeedance || isVeo || isSeedanceVip) ? (isVeoRefMode ? 8 : currentDuration) : undefined}
+            onDurationChange={(isSeedance || isVeo || isSeedanceVip) ? (n) => handleDurationChange(String(n)) : undefined}
+            durationOptions={(isSeedance || isVeo || isSeedanceVip) ? effectiveDurationOptions : undefined}
             durationDisabled={isVeoRefMode}
             disabled={generating}
           />

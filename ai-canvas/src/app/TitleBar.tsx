@@ -217,6 +217,7 @@ export default function TitleBar() {
               return (
                 <div
                   key={id}
+                  data-tauri-drag-region="false"
                   role="button"
                   tabIndex={0}
                   onClick={() => { if (!isEditing) handleSwitchTab(id); }}
@@ -243,6 +244,7 @@ export default function TitleBar() {
                   {isEditing ? (
                     <input
                       ref={renameInputRef}
+                      data-tauri-drag-region="false"
                       value={renameDraft}
                       onChange={(e) => setRenameDraft(e.target.value)}
                       onClick={(e) => e.stopPropagation()}

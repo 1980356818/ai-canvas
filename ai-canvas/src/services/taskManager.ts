@@ -350,9 +350,8 @@ class TaskManager {
 
       // async：拿到 external_id，进入 polling
       //
-      // 注意：**不要**给 progress 写默认占位值（曾经写过 5）——下游 taskBridge
-      // 现在把 task.progress 视为"上游真实进度"，>0 就跳过时间外推。如果这里写 5，
-      // 后续上游不报进度时 taskBridge 会一直停在 5%，时间外推永远不触发。
+      // 注意：**不要**给 progress 写默认占位值——下游 taskBridge 和任务记录页都直接
+      // 透传 task.progress，写占位值会让 UI 显示一个不存在的"假进度"。
       // 只在 provider 显式提供 initialProgress 时才写。
       const updated = await this.patch(task.id, {
         status: "polling",

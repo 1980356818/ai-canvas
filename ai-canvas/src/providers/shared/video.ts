@@ -327,31 +327,32 @@ export function toSeedanceRatio(size: string | undefined): string | undefined {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Seedance 2.0 VIP — 极境 Nexus 网关 (V138 重构)
+// Seedance 2.0 VIP — 极境 Nexus 网关 (V138 重构 + V145 去 -15s 后缀)
 // ═══════════════════════════════════════════════════════════════════
 // 与旧 Seedance (Dale channel 1094, Volcano content[] 协议) 完全隔离.
-// V138 把后端 route 拆成 5 个独立 model_name:
-//   seedance-2-0-720p-15s-no-person  (sd-2-vip, 720P, 不支持真人)
-//   seedance-2-0-720p-15s            (Seedance2.0-720P-15S, 720P, 支持真人)
-//   seedance-2-0-720p-video          (720P + 视频参考)
-//   seedance-2-0-1080p               (1080P, 支持真人)
-//   seedance-2-0-1080p-video         (1080P + 视频参考)
-// duration 后端固定 15 秒 (form 不暴露), quality 字段废弃.
+// V145 后, 后端 5 个独立 model_name:
+//   seedance-2-0-720p-no-person  (sd-2-vip, 720P, 不支持真人)
+//   seedance-2-0-720p            (seedance-v2-720p, 720P, 支持真人)
+//   seedance-2-0-720p-video      (720P + 视频参考)
+//   seedance-2-0-1080p           (1080P, 支持真人)
+//   seedance-2-0-1080p-video     (1080P + 视频参考)
+// duration 后端支持 5-15 秒, 缺省 15. canvas 暂不暴露 duration 控件 → 始终走默认 15s.
+// quality 字段废弃.
 //
 // canvas UI 把 5 个上游收敛成 2 个下拉项:
 //   - alias `seedance-2-0`: 内部按 (分辨率, 是否传视频) resolve 到 4 个主上游
-//   - economy `seedance-2-0-720p-15s-no-person`: 单独项 (因为不支持真人)
+//   - economy `seedance-2-0-720p-no-person`: 单独项 (因为不支持真人)
 // ═══════════════════════════════════════════════════════════════════
 
 /** alias 项 (覆盖 4 个主上游): 用户在 UI 选分辨率, 提交时按是否有视频参考 resolve. */
 export const SEEDANCE_VIP_ALIAS_ID = "seedance-2-0";
 
 /** economy 项: 独立 model_name, 不进 alias resolve. */
-export const SEEDANCE_VIP_ECONOMY_ID = "seedance-2-0-720p-15s-no-person";
+export const SEEDANCE_VIP_ECONOMY_ID = "seedance-2-0-720p-no-person";
 
 /** 4 个主上游 model_name (alias resolve 的目标值域). */
 const SEEDANCE_VIP_ALIAS_TARGETS = new Set<string>([
-  "seedance-2-0-720p-15s",
+  "seedance-2-0-720p",
   "seedance-2-0-720p-video",
   "seedance-2-0-1080p",
   "seedance-2-0-1080p-video",
@@ -393,8 +394,8 @@ export const SEEDANCE_VIP_RESOLUTION_TIERS: readonly { value: SeedanceVipResolut
 ];
 
 /**
- * V138 核心 resolve: alias `seedance-2-0` 提交时按 (分辨率, 是否传视频) 选具体上游.
- *   720P + 无视频 → seedance-2-0-720p-15s        (¥12, 支持真人)
+ * V138/V145 核心 resolve: alias `seedance-2-0` 提交时按 (分辨率, 是否传视频) 选具体上游.
+ *   720P + 无视频 → seedance-2-0-720p            (¥12, 支持真人)
  *   720P + 有视频 → seedance-2-0-720p-video      (¥15, 支持视频参考)
  *   1080P + 无视频 → seedance-2-0-1080p          (¥26, 支持真人)
  *   1080P + 有视频 → seedance-2-0-1080p-video    (¥32, 支持视频参考)
@@ -406,7 +407,7 @@ export function resolveSeedanceVipModelId(
   if (resolution === "1080p") {
     return hasVideos ? "seedance-2-0-1080p-video" : "seedance-2-0-1080p";
   }
-  return hasVideos ? "seedance-2-0-720p-video" : "seedance-2-0-720p-15s";
+  return hasVideos ? "seedance-2-0-720p-video" : "seedance-2-0-720p";
 }
 
 /**
