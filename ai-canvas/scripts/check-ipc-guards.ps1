@@ -107,19 +107,19 @@ if ($aiContent -notmatch '(?m)^(?!\s*//).*check_stream_buffer\s*\(') {
 }
 $checks++
 if ($aiContent -notmatch '(?m)^(?!\s*//).*check_inline_total_bytes\s*\(') {
-    AddError "ai.rs MUST call check_inline_total_bytes() (non-commented) in inline_local_files — see ipc_guard"
+    AddError "ai.rs MUST call check_inline_total_bytes() (non-commented) in inline_local_files -- see ipc_guard"
 }
 $checks++
 if ($aiContent -notmatch '(?m)^(?!\s*//).*read_body_bounded') {
-    AddError "ai.rs MUST use read_body_bounded()/read_body_bounded_bytes() — never resp.text()/resp.bytes() directly"
+    AddError "ai.rs MUST use read_body_bounded()/read_body_bounded_bytes() -- never resp.text()/resp.bytes() directly"
 }
 $checks++
 if ($aiContent -match '(?m)^(?!\s*//).*\bresp\s*\.\s*text\s*\(\s*\)\s*\.\s*await') {
-    AddError "ai.rs uses raw 'resp.text().await' — replace with read_body_bounded() (OOM safety)"
+    AddError "ai.rs uses raw 'resp.text().await' -- replace with read_body_bounded() (OOM safety)"
 }
 $checks++
 if ($aiContent -match '(?m)^(?!\s*//).*\bresp\s*\.\s*bytes\s*\(\s*\)\s*\.\s*await') {
-    AddError "ai.rs uses raw 'resp.bytes().await' — replace with read_body_bounded_bytes() (OOM safety)"
+    AddError "ai.rs uses raw 'resp.bytes().await' -- replace with read_body_bounded_bytes() (OOM safety)"
 }
 
 # 3b. http_util.rs has the bounded readers

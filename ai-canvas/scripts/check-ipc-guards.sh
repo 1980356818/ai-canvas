@@ -43,11 +43,16 @@ checks=$((checks + 4))
 #   a) strip `/* ... */` block comments (perl -0777 reads whole file, /s makes
 #      . span newlines). Without this, a comment block containing guard names
 #      would fool the line-based check.
-#   b) on the stripped content, filter out lines beginning with `//`, then grep.
+#   b) on the stripped content, drop pure-`//` comment lines, then grep.
+#
+# IMPORTANT: do not use `[^/[:space:]]` style negation -- BSD grep (macOS CI)
+# parses the embedded POSIX class differently from GNU grep and silently
+# discards every non-blank line. v1.1.4/v1.1.5 builds on macOS died exactly
+# here. The portable form is `grep -v '^[[:space:]]*//'`.
 ai_stripped="$(perl -0777 -pe 's{/\*.*?\*/}{}gs' "$ai")"
 non_comment_grep() {
     # $1 = pattern; reads stripped content from stdin via the caller
-    grep -E '^[[:space:]]*[^/[:space:]]' | grep -q "$1"
+    grep -v '^[[:space:]]*//' | grep -q "$1"
 }
 grep -q 'use super::ipc_guard::' "$ai" || errors+=("ai.rs MUST import super::ipc_guard")
 grep -q 'use super::util::run_blocking' "$ai" || errors+=("ai.rs MUST import super::util::run_blocking")
@@ -56,11 +61,11 @@ printf '%s' "$ai_stripped" | non_comment_grep 'check_stream_chunk'       || erro
 printf '%s' "$ai_stripped" | non_comment_grep 'check_stream_buffer'      || errors+=("ai.rs MUST call check_stream_buffer() (non-commented, non-block-commented)")
 printf '%s' "$ai_stripped" | non_comment_grep 'check_inline_total_bytes' || errors+=("ai.rs MUST call check_inline_total_bytes() in inline_local_files")
 printf '%s' "$ai_stripped" | non_comment_grep 'read_body_bounded'        || errors+=("ai.rs MUST use read_body_bounded()/read_body_bounded_bytes() (never resp.text()/resp.bytes())")
-if printf '%s' "$ai_stripped" | grep -qE '^[[:space:]]*[^/[:space:]].*\bresp[[:space:]]*\.[[:space:]]*text[[:space:]]*\([[:space:]]*\)[[:space:]]*\.[[:space:]]*await'; then
-    errors+=("ai.rs uses raw 'resp.text().await' — replace with read_body_bounded() (OOM safety)")
+if printf '%s' "$ai_stripped" | grep -v '^[[:space:]]*//' | grep -qE '\bresp[[:space:]]*\.[[:space:]]*text[[:space:]]*\([[:space:]]*\)[[:space:]]*\.[[:space:]]*await'; then
+    errors+=("ai.rs uses raw 'resp.text().await' -- replace with read_body_bounded() (OOM safety)")
 fi
-if printf '%s' "$ai_stripped" | grep -qE '^[[:space:]]*[^/[:space:]].*\bresp[[:space:]]*\.[[:space:]]*bytes[[:space:]]*\([[:space:]]*\)[[:space:]]*\.[[:space:]]*await'; then
-    errors+=("ai.rs uses raw 'resp.bytes().await' — replace with read_body_bounded_bytes() (OOM safety)")
+if printf '%s' "$ai_stripped" | grep -v '^[[:space:]]*//' | grep -qE '\bresp[[:space:]]*\.[[:space:]]*bytes[[:space:]]*\([[:space:]]*\)[[:space:]]*\.[[:space:]]*await'; then
+    errors+=("ai.rs uses raw 'resp.bytes().await' -- replace with read_body_bounded_bytes() (OOM safety)")
 fi
 checks=$((checks + 9))
 
