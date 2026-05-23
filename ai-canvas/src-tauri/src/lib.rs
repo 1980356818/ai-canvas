@@ -61,7 +61,14 @@ impl AppState {
                 .pool_max_idle_per_host(4)
                 .tcp_nodelay(true)
                 .build()
-                .expect("failed to create http client")
+                // build 失败极罕见(rustls 后端不依赖系统库);万一失败也不能直接 panic
+                // 让进程闪退 —— 落日志 + 退化到默认 client 让用户能继续用。
+                // 详见 docs/性能与IPC规范.md §11.2。
+                .unwrap_or_else(|e| {
+                    tracing::error!("[fatal] http_client build failed: {} — falling back to default", e);
+                    boot_log(&format!("[fatal] http_client build failed: {}", e));
+                    reqwest::Client::new()
+                })
         })
     }
 
@@ -77,7 +84,11 @@ impl AppState {
                 .tcp_nodelay(true)
                 .http1_only()
                 .build()
-                .expect("failed to create stream client")
+                .unwrap_or_else(|e| {
+                    tracing::error!("[fatal] stream_client build failed: {} — falling back to default", e);
+                    boot_log(&format!("[fatal] stream_client build failed: {}", e));
+                    reqwest::Client::new()
+                })
         })
     }
 }
@@ -583,15 +594,54 @@ fn check_webview2_version() -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Panic hook: write to file so we can diagnose crashes on macOS (no stderr visible from Finder)
+    // Panic hook：把 panic 现场连同 backtrace、平台、版本一起落到 startup.log，
+    // Mac 用户从 Finder 启动看不到 stderr，crash log 又分散在
+    // ~/Library/Logs/DiagnosticReports/ 里；这里集中写一份方便诊断。
+    //
+    // 必须配合 [profile.release] panic = "unwind" + strip = "debuginfo"，
+    // 否则要么直接 SIGABRT 不走 hook，要么 backtrace 只有 <unknown>。
+    // 详见 docs/性能与IPC规范.md §11.2。
+    //
+    // 注意:这里**不需要** set_var("RUST_BACKTRACE", "1") ——
+    // 下面用的是 Backtrace::force_capture(),它无条件抓栈,忽略 env var。
+    // 此外 Rust 2024 edition 起 std::env::set_var 已 unsafe,留着也只是 footgun。
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let msg = format!("PANIC: {}", info);
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "<unknown>".to_string());
+        let payload = info
+            .payload()
+            .downcast_ref::<&str>()
+            .copied()
+            .map(str::to_string)
+            .or_else(|| info.payload().downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "<non-string payload>".to_string());
+        let bt = std::backtrace::Backtrace::force_capture();
+        let msg = format!(
+            "=== PANIC ===\n  os: {} {}\n  app: {} v{}\n  thread: {:?}\n  at: {}\n  payload: {}\n  backtrace:\n{}",
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION"),
+            std::thread::current().name().unwrap_or("<unnamed>"),
+            location,
+            payload,
+            bt,
+        );
         boot_log(&msg);
+        // tracing 可能还没初始化或被 panic 中断,直接 eprintln 兜底
+        eprintln!("{}", msg);
         default_hook(info);
     }));
 
-    boot_log("=== AICat process started ===");
+    boot_log(&format!(
+        "=== AICat v{} starting on {} {} ===",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+    ));
 
     #[cfg(target_os = "windows")]
     {
@@ -603,6 +653,10 @@ pub fn run() {
     }
 
     init_tracing();
+
+    // IPC 守门常量自检 —— 任何人手贱把 IPC_RESPONSE_BODY_HARD_LIMIT_BYTES
+    // 改成 0 / 1TB 之类非法值,启动时 fail fast 而不是等到上线后用户崩
+    commands::ipc_guard::sanity_check_limits();
 
     boot_log("building tauri app");
 
@@ -660,6 +714,9 @@ pub fn run() {
                 boot_log(&format!("asset scope warn: {}", e));
             }
             boot_log("directories created");
+
+            // 清掉上次崩溃残留的孤儿分块上传文件;同步快操作,不会卡启动。
+            commands::upload::cleanup_orphan_uploads_on_startup(&data_dir);
 
             // 备份目录跟随安装目录，所有文件统一在同一位置。
             let backup_dir = data_dir.join("backups");
@@ -833,6 +890,9 @@ pub fn run() {
             commands::ai::get_media_base_path,
             commands::ai::export_file,
             commands::ai::open_in_explorer,
+            // 分块上传专为视频 / 超 IPC 上限的大文件 —— 见 commands/upload.rs
+            commands::upload::upload_media_chunk,
+            commands::upload::upload_media_cleanup,
             commands::gateway::list_models,
             commands::gateway::poll_task,
             commands::gateway::validate_connection,

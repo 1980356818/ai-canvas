@@ -10,9 +10,9 @@ import ChatSessionList from "./ChatSessionList";
 import ChatMessageList from "./ChatMessageList";
 import ChatInput from "./ChatInput";
 import type { ChatInputHandle } from "./ChatInput";
+import { IMAGE_EXTENSIONS_REGEX } from "@/shared/mediaFormats";
 
-const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif"];
-const isImageFile = (f: File) => f.type.startsWith("image/") || IMAGE_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(`.${ext}`));
+const isImageFile = (f: File) => f.type.startsWith("image/") || IMAGE_EXTENSIONS_REGEX.test(f.name);
 
 export default function ChatPanel() {
   const toggleChatPanel = useUIStore((s) => s.toggleChatPanel);

@@ -1,14 +1,24 @@
-﻿import { useRef, useCallback, useEffect, type RefObject } from "react";
+﻿import { useRef, useCallback, type RefObject } from "react";
 import { useCardStore } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
-import { liveViewport } from "@/stores/canvasStore";
 import { useUIStore } from "@/stores/uiStore";
 import type { CanvasCard } from "@/types";
 import { CARD_DEFAULTS, sizeFromRatio } from "@/shared/constants";
+import {
+  IMAGE_EXTENSIONS_REGEX,
+  VIDEO_EXTENSIONS_REGEX,
+  AUDIO_EXTENSIONS_REGEX,
+} from "@/shared/mediaFormats";
 import { autoSave } from "@/lib/autoSave";
-import { updateProjectMeta, onTauriFileDrop, isTauri } from "@/platform";
-import { persistImage, getDisplayUrl, normalizeToStoragePath, type PersistImageResult } from "@/lib/media";
-import { ensureDisplayableImage, isHeicFile, convertHeicPath } from "@/lib/heicConverter";
+import { updateProjectMeta } from "@/platform";
+import {
+  persistFile,
+  persistImage,
+  getDisplayUrl,
+  normalizeToStoragePath,
+  type PersistImageResult,
+} from "@/lib/media";
+import { ensureDisplayableImage, isHeicFile } from "@/lib/heicConverter";
 import { runWithLimit } from "@/lib/concurrency";
 
 // Utility helpers
@@ -22,28 +32,97 @@ function cardSizeFromPersist(
   return { width: CARD_DEFAULTS.ai_image.width, height: CARD_DEFAULTS.ai_image.height };
 }
 
-const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|bmp|svg|avif|tiff?|heic|heif)$/i;
-const VIDEO_EXTENSIONS = /\.(mp4|webm|mov|avi|mkv)$/i;
-const AUDIO_EXTENSIONS = /\.(wav|mp3)$/i;
-
 function isImageFile(file: File): boolean {
-  return file.type.startsWith("image/") || IMAGE_EXTENSIONS.test(file.name) || isHeicFile(file);
+  return file.type.startsWith("image/") || IMAGE_EXTENSIONS_REGEX.test(file.name) || isHeicFile(file);
 }
 
 function isVideoFile(file: File): boolean {
-  return file.type.startsWith("video/") || VIDEO_EXTENSIONS.test(file.name);
-}
-
-function isVideoPath(path: string): boolean {
-  return VIDEO_EXTENSIONS.test(path);
+  return file.type.startsWith("video/") || VIDEO_EXTENSIONS_REGEX.test(file.name);
 }
 
 function isAudioFile(file: File): boolean {
-  return file.type.startsWith("audio/") || AUDIO_EXTENSIONS.test(file.name);
+  return file.type.startsWith("audio/") || AUDIO_EXTENSIONS_REGEX.test(file.name);
 }
 
-function isAudioPath(path: string): boolean {
-  return AUDIO_EXTENSIONS.test(path);
+function unsupportedVideoToast(filename: string): void {
+  useUIStore.getState().addToast({
+    type: "error",
+    title: "视频格式不支持",
+    description: `「${filename}」无法播放。常见原因：HEVC/H.265 编码（Windows 需安装 HEVC 视频扩展，或转成 H.264 的 MP4）。`,
+    duration: 6000,
+  });
+}
+
+/**
+ * import 时一次性做三件事：
+ *   1. 试解码（codec 不支持就 resolve(null) → 调用方拒收）
+ *   2. 拿尺寸（宽高用于建卡比例）
+ *   3. 抽第一帧 → JPEG dataUrl（用作 `<video poster>` 缩略图，避免画布全黑）
+ *
+ * 缩略图失败（如 canvas 被 CORS taint）不影响视频本身可用 —— 返回 dataUrl: null。
+ * `<video preload="none">` 不会自动解码视频帧，所以缩略图必须在 import 这一刻抽，
+ * 否则就要每张卡都 preload metadata，多卡同屏会 OOM（参见 VideoPreview 注释）。
+ */
+async function extractFirstFrame(srcUrl: string): Promise<{
+  dataUrl: string | null;
+  width: number;
+  height: number;
+} | null> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+    video.crossOrigin = "anonymous";
+
+    let done = false;
+    const finish = (result: { dataUrl: string | null; width: number; height: number } | null) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      video.onloadeddata = null;
+      video.onerror = null;
+      video.removeAttribute("src");
+      video.load();
+      resolve(result);
+    };
+
+    const timer = setTimeout(() => finish(null), 8000);
+
+    video.onloadeddata = () => {
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (w === 0 || h === 0) {
+        finish(null);
+        return;
+      }
+
+      let dataUrl: string | null = null;
+      try {
+        // 长边压到 480px，JPEG q=0.7 —— 典型 20-60KB 一张，画布上做卡片缩略图绰绰有余
+        const maxDim = 480;
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        const tw = Math.max(1, Math.round(w * scale));
+        const th = Math.max(1, Math.round(h * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = tw;
+        canvas.height = th;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, tw, th);
+          dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+        }
+      } catch {
+        // canvas 被 CORS taint(读像素被拒)。视频本身能播,只是这卡没缩略图。
+        dataUrl = null;
+      }
+
+      finish({ dataUrl, width: w, height: h });
+    };
+
+    video.onerror = () => finish(null);
+    video.src = srcUrl;
+  });
 }
 
 function getImageDimensions(src: string): Promise<{ width: number; height: number }> {
@@ -141,27 +220,11 @@ function findAcceptingCardIdAtClientPoint(
   return findAcceptingCardIdAtCanvasPoint(projectId, world.x, world.y);
 }
 
-function clientPointToCanvas(
-  container: HTMLElement | null,
-  clientX: number,
-  clientY: number,
-): { x: number; y: number } {
-  const rect = container?.getBoundingClientRect();
-  const localX = rect ? clientX - rect.left : clientX;
-  const localY = rect ? clientY - rect.top : clientY;
-  return {
-    x: (localX - liveViewport.x) / liveViewport.zoom,
-    y: (localY - liveViewport.y) / liveViewport.zoom,
-  };
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.readAsDataURL(file);
-  });
-}
+// 历史:clientPointToCanvas / readFileAsDataUrl 已在 2026-05-23 移除。
+//   - clientPointToCanvas:只被已删的 Tauri-native drop 用,liveViewport 也跟着不再 import
+//   - readFileAsDataUrl:所有调用方改走 `persistFile(file, ...)`,在那里按 size 自动
+//     分流:小文件走 dataURL + 单 invoke;大文件走 `persistLargeFile` 分块上传。
+//     根治了"大视频/大图 dataURL 撞 IPC 雷区"的崩溃链。
 
 async function handleDropOnCard(
   targetCardId: string,
@@ -198,6 +261,7 @@ function createMediaCard(
   isVideo: boolean,
   localPath: string,
   content: string,
+  posterPath?: string,
 ): CanvasCard {
   const now = new Date().toISOString();
   return {
@@ -212,11 +276,28 @@ function createMediaCard(
     locked: false,
     collapsed: false,
     data: isVideo
-      ? { videoUrl: localPath, content }
+      ? { videoUrl: localPath, posterUrl: posterPath, content }
       : { imageUrl: localPath, content },
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/**
+ * 把 `extractFirstFrame` 返回的 JPEG dataUrl 落盘成 poster 文件。
+ * 失败不阻断主流程 —— 此时建一张没 poster 的卡，VideoPreview 退化成黑底。
+ */
+async function persistPoster(
+  frameDataUrl: string | null,
+  projectId: string,
+): Promise<string | undefined> {
+  if (!frameDataUrl) return undefined;
+  try {
+    const p = await persistImage(frameDataUrl, undefined, projectId);
+    return p.localPath;
+  } catch {
+    return undefined;
+  }
 }
 
 function createAudioCard(
@@ -258,7 +339,6 @@ export function useFileDrop(
   screenToCanvas: (x: number, y: number) => { x: number; y: number },
 ) {
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
-  const dropHandledAt = useRef(0);
   const fileDragTargetRef = useRef<string | null>(null);
 
   const handleDragOver = useCallback(
@@ -359,8 +439,6 @@ export function useFileDrop(
       );
       if (rawFiles.length === 0) return;
 
-      dropHandledAt.current = Date.now();
-
       const targetCardId =
         fileDragTargetRef.current ??
         findAcceptingCardIdAtClientPoint(
@@ -382,8 +460,8 @@ export function useFileDrop(
         if (audioFiles.length > 0) {
           let audioOffsetY = 0;
           for (const af of audioFiles) {
-            const dataUrl = await readFileAsDataUrl(af);
-            const saved = await persistImage(dataUrl, undefined, currentProjectId);
+            // 音频常常 > 1.5MB → 走 persistFile 自动分流(大文件分块上传)
+            const saved = await persistFile(af, undefined, currentProjectId);
             const { maxZIndex } = useCardStore.getState();
             const card = createAudioCard(
               currentProjectId, dropPos.x, dropPos.y + audioOffsetY,
@@ -413,8 +491,8 @@ export function useFileDrop(
         if (targetCardId) {
           const targetCard = useCardStore.getState().getCard(targetCardId);
           if (targetCard) {
-            const dataUrl = await readFileAsDataUrl(files[0]!);
-            const saved = await persistImage(dataUrl, undefined, currentProjectId);
+            // 拖到既有卡上:走 persistFile 自动按 size 分流
+            const saved = await persistFile(files[0]!, undefined, currentProjectId);
             await handleDropOnCard(targetCardId, saved);
             startIdx = 1;
           }
@@ -430,15 +508,31 @@ export function useFileDrop(
         for (let idx = 0; idx < remaining.length; idx++) {
           const file = remaining[idx]!;
           const video = isVideoFile(file);
-          const dataUrl = await readFileAsDataUrl(file);
-          const saved = await persistImage(dataUrl, undefined, currentProjectId);
 
-          let cardW: number, cardH: number;
+          let cardW = 0;
+          let cardH = 0;
+          let posterPath: string | undefined;
+
+          // 视频：import 时让 WebView 自己探一次解码 + 抽第一帧。失败就直接拒,别走完
+          // base64 IPC + 写盘之后让用户对着黑卡发愣。preload="none" 让卡片上的 <video>
+          // 在用户点播放前不加载元数据,所以缩略图必须在 drop 这一刻当场抽,事后没机会。
+          // 典型踩坑:iPhone/QuickTime 导出的 HEVC mp4 在无 HEVC 扩展的 Windows WebView2
+          // 必然失败;Mac WKWebView 上 HEVC-in-mp4 也比 HEVC-in-mov 脆弱得多。
           if (video) {
             const blobUrl = URL.createObjectURL(file);
-            ({ width: cardW, height: cardH } = await videoCardSize(blobUrl));
+            const frame = await extractFirstFrame(blobUrl);
             URL.revokeObjectURL(blobUrl);
-          } else {
+            if (!frame) {
+              unsupportedVideoToast(file.name);
+              continue;
+            }
+            ({ width: cardW, height: cardH } = sizeFromRatio(frame.width / frame.height));
+            posterPath = await persistPoster(frame.dataUrl, currentProjectId);
+          }
+
+          // 视频 / 大图都走 persistFile —— 大文件自动改走分块上传,不再撞 IPC 雷区
+          const saved = await persistFile(file, undefined, currentProjectId);
+          if (!video) {
             ({ width: cardW, height: cardH } = cardSizeFromPersist(saved));
           }
 
@@ -446,6 +540,7 @@ export function useFileDrop(
           const card = createMediaCard(
             currentProjectId, dropPos.x + cursorX, dropPos.y,
             maxZIndex + 1 + idx, cardW, cardH, video, saved.localPath, "",
+            posterPath,
           );
           useCardStore.getState().addCard(card);
           autoSave.markDirty(card.id);
@@ -458,122 +553,19 @@ export function useFileDrop(
     [currentProjectId, screenToCanvas],
   );
 
-  // Tauri-native file-drop fallback
-  useEffect(() => {
-    if (!isTauri) return;
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-
-    // 注意：onTauriFileDrop 返回 Promise，如果在它 resolve **之前** useEffect cleanup
-    // 先跑了（用户快速切走/重 mount），unlisten 还是 undefined → 调不到。等 then 拿到
-    // 真正 unlisten 时再判断 cancelled，已经晚的就立刻 unlisten 兜底，否则就保存它供
-    // 后续 cleanup 用。
-    onTauriFileDrop(async (paths, sx, sy) => {
-      if (cancelled) return;
-      if (Date.now() - dropHandledAt.current < 1000) return;
-      const pid = useProjectStore.getState().currentProjectId;
-      if (!pid) return;
-
-      const dpr = window.devicePixelRatio || 1;
-      const pointCandidates = dpr === 1
-        ? [{ x: sx, y: sy }]
-        : [{ x: sx / dpr, y: sy / dpr }, { x: sx, y: sy }];
-      let cssx = pointCandidates[0]!.x;
-      let cssy = pointCandidates[0]!.y;
-      let dropPoint = clientPointToCanvas(containerRef.current, cssx, cssy);
-      let targetCardId: string | null = null;
-      for (const point of pointCandidates) {
-        const world = clientPointToCanvas(containerRef.current, point.x, point.y);
-        const candidateId =
-          findAcceptingCardIdAt(point.x, point.y) ??
-          findAcceptingCardIdAtCanvasPoint(pid, world.x, world.y);
-        if (candidateId) {
-          cssx = point.x;
-          cssy = point.y;
-          dropPoint = world;
-          targetCardId = candidateId;
-          break;
-        }
-      }
-      const dropX = dropPoint.x;
-      const dropY = dropPoint.y;
-      const GAP = 20;
-
-      let startIdx = 0;
-
-      const audioPaths = paths.filter(isAudioPath);
-      if (audioPaths.length > 0) {
-        let audioOffsetY = 0;
-        for (const ap of audioPaths) {
-          try {
-            const saved = await persistImage(ap, undefined, pid);
-            const fname = ap.split(/[/\\]/).pop() ?? "audio";
-            const { maxZIndex } = useCardStore.getState();
-            const card = createAudioCard(
-              pid, dropX, dropY + audioOffsetY,
-              maxZIndex + 1, saved.localPath, fname,
-            );
-            useCardStore.getState().addCard(card);
-            autoSave.markDirty(card.id);
-            audioOffsetY += CARD_DEFAULTS.audio.height + 10;
-          } catch { /* skip */ }
-        }
-      }
-
-      if (targetCardId && canCardAcceptFileDrop(targetCardId)) {
-        const nonAudioPaths = paths.filter((p) => !isAudioPath(p));
-        if (nonAudioPaths.length > 0) {
-          try {
-            const src0 = await convertHeicPath(nonAudioPaths[0]!);
-            const saved = await persistImage(src0, undefined, pid);
-            await handleDropOnCard(targetCardId, saved);
-            startIdx = 1;
-          } catch { /* skip */ }
-        }
-      }
-
-      const remainingPaths = paths.filter((p) => !isAudioPath(p));
-      let tauriCursorX = 0;
-      for (let i = startIdx; i < remainingPaths.length; i++) {
-        try {
-          const rawPath = remainingPaths[i]!;
-          const video = isVideoPath(rawPath);
-          const filePath = video ? rawPath : await convertHeicPath(rawPath);
-          const saved = await persistImage(filePath, undefined, pid);
-
-          let cardW: number, cardH: number;
-          if (video) {
-            ({ width: cardW, height: cardH } = await videoCardSize(getDisplayUrl(saved.localPath)));
-          } else {
-            ({ width: cardW, height: cardH } = cardSizeFromPersist(saved));
-          }
-
-          const { maxZIndex } = useCardStore.getState();
-          const card = createMediaCard(
-            pid, dropX + tauriCursorX, dropY,
-            maxZIndex + 1 + (i - startIdx), cardW, cardH, video, saved.localPath, "",
-          );
-          useCardStore.getState().addCard(card);
-          autoSave.markDirty(card.id);
-          tauriCursorX += cardW + GAP;
-        } catch { /* skip */ }
-      }
-
-      updateNodeCount(pid);
-    }).then((fn) => {
-      if (cancelled) {
-        // useEffect 已经清理过了：立即 unlisten，别让监听器泄漏
-        try { fn(); } catch { /* ignore */ }
-      } else {
-        unlisten = fn;
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, [containerRef]);
+  // 历史:Tauri-native file-drop fallback 已在 2026-05-23 删除。
+  //
+  // 之前 130 行代码监听 `tauri://file-drop` 事件,只在 tauri.conf.json 的
+  // `dragDropEnabled: true` 下才会触发,而我们一直设 false —— 路径死的。
+  //
+  // 它本身还有一个未修的 bug:visual probe 失败时,文件已被 save_media 复制
+  // 进 media/images + 用户 auto-save 目录,留下两个孤儿文件没人清。要复活
+  // native drop 必须配套加 stage/commit 两阶段 + delete_media 命令。
+  //
+  // 现在 HTML drag-drop 走 persistFile 自动分流(小文件 dataURL / 大文件
+  // 分块上传)已经能覆盖所有场景,包括 100MB 视频 —— 没有保留 native drop
+  // 路径的必要。要恢复请阅读: docs/性能与IPC规范.md §12 之前的版本 +
+  // git log -- src/hooks/useFileDrop.ts。
 
   return { handleDragOver, handleDragLeave, handleDrop };
 }

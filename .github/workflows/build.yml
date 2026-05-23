@@ -139,10 +139,40 @@ jobs:
           file "$UNIVERSAL_APP/Contents/MacOS/$BINARY_NAME"
           lipo -info "$UNIVERSAL_APP/Contents/MacOS/$BINARY_NAME"
 
+          # Info.plist 注入(防御:不依赖 Tauri 2 自动 merge src-tauri/Info.plist
+          # 的能力,显式用 PlistBuddy 把所有要的 key 写入最终 bundle)。
+          # 详见 docs/mac-build-guide.md §3.6 + docs/性能与IPC规范.md §11.3。
           PLIST="$UNIVERSAL_APP/Contents/Info.plist"
+
+          # 1. NSAppTransportSecurity — WKWebView 内 <img>/<video>/fetch 放行非 ATS 兼容资源
           /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" "$PLIST"
+
+          # 2. LSMinimumSystemVersion — 与 tauri.conf.json bundle.macOS.minimumSystemVersion 对齐
+          /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string 12.0" "$PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion 12.0" "$PLIST"
+
+          # 3. NSHighResolutionCapable — Retina 屏字体不模糊
+          /usr/libexec/PlistBuddy -c "Add :NSHighResolutionCapable bool true" "$PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSHighResolutionCapable true" "$PLIST"
+
+          # 4. CFBundleDisplayName — Finder/Dock 显示名(覆盖 Tauri 默认的 productName)
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string AICat" "$PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName AICat" "$PLIST"
+
+          # 5. CFBundleName — 系统原生工具显示名(Activity Monitor / Login Items 等)
+          /usr/libexec/PlistBuddy -c "Add :CFBundleName string AICat" "$PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :CFBundleName AICat" "$PLIST"
+
+          # 6. NSHumanReadableCopyright — Get Info 面板的版权字符串
+          /usr/libexec/PlistBuddy -c "Add :NSHumanReadableCopyright string '© 2024 AI猫'" "$PLIST" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :NSHumanReadableCopyright '© 2024 AI猫'" "$PLIST"
+
+          # 验证:dump 完整 Info.plist 到日志,出问题时一眼能看出哪个 key 没进去
+          echo "=== Final Info.plist ==="
+          /usr/libexec/PlistBuddy -c "Print" "$PLIST"
+          echo "=== End Info.plist ==="
 
           codesign --force --deep --sign - "$UNIVERSAL_APP"
           codesign --verify --verbose "$UNIVERSAL_APP"

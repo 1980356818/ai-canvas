@@ -1,5 +1,6 @@
 ﻿import type { FileDropCallback } from "@/types";
 import { isTauri, ensureTauriAPIs } from "./runtime";
+import { ANY_MEDIA_EXTENSIONS_REGEX } from "@/shared/mediaFormats";
 
 export async function onTauriFileDrop(
   cb: FileDropCallback,
@@ -17,7 +18,7 @@ export async function onTauriFileDrop(
           .position ?? { x: 0, y: 0 };
         const paths = (event.payload as { paths?: string[] }).paths ?? [];
         const mediaPaths = paths.filter((p: string) =>
-          /\.(png|jpe?g|gif|webp|bmp|svg|avif|tiff?|heic|heif|mp4|webm|mov|avi|mkv|wav|mp3)$/i.test(p),
+          ANY_MEDIA_EXTENSIONS_REGEX.test(p),
         );
         if (mediaPaths.length > 0) cb(mediaPaths, pos.x, pos.y);
       }

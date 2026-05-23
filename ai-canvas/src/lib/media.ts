@@ -1,6 +1,10 @@
 import { saveMedia, readMediaBase64 } from "@/platform/media.api";
 import { isTauri } from "@/platform/runtime";
-import { IPC_PAYLOAD_HARD_LIMIT_BYTES } from "@/lib/ipcLimits";
+import {
+  IPC_SINGLE_INVOKE_SAFE_RAW_BYTES,
+  MEDIA_UPLOAD_CHUNK_RAW_BYTES,
+  MEDIA_TRANSFER_TOTAL_BYTES,
+} from "@/lib/ipcLimits";
 
 let _basePath: string | null = null;
 let _convertFileSrc: ((path: string, protocol?: string) => string) | null = null;
@@ -35,12 +39,21 @@ export interface PersistImageResult {
 }
 
 /**
- * 把 dataUrl 压到 IPC 安全大小。返回的 dataUrl 总长度保证 ≤ `IPC_PAYLOAD_HARD_LIMIT_BYTES`。
- * 用于所有"前端构造 dataUrl 后必须送给 Rust"的场景。常量来源见
- * `@/lib/ipcLimits`。
+ * 把图像 dataUrl 压到 IPC 安全大小(再大也无解的情况返回原值,由 persistImage
+ * 检测后改走分块上传)。
+ *
+ * 视频/音频 dataURL 直接原样返回 —— `compressDataUrlForApi` 走的是
+ * `createImageBitmap` / `<img>` 解码管线,对非图像 MIME 必定失败回退到原值,
+ * 中间还会 `fetch(dataUrl)` 一次(~ 2× 文件大小的内存峰值)。对视频纯属浪费。
+ * 视频 dataURL 如果超 IPC 上限,persistImage 会**转 Blob 再走分块上传**,
+ * 不再撞 WebView2 雷区。
  */
 async function ensureIpcSafeDataUrl(dataUrl: string): Promise<string> {
-  if (dataUrl.length <= IPC_PAYLOAD_HARD_LIMIT_BYTES) return dataUrl;
+  if (dataUrl.length <= IPC_SINGLE_INVOKE_SAFE_RAW_BYTES) return dataUrl;
+
+  if (/^data:(video|audio)\//i.test(dataUrl)) {
+    return dataUrl;
+  }
 
   const { compressDataUrlForApi } = await import("@/lib/imageCompression");
 
@@ -51,7 +64,7 @@ async function ensureIpcSafeDataUrl(dataUrl: string): Promise<string> {
     forceJpeg: true,
   });
 
-  if (safe.length > IPC_PAYLOAD_HARD_LIMIT_BYTES) {
+  if (safe.length > IPC_SINGLE_INVOKE_SAFE_RAW_BYTES) {
     safe = await compressDataUrlForApi(safe, {
       maxDim: 1280,
       maxBytes: 1 * 1024 * 1024,
@@ -63,15 +76,168 @@ async function ensureIpcSafeDataUrl(dataUrl: string): Promise<string> {
   return safe;
 }
 
+// ── 大文件分块上传 ───────────────────────────────────────────────────
+//
+// IPC 单次 invoke 安全上限 3MB,但用户拖入的视频/原图常常远大于此。
+// 流程见 src-tauri/src/commands/upload.rs 顶部注释。
+
+/** ArrayBuffer → base64 字符串。 */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  // btoa(String.fromCharCode(...bytes)) 在 > 100KB 时会触发 RangeError(参数数量上限),
+  // 必须分段拼。32KB chunk 是参数数量 / 性能的折中。
+  const CHUNK = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(
+      ...bytes.subarray(i, Math.min(i + CHUNK, bytes.length)),
+    );
+  }
+  return btoa(binary);
+}
+
+/** Blob / File → dataURL 字符串。 */
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error("FileReader error"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** dataURL → Blob。失败抛 Error。 */
+function dataUrlToBlob(dataUrl: string): Blob {
+  // data:<mime>;base64,<payload>
+  const commaIdx = dataUrl.indexOf(",");
+  if (!dataUrl.startsWith("data:") || commaIdx < 0) {
+    throw new Error("非合法 dataURL");
+  }
+  const meta = dataUrl.slice(5, commaIdx); // e.g. "image/png;base64"
+  const isBase64 = meta.endsWith(";base64");
+  const mime = isBase64 ? meta.slice(0, -7) : meta;
+  const payload = dataUrl.slice(commaIdx + 1);
+  if (isBase64) {
+    const binary = atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mime || "application/octet-stream" });
+  }
+  // 非 base64 (rare) - URL-decode the payload as text
+  return new Blob([decodeURIComponent(payload)], {
+    type: mime || "text/plain",
+  });
+}
+
+/**
+ * 大文件分块上传 —— 走 Tauri commands `upload_media_chunk` + `save_media` +
+ * `upload_media_cleanup`。视频 / 超 IPC 上限的大图必走这条路径,
+ * 否则单次 invoke 撞 WebView2 雷区。
+ *
+ * 流程详见 `src-tauri/src/commands/upload.rs` 顶部注释。
+ *
+ * 上限:文件 size ≤ `MEDIA_TRANSFER_TOTAL_BYTES` (500MB)。再大前端直接拒,
+ * 不浪费一通分块发送再被后端 reject。
+ */
+async function persistLargeFile(
+  file: File | Blob,
+  title?: string,
+  projectId?: string,
+): Promise<PersistImageResult> {
+  if (!isTauri) {
+    // 浏览器 dev 模式:回到 dataURL 路径
+    const dataUrl = await blobToDataUrl(file);
+    return persistImage(dataUrl, title, projectId);
+  }
+  if (file.size > MEDIA_TRANSFER_TOTAL_BYTES) {
+    throw new Error(
+      `文件 ${(file.size / (1024 * 1024)).toFixed(1)}MB 超过 ${MEDIA_TRANSFER_TOTAL_BYTES / (1024 * 1024)}MB 单文件上限,请压缩或裁剪后重试`,
+    );
+  }
+
+  const invoke = await ensureInvoke();
+  const uploadId = crypto.randomUUID();
+  const filename = file instanceof File ? file.name : undefined;
+
+  try {
+    // 顺序追加 chunk —— **不能并行**:后端按 file size + append 序列化,并行会撞
+    // race(虽然 Tauri IPC 在同窗口是 FIFO 的,但 await 是稳妥写法)。
+    for (let offset = 0; offset < file.size; offset += MEDIA_UPLOAD_CHUNK_RAW_BYTES) {
+      const slice = file.slice(offset, offset + MEDIA_UPLOAD_CHUNK_RAW_BYTES);
+      const ab = await slice.arrayBuffer();
+      const base64 = arrayBufferToBase64(ab);
+      await invoke<number>("upload_media_chunk", {
+        uploadId,
+        base64Chunk: base64,
+      });
+    }
+
+    // Finalize:save_media 读 temp 文件,移到 media/images/,magic-byte 校正扩展名。
+    const result = await invoke<{
+      localPath: string;
+      width?: number;
+      height?: number;
+    }>("save_media", {
+      source: `media/uploads_temp/${uploadId}`,
+      filename: filename ?? null,
+      title: title ?? null,
+      projectId: projectId ?? null,
+    });
+
+    return {
+      localPath: result.localPath,
+      width: result.width,
+      height: result.height,
+    };
+  } finally {
+    // 不论成功失败,清掉 temp 文件 —— 万一这里也失败,启动期 cleanup 会兜底。
+    try {
+      await invoke("upload_media_cleanup", { uploadId });
+    } catch {
+      // best-effort
+    }
+  }
+}
+
+/**
+ * 持久化 File / Blob 到本地存储。
+ *
+ * 自动按 size 分流:
+ *   - ≤ `IPC_SINGLE_INVOKE_SAFE_RAW_BYTES` (1.5MB):走 dataURL + 单 invoke
+ *   - 超过:走 `persistLargeFile` 分块上传
+ *
+ * 所有"用户从浏览器拖入 File"的入口都应走这里(而不是手动 readFileAsDataUrl
+ * + persistImage),让 IPC 安全分流由这里统一处理。
+ */
+export async function persistFile(
+  file: File | Blob,
+  title?: string,
+  projectId?: string,
+): Promise<PersistImageResult> {
+  if (!isTauri) {
+    const dataUrl = await blobToDataUrl(file);
+    return persistImage(dataUrl, title, projectId);
+  }
+  if (file.size <= IPC_SINGLE_INVOKE_SAFE_RAW_BYTES) {
+    const dataUrl = await blobToDataUrl(file);
+    return persistImage(dataUrl, title, projectId);
+  }
+  const inferredTitle =
+    title ?? (file instanceof File ? file.name : undefined);
+  return persistLargeFile(file, inferredTitle, projectId);
+}
+
 /**
  * Save any image source (data URL, HTTP URL, local path) to local storage.
  * When `projectId` is provided, auto-saved copies are organized into
  * a project-specific subfolder: `{title}_{short_id}/`.
  *
- * Large data-URL inputs are transparently downsized before being shipped
- * over IPC; this prevents `invoke("save_media")` from killing the IPC
- * channel when the user drops a multi-megabyte camera photo. AI models
- * downsample reference images internally, so the visual loss is moot.
+ * 大 dataURL 的安全分流逻辑(三级):
+ *   1. 先 `ensureIpcSafeDataUrl` 尝试压缩到 IPC 安全大小(JPEG, maxDim)
+ *   2. 压完仍然超 → 转 Blob 走 `persistLargeFile` 分块上传(根治 IPC 雷区)
+ *   3. 不是 dataURL(HTTP URL / local path) → 直接 saveMedia(IPC payload 不大)
+ *
+ * 这样调用方不用关心 size,统一交给本函数路由。
  */
 export async function persistImage(
   source: string,
@@ -80,11 +246,25 @@ export async function persistImage(
 ): Promise<PersistImageResult> {
   if (!isTauri) return { localPath: source };
 
-  const safeSource = source.startsWith("data:")
-    ? await ensureIpcSafeDataUrl(source)
-    : source;
+  if (source.startsWith("data:")) {
+    const safe = await ensureIpcSafeDataUrl(source);
+    if (safe.length > IPC_SINGLE_INVOKE_SAFE_RAW_BYTES) {
+      // 压不下去(典型场景:视频 dataURL,或图像压完仍然 > 1.5MB)
+      // → 转 Blob 改走分块上传,而不是硬塞 IPC 撞雷区
+      const blob = dataUrlToBlob(safe);
+      return persistLargeFile(blob, title, projectId);
+    }
+    const result = await saveMedia(safe, undefined, title, projectId);
+    return {
+      localPath: result.localPath,
+      width: result.width,
+      height: result.height,
+    };
+  }
 
-  const result = await saveMedia(safeSource, undefined, title, projectId);
+  // 非 dataURL source(HTTP URL / local path / asset://)— IPC payload 只是个短字符串,
+  // 真正的下载/读取在 Rust 端做,无 IPC size 顾虑
+  const result = await saveMedia(source, undefined, title, projectId);
   return {
     localPath: result.localPath,
     width: result.width,

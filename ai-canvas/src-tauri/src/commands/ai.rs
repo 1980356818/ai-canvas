@@ -1,6 +1,26 @@
+//! ╔══════════════════════════════════════════════════════════════════════╗
+//! ║  ⚠️  IPC 关键路径 — 必读 ipc_guard.rs 顶部注释                        ║
+//! ║                                                                       ║
+//! ║  ai_proxy / ai_proxy_stream / do_stream 任何 String / chunk 跨 IPC    ║
+//! ║  回前端的位置都**必须**通过 super::ipc_guard 的三个守门函数:          ║
+//! ║   - guard_response_body() — invoke 返回 body 前                       ║
+//! ║   - check_stream_chunk()  — emit("ai-stream", chunk) 前               ║
+//! ║   - check_stream_buffer() — 流式 buffer 累积时                        ║
+//! ║                                                                       ║
+//! ║  任何 std::fs::* / 大文件 base64 编码必须包 super::util::run_blocking ║
+//! ║  避免占住 tokio worker → 其他 IPC 超时 → 渲染端被 WebView2 杀。       ║
+//! ║                                                                       ║
+//! ║  改本文件前: `pwsh scripts/check-ipc-guards.ps1` 验证;改完再跑一次。 ║
+//! ╚══════════════════════════════════════════════════════════════════════╝
+
 use crate::AppState;
 use super::config::{provider_display_name, read_full_api_config, set_active_key, is_retryable_status, apply_auth_headers, resolve_key_tag, filter_keys_by_tag};
-use super::http_util::{root_cause_chain, send_with_retry};
+use super::http_util::{read_body_bounded, read_body_bounded_bytes, root_cause_chain, send_with_retry};
+use super::ipc_limits::MEDIA_TRANSFER_TOTAL_HARD_LIMIT_BYTES;
+use super::ipc_guard::{
+    check_inline_total_bytes, check_stream_buffer, check_stream_chunk, guard_response_body,
+};
+use super::util::run_blocking;
 use base64::Engine as _;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -15,7 +35,26 @@ const BASE64_ENGINE: base64::engine::GeneralPurpose = base64::engine::general_pu
 #[derive(Default)]
 struct InlineLocalStats {
     files: usize,
+    /// 源文件累计字节数(`std::fs::read` 出来的原始 bytes)
     total_bytes: usize,
+    /// 编码后累计 base64 字节数 —— 才是真正占 outgoing JSON 体积的量,
+    /// 走 [`check_inline_total_bytes`] 守门用这个值。
+    total_b64_bytes: usize,
+}
+
+/// `inline_local_files` 的 async 包装:把整棵 JSON 树 move 到 blocking pool
+/// 跑文件读取 + base64 编码,避免在 tokio worker 上同步 `std::fs::read` 大文件。
+/// 阻塞 helper 见 [`super::util::run_blocking`]。
+async fn inline_local_files_async(
+    mut body: serde_json::Value,
+    data_dir: std::path::PathBuf,
+) -> Result<(serde_json::Value, InlineLocalStats), String> {
+    run_blocking(move || {
+        let mut stats = InlineLocalStats::default();
+        inline_local_files(&mut body, &data_dir, &mut stats)?;
+        Ok((body, stats))
+    })
+    .await
 }
 
 fn debug_request_id(body: &serde_json::Value) -> Option<String> {
@@ -84,9 +123,13 @@ fn inline_local_files(
                 let b64 = BASE64_ENGINE.encode(&bytes);
                 stats.files += 1;
                 stats.total_bytes += bytes.len();
+                stats.total_b64_bytes += b64.len();
+                // 累计上限守门:一次请求引用了 N 张大图,total_b64_bytes 超过
+                // INLINE_LOCAL_FILES_TOTAL_HARD_LIMIT_BYTES 直接中断,避免 OOM。
+                check_inline_total_bytes(stats.total_b64_bytes)?;
                 tracing::debug!(
-                    "[ai_proxy] inlined local file '{}' ({} bytes, mime={})",
-                    rel, bytes.len(), mime
+                    "[ai_proxy] inlined local file '{}' ({} bytes → {}b64, mime={}; cum {}b64)",
+                    rel, bytes.len(), b64.len(), mime, stats.total_b64_bytes
                 );
                 *s = format!("data:{};base64,{}", mime, b64);
             }
@@ -146,6 +189,8 @@ fn resolve_local_path(rel: &str, data_dir: &Path) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
+/// 文件扩展名 → MIME。与前端 `src/shared/mediaFormats.ts` 白名单同步。
+/// `ext_from_mime` 是它的逆向表，两边要一起改。
 fn mime_from_path(path: &Path) -> &'static str {
     let ext = path
         .extension()
@@ -157,12 +202,16 @@ fn mime_from_path(path: &Path) -> &'static str {
         "jpg" | "jpeg" => "image/jpeg",
         "gif" => "image/gif",
         "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "avif" => "image/avif",
         "svg" => "image/svg+xml",
+        "tif" | "tiff" => "image/tiff",
         "heic" => "image/heic",
         "heif" => "image/heif",
         "mp4" => "video/mp4",
         "webm" => "video/webm",
         "mov" => "video/quicktime",
+        "m4v" => "video/x-m4v",
         "avi" => "video/x-msvideo",
         "mkv" => "video/x-matroska",
         "wav" => "audio/wav",
@@ -172,6 +221,136 @@ fn mime_from_path(path: &Path) -> &'static str {
         "flac" => "audio/flac",
         _ => "application/octet-stream",
     }
+}
+
+/// MIME → 扩展名。`mime_from_path` 的逆向表。供 `detect_extension`、
+/// `ext_from_content_type` 共用，是 dataURL/HTTP Content-Type 到落盘扩展名
+/// 的唯一映射点。与前端 `src/shared/mediaFormats.ts` 白名单保持同步。
+fn ext_from_mime(mime: &str) -> Option<&'static str> {
+    Some(match mime.trim().to_lowercase().as_str() {
+        "image/png" => "png",
+        "image/jpeg" | "image/jpg" => "jpg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "image/bmp" => "bmp",
+        "image/avif" => "avif",
+        "image/svg+xml" => "svg",
+        "image/tiff" => "tif",
+        "image/heic" | "image/heic-sequence" => "heic",
+        "image/heif" | "image/heif-sequence" => "heif",
+        "video/mp4" => "mp4",
+        "video/webm" => "webm",
+        "video/quicktime" => "mov",
+        "video/x-m4v" => "m4v",
+        "video/x-msvideo" => "avi",
+        "video/x-matroska" => "mkv",
+        "audio/wav" | "audio/x-wav" | "audio/wave" => "wav",
+        "audio/mpeg" | "audio/mp3" => "mp3",
+        "audio/mp4" => "m4a",
+        "audio/ogg" => "ogg",
+        "audio/flac" => "flac",
+        _ => return None,
+    })
+}
+
+fn is_supported_media_ext(ext: &str) -> bool {
+    matches!(
+        ext,
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "avif"
+        | "tif" | "tiff" | "heic" | "heif"
+        | "mp4" | "webm" | "mov" | "m4v" | "avi" | "mkv"
+        | "wav" | "mp3" | "m4a" | "ogg" | "flac"
+    )
+}
+
+/// 看 magic bytes 反推扩展名。识别就 `Some(ext)`,完全不识别返 `None`。
+///
+/// **这才是落盘扩展名的"真相来源"**:filename / dataURL MIME / URL ext / Content-Type
+/// 都可能撒谎(浏览器 dnd File.name 不带扩展、provider 把 mp4 标成 octet-stream、CDN 不发
+/// Content-Type 等),最终拿到 bytes 后用 magic bytes 校正一次,可以杜绝
+/// `detect_extension` 历史 "png" 兜底把视频/音频写成 `.png` 的乌龙。
+///
+/// 故意保守:遇到任何无法**明确**识别的字节都返 `None`,不要瞎猜 ——
+/// 让调用方继续用自己上下文里的扩展名兜底(filename / URL),它们至少有外部证据。
+///
+/// 与 [`ext_from_mime`] / [`mime_from_path`] / `src/shared/mediaFormats.ts` 同步,
+/// 任何扩展名分支必须在这三处 + 此处都登记。
+fn detect_ext_from_magic(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.len() < 12 {
+        return None;
+    }
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
+        return Some("png");
+    }
+    // JPEG: FF D8 FF
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return Some("jpg");
+    }
+    // GIF87a / GIF89a
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        return Some("gif");
+    }
+    // BMP
+    if bytes.starts_with(b"BM") {
+        return Some("bmp");
+    }
+    // RIFF 家族:WEBP / WAV / AVI 共享前 4 字节,看 8..12 区分
+    if bytes.starts_with(b"RIFF") && bytes.len() >= 12 {
+        match &bytes[8..12] {
+            b"WEBP" => return Some("webp"),
+            b"WAVE" => return Some("wav"),
+            b"AVI " => return Some("avi"),
+            _ => {}
+        }
+    }
+    // TIFF: II*\0 (little-endian) or MM\0* (big-endian)
+    if bytes.starts_with(&[0x49, 0x49, 0x2A, 0x00]) || bytes.starts_with(&[0x4D, 0x4D, 0x00, 0x2A]) {
+        return Some("tif");
+    }
+    // ISO BMFF (MP4 / MOV / M4V / M4A / HEIC / HEIF / AVIF):
+    //   bytes 4..8 = "ftyp", bytes 8..12 = brand (4 chars)
+    if &bytes[4..8] == b"ftyp" {
+        let brand = &bytes[8..12];
+        match brand {
+            b"qt  " => return Some("mov"),
+            b"M4V " | b"M4VH" | b"M4VP" => return Some("m4v"),
+            b"M4A " | b"M4B " => return Some("m4a"),
+            b"heic" | b"heix" | b"hevc" | b"hevx" | b"heim" | b"heis" => return Some("heic"),
+            b"mif1" | b"msf1" => return Some("heif"),
+            b"avif" | b"avis" => return Some("avif"),
+            // isom / iso2 / mp41 / mp42 / avc1 / dash / 未知 brand → 当 mp4
+            _ => return Some("mp4"),
+        }
+    }
+    // EBML (WebM / Matroska)
+    if bytes.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]) {
+        // 二者前 4 字节相同;mkv 用户少,优先 webm(WebView 兼容更好)
+        return Some("webm");
+    }
+    // OGG: "OggS"
+    if bytes.starts_with(b"OggS") {
+        return Some("ogg");
+    }
+    // FLAC: "fLaC"
+    if bytes.starts_with(b"fLaC") {
+        return Some("flac");
+    }
+    // MP3: ID3v2 tag 头,或 MPEG audio frame sync (0xFF 后高 3 位全 1)
+    if bytes.starts_with(b"ID3") {
+        return Some("mp3");
+    }
+    if bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0 {
+        return Some("mp3");
+    }
+    // SVG (XML 文本) —— 允许 BOM + 任意空白前缀
+    let head = &bytes[..bytes.len().min(256)];
+    let head_str = std::str::from_utf8(head).unwrap_or("");
+    let trimmed = head_str.trim_start_matches('\u{FEFF}').trim_start();
+    if trimmed.starts_with("<?xml") || trimmed.starts_with("<svg") {
+        return Some("svg");
+    }
+    None
 }
 
 fn build_auth_request(
@@ -194,6 +373,9 @@ const DUMP_MAX_STRING_LEN: usize = 256;
 
 /// dump 目录下最多保留这么多个最近文件，更早的自动清理，防止长期累积。
 const DUMP_KEEP_RECENT: usize = 20;
+
+// spill_oversize_response 已移至 super::ipc_guard —— 不要在这里实现守门逻辑,
+// 重构者一眼看到 inline 实现就敢删。统一走 ipc_guard::guard_response_body()。
 
 /// 递归把 outgoing JSON 里的「特长字符串」替换成长度摘要，再写盘。
 /// 保持结构和短字段原样，便于人类对比 outgoing 跟 DTO 期望的字段是否对得上。
@@ -330,8 +512,9 @@ pub async fn ai_proxy(
     scrub_debug_fields(&mut body);
 
     let inline_start = Instant::now();
-    let mut inline_stats = InlineLocalStats::default();
-    inline_local_files(&mut body, &state.data_dir, &mut inline_stats)?;
+    // inline 大 base64 file 必须扔进 blocking pool,避免占住 tokio worker 拖崩其他 IPC
+    let (body, inline_stats) =
+        inline_local_files_async(body, state.data_dir.clone()).await?;
     tracing::info!(
         "[ai_proxy:{}] local inline finished: files={}, source_bytes={}, elapsed_ms={}, outgoing_body≈{} bytes",
         request_id,
@@ -340,6 +523,11 @@ pub async fn ai_proxy(
         inline_start.elapsed().as_millis(),
         approx_json_bytes(&body)
     );
+
+    // Arc-wrap body 之后才能在 dump_failed_request 路径上零拷贝传给 spawn_blocking。
+    // body 在这之后是只读的(retry loop 只读 / 序列化),所以 Arc<Value> 足够 ——
+    // 不需要 Arc<Mutex<_>>。inline 走完 = mutation 已结束。
+    let body = Arc::new(body);
 
     let full_config = {
         let db_start = Instant::now();
@@ -429,7 +617,9 @@ pub async fn ai_proxy(
 
         let status = resp.status().as_u16();
         let text_start = Instant::now();
-        let resp_body = resp.text().await.map_err(|e| format!("读取响应失败: {}", e))?;
+        // 流式读 + 累计字节守门(super::http_util::read_body_bounded),
+        // 而**不是** resp.text().await —— 后者无上限,buggy provider 返 1GB 直接 OOM。
+        let resp_body = read_body_bounded(resp, &log_tag).await?;
         tracing::info!(
             "[ai_proxy:{}] upstream body read: status={}, body_bytes={}, read_elapsed_ms={}, request_elapsed_ms={}, total_elapsed_ms={}",
             request_id,
@@ -439,6 +629,10 @@ pub async fn ai_proxy(
             send_start.elapsed().as_millis(),
             total_start.elapsed().as_millis()
         );
+
+        // 跨 IPC 大 body 必经守门 —— 详见 super::ipc_guard 模块注释
+        let resp_body =
+            guard_response_body(resp_body, &state.data_dir, "ai_proxy", &request_id, status).await;
 
         if status < 400 || !can_rotate || !is_retryable_status(status) {
             let rotated = if i > 0 {
@@ -454,7 +648,20 @@ pub async fn ai_proxy(
                 None
             };
             if status >= 400 {
-                dump_failed_request(&state.data_dir, "ai_proxy", &url, &provider, status, &body, &resp_body);
+                let data_dir = state.data_dir.clone();
+                let url_clone = url.clone();
+                let provider_clone = provider.clone();
+                let body_clone = body.clone();
+                let resp_body_clone = resp_body.clone();
+                // dump 落盘可能写几 MB JSON:放进 spawn_blocking 避免阻塞 runtime
+                let _ = run_blocking(move || {
+                    dump_failed_request(
+                        &data_dir, "ai_proxy", &url_clone, &provider_clone, status,
+                        &body_clone, &resp_body_clone,
+                    );
+                    Ok(())
+                })
+                .await;
             }
             tracing::info!(
                 "[ai_proxy:{}] finished total_elapsed_ms={}",
@@ -510,8 +717,9 @@ pub async fn ai_proxy_stream(
 ) -> Result<(), String> {
     let request_id = debug_request_id(&body).unwrap_or_else(|| stream_id.chars().take(8).collect());
     scrub_debug_fields(&mut body);
-    let mut inline_stats = InlineLocalStats::default();
-    inline_local_files(&mut body, &state.data_dir, &mut inline_stats)?;
+    // 同 ai_proxy:inline 大 base64 必须在 blocking pool 跑
+    let (body, inline_stats) =
+        inline_local_files_async(body, state.data_dir.clone()).await?;
     tracing::info!(
         "[ai_proxy_stream:{}] local inline finished: files={}, source_bytes={}, outgoing_body≈{} bytes",
         request_id,
@@ -519,6 +727,10 @@ pub async fn ai_proxy_stream(
         inline_stats.total_bytes,
         approx_json_bytes(&body)
     );
+
+    // 见 ai_proxy 的同名注释:Arc-wrap 之后 dump_failed_request 走 spawn_blocking
+    // 不再需要 deep-clone 整棵 body,失败路径上的内存峰值从 2x 降到 1x。
+    let body = Arc::new(body);
 
     let full_config = {
         let db = state.db.lock().map_err(|e| e.to_string())?;
@@ -661,7 +873,10 @@ async fn do_stream(
     url: &str,
     api_key: &str,
     provider: &str,
-    body: &serde_json::Value,
+    // 关键:这里收 `&Arc<Value>` 而不是 `&Value`,失败时 `body.clone()` 走 Arc::clone
+    // 是 O(1) 引用计数自增,不复制内部 JSON 树。改回 `&Value` = dump 路径每次都 deep-clone
+    // 几 MB JSON,见 ai_proxy 同名注释 + project_ai_canvas_crash_fixes memory。
+    body: &Arc<serde_json::Value>,
     stream_id: &str,
     cancelled: &Arc<AtomicBool>,
 ) -> Result<(), String> {
@@ -671,7 +886,10 @@ async fn do_stream(
                 .post(url)
                 .header("Content-Type", "application/json")
                 .header("Accept-Encoding", "identity")
-                .json(body),
+                // body 是 &Arc<Value>;reqwest .json() 自身接受任何 &impl Serialize,
+                // Arc<Value> 也实现了 Serialize 透传内部 Value,但写 as_ref() 让读者
+                // 一眼看见这里要的是 &Value、避免对 Arc 序列化语义的怀疑。
+                .json(body.as_ref()),
             provider,
             api_key,
         ),
@@ -692,14 +910,35 @@ async fn do_stream(
     );
 
     if !resp.status().is_success() {
-        let resp_body = resp.text().await.unwrap_or_default();
+        // 同 ai_proxy:走 read_body_bounded 以防 buggy provider 返巨型 error body。
+        // 这里失败时不抛 —— 错误响应丢了也得返个明确的 HTTP 错给用户,但 body 内容
+        // 不是必需,落 warn 让 app.log 留线索就够了。
+        let resp_body = read_body_bounded(resp, "stream").await.unwrap_or_else(|e| {
+            tracing::warn!("[stream] failed to read error body: {}", e);
+            String::new()
+        });
         if let Some(state) = app.try_state::<AppState>() {
-            dump_failed_request(&state.data_dir, "stream", url, provider, status, body, &resp_body);
+            let data_dir = state.data_dir.clone();
+            let url_clone = url.to_string();
+            let provider_clone = provider.to_string();
+            let body_clone = body.clone();
+            let resp_body_clone = resp_body.clone();
+            let _ = run_blocking(move || {
+                dump_failed_request(
+                    &data_dir, "stream", &url_clone, &provider_clone, status,
+                    &body_clone, &resp_body_clone,
+                );
+                Ok(())
+            })
+            .await;
         }
         return Err(format!("API 错误 (HTTP {}): {}", status, resp_body));
     }
 
-    let mut buffer = String::new();
+    // 流式行缓冲必须用 Vec<u8> + drain。**绝对不要**改回 String + buffer[..].to_string()
+    // —— 那是 O(n²) 重分配,会把主线程钉死,踩过 v8 的雷。详见 ipc_guard.rs 注释。
+    // 守门(chunk / line buffer 上限)走 super::ipc_guard 函数,不要内联。
+    let mut buffer: Vec<u8> = Vec::with_capacity(8 * 1024);
 
     let mut stream = resp;
     loop {
@@ -730,11 +969,22 @@ async fn do_stream(
             }
         };
 
-        buffer.push_str(&String::from_utf8_lossy(&chunk));
+        buffer.extend_from_slice(&chunk);
 
-        while let Some(newline_pos) = buffer.find('\n') {
-            let line = buffer[..newline_pos].trim_end_matches('\r').to_string();
-            buffer = buffer[newline_pos + 1..].to_string();
+        // 行缓冲累积守门:上游异常输出(超 limit 无换行) → 中断,避免 OOM
+        check_stream_buffer(&buffer)?;
+
+        loop {
+            let newline_pos = match buffer.iter().position(|&b| b == b'\n') {
+                Some(p) => p,
+                None => break,
+            };
+
+            // 取出 [..newline_pos](不含 \n 本身)作为一行;\n 本身也丢掉。
+            // String::from_utf8_lossy 可以容忍坏字节,避免上游偶尔吐出半个 utf-8 字符就 panic。
+            let raw_line: Vec<u8> = buffer.drain(..=newline_pos).take(newline_pos).collect();
+            let line_cow = String::from_utf8_lossy(&raw_line);
+            let line = line_cow.trim_end_matches('\r');
 
             if line.is_empty() || line.starts_with(':') {
                 continue;
@@ -744,6 +994,10 @@ async fn do_stream(
                 if data.trim() == "[DONE]" {
                     return Ok(());
                 }
+
+                // chunk 大小守门:IPC 单条 emit 太大会拖崩 WebView 渲染端
+                check_stream_chunk(data)?;
+
                 let _ = app.emit("ai-stream", StreamEvent {
                     stream_id: stream_id.to_string(),
                     event: "chunk".into(),
@@ -883,8 +1137,14 @@ pub async fn save_media(
         project_id
     );
     let media_dir = data_dir.join("media/images");
-    std::fs::create_dir_all(&media_dir)
-        .map_err(|e| format!("创建媒体目录失败: {}", e))?;
+    {
+        let media_dir = media_dir.clone();
+        run_blocking(move || {
+            std::fs::create_dir_all(&media_dir)
+                .map_err(|e| format!("创建媒体目录失败: {}", e))
+        })
+        .await?;
+    }
 
     let mut ext = detect_extension(&source, &filename);
     let file_id = uuid::Uuid::new_v4().to_string();
@@ -949,7 +1209,10 @@ pub async fn save_media(
                         ext = ct_ext;
                     }
                     let bytes_start = Instant::now();
-                    match resp.bytes().await {
+                    // 流式 + 上限守门 —— buggy 上游返 GB 级 body 会被 abort,
+                    // 不是直接 OOM。上限走 MEDIA_TRANSFER_TOTAL(500MB),给 AI
+                    // 生成的视频/大图留足量,但封死无限读。
+                    match read_body_bounded_bytes(resp, "save_media", MEDIA_TRANSFER_TOTAL_HARD_LIMIT_BYTES).await {
                         Ok(b) => {
                             tracing::info!(
                                 "[save_media] 下载成功, {} 字节, body_elapsed_ms={}, total_download_elapsed_ms={}",
@@ -957,11 +1220,11 @@ pub async fn save_media(
                                 bytes_start.elapsed().as_millis(),
                                 download_start.elapsed().as_millis()
                             );
-                            downloaded = Some(b.to_vec());
+                            downloaded = Some(b);
                             break;
                         }
                         Err(e) => {
-                            last_err = format!("读取响应体失败: {}", e);
+                            last_err = e;
                             tracing::warn!("[save_media] {}", last_err);
                         }
                     }
@@ -975,16 +1238,42 @@ pub async fn save_media(
 
         downloaded.ok_or_else(|| format!("下载失败 (重试{}次): {}", max_retries, last_err))?
     } else {
-        // 当 source 是 media/ 开头的相对路径时，解析到 data_dir 而不是当前工作目录。
-        // 否则 std::fs::read 会以 CWD 为基准导致 "系统找不到指定的路径"。
-        let abs = if source.starts_with("media/") || source.starts_with("media\\") {
-            data_dir.join(&source)
-        } else {
-            std::path::PathBuf::from(&source)
-        };
-        tracing::info!("[save_media] local-file branch: abs_path={:?}", abs);
+        // 两类合法 source:
+        //   1. `media/...` 相对路径 → 必须解析后仍在 data_dir/media 下(防 `media/../../etc`)
+        //   2. 绝对路径 → 用户主动给(Tauri 原生 drop / 完整文件路径),不限制
+        //
+        // 严格的相对 `media/` 校验放在 run_blocking 里跟 std::fs::read 一起做,
+        // canonicalize 本身也是 syscall。
+        let source_for_resolve = source.clone();
+        let data_dir_for_resolve = data_dir.clone();
         let read_start = Instant::now();
-        let data = std::fs::read(&abs).map_err(|e| format!("读取文件失败: {}", e))?;
+        let data = run_blocking(move || -> Result<Vec<u8>, String> {
+            let abs = if source_for_resolve.starts_with("media/")
+                || source_for_resolve.starts_with("media\\")
+            {
+                let joined = data_dir_for_resolve.join(&source_for_resolve);
+                let canonical = joined
+                    .canonicalize()
+                    .map_err(|e| format!("local source 解析失败 '{}': {}", source_for_resolve, e))?;
+                // canonicalize 必须成功 —— 文件不存在的话上层 std::fs::read 也会失败,
+                // 提前在这里捕获并给一个对人友好的错误。
+                let media_root = data_dir_for_resolve
+                    .join("media")
+                    .canonicalize()
+                    .map_err(|e| format!("media root canonicalize 失败: {}", e))?;
+                if !canonical.starts_with(&media_root) {
+                    return Err(format!(
+                        "source 路径越权 (跑出 media/ 根目录): {}",
+                        source_for_resolve
+                    ));
+                }
+                canonical
+            } else {
+                std::path::PathBuf::from(&source_for_resolve)
+            };
+            std::fs::read(&abs).map_err(|e| format!("读取文件失败 '{}': {}", abs.display(), e))
+        })
+        .await?;
         tracing::info!(
             "[save_media] local file read: bytes={}, elapsed_ms={}",
             data.len(),
@@ -993,10 +1282,31 @@ pub async fn save_media(
         data
     };
 
+    // 拿到真正 bytes 后,用 magic-byte 校正一次扩展名。这是落盘扩展名的"终审":
+    //   - filename / URL ext / Content-Type / dataURL MIME 任意一项撒谎 → 这里救回来
+    //   - 历史 "png" 兜底把视频写成 .png 的乌龙在这里被根治
+    //   - 完全无法识别 = 保持原 ext(magic-byte 不瞎猜)
+    if let Some(magic_ext) = detect_ext_from_magic(&bytes) {
+        if magic_ext != ext {
+            tracing::info!(
+                "[save_media] magic-byte 校正扩展名: '{}' → '{}' (原 source/filename 撒谎)",
+                ext, magic_ext
+            );
+            ext = magic_ext.into();
+        }
+    }
+
     let dest = media_dir.join(format!("{}.{}", file_id, ext));
 
     let write_start = Instant::now();
-    std::fs::write(&dest, &bytes).map_err(|e| format!("写入文件失败: {}", e))?;
+    {
+        let dest = dest.clone();
+        let bytes_ref = bytes.clone();
+        run_blocking(move || {
+            std::fs::write(&dest, &bytes_ref).map_err(|e| format!("写入文件失败: {}", e))
+        })
+        .await?;
+    }
     tracing::info!(
         "[save_media] 写入内部媒体文件完成: bytes={}, elapsed_ms={}, path={:?}",
         bytes.len(),
@@ -1049,19 +1359,28 @@ pub async fn save_media(
         target_dir, friendly_name
     );
 
-    if let Err(e) = std::fs::create_dir_all(&target_dir) {
-        tracing::warn!("创建自动保存目录失败: {}", e);
-    } else {
-        let copy_start = Instant::now();
-        if let Err(e) = std::fs::copy(&dest, &user_dest) {
-            tracing::warn!("复制文件到自动保存目录失败: {}", e);
-        } else {
-            tracing::info!(
-                "文件已自动保存: {:?}, copy_elapsed_ms={}",
-                user_dest,
-                copy_start.elapsed().as_millis()
-            );
-        }
+    {
+        let target_dir = target_dir.clone();
+        let dest = dest.clone();
+        let user_dest = user_dest.clone();
+        // 失败仅 warn,不打断主路径;放进 spawn_blocking 避免在 runtime 上做 dir/copy IO
+        let _ = run_blocking::<(), _>(move || {
+            if let Err(e) = std::fs::create_dir_all(&target_dir) {
+                tracing::warn!("创建自动保存目录失败: {}", e);
+                return Ok(());
+            }
+            let copy_start = Instant::now();
+            match std::fs::copy(&dest, &user_dest) {
+                Err(e) => tracing::warn!("复制文件到自动保存目录失败: {}", e),
+                Ok(_) => tracing::info!(
+                    "文件已自动保存: {:?}, copy_elapsed_ms={}",
+                    user_dest,
+                    copy_start.elapsed().as_millis()
+                ),
+            }
+            Ok(())
+        })
+        .await;
     }
 
     let dims_start = Instant::now();
@@ -1147,12 +1466,20 @@ pub async fn export_file(
         base_dir
     };
 
-    std::fs::create_dir_all(&target_dir)
-        .map_err(|e| format!("创建导出目录失败: {}", e))?;
-
     let dest = target_dir.join(&export_name);
-    std::fs::copy(&abs_source, &dest)
-        .map_err(|e| format!("导出文件失败: {}", e))?;
+    {
+        let target_dir = target_dir.clone();
+        let abs_source = abs_source.clone();
+        let dest_clone = dest.clone();
+        run_blocking(move || {
+            std::fs::create_dir_all(&target_dir)
+                .map_err(|e| format!("创建导出目录失败: {}", e))?;
+            std::fs::copy(&abs_source, &dest_clone)
+                .map_err(|e| format!("导出文件失败: {}", e))?;
+            Ok(())
+        })
+        .await?;
+    }
 
     tracing::info!("文件已导出: {:?}", dest);
     Ok(dest.to_string_lossy().to_string())
@@ -1381,32 +1708,14 @@ pub async fn read_media_base64(state: State<'_, AppState>, path: String) -> Resu
         std::path::PathBuf::from(&path)
     };
 
-    let bytes =
-        std::fs::read(&abs_path).map_err(|e| format!("读取文件失败 '{}': {}", abs_path.display(), e))?;
+    let abs_for_read = abs_path.clone();
+    let bytes = run_blocking(move || {
+        std::fs::read(&abs_for_read)
+            .map_err(|e| format!("读取文件失败 '{}': {}", abs_for_read.display(), e))
+    })
+    .await?;
 
-    let mime = match abs_path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase()
-        .as_str()
-    {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        "svg" => "image/svg+xml",
-        "heic" => "image/heic",
-        "heif" => "image/heif",
-        "mp4" => "video/mp4",
-        "webm" => "video/webm",
-        "mov" => "video/quicktime",
-        "avi" => "video/x-msvideo",
-        "mkv" => "video/x-matroska",
-        "wav" => "audio/wav",
-        "mp3" => "audio/mpeg",
-        _ => "application/octet-stream",
-    };
+    let mime = mime_from_path(&abs_path);
 
     let b64 = BASE64_ENGINE.encode(&bytes);
     Ok(format!("data:{};base64,{}", mime, b64))
@@ -1541,20 +1850,14 @@ pub(crate) fn candidate_save_dirs(state: &AppState) -> Vec<std::path::PathBuf> {
 fn ext_from_content_type(headers: &reqwest::header::HeaderMap) -> Option<String> {
     let ct = headers.get("content-type")?.to_str().ok()?;
     let mime = ct.split(';').next().unwrap_or(ct).trim();
-    match mime {
-        "video/mp4" => Some("mp4".into()),
-        "video/webm" => Some("webm".into()),
-        "video/quicktime" => Some("mov".into()),
-        "image/png" => Some("png".into()),
-        "image/jpeg" => Some("jpg".into()),
-        "image/gif" => Some("gif".into()),
-        "image/webp" => Some("webp".into()),
-        "image/svg+xml" => Some("svg".into()),
-        "image/heic" | "image/heic-sequence" => Some("heic".into()),
-        "image/heif" | "image/heif-sequence" => Some("heif".into()),
-        _ if mime.starts_with("video/") => Some("mp4".into()),
-        _ => None,
+    if let Some(e) = ext_from_mime(mime) {
+        return Some(e.into());
     }
+    // 兜底：泛 video/* 当成 mp4 (历史行为，远端非主流 MIME 但确实是视频时不至于落 png)
+    if mime.to_lowercase().starts_with("video/") {
+        return Some("mp4".into());
+    }
+    None
 }
 
 fn detect_extension(source: &str, filename: &Option<String>) -> String {
@@ -1563,22 +1866,28 @@ fn detect_extension(source: &str, filename: &Option<String>) -> String {
             return ext.to_lowercase();
         }
     }
-    if source.starts_with("data:image/png") { return "png".into(); }
-    if source.starts_with("data:image/jpeg") || source.starts_with("data:image/jpg") { return "jpg".into(); }
-    if source.starts_with("data:image/gif") { return "gif".into(); }
-    if source.starts_with("data:image/webp") { return "webp".into(); }
-    if source.starts_with("data:image/heic") { return "heic".into(); }
-    if source.starts_with("data:image/heif") { return "heif".into(); }
-    if source.starts_with("data:video/mp4") { return "mp4".into(); }
-    if source.starts_with("data:video/webm") { return "webm".into(); }
-    if source.starts_with("data:video/quicktime") { return "mov".into(); }
+    // data:<mime>;... 取 mime 后查表
+    if let Some(rest) = source.strip_prefix("data:") {
+        if let Some(end) = rest.find(|c: char| c == ';' || c == ',') {
+            if let Some(ext) = ext_from_mime(&rest[..end]) {
+                return ext.into();
+            }
+        }
+    }
+    // 普通 URL/路径 —— 剥 query 后取扩展名，命中白名单才信
     if let Some(path_part) = source.split('?').next() {
         if let Some(ext) = path_part.rsplit('.').next() {
             let ext = ext.to_lowercase();
-            if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "mp4" | "webm" | "mov") {
+            if is_supported_media_ext(&ext) {
                 return ext;
             }
         }
     }
+    // 兜底 "png" —— 早期 AI 服务返回的 PNG 图像没有扩展名也没有 dataURL prefix,
+    // 走到这一支是常见的"看起来像 PNG 但没说明"场景。
+    //
+    // **下游 save_media 会再走一道 [`detect_ext_from_magic`]**:真正拿到 bytes 之后
+    // 看 magic bytes 校正 ——`detect_extension` 这里返回什么不重要,如果实际是 mp4
+    // 那边会改成 mp4。所以这个兜底不再是 "把视频写成 png" 的隐患来源。
     "png".into()
 }

@@ -172,7 +172,7 @@ permissions:
 
 **解决（三步走）**：
 
-1. **将 ATS 配置内置到 Tauri 构建流程**：创建 `src-tauri/Info.plist`，Tauri 自动合并到最终 `.app` 中，无需构建后修改：
+1. **将 ATS 配置内置到 Tauri 构建流程**：[`src-tauri/Info.plist`](../src-tauri/Info.plist) 已落地（v7 — 2026-05-23），Tauri 自动合并到最终 `.app` 中，无需构建后修改：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>

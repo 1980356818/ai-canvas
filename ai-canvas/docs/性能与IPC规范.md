@@ -391,3 +391,99 @@ Tauri 2 的 sync `pub fn` 命令跑在 async runtime worker 上。一个 worker 
 减少一个并发槽位 —— 不一定 freeze UI，但会让其他 IPC 排队。**任何命令体里**有
 `std::fs::*` / 慢 SQL（VACUUM / 跨表 join） / 网络的，都应该是 `pub async fn` +
 `super::ai::run_blocking(...)`。`rename_project` 是这次踩坑后改的样板。
+
+---
+
+## 11. 跨平台一致性（v7 新增 — 2026-05-23）
+
+> **踩过的坑**：用户报告 Mac 上点击"生成"(文字/图片/视频节点)必闪退，Win 上不复现。
+> 根因不是逻辑 bug，而是 **同一份代码在两端走了不同的 native 实现**，Mac 端的实现
+> 又恰好在某些边界条件下 panic，又因 `panic = "abort"` 直接 SIGABRT。"Win 跑得通"
+> 不代表"Mac 跑得通"——任何"native-*"依赖都要明确假设。
+
+### 11.1 TLS 后端必须用 `rustls`，禁用 `native-tls`
+
+`reqwest` / `hyper` 配 `native-tls` feature 时：
+
+| 平台 | 实际后端 | 状态 |
+|------|---------|------|
+| Windows | SChannel | 微软维护，稳定 |
+| macOS | **SecureTransport** | Apple 自 macOS 10.15 已 deprecated；ARM Mac + HTTP/2 + 某些上游证书链上有已知 panic |
+| Linux | OpenSSL | 依赖系统 libssl 版本 |
+
+→ 同一份代码 Mac/Win 行为不一致是**必然**的，不是巧合。
+
+**规则**：[Cargo.toml](../src-tauri/Cargo.toml) 的 `reqwest` 一律用：
+
+```toml
+reqwest = { version = "0.12", default-features = false,
+            features = ["json", "rustls-tls-native-roots", "stream", "http2"] }
+```
+
+- `rustls-tls-native-roots`：纯 Rust TLS + 复用系统 CA 信任链(企业 MITM/自签证书也能用)
+- **禁用** `native-tls` / `default-tls`(隐式打开 native-tls)
+- 任何新增的 HTTP 客户端 crate(grpc / websocket / s3 等)同样要明确 rustls feature
+
+### 11.2 Release `panic = "unwind"`，不能 `"abort"`
+
+`panic = "abort"` 让任何漏网的 `unwrap` / `expect` / `panic!` 直接 SIGABRT，
+**panic hook 完全不走**，stderr 也吃不到 — Mac 用户从 Finder 启动连日志都没有。
+
+**规则**：[Cargo.toml](../src-tauri/Cargo.toml) `[profile.release]` 必须：
+
+```toml
+strip = "debuginfo"   # 保留 symbol，backtrace 能看见函数名
+panic = "unwind"      # 让 panic hook 能抓到现场
+```
+
+配套：[`lib.rs::run()`](../src-tauri/src/lib.rs) 入口的 panic hook 必须：
+- `std::env::set_var("RUST_BACKTRACE", "1")`
+- 抓 `location` / `payload` / `Backtrace::force_capture()`
+- 落到 `startup.log`(boot_log) + `eprintln!`(双保险)
+- 带平台 / 架构 / 版本 / 线程名
+
+新增 unsafe / FFI / `expect()` 时**先检查 panic hook 是否覆盖该路径**，否则要么改成
+`unwrap_or_else(|e| { tracing::error!(...); fallback })`，要么确认 panic 走 hook 后
+还能给前端一个友好错误而不是闪退。
+
+### 11.3 macOS Info.plist 必须存在
+
+[`src-tauri/Info.plist`](../src-tauri/Info.plist) Tauri 构建时自动合并到最终 `.app`。
+缺失 / 字段不全会出现：
+
+- `NSAppTransportSecurity / NSAllowsArbitraryLoads = true`：放行 WKWebView 内的
+  HTTP 资源 + 非系统信任证书的 HTTPS。生成路径不依赖它(走 reqwest)，但媒体预览
+  `<img>` / `<video>` 受 ATS 管控，缺失会让预览空白甚至 WebContent 进程被 jetsam 杀。
+- `LSMinimumSystemVersion`：与 `tauri.conf.json` 的 `bundle.macOS.minimumSystemVersion` 对齐
+- `NSHighResolutionCapable = true`：否则 Retina 屏字体糊
+- `CFBundleDisplayName` / `NSHumanReadableCopyright`：原生工具(Finder/About)显示
+
+**改动这个文件需要重新 build**(不会热重载)。Tauri 自动合并 = `Info.plist` 中的字段
++ Tauri 生成的字段(CFBundleIdentifier 等)合成 `.app/Contents/Info.plist`。
+
+### 11.4 `#[cfg(target_os = "...")]` 分支三平台必须对称
+
+每加一处 `#[cfg(target_os = "windows")]`，立刻问自己：
+
+- macOS 分支是什么？ → 写 `#[cfg(target_os = "macos")]`
+- Linux 分支是什么？ → 写 `#[cfg(all(unix, not(target_os = "macos")))]` 或 `#[cfg(target_os = "linux")]`
+- 其他平台默认行为是什么？ → 至少要有一个 fallback 分支或编译期阻止
+
+**反例**：[`reveal_path`](../src-tauri/src/commands/ai.rs) 三平台齐全(好)；
+某次 v6 之前的 `auto_save_default_dir` 漏了 Linux 分支 — 在 Linux 上 silently fall 
+through 到 `data_dir`，没人报因为没 Linux 用户，但是规范上不许。
+
+**反例 2**：Windows 独占的 `MIN_WEBVIEW2_MAJOR` 版本检测在 Mac 上没对应物 —— 这是
+对的(WKWebView 跟随系统)，但**新增**这种平台独占检查时必须文档说明"为什么其他平台不需要"。
+
+### 11.5 别再犯（v7 增补）
+
+11. **`native-*` 依赖 = 跨平台分裂源**：选 crate features 时，"native-tls" / "native-ssl" /
+    "system-deps" 这类名字一出现，立刻问"Mac/Win 各走什么实现，是否一致"。
+12. **release `panic = "abort"` 在排查阶段是禁区**：bundle 体积小那 1MB 远抵不上
+    "用户反馈崩溃 + 一无所获" 的诊断成本。等连续 1 个月零 panic 报告再考虑切回。
+13. **"我 Win 上没复现"不等于"代码没问题"**：跨平台桌面项目，bug 报告先看是否
+    平台特定，再决定排查范围；交叉验证两个平台是默认动作而不是选择题。
+14. **每个 `expect()` 都是 release 里的潜在闪退**：在 panic = "unwind" + 强 hook 下
+    最坏也只是 thread panic + 日志(不 abort)，但仍可能让一个 IPC command 永远不返回。
+    优先 `unwrap_or_else(|e| { log; fallback })`，逼不得已再 expect 且必须有 hook 覆盖。

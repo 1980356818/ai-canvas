@@ -10,6 +10,7 @@ import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
 import ModelSelector from "@/features/editor/ModelSelector";
+import { VIDEO_EXTENSIONS_REGEX, IMAGE_EXTENSIONS_REGEX } from "@/shared/mediaFormats";
 
 interface UploadedMedia {
   url: string;
@@ -19,23 +20,17 @@ interface UploadedMedia {
 
 const MEDIA_LABELS = ["附件一", "附件二", "附件三", "附件四", "附件五"];
 const MAX_MEDIA = 5;
-const ACCEPTED_IMAGE_MIME = [
-  "image/png", "image/jpeg", "image/gif", "image/webp",
-  "image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence",
-];
-const ACCEPTED_VIDEO_MIME = [
-  "video/mp4", "video/webm", "video/quicktime", "video/x-msvideo", "video/x-matroska",
-];
-const VIDEO_EXTENSIONS = /\.(mp4|webm|mov|avi|mkv)$/i;
 
 function isVideoFile(file: File): boolean {
-  return file.type.startsWith("video/") || VIDEO_EXTENSIONS.test(file.name);
+  return file.type.startsWith("video/") || VIDEO_EXTENSIONS_REGEX.test(file.name);
+}
+
+function isImageFile(file: File): boolean {
+  return file.type.startsWith("image/") || IMAGE_EXTENSIONS_REGEX.test(file.name);
 }
 
 function isMediaFile(file: File): boolean {
-  return ACCEPTED_IMAGE_MIME.includes(file.type)
-    || ACCEPTED_VIDEO_MIME.includes(file.type)
-    || isVideoFile(file);
+  return isImageFile(file) || isVideoFile(file);
 }
 
 const UNIFIED_PLACEHOLDER = "描述你的需求，AI 将自动处理文字与图片...";
@@ -111,7 +106,7 @@ export default function AIPromptInput() {
     const results = await Promise.all(
       toAdd.map(async (src) => {
         const { localPath } = await persistImage(src);
-        const video = VIDEO_EXTENSIONS.test(src);
+        const video = VIDEO_EXTENSIONS_REGEX.test(src);
         return { url: localPath, displayUrl: getDisplayUrl(localPath), kind: (video ? "video" : "image") as "image" | "video" };
       }),
     );

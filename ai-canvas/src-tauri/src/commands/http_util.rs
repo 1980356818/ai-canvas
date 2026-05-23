@@ -112,3 +112,83 @@ where
     }
     Err(format!("请求失败: url={}, {}", url, last_err))
 }
+
+/// 流式读完整 response body 到 `Vec<u8>`,边读边按 `max_bytes` 上限守门。
+/// **绝对不要**直接 `resp.bytes().await` —— 那是 unbounded,上游返几 GB
+/// 直接 OOM。本函数边收 chunk 边累计、超过即 abort,内存峰值受控。
+///
+/// 提前看 Content-Length 短路:上游声明就已超限,根本不 alloc buffer。
+/// (Content-Length 可能撒谎,真实 size 还会再校验。)
+///
+/// `max_bytes` 不同场景不同:
+///   - `ai_proxy` / `do_stream` 错误体 → `HTTP_RESPONSE_BODY_READ_HARD_LIMIT_BYTES`(32MB)
+///   - `save_media` 远程下载 → `MEDIA_TRANSFER_TOTAL_HARD_LIMIT_BYTES`(500MB)
+pub async fn read_body_bounded_bytes(
+    mut resp: reqwest::Response,
+    log_tag: &str,
+    max_bytes: usize,
+) -> Result<Vec<u8>, String> {
+    if let Some(len) = resp.content_length() {
+        if (len as usize) > max_bytes {
+            return Err(format!(
+                "[{}] 上游声明 Content-Length {} bytes 超过 {} MB 上限,拒绝读取",
+                log_tag,
+                len,
+                max_bytes / (1024 * 1024)
+            ));
+        }
+    }
+
+    let mut total: usize = 0;
+    let mut buf: Vec<u8> = Vec::with_capacity(8 * 1024);
+    loop {
+        match resp.chunk().await {
+            Ok(Some(chunk)) => {
+                total = total.saturating_add(chunk.len());
+                if total > max_bytes {
+                    return Err(format!(
+                        "[{}] 上游响应体超过 {} MB 安全读取上限,已中断",
+                        log_tag,
+                        max_bytes / (1024 * 1024)
+                    ));
+                }
+                buf.extend_from_slice(&chunk);
+            }
+            Ok(None) => break,
+            Err(e) => {
+                let root = root_cause_chain(&e);
+                return Err(format!("[{}] 读取响应失败: {}", log_tag, root));
+            }
+        }
+    }
+    Ok(buf)
+}
+
+/// 文本 response body 的便捷包装 —— 用 `HTTP_RESPONSE_BODY_READ_HARD_LIMIT_BYTES`
+/// 作为上限,UTF-8 非法字节走 lossy 兜底(provider 偶发返 latin-1 不该让整个请求 fail)。
+///
+/// 项目内**唯一**的"读 API response body"入口,代替 `resp.text().await`。
+pub async fn read_body_bounded(
+    resp: reqwest::Response,
+    log_tag: &str,
+) -> Result<String, String> {
+    let bytes = read_body_bounded_bytes(
+        resp,
+        log_tag,
+        super::ipc_limits::HTTP_RESPONSE_BODY_READ_HARD_LIMIT_BYTES,
+    )
+    .await?;
+
+    match String::from_utf8(bytes) {
+        Ok(s) => Ok(s),
+        Err(e) => {
+            let bytes = e.into_bytes();
+            tracing::warn!(
+                "[{}] response body contains non-UTF-8 bytes, falling back to lossy decode ({} bytes)",
+                log_tag,
+                bytes.len()
+            );
+            Ok(String::from_utf8_lossy(&bytes).into_owned())
+        }
+    }
+}

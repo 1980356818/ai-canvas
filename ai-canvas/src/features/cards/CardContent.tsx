@@ -258,11 +258,24 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
 }
 
 function VideoPreview({ card }: { card: CanvasCard }) {
-  const data = card.data as { content?: string; videoUrl?: string };
+  const data = card.data as { content?: string; videoUrl?: string; posterUrl?: string };
   const genProgress = useUIStore((s) => s.generatingCards.get(card.id));
   const cardError = useUIStore((s) => s.cardErrors.get(card.id));
   const displayUrl = data.videoUrl ? getDisplayUrl(data.videoUrl) : undefined;
+  // poster 在 drop 时一次性抽好落盘,这里只是把存储路径转成 asset:// 显示 URL。
+  // 用 <video poster> 而不是 <img> 叠加,是为了让用户点 controls 播放时 poster 自然
+  // 被首帧替换,无需额外切换逻辑。
+  const posterUrl = data.posterUrl ? getDisplayUrl(data.posterUrl) : undefined;
   const isRemote = data.videoUrl?.startsWith("http://") || data.videoUrl?.startsWith("https://");
+
+  // 运行时解码失败兜底。drop 阶段已经做了一次 probe,但仍需此兜底：
+  //   - 卡片是早先存的视频,当前机器后来卸了 HEVC 扩展
+  //   - 卡片是从别的机器同步过来的,本机解不动
+  //   - probe 假阳性(浏览器声称能解但实际解不动)
+  // preload="none" 让 onError 只在用户点播放后才触发,所以"先看到 controls,点完才知道解不动"
+  // 是预期 UX —— 总比黑卡静默强。
+  const [decodeFailed, setDecodeFailed] = useState(false);
+  useEffect(() => { setDecodeFailed(false); }, [displayUrl]);
 
   if (genProgress) {
     return (
@@ -292,6 +305,19 @@ function VideoPreview({ card }: { card: CanvasCard }) {
     return <CardErrorWithRetry cardId={card.id} message={cardError} variant="panel" />;
   }
 
+  if (displayUrl && decodeFailed) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-muted-foreground">
+        <Video className="h-10 w-10 opacity-40" />
+        <span className="text-sm font-medium opacity-70">视频无法解码</span>
+        <span className="text-[11px] opacity-50">
+          浏览器不支持该编码（如 HEVC/H.265）。<br />
+          请改用 H.264 编码的 MP4。
+        </span>
+      </div>
+    );
+  }
+
   if (displayUrl) {
     return (
       <div className="relative h-full w-full">
@@ -300,10 +326,12 @@ function VideoPreview({ card }: { card: CanvasCard }) {
             用户点击 controls 播放时才真正拉数据。 */}
         <video
           src={displayUrl}
+          poster={posterUrl}
           className="h-full w-full object-cover"
           controls
           muted
           preload="none"
+          onError={() => setDecodeFailed(true)}
         />
         {isRemote && (
           <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-amber-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm">
