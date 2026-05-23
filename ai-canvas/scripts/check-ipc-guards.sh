@@ -1,6 +1,24 @@
 #!/usr/bin/env bash
-# check-ipc-guards.sh — POSIX 版静态检查 (Mac/Linux CI 用),逻辑与 .ps1 对齐。
-# 详见 scripts/check-ipc-guards.ps1 头部注释。
+# check-ipc-guards.sh -- POSIX static check (Mac/Linux CI). Mirrors .ps1 logic.
+# See scripts/check-ipc-guards.ps1 header for full rationale.
+#
+# History of macOS-only failures (do NOT regress these):
+#   v1.1.4/v1.1.5: used `[^/[:space:]]` style bracket negation. GNU grep
+#     (Linux + Git Bash) parses it correctly; BSD grep (macOS CI default)
+#     parses the embedded POSIX class differently and drops every non-blank
+#     line. 5/25 checks falsely failed.
+#   v1.1.6: switched to `grep -v '^[[:space:]]*//'` filter inside a pipe of
+#     printf "$bigvar" | grep -v | grep -q. Fixed 2/5 but 3 still failed.
+#     Suspect bash 3.2.57 (macOS default) `$(...)` capture + pipefail +
+#     SIGPIPE-when-grep-q-exits-early interaction.
+#   v1.1.7 (current): writes the comment-stripped content to a temp file
+#     per source file, then greps the file directly. No big-variable, no
+#     pipefail-vs-SIGPIPE race. Each grep is one-shot, exit code is the
+#     only signal we care about.
+#
+# Keep this file ASCII-only (no em-dashes, no Chinese). The .ps1 sibling
+# has the same rule for a different reason (PS5.1 ANSI default); aligning
+# both files removes one class of CI surprise.
 
 set -euo pipefail
 
@@ -17,12 +35,6 @@ lib_file="src-tauri/src/lib.rs"
 
 errors=()
 checks=0
-fail_if() {
-    checks=$((checks + 1))
-    if [ "$1" = "true" ]; then
-        errors+=("$2")
-    fi
-}
 
 for f in "$ai" "$mod_file" "$ipc_guard" "$ipc_limits" "$util_file" "$upload_file" "$http_util_file" "$lib_file"; do
     if [ ! -f "$f" ]; then
@@ -31,67 +43,72 @@ for f in "$ai" "$mod_file" "$ipc_guard" "$ipc_limits" "$util_file" "$upload_file
     fi
 done
 
-# 1. mod.rs export
+# strip_to_temp <src> <dst>
+#   Writes <src> with /* ... */ block comments removed AND lines that are
+#   pure // comments (whitespace then //) dropped, to <dst>. Block-comment
+#   strip is done in perl (multi-line non-greedy) before line filter.
+strip_to_temp() {
+    perl -0777 -pe 's{/\*.*?\*/}{}gs' "$1" | grep -v '^[[:space:]]*//' > "$2" || true
+}
+
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
+ai_clean="$tmpdir/ai.rs.clean"
+http_util_clean="$tmpdir/http_util.rs.clean"
+lib_clean="$tmpdir/lib.rs.clean"
+
+strip_to_temp "$ai" "$ai_clean"
+strip_to_temp "$http_util_file" "$http_util_clean"
+strip_to_temp "$lib_file" "$lib_clean"
+
+# 1. mod.rs exports
 grep -qE '^pub mod ipc_limits;' "$mod_file" || errors+=("commands/mod.rs MUST export ipc_limits")
 grep -qE '^pub mod ipc_guard;' "$mod_file"  || errors+=("commands/mod.rs MUST export ipc_guard")
 grep -qE '^pub mod util;' "$mod_file"       || errors+=("commands/mod.rs MUST export util")
 grep -qE '^pub mod upload;' "$mod_file"     || errors+=("commands/mod.rs MUST export upload (chunked media upload)")
 checks=$((checks + 4))
 
-# 2. ai.rs imports + calls (non-commented). grep -E with negative lookahead is
-# not portable; use a two-step strategy:
-#   a) strip `/* ... */` block comments (perl -0777 reads whole file, /s makes
-#      . span newlines). Without this, a comment block containing guard names
-#      would fool the line-based check.
-#   b) on the stripped content, drop pure-`//` comment lines, then grep.
-#
-# IMPORTANT: do not use `[^/[:space:]]` style negation -- BSD grep (macOS CI)
-# parses the embedded POSIX class differently from GNU grep and silently
-# discards every non-blank line. v1.1.4/v1.1.5 builds on macOS died exactly
-# here. The portable form is `grep -v '^[[:space:]]*//'`.
-ai_stripped="$(perl -0777 -pe 's{/\*.*?\*/}{}gs' "$ai")"
-non_comment_grep() {
-    # $1 = pattern; reads stripped content from stdin via the caller
-    grep -v '^[[:space:]]*//' | grep -q "$1"
-}
-grep -q 'use super::ipc_guard::' "$ai" || errors+=("ai.rs MUST import super::ipc_guard")
-grep -q 'use super::util::run_blocking' "$ai" || errors+=("ai.rs MUST import super::util::run_blocking")
-printf '%s' "$ai_stripped" | non_comment_grep 'guard_response_body'      || errors+=("ai.rs MUST call guard_response_body() (non-commented, non-block-commented)")
-printf '%s' "$ai_stripped" | non_comment_grep 'check_stream_chunk'       || errors+=("ai.rs MUST call check_stream_chunk() (non-commented, non-block-commented)")
-printf '%s' "$ai_stripped" | non_comment_grep 'check_stream_buffer'      || errors+=("ai.rs MUST call check_stream_buffer() (non-commented, non-block-commented)")
-printf '%s' "$ai_stripped" | non_comment_grep 'check_inline_total_bytes' || errors+=("ai.rs MUST call check_inline_total_bytes() in inline_local_files")
-printf '%s' "$ai_stripped" | non_comment_grep 'read_body_bounded'        || errors+=("ai.rs MUST use read_body_bounded()/read_body_bounded_bytes() (never resp.text()/resp.bytes())")
-if printf '%s' "$ai_stripped" | grep -v '^[[:space:]]*//' | grep -qE '\bresp[[:space:]]*\.[[:space:]]*text[[:space:]]*\([[:space:]]*\)[[:space:]]*\.[[:space:]]*await'; then
+# 2. ai.rs imports + calls (against the comment-stripped temp file).
+grep -q 'use super::ipc_guard::'           "$ai"       || errors+=("ai.rs MUST import super::ipc_guard")
+grep -q 'use super::util::run_blocking'    "$ai"       || errors+=("ai.rs MUST import super::util::run_blocking")
+grep -q 'guard_response_body'              "$ai_clean" || errors+=("ai.rs MUST call guard_response_body() (non-commented, non-block-commented)")
+grep -q 'check_stream_chunk'               "$ai_clean" || errors+=("ai.rs MUST call check_stream_chunk() (non-commented, non-block-commented)")
+grep -q 'check_stream_buffer'              "$ai_clean" || errors+=("ai.rs MUST call check_stream_buffer() (non-commented, non-block-commented)")
+grep -q 'check_inline_total_bytes'         "$ai_clean" || errors+=("ai.rs MUST call check_inline_total_bytes() in inline_local_files")
+grep -q 'read_body_bounded'                "$ai_clean" || errors+=("ai.rs MUST use read_body_bounded()/read_body_bounded_bytes() (never resp.text()/resp.bytes())")
+checks=$((checks + 7))
+
+# Raw .text()/.bytes() bans, on the comment-stripped file.
+if grep -qE '\bresp[[:space:]]*\.[[:space:]]*text[[:space:]]*\([[:space:]]*\)[[:space:]]*\.[[:space:]]*await' "$ai_clean"; then
     errors+=("ai.rs uses raw 'resp.text().await' -- replace with read_body_bounded() (OOM safety)")
 fi
-if printf '%s' "$ai_stripped" | grep -v '^[[:space:]]*//' | grep -qE '\bresp[[:space:]]*\.[[:space:]]*bytes[[:space:]]*\([[:space:]]*\)[[:space:]]*\.[[:space:]]*await'; then
+if grep -qE '\bresp[[:space:]]*\.[[:space:]]*bytes[[:space:]]*\([[:space:]]*\)[[:space:]]*\.[[:space:]]*await' "$ai_clean"; then
     errors+=("ai.rs uses raw 'resp.bytes().await' -- replace with read_body_bounded_bytes() (OOM safety)")
 fi
-checks=$((checks + 9))
-
-# 3a. http_util.rs has the bounded readers (block-comment stripped)
-http_util_stripped="$(perl -0777 -pe 's{/\*.*?\*/}{}gs' "$http_util_file")"
-printf '%s' "$http_util_stripped" | non_comment_grep 'fn read_body_bounded\b'       || errors+=("http_util.rs MUST define read_body_bounded")
-printf '%s' "$http_util_stripped" | non_comment_grep 'fn read_body_bounded_bytes\b' || errors+=("http_util.rs MUST define read_body_bounded_bytes")
 checks=$((checks + 2))
 
-# 3. ban O(n^2) buffer anti-pattern (run against stripped content so a
-#    historical-note block comment containing the pattern doesn't false-positive)
-if printf '%s' "$ai_stripped" | grep -qE 'let mut buffer[[:space:]]*=[[:space:]]*String::new\(\)'; then
-    errors+=("ai.rs uses 'let mut buffer = String::new()' — O(n^2) anti-pattern in stream path!")
+# 3a. http_util.rs has the bounded readers.
+grep -qE 'fn[[:space:]]+read_body_bounded\b'       "$http_util_clean" || errors+=("http_util.rs MUST define read_body_bounded")
+grep -qE 'fn[[:space:]]+read_body_bounded_bytes\b' "$http_util_clean" || errors+=("http_util.rs MUST define read_body_bounded_bytes")
+checks=$((checks + 2))
+
+# 4. Ban O(n^2) buffer anti-patterns (run against stripped content so the
+#    historical-note comments don't false-positive).
+if grep -qE 'let mut buffer[[:space:]]*=[[:space:]]*String::new\(\)' "$ai_clean"; then
+    errors+=("ai.rs uses 'let mut buffer = String::new()' -- O(n^2) anti-pattern in stream path!")
 fi
-if printf '%s' "$ai_stripped" | grep -qE 'buffer[[:space:]]*=[[:space:]]*buffer\[[^]]+\]\.to_string\(\)'; then
-    errors+=("ai.rs reassigns buffer via .to_string() — O(n^2) anti-pattern!")
+if grep -qE 'buffer[[:space:]]*=[[:space:]]*buffer\[[^]]+\]\.to_string\(\)' "$ai_clean"; then
+    errors+=("ai.rs reassigns buffer via .to_string() -- O(n^2) anti-pattern!")
 fi
 checks=$((checks + 2))
 
-# 4. lib.rs sanity check (non-commented, non-block-commented)
-lib_stripped="$(perl -0777 -pe 's{/\*.*?\*/}{}gs' "$lib_file")"
-printf '%s' "$lib_stripped" | non_comment_grep 'ipc_guard::sanity_check_limits' || \
-    errors+=("lib.rs MUST call commands::ipc_guard::sanity_check_limits() (non-commented) in setup")
+# 5. lib.rs sanity check call.
+grep -q 'ipc_guard::sanity_check_limits' "$lib_clean" \
+    || errors+=("lib.rs MUST call commands::ipc_guard::sanity_check_limits() (non-commented) in setup")
 checks=$((checks + 1))
 
-# 5. ipc_limits constants
+# 6. ipc_limits constants.
 for c in IPC_RESPONSE_BODY_HARD_LIMIT_BYTES \
          IPC_STREAM_CHUNK_HARD_LIMIT_BYTES \
          STREAM_LINE_BUFFER_HARD_LIMIT_BYTES \
