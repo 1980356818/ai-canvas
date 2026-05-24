@@ -242,30 +242,58 @@ export async function persistImage(
 ): Promise<PersistImageResult> {
   if (!isTauri) return { localPath: source };
 
+  let result: PersistImageResult;
+
   if (source.startsWith("data:")) {
     const safe = await ensureIpcSafeDataUrl(source);
     if (safe.length > IPC_SINGLE_INVOKE_SAFE_RAW_BYTES) {
       // 压不下去(典型场景:视频 dataURL,或图像压完仍然 > 1.5MB)
       // → 转 Blob 改走分块上传,而不是硬塞 IPC 撞雷区
       const blob = dataUrlToBlob(safe);
-      return persistLargeFile(blob, title, projectId);
+      result = await persistLargeFile(blob, title, projectId);
+    } else {
+      const saved = await saveMedia(safe, undefined, title, projectId);
+      result = { localPath: saved.localPath, width: saved.width, height: saved.height };
     }
-    const result = await saveMedia(safe, undefined, title, projectId);
-    return {
-      localPath: result.localPath,
-      width: result.width,
-      height: result.height,
-    };
+  } else {
+    // 非 dataURL source(HTTP URL / local path / asset://)— IPC payload 只是个短字符串,
+    // 真正的下载/读取在 Rust 端做,无 IPC size 顾虑
+    const saved = await saveMedia(source, undefined, title, projectId);
+    result = { localPath: saved.localPath, width: saved.width, height: saved.height };
   }
 
-  // 非 dataURL source(HTTP URL / local path / asset://)— IPC payload 只是个短字符串,
-  // 真正的下载/读取在 Rust 端做,无 IPC size 顾虑
-  const result = await saveMedia(source, undefined, title, projectId);
-  return {
-    localPath: result.localPath,
-    width: result.width,
-    height: result.height,
-  };
+  // 落盘成功后 fire-and-forget 后台预热上传到服务端。
+  // 失败完全静默(没缓存就静默, 真正用的时候主路径会再发一次)。
+  // 走 prewarm semaphore(2), 不抢主路径(4) 的并发额度。
+  // 跟主路径共享 in-flight 单飞 — 预热和主路径撞同一文件时只发一次 HTTP。
+  schedulePrewarmUpload(result.localPath);
+
+  return result;
+}
+
+/**
+ * 后台预热上传 —— 不抛错, 不 await, 用户感知零延迟。
+ * 拖入/粘贴/AI 输出的图片都会自动走这里, 等用户真正在生成时调
+ * `mediaToApiRef` 直接命中本地 sqlite 缓存返 HTTP URL, 不等。
+ *
+ * 失败的合理原因 (网络抖动 / 鉴权过期 / 服务端 5xx) 都不该打扰用户 —
+ * 真正发请求时主路径会再试一次, 由那里的错误处理负责 UX。
+ */
+function schedulePrewarmUpload(localPath: string): void {
+  if (!localPath) return;
+  // 用 setTimeout(0) 切出当前微任务队列, 让 persistImage 调用方先返回 UI,
+  // 上传发生在 Tauri command 异步 task, 完全不阻塞渲染。
+  setTimeout(() => {
+    void import("@/platform/media")
+      .then(({ mediaToApiRef }) => mediaToApiRef(localPath, { prewarm: true }))
+      .catch((err) => {
+        // 静默, 但留 debug 日志便于排查"为什么用户点生成时还要等"
+        console.debug(
+          "[media] prewarm upload failed (silent, main path will retry):",
+          localPath, err
+        );
+      });
+  }, 0);
 }
 
 function stripQueryAndHash(path: string): string {

@@ -51,6 +51,20 @@ interface ServerFileUploadResponse {
   cached?: boolean;
 }
 
+export interface MediaToApiRefOptions {
+  /** 哪个 provider 的 base_url 走上传 (默认 jijing) */
+  provider?: string;
+  /**
+   * 预热模式 —— 用户拖入/粘贴后台静默上传时设 true,
+   * Rust 端占独立 PREWARM_SEMAPHORE(2), 不挤占主路径 MAIN_SEMAPHORE(4)。
+   * 主动触发 (点生成 / 送 ref 图) 走 false (默认)。
+   *
+   * 跟主路径**共享 in-flight 单飞**:预热和主路径撞同一 sha256 时,
+   * 后到的 follower 直接 await 先到的 broadcast, 不重复发 HTTP。
+   */
+  prewarm?: boolean;
+}
+
 /**
  * 把任意本地媒体引用转成上游 AI API 可消费的 HTTP URL。
  *
@@ -63,13 +77,11 @@ interface ServerFileUploadResponse {
  * 永远返回 HTTPS URL。失败抛 Error, 调用方按错误信息决定 UX (展示 toast /
  * 切换 provider / 等)。
  *
- * @param input 任意本地媒体引用
- * @param opts.provider 哪个 provider 的 base_url 走上传 (默认 jijing)
  * @throws {Error} 上传失败 (鉴权 / 体积 / 网络 / 服务端 5xx)
  */
 export async function mediaToApiRef(
   input: string,
-  opts?: { provider?: string }
+  opts?: MediaToApiRefOptions
 ): Promise<string> {
   if (!input) return "";
 
@@ -79,9 +91,10 @@ export async function mediaToApiRef(
   }
 
   const provider = opts?.provider ?? "jijing";
+  const prewarm = opts?.prewarm ?? false;
 
   if (isTauri) {
-    return uploadViaTauri(input, provider);
+    return uploadViaTauri(input, provider, prewarm);
   }
 
   return uploadViaFetch(input, provider);
@@ -89,13 +102,14 @@ export async function mediaToApiRef(
 
 /**
  * Tauri 模式: Rust 端走 `upload_to_server` command, 自带 sha256 流式 + sqlite
- * 缓存 + 并发限制, 比前端拿到 Blob 再 FormData 高效得多 (省一道 webview ↔ rust IPC)。
+ * 缓存 + in-flight 单飞 + 双 semaphore (main / prewarm) 分桶。
  */
-async function uploadViaTauri(input: string, provider: string): Promise<string> {
+async function uploadViaTauri(input: string, provider: string, prewarm: boolean): Promise<string> {
   await ensureTauriAPIs();
   const result = await getInvoke()<UploadResult>("upload_to_server", {
     path: input,
     provider,
+    prewarm,
   });
   return result.url;
 }

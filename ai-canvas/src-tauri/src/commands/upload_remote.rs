@@ -22,14 +22,15 @@
 //! 防止打爆服务端 + 用户本地网络。
 
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::State;
-use tokio::sync::Semaphore;
+use tokio::sync::{broadcast, Semaphore};
 
 use crate::AppState;
 use super::config::{apply_auth_headers, read_full_api_config};
@@ -40,13 +41,50 @@ use super::util::run_blocking;
 /// `max-file-size` 对齐。客户端预校验早失败比让 nginx 413 更友好。
 pub const REMOTE_UPLOAD_MAX_BYTES: u64 = 100 * 1024 * 1024;
 
-/// 全局并发限制。6 张图点生成时只让 4 个并行,
-/// 避免在弱网下同时打开 6 条 multipart 连接 stall 全部 timeout。
-static UPLOAD_SEMAPHORE: OnceLock<Semaphore> = OnceLock::new();
-const UPLOAD_CONCURRENCY: usize = 4;
+// ─── 并发控制:两个 semaphore 分桶 + in-flight 单飞 ─────────────────────────
+//
+// **主路径** (`prewarm=false`):用户点生成 / 编辑器送 ref 图等强相关操作走
+// 这里, 4 路并发够覆盖典型多 ref 场景。
+//
+// **预热路径** (`prewarm=true`):用户拖入/粘贴图片后台静默上传, 优先级低,
+// 不能挤占主路径配额, 单独 2 路。预热和主路径加起来 6 路 ≈ 服务端 nginx
+// `limit_req zone=files_upload_ip burst=20` 完全够。
+//
+// **in-flight 单飞**:同 (sha256, server_origin) 已在上传 → 后来者 await
+// 同一个 broadcast 拿结果, 不再发新 HTTP, 不抢 semaphore。这一层根治
+// 单客户端的 race (同卡片 ref 复用 / 预热+主路径并发同图)。
+// 服务端的 race 兜底 (UploadedFilePortAdapter.handleRaceDuplicate)
+// 只剩对付多客户端场景。
 
-fn upload_semaphore() -> &'static Semaphore {
-    UPLOAD_SEMAPHORE.get_or_init(|| Semaphore::new(UPLOAD_CONCURRENCY))
+static MAIN_SEMAPHORE: OnceLock<Semaphore> = OnceLock::new();
+static PREWARM_SEMAPHORE: OnceLock<Semaphore> = OnceLock::new();
+const MAIN_CONCURRENCY: usize = 4;
+const PREWARM_CONCURRENCY: usize = 2;
+
+fn main_semaphore() -> &'static Semaphore {
+    MAIN_SEMAPHORE.get_or_init(|| Semaphore::new(MAIN_CONCURRENCY))
+}
+
+fn prewarm_semaphore() -> &'static Semaphore {
+    PREWARM_SEMAPHORE.get_or_init(|| Semaphore::new(PREWARM_CONCURRENCY))
+}
+
+/// in-flight 单飞表:key = `{sha256}|{server_origin}`,
+/// value = broadcast sender。leader 上传完调 send 把 Result 广播给所有
+/// follower。leader 走完后从 map 移除。
+///
+/// 用 `std::sync::Mutex` 而非 `tokio::sync::Mutex` —— 临界区只是 HashMap
+/// get/insert/remove, 不跨 await, 同步锁更轻。
+type InFlightMap = HashMap<String, broadcast::Sender<Result<UploadResult, String>>>;
+static IN_FLIGHT: OnceLock<Mutex<InFlightMap>> = OnceLock::new();
+
+fn in_flight_map() -> &'static Mutex<InFlightMap> {
+    IN_FLIGHT.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// 单飞 key 拼接规范, 测试也用这条函数, 防止两边拼法不一致。
+fn flight_key(sha256: &str, server_origin: &str) -> String {
+    format!("{}|{}", sha256, server_origin)
 }
 
 /// 返给前端的上传结果。
@@ -98,22 +136,21 @@ struct ServerEnvelope<T> {
 /// - `media/<rel>` 相对存储路径
 /// - 绝对路径 (Windows / Unix)
 ///
-/// 安全约束:解析后的绝对路径必须落在 `data_dir` 子树内,
-/// 防止前端把任意磁盘文件传上去。
+/// `prewarm`:`true` = 用户拖入/粘贴后台预热路径, 占 PREWARM_SEMAPHORE(2)
+/// 不挤占主路径;`false` = 用户主动触发 (点生成 / 送 ref 图), 占
+/// MAIN_SEMAPHORE(4)。两个路径**共享** in-flight 单飞表 — 预热和主路径
+/// 撞同一 sha256 时, 后到的 follower await 先到的 broadcast, 只发一次 HTTP。
 ///
-/// 失败语义:
-/// - `path` 越权 / 文件不存在 / 不可读 — `Err` 立刻返
-/// - 文件 > 100MB — `Err` 客户端早失败, 不浪费上传带宽
-/// - 服务端 4xx — `Err` 带 message 透传给前端用户
-/// - 网络错误 / 服务端 5xx — `Err`, 前端可重试(本 command 自身不做指数退避,
-///   交给前端按 UX 控制)
+/// 安全约束:解析后的绝对路径必须落在 `data_dir` 子树内。
 #[tauri::command]
 pub async fn upload_to_server(
     state: State<'_, AppState>,
     path: String,
     provider: Option<String>,
+    prewarm: Option<bool>,
 ) -> Result<UploadResult, String> {
     let provider = provider.unwrap_or_else(|| "jijing".to_string());
+    let prewarm = prewarm.unwrap_or(false);
 
     let data_dir = state.data_dir.clone();
     let abs_path = resolve_input_path(&path, &data_dir)?;
@@ -158,12 +195,12 @@ pub async fn upload_to_server(
     }
     let server_origin = base_url.clone();
 
-    // 命中本地缓存
+    // 1. 命中本地 sqlite 缓存 → 直接返, 不进 in-flight / 不抢 semaphore
     if let Some(cached) = lookup_cache(&state, &sha256, &server_origin)? {
         touch_last_used(&state, &sha256, &server_origin)?;
         tracing::info!(
-            "[upload_remote] cache_hit sha256={} server={} url={}",
-            sha256, server_origin, cached.remote_url
+            "[upload_remote] cache_hit prewarm={} sha256={} server={} url={}",
+            prewarm, sha256, server_origin, cached.remote_url
         );
         return Ok(UploadResult {
             url: cached.remote_url,
@@ -174,14 +211,27 @@ pub async fn upload_to_server(
         });
     }
 
-    // 真上传 —— 并发限制
-    let _permit = upload_semaphore()
-        .acquire()
-        .await
-        .map_err(|e| format!("upload semaphore: {}", e))?;
+    // 2. in-flight 单飞:同 key 已在传 → 当 follower await 共享结果,
+    //    不发新 HTTP, 不抢 semaphore (省一道并发额度)。
+    let key = flight_key(&sha256, &server_origin);
+    let role = claim_or_follow(&key);
 
-    let started = std::time::Instant::now();
-    let resp = do_multipart_upload(
+    match role {
+        FlightRole::Follower(mut rx) => {
+            tracing::info!(
+                "[upload_remote] follower waiting prewarm={} key={}",
+                prewarm, key
+            );
+            return match rx.recv().await {
+                Ok(result) => result,
+                Err(e) => Err(format!("等待并发上传失败: {}", e)),
+            };
+        }
+        FlightRole::Leader => { /* 继续执行 leader 路径 */ }
+    }
+
+    // 3. leader 路径:占对应 semaphore → 实际 multipart 上传 → 写缓存 → 广播
+    let result = perform_leader_upload(
         &state,
         &provider,
         &base_url,
@@ -189,38 +239,96 @@ pub async fn upload_to_server(
         &abs_path,
         &sha256,
         &content_type,
+        &server_origin,
+        size,
+        prewarm,
+    )
+    .await;
+
+    // 4. broadcast 给等待者 + 从 map 清理 (即使本次失败也要广播错误, 不然 follower 永远卡)
+    broadcast_and_release(&key, &result);
+
+    result
+}
+
+/// in-flight 单飞角色:leader 实际跑上传, follower 等 leader 的广播。
+enum FlightRole {
+    Leader,
+    Follower(broadcast::Receiver<Result<UploadResult, String>>),
+}
+
+/// 注册自己为 leader 或当 follower。这一段必须**同步**完成 (持 std Mutex),
+/// 不能跨 await。
+fn claim_or_follow(key: &str) -> FlightRole {
+    let mut map = in_flight_map().lock().expect("in_flight_map poisoned");
+    if let Some(sender) = map.get(key) {
+        FlightRole::Follower(sender.subscribe())
+    } else {
+        // broadcast channel 容量 4 够用:follower 数量在我们场景下通常 ≤ 4
+        // (6 张图同卡片极端情况 5 个 follower)。容量不够 send 会被丢, 但只
+        // 影响晚到的 follower —— follower 会在 recv 时拿到 Lagged 错误,
+        // 退化为重发本次上传, 自然兜底。
+        let (tx, _rx) = broadcast::channel(4);
+        map.insert(key.to_string(), tx);
+        FlightRole::Leader
+    }
+}
+
+/// leader 执行实际上传 (占 semaphore → multipart → 写本地缓存)。
+#[allow(clippy::too_many_arguments)]
+async fn perform_leader_upload(
+    state: &State<'_, AppState>,
+    provider: &str,
+    base_url: &str,
+    api_key: &str,
+    abs_path: &Path,
+    sha256: &str,
+    content_type: &str,
+    server_origin: &str,
+    size: u64,
+    prewarm: bool,
+) -> Result<UploadResult, String> {
+    let sem = if prewarm { prewarm_semaphore() } else { main_semaphore() };
+    let _permit = sem
+        .acquire()
+        .await
+        .map_err(|e| format!("upload semaphore: {}", e))?;
+
+    let started = std::time::Instant::now();
+    let resp = do_multipart_upload(
+        state, provider, base_url, api_key, abs_path, sha256, content_type,
     )
     .await?;
 
-    // 落本地缓存 (服务端 cached 字段是它自己的去重命中, 本地缓存独立判断)
     insert_cache(
-        &state,
-        &sha256,
-        &server_origin,
-        &resp.url,
-        &resp.content_type,
-        size,
+        state, sha256, server_origin, &resp.url, &resp.content_type, size,
         abs_path.to_string_lossy().as_ref(),
     )?;
 
     tracing::info!(
-        "[upload_remote] uploaded sha256={} size={} server={} url={} duration_ms={} server_cached={}",
-        sha256,
-        size,
-        server_origin,
-        resp.url,
-        started.elapsed().as_millis(),
-        resp.cached
+        "[upload_remote] uploaded prewarm={} sha256={} size={} server={} url={} duration_ms={} server_cached={}",
+        prewarm, sha256, size, server_origin, resp.url,
+        started.elapsed().as_millis(), resp.cached
     );
 
     Ok(UploadResult {
         url: resp.url,
-        sha256,
+        sha256: sha256.to_string(),
         content_type: resp.content_type,
         size: resp.size.max(size),
-        // 服务端 cached=true 也是首次本地, 客户端 cached 字段以"是否走了实际 HTTP"为准
         cached: false,
     })
+}
+
+/// leader 完成后:把结果广播给所有 follower, 同时从 in-flight map 移除 key。
+/// 即便 result 是 Err 也要广播 (否则 follower 永远 await),
+/// 但 follower 收到 Err 后由它自己决定是否重试 (当前实现是直接透传错误)。
+fn broadcast_and_release(key: &str, result: &Result<UploadResult, String>) {
+    let mut map = in_flight_map().lock().expect("in_flight_map poisoned");
+    if let Some(sender) = map.remove(key) {
+        // 没 follower 时 send 返 Err(SendError) — 正常, 忽略。
+        let _ = sender.send(result.clone());
+    }
 }
 
 /// 把 `local://media/x`, `media/x`, 绝对路径都归一为 data_dir 下的绝对路径,
@@ -541,5 +649,112 @@ mod tests {
 
         let r = resolve_input_path("media/x.jpg", dir.path()).unwrap();
         assert!(r.ends_with("x.jpg"));
+    }
+
+    // ── in-flight 单飞 ──────────────────────────────────────────────────
+    //
+    // 这几个测试直接调 claim_or_follow / broadcast_and_release, 不打 HTTP。
+    // IN_FLIGHT 是全局 static, 每个 test 用唯一 key (含 test 名 + sha 前缀)
+    // 避免相互污染。
+
+    fn unique_key(prefix: &str) -> String {
+        format!(
+            "{}-{}-{}",
+            prefix,
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        )
+    }
+
+    #[test]
+    fn flight_key_format_stable() {
+        assert_eq!(
+            flight_key("abc", "https://api.example"),
+            "abc|https://api.example"
+        );
+    }
+
+    #[test]
+    fn first_claim_is_leader_second_is_follower() {
+        let k = unique_key("leader-follower");
+        match claim_or_follow(&k) {
+            FlightRole::Leader => {}
+            FlightRole::Follower(_) => panic!("first call should be Leader"),
+        }
+        match claim_or_follow(&k) {
+            FlightRole::Follower(_) => {}
+            FlightRole::Leader => panic!("second call should be Follower"),
+        }
+        // 清理, 不影响后续测试
+        let ok: Result<UploadResult, String> = Err("test cleanup".to_string());
+        broadcast_and_release(&k, &ok);
+        // 释放后又能成为新 leader
+        match claim_or_follow(&k) {
+            FlightRole::Leader => {}
+            FlightRole::Follower(_) => panic!("after release first call should be Leader again"),
+        }
+        broadcast_and_release(&k, &ok);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn followers_receive_leader_broadcast() {
+        let k = unique_key("broadcast-ok");
+
+        // 先 claim 当 leader, 再 subscribe 几个 follower
+        let _leader = claim_or_follow(&k);
+        let mut rxs: Vec<_> = (0..3).map(|_| match claim_or_follow(&k) {
+            FlightRole::Follower(rx) => rx,
+            FlightRole::Leader => panic!("expected Follower"),
+        }).collect();
+
+        let result = Ok(UploadResult {
+            url: "/uploads/x.png".to_string(),
+            sha256: "deadbeef".to_string(),
+            content_type: "image/png".to_string(),
+            size: 42,
+            cached: false,
+        });
+        broadcast_and_release(&k, &result);
+
+        for rx in rxs.iter_mut() {
+            let got = rx.recv().await.expect("follower should receive");
+            assert_eq!(got.as_ref().unwrap().url, "/uploads/x.png");
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn followers_receive_leader_error_too() {
+        let k = unique_key("broadcast-err");
+
+        let _leader = claim_or_follow(&k);
+        let mut rx = match claim_or_follow(&k) {
+            FlightRole::Follower(r) => r,
+            FlightRole::Leader => panic!("expected Follower"),
+        };
+
+        let err_result: Result<UploadResult, String> = Err("simulated network down".to_string());
+        broadcast_and_release(&k, &err_result);
+
+        let got = rx.recv().await.expect("follower should receive Err");
+        assert!(got.is_err());
+        assert!(got.unwrap_err().contains("network down"));
+    }
+
+    #[test]
+    fn broadcast_release_removes_key_from_map() {
+        let k = unique_key("release-cleanup");
+        let _leader = claim_or_follow(&k);
+        // 此时 key 应在 map 里
+        assert!(in_flight_map().lock().unwrap().contains_key(&k));
+
+        let r: Result<UploadResult, String> = Ok(UploadResult {
+            url: "/x".into(), sha256: "x".into(),
+            content_type: "image/png".into(), size: 1, cached: false,
+        });
+        broadcast_and_release(&k, &r);
+
+        // 释放后 key 必须从 map 移除
+        assert!(!in_flight_map().lock().unwrap().contains_key(&k));
     }
 }
