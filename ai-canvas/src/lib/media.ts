@@ -173,22 +173,18 @@ async function persistLargeFile(
     }
 
     // Finalize:save_media 读 temp 文件,移到 media/images/,magic-byte 校正扩展名。
-    const result = await invoke<{
-      localPath: string;
-      width?: number;
-      height?: number;
-    }>("save_media", {
-      source: `media/uploads_temp/${uploadId}`,
-      filename: filename ?? null,
-      title: title ?? null,
-      projectId: projectId ?? null,
-    });
-
-    return {
-      localPath: result.localPath,
-      width: result.width,
-      height: result.height,
-    };
+    //
+    // 必须走 `saveMedia` wrapper 而不是直接 invoke —— Rust `SaveMediaResult`
+    // 序列化用默认 snake_case (`local_path`),wrapper 里统一做了 snake→camel
+    // 翻译。直接 invoke 拿到的 `result.localPath` 永远是 undefined,卡片
+    // `videoUrl` 设成 undefined,VideoPreview 走"AI 视频"占位符 = 空卡。
+    // 视频几乎必 >1.5MB 全走这条路径,所以"拖视频必空、拖图片正常"。
+    return await saveMedia(
+      `media/uploads_temp/${uploadId}`,
+      filename,
+      title,
+      projectId,
+    );
   } finally {
     // 不论成功失败,清掉 temp 文件 —— 万一这里也失败,启动期 cleanup 会兜底。
     try {
