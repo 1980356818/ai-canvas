@@ -23,7 +23,7 @@ uuid = { version = "1", features = ["v4"] }
 #     在 Windows 上 = SChannel；两端行为分裂，是 Mac 闪退/Win 不复现的主因。
 #   - rustls 是纯 Rust，三端行为完全一致；native-roots 复用系统 CA 信任链。
 # 详见 docs/性能与IPC规范.md §11.1。
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots", "stream", "http2"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots", "stream", "http2", "multipart"] }
 base64 = "0.22"
 tracing = "0.1"
 tracing-subscriber = "0.3"
@@ -31,9 +31,11 @@ tracing-appender = "0.2"
 chrono = "0.4"
 tauri-plugin-clipboard-manager = "2"
 sha2 = "0.10"
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["time", "sync"] }
 
 [dev-dependencies]
+# upload_remote 单测要写临时文件并验 sha256
+tempfile = "3"
 # 仅 `cargo test` 用,故意比 [dependencies] 多 macros + rt-multi-thread:
 #   - macros        — 让 `#[tokio::test]` 可用
 #   - rt-multi-thread — 让 `spawn_blocking` 真正起一个独立线程跑(单测验

@@ -7,9 +7,9 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import type { ModelCategory } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/platform";
-import { getBase64ForApi } from "@/lib/media";
 import { modelService } from "@/services/models";
 import { scheduleBackgroundSave } from "@/lib/media";
+import { mediaToApiRef } from "@/platform/media";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import {
@@ -457,7 +457,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       const refPrepareStart = performance.now();
       for (const ref of rawRefImages) {
         const oneStart = performance.now();
-        const dataUrl = await getBase64ForApi(ref.url);
+        const dataUrl = await mediaToApiRef(ref.url);
         console.log("[MediaEditor] 参考图准备完成", {
           role: ref.role,
           elapsedMs: Math.round(performance.now() - oneStart),

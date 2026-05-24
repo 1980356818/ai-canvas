@@ -7,7 +7,8 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
-import { scheduleBackgroundSave, getBase64ForApi, getDisplayUrl } from "@/lib/media";
+import { scheduleBackgroundSave, getDisplayUrl } from "@/lib/media";
+import { mediaToApiRef } from "@/platform/media";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
@@ -664,20 +665,20 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       // 首尾帧模式: 1 张 = 首帧, 2 张 = 首+尾帧。frame pipeline 自动适配。
       if (imageMode === "firstLastFrame") {
         for (let i = 0; i < frames.length; i++) {
-          const dataUrl = await getBase64ForApi(frames[i]!.url);
+          const dataUrl = await mediaToApiRef(frames[i]!.url);
           referenceImages.push({ url: dataUrl, role: i === 0 ? "firstFrame" : "lastFrame" });
         }
       } else if (imageMode === "reference") {
         for (const slot of refSlots) {
           const entry = data.refImages?.[slot.key];
           if (entry) {
-            const dataUrl = await getBase64ForApi(entry.url);
+            const dataUrl = await mediaToApiRef(entry.url);
             referenceImages.push({ url: dataUrl, role: "referenceImage" });
           }
         }
         if (data.refAudios?.length) {
           for (const entry of data.refAudios) {
-            const dataUrl = await getBase64ForApi(entry.url);
+            const dataUrl = await mediaToApiRef(entry.url);
             referenceAudios.push({ url: dataUrl, role: "referenceAudio" });
           }
         }
@@ -694,7 +695,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         }
         if (data.refVideos?.length) {
           for (const entry of data.refVideos) {
-            const dataUrl = await getBase64ForApi(entry.url);
+            const dataUrl = await mediaToApiRef(entry.url);
             referenceVideos.push({ url: dataUrl, role: "referenceVideo" });
           }
         }

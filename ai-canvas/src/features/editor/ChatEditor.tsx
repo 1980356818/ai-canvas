@@ -10,7 +10,8 @@ import { CHAT_EDITOR_DEFAULT_SYSTEM_PROMPT } from "@/lib/systemPrompts";
 import { hasApiKey } from "@/platform";
 import type { UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 import "@/providers";
-import { persistImage, getDisplayUrl, getBase64ForApi, normalizeToStoragePath } from "@/lib/media";
+import { persistImage, getDisplayUrl, normalizeToStoragePath } from "@/lib/media";
+import { mediaToApiRef } from "@/platform/media";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
@@ -423,31 +424,31 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       const inlineUrls = getInlineRefUrls(inlineRefs, data.refImages, imageOptions);
       for (const entry of imageEntries) {
         if (inlineUrls.has(entry.url)) continue;
-        const dataUrl = await getBase64ForApi(entry.url);
+        const dataUrl = await mediaToApiRef(entry.url);
         userContent.unshift({ type: "image_url", image_url: { url: dataUrl } });
       }
       for (const img of directImageItems) {
-        const dataUrl = await getBase64ForApi(img.url);
+        const dataUrl = await mediaToApiRef(img.url);
         userContent.unshift({ type: "image_url", image_url: { url: dataUrl } });
       }
       for (const vid of refVideoEntries) {
         if (inlineUrls.has(vid.url)) continue;
-        const dataUrl = await getBase64ForApi(vid.url);
+        const dataUrl = await mediaToApiRef(vid.url);
         userContent.unshift({ type: "image_url", image_url: { url: dataUrl } });
       }
     } else {
       userContent = [];
       if (modelSupportsVision(model)) {
         for (const img of imageEntries) {
-          const dataUrl = await getBase64ForApi(img.url);
+          const dataUrl = await mediaToApiRef(img.url);
           userContent.push({ type: "image_url", image_url: { url: dataUrl } });
         }
         for (const img of directImageItems) {
-          const dataUrl = await getBase64ForApi(img.url);
+          const dataUrl = await mediaToApiRef(img.url);
           userContent.push({ type: "image_url", image_url: { url: dataUrl } });
         }
         for (const vid of refVideoEntries) {
-          const dataUrl = await getBase64ForApi(vid.url);
+          const dataUrl = await mediaToApiRef(vid.url);
           userContent.push({ type: "image_url", image_url: { url: dataUrl } });
         }
       } else if (totalMedia > 0) {

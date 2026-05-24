@@ -191,7 +191,8 @@ fn resolve_local_path(rel: &str, data_dir: &Path) -> Result<PathBuf, String> {
 
 /// 文件扩展名 → MIME。与前端 `src/shared/mediaFormats.ts` 白名单同步。
 /// `ext_from_mime` 是它的逆向表，两边要一起改。
-fn mime_from_path(path: &Path) -> &'static str {
+/// `pub(super)` 让 `upload_remote.rs` 复用同一份映射, 避免双份维护。
+pub(super) fn mime_from_path(path: &Path) -> &'static str {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())

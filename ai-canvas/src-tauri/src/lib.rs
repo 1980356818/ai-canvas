@@ -716,7 +716,7 @@ pub fn run() {
             boot_log("directories created");
 
             // 清掉上次崩溃残留的孤儿分块上传文件;同步快操作,不会卡启动。
-            commands::upload::cleanup_orphan_uploads_on_startup(&data_dir);
+            commands::upload_local::cleanup_orphan_uploads_on_startup(&data_dir);
 
             // 备份目录跟随安装目录，所有文件统一在同一位置。
             let backup_dir = data_dir.join("backups");
@@ -890,9 +890,11 @@ pub fn run() {
             commands::ai::get_media_base_path,
             commands::ai::export_file,
             commands::ai::open_in_explorer,
-            // 分块上传专为视频 / 超 IPC 上限的大文件 —— 见 commands/upload.rs
-            commands::upload::upload_media_chunk,
-            commands::upload::upload_media_cleanup,
+            // upload_local: 前端 → Rust 本地分块写盘 (规避 WebView2 3MB IPC 上限)
+            commands::upload_local::upload_media_chunk,
+            commands::upload_local::upload_media_cleanup,
+            // upload_remote: Rust → JiJing /v1/files/upload (规避上游 API body 上限)
+            commands::upload_remote::upload_to_server,
             commands::gateway::list_models,
             commands::gateway::poll_task,
             commands::gateway::validate_connection,

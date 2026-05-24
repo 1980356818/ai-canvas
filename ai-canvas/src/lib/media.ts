@@ -454,47 +454,32 @@ export function getDisplayUrl(storedPath: string): string {
 }
 
 /**
- * Returns a value that can be embedded in an AI API request body.
+ * @deprecated 用 {@link import("@/platform/media").mediaToApiRef} 替代。
  *
- * 输入允许任意 URL 格式（storagePath / asset:// / data: / http: / 前端 asset）。
- * 内部先经过 normalizeToStoragePath() 归一化，再按格式分发。
+ * 这个函数的设计有根本缺陷:Tauri 模式返回 `local://` 占位符,Rust 端 inline
+ * 成 base64 塞 JSON,会撞 4 道墙 (IPC 3MB / ipc_guard 64MB / nginx 100MB /
+ * MySQL request_params)。详见 docs/media-upload-refactor.md。
  *
- * Tauri 模式下返回 `local://<relPath>` 占位符；Rust ai_proxy 在真正发请求前
- * 读文件并内联为 base64 data URL，对 provider 完全透明。
+ * 为兼容已上线版本, 内部转调 mediaToApiRef (走 /v1/files/upload 拿 HTTP URL)。
+ * Phase 4 (3 个月监控期满) 会删除函数本体。新代码不允许直接调用。
  */
 export async function getBase64ForApi(rawUrl: string): Promise<string> {
-  if (!rawUrl) return "";
+  warnDeprecatedOnce("getBase64ForApi");
+  // 转调统一入口, 确保即便老调用点没改完也走 HTTP URL 路径
+  const { mediaToApiRef } = await import("@/platform/media");
+  return mediaToApiRef(rawUrl);
+}
 
-  if (rawUrl.startsWith("local://")) return rawUrl;
-
-  if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
-    return rawUrl;
-  }
-
-  // ① 尝试归一化为相对存储路径
-  const storagePath = normalizeToStoragePath(rawUrl);
-  if (storagePath) {
-    if (isTauri) return `local://${storagePath}`;
-    return readMediaBase64(storagePath);
-  }
-
-  // ② data: URL — 大体积先落盘
-  if (rawUrl.startsWith("data:")) {
-    if (!isTauri) return rawUrl;
-    const { localPath } = await persistImage(rawUrl);
-    return `local://${localPath}`;
-  }
-
-  // ③ Vite 前端 asset — webview 内 fetch 转 dataUrl
-  if (isFrontendAssetUrl(rawUrl)) {
-    const dataUrl = await urlToDataUrl(rawUrl);
-    if (!isTauri) return dataUrl;
-    return ensureIpcSafeDataUrl(dataUrl);
-  }
-
-  // ④ 兜底：当作相对路径（向后兼容）
-  if (isTauri) return `local://${rawUrl}`;
-  return readMediaBase64(rawUrl);
+let _deprecatedWarned: Set<string> | null = null;
+function warnDeprecatedOnce(name: string) {
+  if (!_deprecatedWarned) _deprecatedWarned = new Set();
+  if (_deprecatedWarned.has(name)) return;
+  _deprecatedWarned.add(name);
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[ai-canvas] ${name} is deprecated — use mediaToApiRef from @/platform/media. ` +
+      `See docs/media-upload-refactor.md`
+  );
 }
 
 /**

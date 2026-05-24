@@ -1,6 +1,15 @@
-//! 大文件分块上传 —— Tauri 单次 invoke 字符串上限 ~3MB (`IPC_PAYLOAD_HARD_LIMIT_BYTES`),
+//! 前端 → Rust 本地分块写盘 —— Tauri 单次 invoke 字符串上限 ~3MB (`IPC_PAYLOAD_HARD_LIMIT_BYTES`),
 //! 所以视频/大图必须由前端切片 + 顺序发送,后端追加到 temp 文件,完事用
 //! `save_media` 把 temp 当本地源走一遍。
+//!
+//! ## 跟 [`upload_remote`](super::upload_remote) 的区别
+//!
+//! - 本模块 (`upload_local`):**前端 → Rust 本地磁盘**。规避 WebView2 IPC 单次 3MB 上限,
+//!   终点是 ai-canvas data_dir 下的 temp 文件 / media/images/ 持久化。
+//! - [`upload_remote`](super::upload_remote):**Rust → JiJing 服务端**。规避上游 API body
+//!   过大,终点是 `https://api.../uploads/...` 远端 URL。
+//!
+//! 这两套绝不要混用。语义不同, IPC 守门常量也不同。
 //!
 //! ## 流程
 //!

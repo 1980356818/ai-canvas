@@ -62,6 +62,16 @@ export default tseslint.config(
           message:
             "禁止 JSON.stringify(a) === JSON.stringify(b) 做 deep-equal（v5 规范）。改用 shallow-key-equal 或版本号信号比对。",
         },
+        {
+          // 禁止直接调 getBase64ForApi —— Tauri 下返 local:// 占位符再走 base64
+          // inline,会撞 IPC 64MB / nginx 100MB / MySQL request_params。必须用
+          // mediaToApiRef (来自 @/platform/media),先 /v1/files/upload 拿 HTTP URL
+          // 再塞 JSON。详见 docs/media-upload-refactor.md。
+          selector:
+            "CallExpression[callee.name='getBase64ForApi']",
+          message:
+            "禁止 getBase64ForApi —— 用 mediaToApiRef (@/platform/media) 替代。getBase64ForApi 走 local:// → Rust inline base64 路径,撞 IPC 64MB / nginx 100MB / MySQL request_params 上限。详见 docs/media-upload-refactor.md。",
+        },
       ],
     },
   },

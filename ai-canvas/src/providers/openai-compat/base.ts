@@ -19,7 +19,7 @@ import {
   getLastFinishReason,
 } from "./formatter";
 import { aiProxy, aiProxyStream, isTauri, listModels as platformListModels } from "@/platform";
-import { compressDataUrlForApi } from "@/lib/imageCompression";
+import { mediaToApiRef } from "@/platform/media";
 import { executeAsyncMediaTask } from "../shared/asyncMediaTask";
 import { PROGRESS_EXPECTED_SEC } from "../shared/progress";
 import { normalizeResolution } from "@/shared/constants";
@@ -232,10 +232,13 @@ export abstract class OpenAICompatProvider implements AIProvider {
     }
 
     if (req.referenceImages?.length) {
-      // 在送往 API 前对参考图统一做"过大才压缩"，单点维护、不污染 UI 链路。
-      // 详见 lib/imageCompression.ts。
+      // 所有 ref 图统一走 mediaToApiRef → /v1/files/upload 拿 HTTP URL。
+      // 之前用 compressDataUrlForApi 是死代码 (Tauri 下 ref.url 是 local://
+      // 占位符, 不满足 startsWith("data:") 立刻 return 原样, 等于完全没压),
+      // 而且即便压了也是 base64 inline 仍然会撞 ipc_guard 64MB。
+      // 详见 docs/media-upload-refactor.md。
       body[imageField] = await Promise.all(
-        req.referenceImages.map((ref) => compressDataUrlForApi(ref.url)),
+        req.referenceImages.map((ref) => mediaToApiRef(ref.url)),
       );
     }
 
@@ -273,7 +276,7 @@ export abstract class OpenAICompatProvider implements AIProvider {
     };
     if (req.referenceImages?.length) {
       body.images = await Promise.all(
-        req.referenceImages.map((ref) => compressDataUrlForApi(ref.url)),
+        req.referenceImages.map((ref) => mediaToApiRef(ref.url)),
       );
     }
     if (req.size && req.size !== "auto") {

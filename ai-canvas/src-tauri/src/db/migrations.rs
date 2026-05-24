@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: u32 = 7;
+const CURRENT_VERSION: u32 = 8;
 
 pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     let version: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -26,6 +26,9 @@ pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     }
     if version < 7 {
         migrate_v7(conn)?;
+    }
+    if version < 8 {
+        migrate_v8(conn)?;
     }
 
     Ok(())
@@ -224,6 +227,44 @@ fn migrate_v7(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
         CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 
         PRAGMA user_version = 7;
+        ",
+    )?;
+
+    Ok(())
+}
+
+fn migrate_v8(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::info!("running migration v8: remote upload cache");
+
+    // uploaded_files —— ai-canvas 已上传到 JiJing server 的文件本地索引,
+    // 让"二次使用同一张图"直接命中已有 URL 不重传。详见
+    // docs/media-upload-refactor.md §3.4 与 commands/upload_remote.rs。
+    //
+    // 复合主键 (sha256, server_origin) 而非自增 id —— 同一台机器上同一文件
+    // 上传到不同 server (用户切了 provider) 是两条独立记录;同一 server 多次
+    // 调用同一文件应天然命中。
+    //
+    // local_path_hint 不参与主键, 仅作"反向查找"提示 (本地路径换了/被删了
+    // 不影响缓存命中, 因为命中是按 sha256)。
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS uploaded_files (
+            sha256          TEXT NOT NULL,
+            server_origin   TEXT NOT NULL,
+            remote_url      TEXT NOT NULL,
+            content_type    TEXT NOT NULL,
+            size_bytes      INTEGER NOT NULL,
+            local_path_hint TEXT,
+            uploaded_at     INTEGER NOT NULL,
+            last_used_at    INTEGER NOT NULL,
+            PRIMARY KEY (sha256, server_origin)
+        );
+        CREATE INDEX IF NOT EXISTS idx_uploaded_files_lru
+            ON uploaded_files(last_used_at);
+        CREATE INDEX IF NOT EXISTS idx_uploaded_files_path_hint
+            ON uploaded_files(local_path_hint);
+
+        PRAGMA user_version = 8;
         ",
     )?;
 

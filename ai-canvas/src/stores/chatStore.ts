@@ -15,7 +15,8 @@ import { modelService } from "@/services/models";
 import { providerService } from "@/services/provider.service";
 import { useProviderStore, parseModelRef } from "@/stores/providerStore";
 import { getAccumulatedToolCalls } from "@/providers/openai-compat/formatter";
-import { getBase64ForApi, persistImage } from "@/lib/media";
+import { persistImage } from "@/lib/media";
+import { mediaToApiRef } from "@/platform/media";
 import { runWithLimit } from "@/lib/concurrency";
 import { useProjectStore } from "@/stores/projectStore";
 import {
@@ -134,10 +135,10 @@ async function historyToUnified(history: ChatHistoryMessage[]): Promise<UnifiedM
       if (p.type === "text") {
         parts.push({ type: "text", text: p.text });
       } else if (p.type === "image") {
-        const url = await getBase64ForApi(p.url);
+        const url = await mediaToApiRef(p.url);
         parts.push({ type: "image", url });
       } else if (p.type === "video") {
-        const url = p.url ? await getBase64ForApi(p.url) : "";
+        const url = p.url ? await mediaToApiRef(p.url) : "";
         parts.push({ type: "video", url });
       }
     }
@@ -927,7 +928,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const refImages = hasImages
           ? await Promise.all(
               imageUrls!.map(async (url, i) => ({
-                url: await getBase64ForApi(url),
+                url: await mediaToApiRef(url),
                 role: `refImage${i}`,
               })),
             )

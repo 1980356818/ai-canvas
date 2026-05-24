@@ -6,7 +6,8 @@ import { useUIStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/platform";
-import { getBase64ForApi, getDisplayUrl } from "@/lib/media";
+import { getDisplayUrl } from "@/lib/media";
+import { mediaToApiRef } from "@/platform/media";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
@@ -187,7 +188,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
       const rawRef = data.refImages?.refImage0;
       if (!rawRef) throw new Error("请先添加参考图");
 
-      const dataUrl = await getBase64ForApi(rawRef.url);
+      const dataUrl = await mediaToApiRef(rawRef.url);
       const referenceImages = [{ url: dataUrl, role: "refImage0" }];
 
       const result = await provider.generateImage({

@@ -1,6 +1,6 @@
 import type { ImageRefOption, InlineImageSource } from "@/hooks/useImageRefSources";
 import type { RefImageEntry } from "@/config/model-ref-images";
-import { getBase64ForApi } from "@/lib/media";
+import { mediaToApiRef } from "@/platform/media";
 
 // ── Data Types ──────────────────────────────────────────────
 
@@ -107,7 +107,7 @@ export async function serializeForApi(
       const url = resolveRefUrl(ref.source, refImages, optionMap);
       if (!url) continue;
 
-      const base64 = await getBase64ForApi(url);
+      const base64 = await mediaToApiRef(url);
       parts.push({ type: "image_url", image_url: { url: base64 } });
       usedUrls.add(url);
     }
