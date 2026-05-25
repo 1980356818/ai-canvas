@@ -19,7 +19,7 @@ import {
   getLastFinishReason,
 } from "./formatter";
 import { aiProxy, aiProxyStream, isTauri, listModels as platformListModels } from "@/platform";
-import { mediaToApiRef } from "@/platform/media";
+import { uploadMediaBatch } from "@/platform/media";
 import { executeAsyncMediaTask } from "../shared/asyncMediaTask";
 import { PROGRESS_EXPECTED_SEC } from "../shared/progress";
 import { normalizeResolution } from "@/shared/constants";
@@ -232,13 +232,23 @@ export abstract class OpenAICompatProvider implements AIProvider {
     }
 
     if (req.referenceImages?.length) {
-      // 所有 ref 图统一走 mediaToApiRef → /v1/files/upload 拿 HTTP URL。
-      // 之前用 compressDataUrlForApi 是死代码 (Tauri 下 ref.url 是 local://
-      // 占位符, 不满足 startsWith("data:") 立刻 return 原样, 等于完全没压),
-      // 而且即便压了也是 base64 inline 仍然会撞 ipc_guard 64MB。
+      // 所有 ref 图统一走 uploadMediaBatch → /v1/files/upload 拿 HTTP URL。
       // 详见 docs/media-upload-refactor.md。
-      body[imageField] = await Promise.all(
-        req.referenceImages.map((ref) => mediaToApiRef(ref.url)),
+      //
+      // 借用 GenerationProgress 的 "submitting" phase 反馈上传阶段,
+      // UI 看到 "上传媒体 2/3…" 而非 "准备中…",根治用户感受的 "卡住"。
+      // 真正提交请求后 executeAsyncMediaTask 会立刻把 label 覆盖为 submittingLabel。
+      body[imageField] = await uploadMediaBatch(
+        req.referenceImages.map((ref) => ref.url),
+        {
+          onProgress: ({ uploaded, total }) => {
+            req.onProgress?.({
+              percent: 0,
+              phase: "submitting",
+              label: `上传媒体 ${uploaded}/${total}…`,
+            });
+          },
+        },
       );
     }
 
@@ -275,8 +285,17 @@ export abstract class OpenAICompatProvider implements AIProvider {
       model: req.model ?? this.defaultVideoModel(),
     };
     if (req.referenceImages?.length) {
-      body.images = await Promise.all(
-        req.referenceImages.map((ref) => mediaToApiRef(ref.url)),
+      body.images = await uploadMediaBatch(
+        req.referenceImages.map((ref) => ref.url),
+        {
+          onProgress: ({ uploaded, total }) => {
+            req.onProgress?.({
+              percent: 0,
+              phase: "submitting",
+              label: `上传媒体 ${uploaded}/${total}…`,
+            });
+          },
+        },
       );
     }
     if (req.size && req.size !== "auto") {

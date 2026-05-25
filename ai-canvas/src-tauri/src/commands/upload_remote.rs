@@ -35,11 +35,45 @@ use tokio::sync::{broadcast, Semaphore};
 use crate::AppState;
 use super::config::{apply_auth_headers, read_full_api_config};
 use super::http_util::root_cause_chain;
+use super::jijing_serde::{deserialize_u64_str_or_num, ServerEnvelope};
 use super::util::run_blocking;
 
-/// 单文件上限 100MB —— 与 nginx `client_max_body_size` / Spring
-/// `max-file-size` 对齐。客户端预校验早失败比让 nginx 413 更友好。
-pub const REMOTE_UPLOAD_MAX_BYTES: u64 = 100 * 1024 * 1024;
+// ─── 单文件上限按 MIME 分桶 ─────────────────────────────────────────────
+//
+// 与服务端 `com.jijing.common.storage.StorageProperties.resolveMaxFileSize`
+// 对齐 —— 图 / 视频 / 音频各自独立上限, 视频 1GB 覆盖 4K 长片段。客户端预
+// 校验早失败比让 nginx 413 更友好, 错误消息也更具体 ("视频 250MB 超过 1GB"
+// 而不是 nginx 通用 413)。
+//
+// 兜底 `DEFAULT_UPLOAD_MAX_BYTES` 对应服务端 `maxFileSize`, 用于无法按 MIME
+// 前缀识别的场景。改默认值时同步改服务端 yml 的
+// `jijing.storage.{image,video,audio}-max-file-size`。
+
+/// 图片上限 (image/*), 50MB —— 覆盖 4K PNG 无损。
+pub const IMAGE_UPLOAD_MAX_BYTES: u64 = 50 * 1024 * 1024;
+/// 视频上限 (video/*), 1GB —— 覆盖 4K 长片段。
+pub const VIDEO_UPLOAD_MAX_BYTES: u64 = 1024 * 1024 * 1024;
+/// 音频上限 (audio/*), 100MB。
+pub const AUDIO_UPLOAD_MAX_BYTES: u64 = 100 * 1024 * 1024;
+/// 兜底上限, 100MB —— 与服务端 `jijing.storage.max-file-size` 对齐。
+pub const DEFAULT_UPLOAD_MAX_BYTES: u64 = 100 * 1024 * 1024;
+
+/// 按 MIME 类型解析对应上限。未匹配前缀时返回 [`DEFAULT_UPLOAD_MAX_BYTES`]。
+///
+/// 跟服务端 `StorageProperties.resolveMaxFileSize` 行为一致 —— **保持两边同
+/// 步**, 否则客户端放过去服务端再拒会产生 413 / 4xx 不一致体验。
+pub fn resolve_upload_max_bytes(content_type: &str) -> u64 {
+    let mime = content_type.to_ascii_lowercase();
+    if mime.starts_with("image/") {
+        IMAGE_UPLOAD_MAX_BYTES
+    } else if mime.starts_with("video/") {
+        VIDEO_UPLOAD_MAX_BYTES
+    } else if mime.starts_with("audio/") {
+        AUDIO_UPLOAD_MAX_BYTES
+    } else {
+        DEFAULT_UPLOAD_MAX_BYTES
+    }
+}
 
 // ─── 并发控制:两个 semaphore 分桶 + in-flight 单飞 ─────────────────────────
 //
@@ -104,27 +138,19 @@ pub struct UploadResult {
 }
 
 /// 服务端 `/v1/files/upload` 返回结构 —— 跟 `FileUploadResponse.java` 对齐。
+///
+/// `size` 是 Java `Long`, 必须套 `deserialize_u64_str_or_num` —— 服务端
+/// Jackson 把所有 `Long` 序列化成字符串。详见 [`super::jijing_serde`]。
 #[derive(Debug, Deserialize)]
 struct ServerFileUploadResponse {
     url: String,
     sha256: String,
     #[serde(rename = "contentType")]
     content_type: String,
+    #[serde(deserialize_with = "deserialize_u64_str_or_num")]
     size: u64,
     #[serde(default)]
     cached: bool,
-}
-
-/// 服务端 `R<T>` 信封 —— code=200 才算成功, code 字段非 200 时 message 是
-/// 面向用户的可读文案。详见 `R.java`。
-///
-/// Option 字段缺失时 serde 自动当 None, 不需要 `#[serde(default)]`
-/// (后者会要求 T: Default)。
-#[derive(Debug, Deserialize)]
-struct ServerEnvelope<T> {
-    code: i32,
-    message: Option<String>,
-    data: Option<T>,
 }
 
 /// 把任意"本地媒体路径"上传到 JiJing server 并返 HTTP URL。
@@ -140,6 +166,11 @@ struct ServerEnvelope<T> {
 /// 不挤占主路径;`false` = 用户主动触发 (点生成 / 送 ref 图), 占
 /// MAIN_SEMAPHORE(4)。两个路径**共享** in-flight 单飞表 — 预热和主路径
 /// 撞同一 sha256 时, 后到的 follower await 先到的 broadcast, 只发一次 HTTP。
+///
+/// **Failure isolation (Patch B)**:follower 收到 leader 失败 broadcast 时
+/// 不直接透传 Err,而是 fall through 进 retry loop 重新 claim 自己当新 leader
+/// 跑一遍。这样预热的偶发网络抖动不会拖累用户主动触发的主路径。
+/// retry 上限 [`MAX_UPLOAD_ATTEMPTS`] 防文件超大/鉴权失败等永久错误导致死循环。
 ///
 /// 安全约束:解析后的绝对路径必须落在 `data_dir` 子树内。
 #[tauri::command]
@@ -162,15 +193,17 @@ pub async fn upload_to_server(
     if size == 0 {
         return Err("文件为空, 无法上传".to_string());
     }
-    if size > REMOTE_UPLOAD_MAX_BYTES {
-        return Err(format!(
-            "文件 {} MB 超过 {} MB 上限, 请压缩后再上传",
-            size / (1024 * 1024),
-            REMOTE_UPLOAD_MAX_BYTES / (1024 * 1024)
-        ));
-    }
 
     let content_type = super::ai::mime_from_path(&abs_path).to_string();
+    let max_bytes = resolve_upload_max_bytes(&content_type);
+    if size > max_bytes {
+        return Err(format!(
+            "{} 文件 {}MB 超过 {}MB 上限, 请压缩或裁剪后再上传",
+            content_type,
+            size / (1024 * 1024),
+            max_bytes / (1024 * 1024)
+        ));
+    }
 
     // 流式 sha256 — 64KB chunk, 500MB 视频也只占 64KB 内存
     let sha_path = abs_path.clone();
@@ -194,62 +227,120 @@ pub async fn upload_to_server(
         return Err(format!("provider {} 未配置 base_url", provider));
     }
     let server_origin = base_url.clone();
-
-    // 1. 命中本地 sqlite 缓存 → 直接返, 不进 in-flight / 不抢 semaphore
-    if let Some(cached) = lookup_cache(&state, &sha256, &server_origin)? {
-        touch_last_used(&state, &sha256, &server_origin)?;
-        tracing::info!(
-            "[upload_remote] cache_hit prewarm={} sha256={} server={} url={}",
-            prewarm, sha256, server_origin, cached.remote_url
-        );
-        return Ok(UploadResult {
-            url: cached.remote_url,
-            sha256,
-            content_type: cached.content_type,
-            size,
-            cached: true,
-        });
-    }
-
-    // 2. in-flight 单飞:同 key 已在传 → 当 follower await 共享结果,
-    //    不发新 HTTP, 不抢 semaphore (省一道并发额度)。
     let key = flight_key(&sha256, &server_origin);
-    let role = claim_or_follow(&key);
 
-    match role {
-        FlightRole::Follower(mut rx) => {
+    // ── Failure isolation retry loop ───────────────────────────────────
+    //
+    // 每轮: lookup_cache → claim_or_follow → (leader 跑上传 | follower 等结果)
+    //
+    // Follower 收到 Ok(Err) 时,意味着当前 leader 失败但已 broadcast_and_release
+    // (key 已从 IN_FLIGHT map 移除)。重入 loop 这次自己变成 leader 把上传跑一遍。
+    // 实测语义:预热 leader 网络抖动 → 主路径 follower 自动接力当新 leader,
+    // 用户感知零差异。
+    //
+    // 死循环防护:[`MAX_UPLOAD_ATTEMPTS`] = 2 (原始 + 一次降级重试)。
+    // 永久错误 (文件超大/鉴权失败/服务端持续 5xx) 第二轮还会失败,直接报错给上层。
+    let mut attempt = 0u32;
+    loop {
+        attempt += 1;
+
+        // 1. 缓存命中 → 直接返, 不进 in-flight / 不抢 semaphore
+        if let Some(cached) = lookup_cache(&state, &sha256, &server_origin)? {
+            touch_last_used(&state, &sha256, &server_origin)?;
             tracing::info!(
-                "[upload_remote] follower waiting prewarm={} key={}",
-                prewarm, key
+                "[upload_remote] cache_hit prewarm={} sha256={} server={} url={} attempt={}",
+                prewarm, sha256, server_origin, cached.remote_url, attempt
             );
-            return match rx.recv().await {
-                Ok(result) => result,
-                Err(e) => Err(format!("等待并发上传失败: {}", e)),
-            };
+            return Ok(UploadResult {
+                url: cached.remote_url,
+                sha256,
+                content_type: cached.content_type,
+                size,
+                cached: true,
+            });
         }
-        FlightRole::Leader => { /* 继续执行 leader 路径 */ }
+
+        // 2. claim 单飞 — 已有 leader 在跑同 sha256 → 当 follower 等;否则自己 leader
+        let role = claim_or_follow(&key);
+
+        match role {
+            FlightRole::Follower(mut rx) => {
+                tracing::info!(
+                    "[upload_remote] follower waiting prewarm={} key={} attempt={}",
+                    prewarm, key, attempt
+                );
+                match rx.recv().await {
+                    // leader 成功 → 直接复用结果
+                    Ok(Ok(result)) => return Ok(result),
+
+                    // leader 失败且还能重试 → fall through, 下一轮自己当 leader 兜底。
+                    // 注意:leader 一定已经 broadcast_and_release 从 map 摘除了 key,
+                    // 否则 broadcast 不会发出 (channel 还没 send)。所以下一轮 claim
+                    // 必然成为新 Leader。
+                    Ok(Err(leader_err)) if attempt < MAX_UPLOAD_ATTEMPTS => {
+                        tracing::warn!(
+                            "[upload_remote] follower fall_through_retry prewarm={} key={} leader_err={} attempt={}",
+                            prewarm, key, leader_err, attempt
+                        );
+                        continue;
+                    }
+
+                    // 重试次数用完 → 把最后一次的 leader 错误透传
+                    Ok(Err(leader_err)) => {
+                        return Err(format!(
+                            "上传失败 (follower 兜底重试已耗尽 {} 次): {}",
+                            MAX_UPLOAD_ATTEMPTS, leader_err
+                        ));
+                    }
+
+                    // broadcast channel 异常 (leader 直接 panic 没 release / channel 满)
+                    Err(broadcast::error::RecvError::Closed) if attempt < MAX_UPLOAD_ATTEMPTS => {
+                        tracing::warn!(
+                            "[upload_remote] follower channel closed, retry as leader: key={} attempt={}",
+                            key, attempt
+                        );
+                        continue;
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) if attempt < MAX_UPLOAD_ATTEMPTS => {
+                        tracing::warn!(
+                            "[upload_remote] follower channel lagged, retry as leader: key={} attempt={}",
+                            key, attempt
+                        );
+                        continue;
+                    }
+                    Err(e) => {
+                        return Err(format!("等待并发上传失败: {}", e));
+                    }
+                }
+            }
+            FlightRole::Leader => {
+                // 3. leader 路径:占对应 semaphore → multipart → 写缓存 → 广播
+                let result = perform_leader_upload(
+                    &state,
+                    &provider,
+                    &base_url,
+                    &api_key,
+                    &abs_path,
+                    &sha256,
+                    &content_type,
+                    &server_origin,
+                    size,
+                    prewarm,
+                )
+                .await;
+
+                // broadcast 给所有 follower (含成功和失败), 同步从 map 摘除 key
+                broadcast_and_release(&key, &result);
+                return result;
+            }
+        }
     }
-
-    // 3. leader 路径:占对应 semaphore → 实际 multipart 上传 → 写缓存 → 广播
-    let result = perform_leader_upload(
-        &state,
-        &provider,
-        &base_url,
-        &api_key,
-        &abs_path,
-        &sha256,
-        &content_type,
-        &server_origin,
-        size,
-        prewarm,
-    )
-    .await;
-
-    // 4. broadcast 给等待者 + 从 map 清理 (即使本次失败也要广播错误, 不然 follower 永远卡)
-    broadcast_and_release(&key, &result);
-
-    result
 }
+
+/// Follower failure isolation 重试上限。
+/// 1 次原始 + 1 次降级当 leader 兜底 = 2。
+/// 永久错误 (文件超大/鉴权/上游持续 5xx) 第二轮仍会失败,直接报上层。
+const MAX_UPLOAD_ATTEMPTS: u32 = 2;
 
 /// in-flight 单飞角色:leader 实际跑上传, follower 等 leader 的广播。
 enum FlightRole {
@@ -675,6 +766,26 @@ mod tests {
         );
     }
 
+    /// 端到端回归: 用一份**生产环境真实抓包的响应体**确认整条解析链路通。
+    ///
+    /// 通用 string-or-number / Option / 大整数 等 deserializer 行为已经在
+    /// `jijing_serde::tests` 里覆盖, 这里只锁:
+    /// - `ServerEnvelope<ServerFileUploadResponse>` 嵌套拼装能解
+    /// - `#[serde(rename = "contentType")]` 没被改坏
+    /// - `size` 字段确实套了 deserializer (没人手贱去掉)
+    /// - 服务端额外的 `id` / `purpose` / `success` 顶级字段不破坏解析
+    #[test]
+    fn parses_real_production_upload_response() {
+        let body = r#"{"code":200,"message":"操作成功","data":{"id":"file-2058649766147788801","url":"https://ai.snoworangekeji.cn/uploads/media/input/1/20260525/c8c1fd40eb4843938736d24a803f54e8.mp4","sha256":"59c8411ae005d4f13877dce5365950f11b30e9a68085983ca86e8c8a029ad159","contentType":"video/mp4","size":"2050933","purpose":"media-input","cached":false},"success":true}"#;
+        let env: ServerEnvelope<ServerFileUploadResponse> = serde_json::from_str(body).unwrap();
+        assert_eq!(env.code, 200);
+        let data = env.data.expect("data 存在");
+        assert_eq!(data.size, 2_050_933);
+        assert_eq!(data.content_type, "video/mp4");
+        assert!(data.url.ends_with(".mp4"));
+        assert!(!data.cached);
+    }
+
     #[test]
     fn first_claim_is_leader_second_is_follower() {
         let k = unique_key("leader-follower");
@@ -756,5 +867,60 @@ mod tests {
 
         // 释放后 key 必须从 map 移除
         assert!(!in_flight_map().lock().unwrap().contains_key(&k));
+    }
+
+    /// **Patch B failure isolation 核心回归** —— follower 收到 leader Err 后
+    /// 必须能重新 claim 成为新 leader, 而不是死等或返同样的 Err。
+    ///
+    /// 用 broadcast_and_release 释放 key 后再调 claim_or_follow 必须返 Leader,
+    /// 这是 upload_to_server retry loop 的状态机基础。
+    #[tokio::test(flavor = "multi_thread")]
+    async fn follower_can_become_new_leader_after_previous_leader_failed() {
+        let k = unique_key("isolation-retry");
+
+        // A: 第一轮 — 注册为 Leader
+        match claim_or_follow(&k) {
+            FlightRole::Leader => {}
+            _ => panic!("attempt 1 应当成为 Leader"),
+        }
+
+        // B: 同时进来当 Follower
+        let mut rx = match claim_or_follow(&k) {
+            FlightRole::Follower(r) => r,
+            _ => panic!("attempt 2 应当成为 Follower"),
+        };
+
+        // A 上传失败, broadcast Err 并 release key
+        let leader_err: Result<UploadResult, String> = Err("simulated network down".into());
+        broadcast_and_release(&k, &leader_err);
+
+        // B 收到 leader 的 Err
+        let received = rx.recv().await.expect("follower 必须收到 broadcast");
+        assert!(received.is_err());
+        assert!(received.unwrap_err().contains("network down"));
+
+        // 关键断言: 此时 key 已从 IN_FLIGHT 移除, B 再次 claim 必须成为新 Leader
+        // (upload_to_server retry loop 内 continue 后会走到这一步)
+        match claim_or_follow(&k) {
+            FlightRole::Leader => {}
+            FlightRole::Follower(_) => {
+                panic!("follower 重试时必须能成为新 Leader, 否则永远拿不到上传结果");
+            }
+        }
+
+        // 清理
+        let cleanup: Result<UploadResult, String> = Err("test cleanup".into());
+        broadcast_and_release(&k, &cleanup);
+    }
+
+    /// MAX_UPLOAD_ATTEMPTS 必须 ≥ 2,否则 failure isolation 形同虚设
+    /// (follower 不会重新 claim,直接透传 leader 的 Err)。
+    #[test]
+    fn max_upload_attempts_allows_failover() {
+        assert!(
+            MAX_UPLOAD_ATTEMPTS >= 2,
+            "MAX_UPLOAD_ATTEMPTS={} 必须 ≥ 2, 否则 follower 没有机会自己兜底当 leader",
+            MAX_UPLOAD_ATTEMPTS
+        );
     }
 }

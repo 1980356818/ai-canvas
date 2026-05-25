@@ -11,7 +11,7 @@ import { hasApiKey } from "@/platform";
 import type { UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 import "@/providers";
 import { persistImage, getDisplayUrl, normalizeToStoragePath } from "@/lib/media";
-import { mediaToApiRef } from "@/platform/media";
+import { uploadMediaBatch } from "@/platform/media";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
@@ -421,36 +421,54 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         imageOptions,
       ) as ApiContentPart[];
 
+      // 全部 ref 媒体并行上传 —— 后端 MAIN_SEMAPHORE(4) + sha256 单飞兜底, 不会
+      // 打爆服务端。N 张图首传从 N×t 降到 max(N,4)×t。
+      //
+      // 顺序契约: 原代码用 unshift 把每个 ref 塞到 userContent 头部, 等价于
+      // "保留遍历顺序的逆序排在前面"。这里先收集所有 part, 再按 unshift 历史
+      // 行为做一次 reverse + unshift, 等同于挨个 unshift 的最终结果。
       const inlineUrls = getInlineRefUrls(inlineRefs, data.refImages, imageOptions);
-      for (const entry of imageEntries) {
-        if (inlineUrls.has(entry.url)) continue;
-        const dataUrl = await mediaToApiRef(entry.url);
-        userContent.unshift({ type: "image_url", image_url: { url: dataUrl } });
-      }
-      for (const img of directImageItems) {
-        const dataUrl = await mediaToApiRef(img.url);
-        userContent.unshift({ type: "image_url", image_url: { url: dataUrl } });
-      }
-      for (const vid of refVideoEntries) {
-        if (inlineUrls.has(vid.url)) continue;
-        const dataUrl = await mediaToApiRef(vid.url);
-        userContent.unshift({ type: "image_url", image_url: { url: dataUrl } });
-      }
+      const refsToUpload = [
+        ...imageEntries.filter((e) => !inlineUrls.has(e.url)).map((e) => e.url),
+        ...directImageItems.map((m) => m.url),
+        ...refVideoEntries.filter((v) => !inlineUrls.has(v.url)).map((v) => v.url),
+      ];
+      // 进度反馈到卡片:用户挂多张图 / 大视频 ref 时显示 "上传 N/M…"
+      const uploadedRefs = await uploadMediaBatch(refsToUpload, {
+        onProgress: ({ uploaded, total }) => {
+          setCardProgress(card.id, {
+            percent: 0,
+            label: `上传参考媒体 ${uploaded}/${total}…`,
+          });
+        },
+      });
+      // 逐个 unshift 等于:把数组反转后塞到头部 (后 unshift 的被推到更前)
+      uploadedRefs
+        .slice()
+        .reverse()
+        .forEach((dataUrl) => {
+          userContent.unshift({ type: "image_url", image_url: { url: dataUrl } });
+        });
     } else {
       userContent = [];
       if (modelSupportsVision(model)) {
-        for (const img of imageEntries) {
-          const dataUrl = await mediaToApiRef(img.url);
+        // 同样并行上传 + 保序 push (这条分支不走 unshift, 按原遍历顺序 append)
+        const allMedia = [
+          ...imageEntries.map((e) => e.url),
+          ...directImageItems.map((m) => m.url),
+          ...refVideoEntries.map((v) => v.url),
+        ];
+        const uploaded = await uploadMediaBatch(allMedia, {
+          onProgress: ({ uploaded, total }) => {
+            setCardProgress(card.id, {
+              percent: 0,
+              label: `上传媒体 ${uploaded}/${total}…`,
+            });
+          },
+        });
+        uploaded.forEach((dataUrl) => {
           userContent.push({ type: "image_url", image_url: { url: dataUrl } });
-        }
-        for (const img of directImageItems) {
-          const dataUrl = await mediaToApiRef(img.url);
-          userContent.push({ type: "image_url", image_url: { url: dataUrl } });
-        }
-        for (const vid of refVideoEntries) {
-          const dataUrl = await mediaToApiRef(vid.url);
-          userContent.push({ type: "image_url", image_url: { url: dataUrl } });
-        }
+        });
       } else if (totalMedia > 0) {
         useUIStore.getState().addToast({
           type: "warning",

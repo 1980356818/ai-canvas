@@ -29,14 +29,15 @@ mod_file="src-tauri/src/commands/mod.rs"
 ipc_guard="src-tauri/src/commands/ipc_guard.rs"
 ipc_limits="src-tauri/src/commands/ipc_limits.rs"
 util_file="src-tauri/src/commands/util.rs"
-upload_file="src-tauri/src/commands/upload.rs"
+upload_local_file="src-tauri/src/commands/upload_local.rs"
+upload_remote_file="src-tauri/src/commands/upload_remote.rs"
 http_util_file="src-tauri/src/commands/http_util.rs"
 lib_file="src-tauri/src/lib.rs"
 
 errors=()
 checks=0
 
-for f in "$ai" "$mod_file" "$ipc_guard" "$ipc_limits" "$util_file" "$upload_file" "$http_util_file" "$lib_file"; do
+for f in "$ai" "$mod_file" "$ipc_guard" "$ipc_limits" "$util_file" "$upload_local_file" "$upload_remote_file" "$http_util_file" "$lib_file"; do
     if [ ! -f "$f" ]; then
         echo "[check-ipc-guards] FAIL: missing $f"
         exit 1
@@ -65,9 +66,10 @@ strip_to_temp "$lib_file" "$lib_clean"
 # 1. mod.rs exports
 grep -qE '^pub mod ipc_limits;' "$mod_file" || errors+=("commands/mod.rs MUST export ipc_limits")
 grep -qE '^pub mod ipc_guard;' "$mod_file"  || errors+=("commands/mod.rs MUST export ipc_guard")
-grep -qE '^pub mod util;' "$mod_file"       || errors+=("commands/mod.rs MUST export util")
-grep -qE '^pub mod upload;' "$mod_file"     || errors+=("commands/mod.rs MUST export upload (chunked media upload)")
-checks=$((checks + 4))
+grep -qE '^pub mod util;' "$mod_file"          || errors+=("commands/mod.rs MUST export util")
+grep -qE '^pub mod upload_local;' "$mod_file"  || errors+=("commands/mod.rs MUST export upload_local (frontend -> Rust chunked write)")
+grep -qE '^pub mod upload_remote;' "$mod_file" || errors+=("commands/mod.rs MUST export upload_remote (Rust -> JiJing /v1/files/upload)")
+checks=$((checks + 5))
 
 # 2. ai.rs imports + calls (against the comment-stripped temp file).
 grep -q 'use super::ipc_guard::'           "$ai"       || errors+=("ai.rs MUST import super::ipc_guard")
@@ -119,6 +121,68 @@ for c in IPC_RESPONSE_BODY_HARD_LIMIT_BYTES \
     grep -q "pub const $c" "$ipc_limits" || errors+=("ipc_limits.rs MUST define const $c")
     checks=$((checks + 1))
 done
+
+# 7. API key reader unification (2026-05-25 root cause: sync getProviderAuthHeaders
+#    only read localStorage but Tauri-mode SettingsDialog stored keys in sqlite,
+#    so every fetch path got empty Authorization -> 401 "Missing API Key". User
+#    saw chat hang because media upload step died silently.
+#
+#    Single source of truth: src/platform/auth.ts (async). Forbid:
+#      - Re-introducing any sync helper named getProviderAuthHeaders /
+#        getBrowserFirstKey / getAuthHeaders / getBrowserApiConfig / getBrowserKeys.
+#      - Direct lsGet("setting_*_api_key*") / lsSet of api_key keys outside auth.ts.
+#      - The async settings.api::getProviderFirstKey shim (replaced by
+#        auth::readProviderFirstKey which supports keyTag).
+auth_file="src/platform/auth.ts"
+if [ ! -f "$auth_file" ]; then
+    errors+=("src/platform/auth.ts MUST exist -- it is the single API key reader entry point")
+fi
+checks=$((checks + 1))
+
+# Build a temp file per .ts/.tsx file with block-comments stripped + // lines removed,
+# then grep for banned names with real-call regex. Skip auth.ts (its own definitions
+# and history comments legitimately contain these names).
+banned_sync="getProviderAuthHeaders|getBrowserFirstKey|getBrowserApiConfig|getBrowserKeys"
+
+ts_files_clean_dir="$tmpdir/ts_clean"
+mkdir -p "$ts_files_clean_dir"
+
+# `find` is BSD/GNU portable.  -not -path keeps auth.ts out, and node_modules out.
+while IFS= read -r f; do
+    case "$f" in
+        */auth.ts|*/auth.ts.*) continue;;
+    esac
+    rel="${f#./}"
+    safe_name=$(echo "$rel" | tr '/' '_')
+    clean="$ts_files_clean_dir/$safe_name"
+    perl -0777 -pe 's{/\*.*?\*/}{}gs' "$f" | grep -v '^[[:space:]]*//' > "$clean" || true
+
+    for name in $(echo "$banned_sync" | tr '|' ' '); do
+        # Real call: contains "name(" on a non-// line.  -E for ERE.
+        if grep -Eq "\\b${name}[[:space:]]*\\(" "$clean"; then
+            errors+=("$rel: re-introduces banned sync key reader '$name' -- use platform/auth.ts (resolveAuthHeaders / readProviderKeys / readProviderFirstKey)")
+        fi
+        checks=$((checks + 1))
+    done
+    # Direct lsGet / lsSet against api_key storage keys. Allow optional TS generic
+    # `<...>` between name and `(`, mirroring the .ps1 sibling regex.
+    if grep -Eq 'ls(Get|Set)[[:space:]]*(<[^>]+>)?[[:space:]]*\([[:space:]]*[`"'"'"'][^`"'"'"']*api_key' "$clean"; then
+        errors+=("$rel: direct lsGet/lsSet of 'setting_*_api_key*' -- use platform/auth.ts (Tauri mode keys live in sqlite)")
+    fi
+    checks=$((checks + 1))
+done < <(find src -type f \( -name '*.ts' -o -name '*.tsx' \) 2>/dev/null)
+
+# 8. auth.ts must export the canonical async entry points.
+if [ -f "$auth_file" ]; then
+    auth_clean="$tmpdir/auth.ts.clean"
+    perl -0777 -pe 's{/\*.*?\*/}{}gs' "$auth_file" | grep -v '^[[:space:]]*//' > "$auth_clean" || true
+    for name in readProviderKeys readProviderFirstKey resolveAuthHeaders; do
+        if ! grep -Eq "^[[:space:]]*export[[:space:]]+async[[:space:]]+function[[:space:]]+${name}\\b" "$auth_clean"; then
+            errors+=("auth.ts MUST export async function ${name} (canonical API key entry)")
+        fi
+        checks=$((checks + 1))
+    done
+fi
 
 if [ ${#errors[@]} -eq 0 ]; then
     echo "[check-ipc-guards] OK: $checks checks passed"

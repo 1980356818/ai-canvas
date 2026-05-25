@@ -17,9 +17,13 @@ export const COMFLY_IMAGE_MODELS: ModelInfo[] = [
   { id: "nano-banana-pro", display_name: "Nanobanana Pro", capability: "IMAGE" },
 ];
 
-// 视频统一走极境 (JIJING_VIDEO_MODELS), Comfly 不再暴露 video 入口。
-// ComflyProvider.generateVideo 的 seedance/veo override 保留,作老卡片透传兼容。
-export const COMFLY_VIDEO_MODELS: ModelInfo[] = [];
+// Seedance 直连入口 — 走 ComflyProvider.generateSeedanceVideo,
+// canonical alias `seedance` 由 resolveSeedanceUpstreamModel 转为上游
+// doubao-seedance-2-0-260128 / -fast-260128 (VideoEditor 胶囊切 fast/standard).
+// Veo 仍统一走极境, 不在此暴露; generateVeoVideo 留作老卡片透传兼容。
+export const COMFLY_VIDEO_MODELS: ModelInfo[] = [
+  { id: "seedance", display_name: "Seedance 2.0", capability: "VIDEO" },
+];
 
 export const ALL_COMFLY_MODELS: ModelInfo[] = [
   ...COMFLY_CHAT_MODELS,

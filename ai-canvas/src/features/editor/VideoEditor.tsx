@@ -8,7 +8,7 @@ import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
 import { scheduleBackgroundSave, getDisplayUrl } from "@/lib/media";
-import { mediaToApiRef } from "@/platform/media";
+import { uploadMediaBatch } from "@/platform/media";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
@@ -662,25 +662,49 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       const referenceAudios: Array<{ url: string; role: string }> = [];
       const referenceVideos: Array<{ url: string; role: string }> = [];
 
+      // 上传统一用 Promise.all 并行 —— 后端 MAIN_SEMAPHORE(4) + sha256 单飞兜底,
+      // 前端无需串行 await。N 张 ref 图首传从 N×t 降到 max(N,4)×t (sqlite 缓存
+      // 命中时本来就是常数毫秒, 也无所谓并行不并行)。
+      //
       // 首尾帧模式: 1 张 = 首帧, 2 张 = 首+尾帧。frame pipeline 自动适配。
+      // 上传进度反馈到卡片 — 用户拖入大视频/多张图时立刻能看到 "上传 N/M",
+      // 不再"看似阻塞"。executeAsyncMediaTask 提交后会把 label 覆盖为
+      // submittingLabel("正在提交视频请求…")。
+      const reportUploadProgress = (kind: string) =>
+        ({ uploaded, total }: { uploaded: number; total: number }) => {
+          setCardProgress(card.id, {
+            percent: 0,
+            label: `上传${kind} ${uploaded}/${total}…`,
+          });
+        };
+
       if (imageMode === "firstLastFrame") {
-        for (let i = 0; i < frames.length; i++) {
-          const dataUrl = await mediaToApiRef(frames[i]!.url);
-          referenceImages.push({ url: dataUrl, role: i === 0 ? "firstFrame" : "lastFrame" });
-        }
+        const uploaded = await uploadMediaBatch(frames.map((f) => f.url), {
+          onProgress: reportUploadProgress("首尾帧"),
+        });
+        uploaded.forEach((url, i) => {
+          referenceImages.push({ url, role: i === 0 ? "firstFrame" : "lastFrame" });
+        });
       } else if (imageMode === "reference") {
-        for (const slot of refSlots) {
-          const entry = data.refImages?.[slot.key];
-          if (entry) {
-            const dataUrl = await mediaToApiRef(entry.url);
-            referenceImages.push({ url: dataUrl, role: "referenceImage" });
-          }
-        }
+        const refEntries = refSlots
+          .map((slot) => data.refImages?.[slot.key])
+          .filter((e): e is NonNullable<typeof e> => Boolean(e));
+        const uploadedRefImages = await uploadMediaBatch(
+          refEntries.map((entry) => entry.url),
+          { onProgress: reportUploadProgress("参考图") },
+        );
+        uploadedRefImages.forEach((url) => {
+          referenceImages.push({ url, role: "referenceImage" });
+        });
+
         if (data.refAudios?.length) {
-          for (const entry of data.refAudios) {
-            const dataUrl = await mediaToApiRef(entry.url);
-            referenceAudios.push({ url: dataUrl, role: "referenceAudio" });
-          }
+          const uploadedAudios = await uploadMediaBatch(
+            data.refAudios.map((entry) => entry.url),
+            { onProgress: reportUploadProgress("参考音频") },
+          );
+          uploadedAudios.forEach((url) => {
+            referenceAudios.push({ url, role: "referenceAudio" });
+          });
         }
         // Seedance/Grok 上游硬约束: 拒绝 video reference.
         if ((isSeedanceModel(currentModel) || isGrokVideoModel(currentModel)) && data.refVideos?.length) {
@@ -694,10 +718,13 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
           return;
         }
         if (data.refVideos?.length) {
-          for (const entry of data.refVideos) {
-            const dataUrl = await mediaToApiRef(entry.url);
-            referenceVideos.push({ url: dataUrl, role: "referenceVideo" });
-          }
+          const uploadedVideos = await uploadMediaBatch(
+            data.refVideos.map((entry) => entry.url),
+            { onProgress: reportUploadProgress("参考视频") },
+          );
+          uploadedVideos.forEach((url) => {
+            referenceVideos.push({ url, role: "referenceVideo" });
+          });
         }
         if (
           isSeedanceModel(currentModel) &&

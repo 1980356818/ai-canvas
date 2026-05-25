@@ -24,7 +24,8 @@ $modFile = Join-Path $root 'src-tauri/src/commands/mod.rs'
 $ipcGuard = Join-Path $root 'src-tauri/src/commands/ipc_guard.rs'
 $ipcLimits = Join-Path $root 'src-tauri/src/commands/ipc_limits.rs'
 $utilFile = Join-Path $root 'src-tauri/src/commands/util.rs'
-$uploadFile = Join-Path $root 'src-tauri/src/commands/upload.rs'
+$uploadLocalFile = Join-Path $root 'src-tauri/src/commands/upload_local.rs'
+$uploadRemoteFile = Join-Path $root 'src-tauri/src/commands/upload_remote.rs'
 $httpUtilFile = Join-Path $root 'src-tauri/src/commands/http_util.rs'
 $libFile = Join-Path $root 'src-tauri/src/lib.rs'
 $tsLimits = Join-Path $root 'src/lib/ipcLimits.ts'
@@ -37,7 +38,7 @@ function AddError($msg) {
 }
 
 # 1. Required files exist
-foreach ($f in @($ai, $modFile, $ipcGuard, $ipcLimits, $utilFile, $uploadFile, $httpUtilFile, $libFile)) {
+foreach ($f in @($ai, $modFile, $ipcGuard, $ipcLimits, $utilFile, $uploadLocalFile, $uploadRemoteFile, $httpUtilFile, $libFile)) {
     $checks++
     if (-not (Test-Path $f)) {
         AddError "MISSING required file: $f"
@@ -77,8 +78,12 @@ if ($modContent -notmatch '(?m)^pub mod util;') {
     AddError "commands/mod.rs MUST export util (run_blocking helper)"
 }
 $checks++
-if ($modContent -notmatch '(?m)^pub mod upload;') {
-    AddError "commands/mod.rs MUST export upload (chunked media upload module, blocks Win/WebView2 crash on large video drops)"
+if ($modContent -notmatch '(?m)^pub mod upload_local;') {
+    AddError "commands/mod.rs MUST export upload_local (frontend -> Rust chunked write, blocks WebView2 3MB IPC crash on large video drops)"
+}
+$checks++
+if ($modContent -notmatch '(?m)^pub mod upload_remote;') {
+    AddError "commands/mod.rs MUST export upload_remote (Rust -> JiJing /v1/files/upload, blocks upstream body-size cap)"
 }
 
 # 3. ai.rs imports and calls guard functions.
@@ -177,6 +182,66 @@ if (Test-Path $tsLimits) {
     $tsContent = Get-Content $tsLimits -Raw -Encoding UTF8
     if ($tsContent -notmatch 'IPC_PAYLOAD_HARD_LIMIT_BYTES') {
         Write-Host "[check-ipc-guards] WARN: $tsLimits has no IPC_PAYLOAD_HARD_LIMIT_BYTES constant" -ForegroundColor Yellow
+    }
+}
+
+# 9. API key reader unification (2026-05-25 root cause: sync getProviderAuthHeaders
+#    only read localStorage but Tauri-mode SettingsDialog stored keys in sqlite,
+#    so every fetch path got empty Authorization -> 401 "Missing API Key". User
+#    saw chat hang because media upload step died silently.
+#
+#    Single source of truth: src/platform/auth.ts (async). Forbid:
+#      - Re-introducing any sync helper named getProviderAuthHeaders /
+#        getBrowserFirstKey / getAuthHeaders / getBrowserApiConfig / getBrowserKeys.
+#      - Direct lsGet("setting_*_api_key*") / lsSet of api_key keys outside auth.ts
+#        and setActiveKey -- those bypass the sqlite backend.
+#      - The async settings.api::getProviderFirstKey shim (replaced by
+#        auth::readProviderFirstKey which supports keyTag).
+#    src/platform/auth.ts and storage.ts contain those names in COMMENTS as the
+#    history note; the regex below excludes lines starting with comment markers.
+$authFile = Join-Path $root 'src/platform/auth.ts'
+$checks++
+if (-not (Test-Path $authFile)) {
+    AddError "src/platform/auth.ts MUST exist -- it is the single API key reader entry point"
+}
+
+# Scan src/ excluding the auth module itself (its own definitions / doc strings
+# legitimately contain these names). Block-comments stripped, // lines skipped.
+$bannedSync = @(
+    'getProviderAuthHeaders',
+    'getBrowserFirstKey',
+    'getBrowserApiConfig',
+    'getBrowserKeys'
+)
+$tsFiles = Get-ChildItem -Path (Join-Path $root 'src') -Recurse -Include *.ts,*.tsx -File `
+    | Where-Object { $_.FullName -ne $authFile }
+foreach ($f in $tsFiles) {
+    $raw = Get-Content $f.FullName -Raw -Encoding UTF8
+    $stripped = StripBlockComments $raw
+    foreach ($name in $bannedSync) {
+        $checks++
+        # `(?m)^(?!\s*//).*\bNAME\s*\(`  - real call site, not a // comment line.
+        if ($stripped -match ('(?m)^(?!\s*//).*\b' + $name + '\s*\(')) {
+            AddError "$($f.FullName.Substring($root.Length+1)): re-introduces banned sync key reader '$name' -- use platform/auth.ts (resolveAuthHeaders / readProviderKeys / readProviderFirstKey)"
+        }
+    }
+    # Direct lsGet/lsSet against api_key storage keys is also banned. Allow optional
+    # TypeScript generic `<...>` between the function name and the `(`, so writes
+    # like `lsGet<string | null>("setting_jijing_api_keys", ...)` are also caught.
+    $checks++
+    if ($stripped -match '(?m)^(?!\s*//).*\bls(Get|Set)\s*(<[^>]+>)?\s*\(\s*[`"''][^`"'']*api_key') {
+        AddError "$($f.FullName.Substring($root.Length+1)): direct lsGet/lsSet of 'setting_*_api_key*' -- use platform/auth.ts (Tauri mode keys live in sqlite)"
+    }
+}
+
+# 10. auth.ts must export the canonical async entry points.
+if (Test-Path $authFile) {
+    $authContent = StripBlockComments (Get-Content $authFile -Raw -Encoding UTF8)
+    foreach ($name in @('readProviderKeys', 'readProviderFirstKey', 'resolveAuthHeaders')) {
+        $checks++
+        if ($authContent -notmatch ('(?m)^\s*export\s+async\s+function\s+' + $name + '\b')) {
+            AddError "auth.ts MUST export async function $name (canonical API key entry)"
+        }
     }
 }
 

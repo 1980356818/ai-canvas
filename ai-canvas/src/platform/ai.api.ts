@@ -1,6 +1,13 @@
 import type { AiProxyResponse, StreamCallbacks, ModelInfo, TaskInfo } from "@/types";
 import { isTauri, ensureTauriAPIs, getInvoke, getListen } from "./runtime";
-import { buildProxyUrl, getProviderAuthHeaders, lsGet, lsSet } from "./storage";
+import { buildProxyUrl } from "./storage";
+import {
+  readProviderKeys,
+  resolveAuthHeaders,
+  setActiveKey,
+  isAutoRotateEnabled,
+  type ProviderKeyEntry,
+} from "./auth";
 import { getComflyKeyTag } from "@/providers/comfly/models";
 import { diagError, diagWarn } from "@/lib/diag";
 
@@ -13,13 +20,6 @@ const DEBUG = import.meta.env.DEV;
 
 function isRetryableStatus(status: number): boolean {
   return status >= 400;
-}
-
-interface BrowserKeyEntry {
-  id: string;
-  name: string;
-  key: string;
-  tag?: string;
 }
 
 /**
@@ -36,37 +36,6 @@ function keyTagLabel(tag: string | undefined): string {
   if (tag === "gemini_premium") return "Gemini 优质";
   if (tag === "default") return "普通默认";
   return "";
-}
-
-function getBrowserKeys(provider: string, keyTag?: string): BrowserKeyEntry[] {
-  const prefix = provider === "comfly" ? "openai" : provider;
-  const json = lsGet<string | null>(`setting_${provider}_api_keys`, null);
-  if (json) {
-    try {
-      const parsed: BrowserKeyEntry[] = JSON.parse(json);
-      const filtered = keyTag
-        ? parsed.filter((k) => (k.tag ?? "default") === keyTag)
-        : parsed;
-      return filtered.filter((k) => k.key.trim());
-    } catch { /* ignore */ }
-  }
-  const legacy = lsGet<string | null>(`setting_${prefix}_api_key`, null);
-  if (legacy?.trim()) {
-    return [{ id: "legacy", name: "默认", key: legacy.trim() }];
-  }
-  return [];
-}
-
-function isBrowserAutoRotate(provider: string): boolean {
-  return lsGet<string | null>(`setting_${provider}_auto_rotate`, null) !== "false";
-}
-
-function setBrowserActiveKey(provider: string, entry: BrowserKeyEntry) {
-  lsSet(`setting_${provider}_active_key_id`, entry.id);
-  lsSet(`setting_${provider}_api_key`, entry.key);
-  if (provider === "comfly") {
-    lsSet("setting_openai_api_key", entry.key);
-  }
 }
 
 function notifyKeyRotation(keyName: string | null | undefined) {
@@ -106,24 +75,18 @@ export async function aiProxy(
 
   const url = buildProxyUrl(endpoint, provider);
   const keyTag = resolveKeyTag(provider, body);
-  const keys = getBrowserKeys(provider, keyTag);
-  const canRotate = isBrowserAutoRotate(provider) && keys.length > 1;
+  const keys = await readProviderKeys(provider, keyTag);
+  const canRotate = (await isAutoRotateEnabled(provider)) && keys.length > 1;
 
   if (keys.length === 0) {
     const tagLabel = keyTagLabel(keyTag);
-    if (tagLabel) {
-      return {
-        body: JSON.stringify({ error: { message: `Provider '${provider}' 的「${tagLabel}」槽位未配置 API Key，请在设置中填写` } }),
-        status: 401,
-      };
-    }
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      ...getProviderAuthHeaders(provider),
+    const message = tagLabel
+      ? `Provider '${provider}' 的「${tagLabel}」槽位未配置 API Key，请在设置中填写`
+      : `Provider '${provider}' 未配置 API Key，请在设置中填写`;
+    return {
+      body: JSON.stringify({ error: { message } }),
+      status: 401,
     };
-    const resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
-    const text = await resp.text();
-    return { body: text, status: resp.status };
   }
 
   let lastBody = "";
@@ -141,7 +104,7 @@ export async function aiProxy(
 
     if (resp.status < 400 || !canRotate || !isRetryableStatus(resp.status)) {
       if (i > 0) {
-        setBrowserActiveKey(provider, entry);
+        await setActiveKey(provider, entry);
         notifyKeyRotation(entry.name);
       }
       return { body: text, status: resp.status, rotated_key_name: i > 0 ? entry.name : undefined, tried_count: i + 1 };
@@ -258,10 +221,11 @@ export async function aiProxyStream(
   const abortController = new AbortController();
   const url = buildProxyUrl(endpoint, provider);
   const keyTag = resolveKeyTag(provider, body);
-  const keys = getBrowserKeys(provider, keyTag);
-  const canRotate = isBrowserAutoRotate(provider) && keys.length > 1;
 
   (async () => {
+    const keys: ProviderKeyEntry[] = await readProviderKeys(provider, keyTag);
+    const canRotate = (await isAutoRotateEnabled(provider)) && keys.length > 1;
+
     const tryStreamWithKey = async (apiKey: string): Promise<{ ok: boolean; retryable: boolean }> => {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -328,9 +292,11 @@ export async function aiProxyStream(
 
     try {
       if (keys.length === 0) {
-        const h = getProviderAuthHeaders(provider);
-        const apiKey = h.Authorization?.replace("Bearer ", "") ?? "";
-        await tryStreamWithKey(apiKey);
+        const tagLabel = keyTagLabel(keyTag);
+        const message = tagLabel
+          ? `Provider '${provider}' 的「${tagLabel}」槽位未配置 API Key，请在设置中填写`
+          : `Provider '${provider}' 未配置 API Key，请在设置中填写`;
+        callbacks.onError(message);
         return;
       }
 
@@ -340,7 +306,7 @@ export async function aiProxyStream(
 
         if (result.ok) {
           if (i > 0) {
-            setBrowserActiveKey(provider, entry);
+            await setActiveKey(provider, entry);
             notifyKeyRotation(entry.name);
             callbacks.onKeySwitched?.(entry.name, i + 1);
           }
@@ -381,7 +347,7 @@ export async function listModels(provider?: string): Promise<ModelInfo[]> {
   }
 
   const url = buildProxyUrl("/v1/models", provider);
-  const resp = await fetch(url, { headers: getProviderAuthHeaders(provider) });
+  const resp = await fetch(url, { headers: await resolveAuthHeaders(provider) });
   if (!resp.ok) throw new Error(`Failed to list models: ${resp.status}`);
   const data = await resp.json();
   return data.data ?? [];
@@ -481,7 +447,7 @@ export async function pollTask(
     ? endpoint.replace("{task_id}", taskId)
     : `/v1/tasks/${taskId}`;
   const url = buildProxyUrl(path, provider);
-  const resp = await fetch(url, { headers: getProviderAuthHeaders(provider, keyTag) });
+  const resp = await fetch(url, { headers: await resolveAuthHeaders(provider, keyTag) });
   if (!resp.ok) throw new Error(`Failed to poll task: ${resp.status}`);
   const raw = await resp.json();
   return normalizeTaskInfo(raw);
@@ -513,7 +479,7 @@ export async function validateConnection(
   const apiKey = overrides?.apiKey?.trim();
   const headers: Record<string, string> = apiKey
     ? { Authorization: `Bearer ${apiKey}` }
-    : getProviderAuthHeaders(provider, overrides?.keyTag);
+    : await resolveAuthHeaders(provider ?? "comfly", overrides?.keyTag);
   const url = buildProxyUrl("/v1/models", provider);
   const resp = await fetch(url, { headers });
   if (!resp.ok)

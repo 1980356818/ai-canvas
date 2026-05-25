@@ -53,6 +53,40 @@ function unsupportedVideoToast(filename: string): void {
   });
 }
 
+type DragFileKinds = { hasImage: boolean; hasVideo: boolean };
+
+// dragover 阶段拿不到 File 对象,只能读 DataTransferItem.kind+.type(MIME)。
+// MIME 缺失时(部分跨应用拖拽 / WebView)退化成"两种都假设有",避免误拒。
+function itemsFileKinds(items: DataTransferItemList): DragFileKinds {
+  let hasImage = false;
+  let hasVideo = false;
+  let totalFiles = 0;
+  let typedFiles = 0;
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i]!;
+    if (it.kind !== "file") continue;
+    totalFiles += 1;
+    if (!it.type) continue;
+    typedFiles += 1;
+    if (it.type.startsWith("image/")) hasImage = true;
+    else if (it.type.startsWith("video/")) hasVideo = true;
+  }
+  if (totalFiles > 0 && typedFiles === 0) {
+    return { hasImage: true, hasVideo: true };
+  }
+  return { hasImage, hasVideo };
+}
+
+function filesKinds(files: File[]): DragFileKinds {
+  let hasImage = false;
+  let hasVideo = false;
+  for (const f of files) {
+    if (isImageFile(f)) hasImage = true;
+    if (isVideoFile(f)) hasVideo = true;
+  }
+  return { hasImage, hasVideo };
+}
+
 /**
  * import 时一次性做三件事：
  *   1. 试解码（codec 不支持就 resolve(null) → 调用方拒收）
@@ -164,26 +198,34 @@ async function videoCardSize(src: string): Promise<{ width: number; height: numb
   return { width: CARD_DEFAULTS.ai_video.width, height: CARD_DEFAULTS.ai_video.height };
 }
 
-function canCardAcceptFileDrop(cardId: string): boolean {
+function canCardAcceptFileDrop(cardId: string, kinds: DragFileKinds): boolean {
   const card = useCardStore.getState().getCard(cardId);
   if (!card) return false;
   if (useUIStore.getState().generatingCards.has(cardId)) return false;
   if (card.type === "ai_image" || card.type === "ai_multiangle") {
-    return true;
+    return kinds.hasImage;
+  }
+  if (card.type === "ai_video") {
+    return kinds.hasVideo;
   }
   if (card.type === "ai_tryon") {
+    if (!kinds.hasImage) return false;
     const d = card.data as { personImageUrl?: string; garmentImageUrl?: string };
     return !d.personImageUrl || !d.garmentImageUrl;
   }
   return false;
 }
 
-function findAcceptingCardIdAt(clientX: number, clientY: number): string | null {
+function findAcceptingCardIdAt(
+  clientX: number,
+  clientY: number,
+  kinds: DragFileKinds,
+): string | null {
   const els = document.elementsFromPoint(clientX, clientY);
   for (const el of els) {
     const cardEl = el.closest("[data-card-id]") as HTMLElement | null;
     const candidateId = cardEl?.dataset.cardId ?? null;
-    if (candidateId && canCardAcceptFileDrop(candidateId)) return candidateId;
+    if (candidateId && canCardAcceptFileDrop(candidateId, kinds)) return candidateId;
   }
   return null;
 }
@@ -192,6 +234,7 @@ function findAcceptingCardIdAtCanvasPoint(
   projectId: string,
   worldX: number,
   worldY: number,
+  kinds: DragFileKinds,
 ): string | null {
   const cards = useCardStore
     .getState()
@@ -205,7 +248,7 @@ function findAcceptingCardIdAtCanvasPoint(
     )
     .sort((a, b) => b.zIndex - a.zIndex);
 
-  return cards.find((card) => canCardAcceptFileDrop(card.id))?.id ?? null;
+  return cards.find((card) => canCardAcceptFileDrop(card.id, kinds))?.id ?? null;
 }
 
 function findAcceptingCardIdAtClientPoint(
@@ -213,11 +256,12 @@ function findAcceptingCardIdAtClientPoint(
   clientX: number,
   clientY: number,
   screenToCanvas: (x: number, y: number) => { x: number; y: number },
+  kinds: DragFileKinds,
 ): string | null {
-  const domHit = findAcceptingCardIdAt(clientX, clientY);
+  const domHit = findAcceptingCardIdAt(clientX, clientY, kinds);
   if (domHit) return domHit;
   const world = screenToCanvas(clientX, clientY);
-  return findAcceptingCardIdAtCanvasPoint(projectId, world.x, world.y);
+  return findAcceptingCardIdAtCanvasPoint(projectId, world.x, world.y, kinds);
 }
 
 // 历史:clientPointToCanvas / readFileAsDataUrl 已在 2026-05-23 移除。
@@ -229,6 +273,7 @@ function findAcceptingCardIdAtClientPoint(
 async function handleDropOnCard(
   targetCardId: string,
   saved: PersistImageResult,
+  videoExtras?: { width: number; height: number; posterPath?: string },
 ): Promise<void> {
   const latest = useCardStore.getState().getCard(targetCardId);
   if (!latest) return;
@@ -237,6 +282,16 @@ async function handleDropOnCard(
   if (latest.type === "ai_image" || latest.type === "ai_multiangle") {
     d.imageUrl = saved.localPath;
     const sized = cardSizeFromPersist(saved);
+    const cx = latest.x + latest.width / 2;
+    const cy = latest.y + latest.height / 2;
+    update.x = cx - sized.width / 2;
+    update.y = cy - sized.height / 2;
+    update.width = sized.width;
+    update.height = sized.height;
+  } else if (latest.type === "ai_video" && videoExtras) {
+    d.videoUrl = saved.localPath;
+    d.posterUrl = videoExtras.posterPath;
+    const sized = sizeFromRatio(videoExtras.width / videoExtras.height);
     const cx = latest.x + latest.width / 2;
     const cy = latest.y + latest.height / 2;
     update.x = cx - sized.width / 2;
@@ -353,11 +408,13 @@ export function useFileDrop(
         return;
       }
 
+      const kinds = itemsFileKinds(e.dataTransfer.items);
       const newTargetId = findAcceptingCardIdAtClientPoint(
         currentProjectId,
         e.clientX,
         e.clientY,
         screenToCanvas,
+        kinds,
       );
 
       if (newTargetId !== fileDragTargetRef.current) {
@@ -439,6 +496,7 @@ export function useFileDrop(
       );
       if (rawFiles.length === 0) return;
 
+      const dropKinds = filesKinds(rawFiles);
       const targetCardId =
         fileDragTargetRef.current ??
         findAcceptingCardIdAtClientPoint(
@@ -446,6 +504,7 @@ export function useFileDrop(
           e.clientX,
           e.clientY,
           screenToCanvas,
+          dropKinds,
         );
       if (fileDragTargetRef.current) {
         document
@@ -483,22 +542,53 @@ export function useFileDrop(
           mediaRawFiles.map((f) => () => ensureDisplayableImage(f)),
           4,
         );
-        const files = heicSettled.map((r, i) =>
+        let files = heicSettled.map((r, i) =>
           r.status === "fulfilled" ? r.value : mediaRawFiles[i]!,
         );
-        let startIdx = 0;
 
         if (targetCardId) {
           const targetCard = useCardStore.getState().getCard(targetCardId);
           if (targetCard) {
-            // 拖到既有卡上:走 persistFile 自动按 size 分流
-            const saved = await persistFile(files[0]!, undefined, currentProjectId);
-            await handleDropOnCard(targetCardId, saved);
-            startIdx = 1;
+            // 按目标卡类型挑该消费哪个文件 —— 视频卡只吃视频,图片/换装卡只吃图片。
+            // 拖错类型时 consumedIdx=-1,该文件留到下面循环作为新卡。
+            let consumedIdx = -1;
+            if (targetCard.type === "ai_video") {
+              const idx = files.findIndex(isVideoFile);
+              if (idx !== -1) {
+                const vf = files[idx]!;
+                const blobUrl = URL.createObjectURL(vf);
+                const frame = await extractFirstFrame(blobUrl);
+                URL.revokeObjectURL(blobUrl);
+                if (frame) {
+                  const saved = await persistFile(vf, undefined, currentProjectId);
+                  const posterPath = await persistPoster(frame.dataUrl, currentProjectId);
+                  await handleDropOnCard(targetCardId, saved, {
+                    width: frame.width,
+                    height: frame.height,
+                    posterPath,
+                  });
+                  consumedIdx = idx;
+                } else {
+                  // 解码失败:报错,同时消费掉这个文件免得下面循环再次黑卡 + 重复 toast
+                  unsupportedVideoToast(vf.name);
+                  consumedIdx = idx;
+                }
+              }
+            } else {
+              const idx = files.findIndex(isImageFile);
+              if (idx !== -1) {
+                const saved = await persistFile(files[idx]!, undefined, currentProjectId);
+                await handleDropOnCard(targetCardId, saved);
+                consumedIdx = idx;
+              }
+            }
+            if (consumedIdx !== -1) {
+              files = files.filter((_, i) => i !== consumedIdx);
+            }
           }
         }
 
-        const remaining = files.slice(startIdx);
+        const remaining = files;
         if (remaining.length === 0) return;
 
         dropPos = screenToCanvas(e.clientX, e.clientY);

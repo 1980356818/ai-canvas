@@ -3,12 +3,17 @@
 > 适用范围：本仓库前端 React + Zustand + Tauri 代码。每条规范都有"踩过的坑"作为支撑——
 > **任何新增 / 重构 / Code Review 必须对照本文件**。规范缺失或例外要先更新本文档再写代码。
 
-历史治理四波见：
+历史治理见：
 - v1 (2026-05-15)：IPC 阈值首次落地
 - v2 (2026-05-22)：[`project_ai_canvas_crash_fixes.md`](../../../../Users/Administrator/.claude/projects/D--Project/memory/project_ai_canvas_crash_fixes.md) v3 — 异步阻塞 + 内存累积 + 拖拽性能
 - v3 (2026-05-22)：性能精细化 + 规范化（本文档 v1）
 - v5 (2026-05-23)：data 派生订阅根治 + 共享 tick + ESLint 兜底
-- **v6 (2026-05-23)**：Rust `std::sync::Mutex` 二次 lock 死锁根治 + lock-acquiring helper 类型签名重构（本文档当前版本）
+- v6 (2026-05-23)：Rust `std::sync::Mutex` 二次 lock 死锁根治 + lock-acquiring helper 类型签名重构
+- v7 (2026-05-23)：Mac 跨平台一致性（TLS / panic / Info.plist）
+- **v9 (2026-05-25)**：Provider API key 读取统一为单一 async 入口 `platform/auth.ts`，
+  删除全部同步 `getProviderAuthHeaders` / `getBrowserFirstKey` / `getAuthHeaders` /
+  `getBrowserApiConfig` —— 它们只读 localStorage，Tauri 模式 SettingsDialog 把 key 存
+  sqlite 后所有 fetch 路径 401。新增 `check-ipc-guards` 静态扫描防回归。详见 §12。
 
 ---
 
@@ -487,3 +492,77 @@ through 到 `data_dir`，没人报因为没 Linux 用户，但是规范上不许
 14. **每个 `expect()` 都是 release 里的潜在闪退**：在 panic = "unwind" + 强 hook 下
     最坏也只是 thread panic + 日志(不 abort)，但仍可能让一个 IPC command 永远不返回。
     优先 `unwrap_or_else(|e| { log; fallback })`，逼不得已再 expect 且必须有 hook 覆盖。
+
+---
+
+## 12. Provider API Key 读取规范（v9，2026-05-25 根治）
+
+### 12.1 唯一入口：[`src/platform/auth.ts`](../src/platform/auth.ts)
+
+所有 API key / Authorization header 读取**必须**走该模块的 async 接口：
+
+```ts
+import { resolveAuthHeaders, readProviderKeys, readProviderFirstKey } from "@/platform";
+
+// 单 key + Header 构造（最常用）
+const headers = await resolveAuthHeaders("jijing");
+// → { Authorization: "Bearer sk-..." } 或 {} (无 key 时)
+
+// 取 key 列表（rotation 场景）
+const keys = await readProviderKeys("comfly", "gemini_premium");
+
+// 仅取 key 字符串
+const k = await readProviderFirstKey("jijing");
+```
+
+后端透明：
+- **Tauri 模式** → `settings.api::getSetting` → `invoke('get_setting')` → Rust sqlite
+- **Web 模式**   → `settings.api::getSetting` → `lsGet(...)` → localStorage
+
+`SettingsDialog` 通过 `setSetting()` 写 key，**同样**通过后端透明层落地到 sqlite / localStorage —
+读写双端对称。
+
+### 12.2 禁用清单
+
+任何引入下列形态的 PR 必须被拒（`scripts/check-ipc-guards.{ps1,sh}` 静态扫描会失败）：
+
+```ts
+// ❌ 同步、只读 localStorage —— Tauri 模式 key 在 sqlite，永远拿不到 -> 401
+getProviderAuthHeaders(provider)
+getBrowserFirstKey(provider)
+getBrowserKeys(provider, keyTag)
+getAuthHeaders()
+getBrowserApiConfig()
+
+// ❌ 直接绕过抽象去读 localStorage
+lsGet("setting_jijing_api_keys", null)
+lsGet("setting_comfly_api_key", null)
+```
+
+### 12.3 踩过的坑（2026-05-25）
+
+用户报告 `ChatEditor` 调 `gemini-3.1-pro-preview` "卡住"。排查链路：
+- 服务端正常（curl 测 4.8s 200）
+- ai-canvas Rust 端 `ai_proxy` 完全没收到请求（启动后零 `tracing::info!` 痕迹）
+- WebView Console 暴露：`POST /v1-jijing/v1/files/upload 401 (Unauthorized)` → `Missing API Key`
+
+**根因**：`uploadViaFetch` 在 `platform/media.ts:161` 调同步 `getProviderAuthHeaders("jijing")`，
+该函数只读 `localStorage["setting_jijing_api_keys"]`。Tauri 模式下 `SettingsDialog`
+通过 `invoke('set_setting')` 把 key 写到 sqlite (`data.db`)，**完全没写 localStorage**。
+fetch 因此带空 Authorization 头，服务端 401。UI 把 reject 当 "loading 中" 显示，
+看起来像 chat completions 本身卡死。
+
+为什么 `ai_proxy`（主聊天）不踩这个坑？因为它走 `invoke('ai_proxy')`，Rust 端直接从
+sqlite 读 key。**只有"先把 dataURL/blob 上传成 server URL"这条 fetch 子流程**会撞上。
+
+### 12.4 别再犯
+
+15. **新增任何"我直接 fetch 调一下后端"的代码**，先想清楚 key 怎么注入 —— 答案永远是
+    `await resolveAuthHeaders(provider)`，不许同步、不许走 localStorage 直读。
+16. **同步 / 异步分裂是 bug 的温床**：当某个数据源有"快路径同步 + 慢路径异步"两个版本时
+    （sqlite 必须 async，localStorage 可 sync），快慢路径行为不一致 → 调用方按"上次能用"
+    选了快路径就出错。本模块的做法是**取消快路径**，让所有调用方一致 await。
+17. **看到 `// @deprecated, use X instead` 别只是加一个新函数 X 就走**，老函数还在的话
+    迟早会有人用。直接删，或者改成 `throw new Error(...)` 让运行时炸出来。
+18. **设置面板写到哪 / 业务代码读自哪必须对账**：每个 storage 后端（sqlite / localStorage /
+    cookies / IndexedDB）的 reader 和 writer 都列在一起，PR 改了 writer 必须扫一遍所有 reader。

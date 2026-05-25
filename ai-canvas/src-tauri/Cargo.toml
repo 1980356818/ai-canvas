@@ -32,6 +32,9 @@ chrono = "0.4"
 tauri-plugin-clipboard-manager = "2"
 sha2 = "0.10"
 tokio = { version = "1", features = ["time", "sync"] }
+# ffmpeg-sidecar: 视频抽帧用。不走 C/C++ binding，直接调编译好的 ffmpeg 二进制 —
+# Windows/macOS/Linux 三端零 C 编译依赖，首次使用时 auto_download() 拉到 cache。
+ffmpeg-sidecar = "2"
 
 [dev-dependencies]
 # upload_remote 单测要写临时文件并验 sha256

@@ -1,4 +1,4 @@
-import { saveMedia, readMediaBase64 } from "@/platform/media.api";
+import { saveMedia } from "@/platform/media.api";
 import { isTauri } from "@/platform/runtime";
 import {
   IPC_SINGLE_INVOKE_SAFE_RAW_BYTES,
@@ -272,28 +272,13 @@ export async function persistImage(
 }
 
 /**
- * 后台预热上传 —— 不抛错, 不 await, 用户感知零延迟。
- * 拖入/粘贴/AI 输出的图片都会自动走这里, 等用户真正在生成时调
- * `mediaToApiRef` 直接命中本地 sqlite 缓存返 HTTP URL, 不等。
- *
- * 失败的合理原因 (网络抖动 / 鉴权过期 / 服务端 5xx) 都不该打扰用户 —
- * 真正发请求时主路径会再试一次, 由那里的错误处理负责 UX。
+ * 后台预热上传 — 转调 `platform/media.ts::prewarmMedia` 统一入口。
+ * 这一层 wrapper 保留是为了让 `persistImage` 调用点不用改;新代码请直接
+ * 调 `prewarmMedia`。dynamic import 是为了避开 `lib ↔ platform` 的循环。
  */
 function schedulePrewarmUpload(localPath: string): void {
   if (!localPath) return;
-  // 用 setTimeout(0) 切出当前微任务队列, 让 persistImage 调用方先返回 UI,
-  // 上传发生在 Tauri command 异步 task, 完全不阻塞渲染。
-  setTimeout(() => {
-    void import("@/platform/media")
-      .then(({ mediaToApiRef }) => mediaToApiRef(localPath, { prewarm: true }))
-      .catch((err) => {
-        // 静默, 但留 debug 日志便于排查"为什么用户点生成时还要等"
-        console.debug(
-          "[media] prewarm upload failed (silent, main path will retry):",
-          localPath, err
-        );
-      });
-  }, 0);
+  void import("@/platform/media").then(({ prewarmMedia }) => prewarmMedia(localPath));
 }
 
 function stripQueryAndHash(path: string): string {

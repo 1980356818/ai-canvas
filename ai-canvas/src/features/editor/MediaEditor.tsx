@@ -9,7 +9,7 @@ import { autoSave } from "@/lib/autoSave";
 import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
 import { scheduleBackgroundSave } from "@/lib/media";
-import { mediaToApiRef } from "@/platform/media";
+import { uploadMediaBatch } from "@/platform/media";
 import { cn } from "@/lib/utils";
 import { friendlyError } from "@/lib/errors";
 import {
@@ -453,20 +453,30 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         }
       }
 
-      const referenceImages: Array<{ url: string; role: string }> = [];
+      // 并行批量上传 — onProgress 同时驱动两路:
+      // (a) 卡片 UI 显示 "上传参考图 N/M…",避免"看似阻塞"
+      // (b) console 日志便于排查 "为什么用户点生成时还要等"
       const refPrepareStart = performance.now();
-      for (const ref of rawRefImages) {
-        const oneStart = performance.now();
-        const dataUrl = await mediaToApiRef(ref.url);
-        console.log("[MediaEditor] 参考图准备完成", {
-          role: ref.role,
-          elapsedMs: Math.round(performance.now() - oneStart),
-          inputPrefix: ref.url.slice(0, 40),
-          outputType: dataUrl.startsWith("data:") ? "base64" : dataUrl.startsWith("http") ? "http" : "local",
-          outputLength: dataUrl.length,
-        });
-        referenceImages.push({ ...ref, url: dataUrl });
-      }
+      const uploaded = await uploadMediaBatch(
+        rawRefImages.map((r) => r.url),
+        {
+          onProgress: ({ uploaded, total, current }) => {
+            setCardProgress(card.id, {
+              percent: 0,
+              label: `上传参考图 ${uploaded}/${total}…`,
+            });
+            console.log("[MediaEditor] 参考图进度", {
+              uploaded,
+              total,
+              currentPrefix: current?.slice(0, 40),
+              elapsedMs: Math.round(performance.now() - refPrepareStart),
+            });
+          },
+        },
+      );
+      const referenceImages: Array<{ url: string; role: string }> = rawRefImages.map(
+        (ref, i) => ({ ...ref, url: uploaded[i]! }),
+      );
       logElapsed("全部参考图准备完成", {
         refImageCount: referenceImages.length,
         refPrepareElapsedMs: Math.round(performance.now() - refPrepareStart),

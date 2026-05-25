@@ -1,6 +1,6 @@
 import type { ImageRefOption, InlineImageSource } from "@/hooks/useImageRefSources";
 import type { RefImageEntry } from "@/config/model-ref-images";
-import { mediaToApiRef } from "@/platform/media";
+import { uploadMediaBatch } from "@/platform/media";
 
 // ── Data Types ──────────────────────────────────────────────
 
@@ -91,25 +91,42 @@ export async function serializeForApi(
   const refMap = new Map(inlineRefs.map((r) => [r.id, r]));
   const optionMap = new Map(allOptions.map((o) => [o.id, o]));
   const usedUrls = new Set<string>();
-  const parts: ContentPart[] = [];
 
   const segments = promptText.split(REF_TOKEN_RE);
 
+  // 两遍走法 (改自原先单遍串行): 第一遍只解析 URL + 收集要上传的图, 第二遍
+  // Promise.all 并行上传, 第三遍按 segments 顺序拼 parts。这样 N 个内联 ref
+  // 图首传从 N×t 降到 max(N,4)×t (后端 MAIN_SEMAPHORE(4)), 同时保 segments
+  // 顺序 (text₁ img₁ text₂ img₂ ...)。
+  const refUrls: Array<string | null> = segments.map((seg, i) => {
+    if (i % 2 === 0) return null;
+    const ref = refMap.get(seg);
+    if (!ref) return null;
+    const url = resolveRefUrl(ref.source, refImages, optionMap);
+    return url || null;
+  });
+  const uploadIndex: number[] = [];
+  const uploadUrls: string[] = [];
+  refUrls.forEach((u, i) => {
+    if (u) {
+      uploadIndex.push(i);
+      uploadUrls.push(u);
+    }
+  });
+  const uploaded = await uploadMediaBatch(uploadUrls);
+  const segIndexToUrl = new Map<number, string>();
+  uploadIndex.forEach((segIdx, k) => segIndexToUrl.set(segIdx, uploaded[k]!));
+
+  const parts: ContentPart[] = [];
   for (let i = 0; i < segments.length; i++) {
     if (i % 2 === 0) {
       const text = segments[i]!.trim();
       if (text) parts.push({ type: "text", text });
     } else {
-      const refId = segments[i]!;
-      const ref = refMap.get(refId);
-      if (!ref) continue;
-
-      const url = resolveRefUrl(ref.source, refImages, optionMap);
-      if (!url) continue;
-
-      const base64 = await mediaToApiRef(url);
-      parts.push({ type: "image_url", image_url: { url: base64 } });
-      usedUrls.add(url);
+      const uploadedUrl = segIndexToUrl.get(i);
+      if (!uploadedUrl) continue;
+      parts.push({ type: "image_url", image_url: { url: uploadedUrl } });
+      usedUrls.add(refUrls[i]!);
     }
   }
 

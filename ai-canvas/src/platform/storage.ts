@@ -1,3 +1,19 @@
+/**
+ * Web 模式的低阶 localStorage 包装 + dev 模式的 vite proxy URL 构造。
+ *
+ * 注意（2026-05-25 重构）：本模块**不再**暴露任何 API key 读取接口。早期版本
+ * 有同步的 `getProviderAuthHeaders` / `getBrowserFirstKey` / `getAuthHeaders` /
+ * `getBrowserApiConfig`，都只读 localStorage —— Tauri 模式下 SettingsDialog
+ * 把 key 存在 sqlite，这些同步接口永远拿不到，导致 fetch 路径 Authorization
+ * 头为空 -> 服务端 401。**所有 API key 读取一律走 `platform/auth.ts` 异步入口**
+ * （`readProviderKeys` / `readProviderFirstKey` / `resolveAuthHeaders`），后端
+ * 透明（Tauri sqlite / Web localStorage）。`scripts/check-ipc-guards.{ps1,sh}`
+ * 静态扫描禁止在本模块或任何其他地方重新引入同步 key 读取。
+ *
+ * `lsGet/lsSet/lsRemove` 仍可用于**非 key 场景**的浏览器本地缓存（UI 偏好、
+ * 一次性 banner 隐藏状态等），Tauri 模式那些场景也照样在 localStorage 中。
+ */
+
 const LS_PREFIX = "ai_canvas_";
 
 export function lsGet<T>(key: string, fallback: T): T {
@@ -17,13 +33,6 @@ export function lsRemove(key: string) {
   localStorage.removeItem(LS_PREFIX + key);
 }
 
-export function getBrowserApiConfig(): { apiKey: string; baseUrl: string } {
-  return {
-    apiKey: lsGet("setting_openai_api_key", ""),
-    baseUrl: lsGet("setting_openai_base_url", ""),
-  };
-}
-
 import { getJiJingDevProxyPrefix } from "@/providers/jijing/baseUrl";
 
 // Provider → dev 模式下 vite proxy 的静态前缀映射。
@@ -41,50 +50,4 @@ export function buildProxyUrl(endpoint: string, provider?: string): string {
   if (provider === "jijing") return getJiJingDevProxyPrefix() + endpoint;
   const prefix = (provider && PROXY_PREFIX[provider]) || "/v1-proxy";
   return prefix + endpoint;
-}
-
-interface BrowserKeyEntry {
-  id: string;
-  name: string;
-  key: string;
-  tag?: string;
-}
-
-/**
- * Resolve the first usable API key for a provider from localStorage.
- * Checks JSON array (new format) → legacy single key → empty string.
- *
- * 可选 keyTag 过滤——Comfly 用 "default" / "gemini_premium" 区分槽位。
- * 没标 tag 的旧条目视作 "default"。
- */
-export function getBrowserFirstKey(provider: string, keyTag?: string): string {
-  const json = lsGet<string | null>(`setting_${provider}_api_keys`, null);
-  if (json) {
-    try {
-      const parsed: BrowserKeyEntry[] = JSON.parse(json);
-      const filtered = keyTag
-        ? parsed.filter((k) => (k.tag ?? "default") === keyTag)
-        : parsed;
-      const first = filtered.find((k) => k.key.trim());
-      if (first) return first.key.trim();
-    } catch { /* ignore */ }
-  }
-  const legacyPrefix = provider === "comfly" ? "openai" : provider;
-  const legacy = lsGet<string | null>(`setting_${legacyPrefix}_api_key`, null);
-  return legacy?.trim() ?? "";
-}
-
-/**
- * Build Authorization headers using the first key of the given provider.
- * Falls back to comfly when no provider is specified.
- */
-export function getProviderAuthHeaders(provider?: string, keyTag?: string): Record<string, string> {
-  const apiKey = getBrowserFirstKey(provider ?? "comfly", keyTag);
-  if (!apiKey) return {};
-  return { Authorization: `Bearer ${apiKey}` };
-}
-
-/** @deprecated Use getProviderAuthHeaders(provider) instead. */
-export function getAuthHeaders(): Record<string, string> {
-  return getProviderAuthHeaders("comfly");
 }

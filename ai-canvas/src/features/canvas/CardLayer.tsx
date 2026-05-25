@@ -39,6 +39,37 @@ const TYPE_LABELS: Record<string, string> = {
   sticky_note: "N",
 };
 
+/**
+ * 单卡渲染槽。**统一入口** —— 任何"展开渲染"的卡都必须经此组件。
+ *
+ * cardStore 规范（见 stores/cardStore.ts 顶部注释）要求单卡渲染
+ * 用 `useCardStore(s => s.cards.get(id))` 订阅，而不是从父级 prop-drill
+ * 一个静态 card 引用。这样 `updateCardData` 触发的纯 data 改动
+ * （只 bump dataVersion，不动 layoutVersion）能直接推到该卡，无需
+ * CardLayer 介入。zustand 默认 Object.is，单卡 selector 只在自身
+ * 引用变化时让本 slot re-render，不会被"别的卡改 data"误触发。
+ *
+ * 历史 bug：CardLayer 直接把 fullCards 里的旧 card 对象 prop 给
+ * CardShell/CardContent，而 fullCards 只在 layoutVersion 变时重算，
+ * 导致生成结果（imageUrl/results 等 data 字段）写完后卡片不刷新，
+ * 必须点击触发 bringToFront → layoutVersion +1 才能看到结果。
+ */
+const CardSlot = memo(function CardSlot({
+  cardId,
+  selected,
+}: {
+  cardId: string;
+  selected: boolean;
+}) {
+  const card = useCardStore((s) => s.cards.get(cardId));
+  if (!card) return null;
+  return (
+    <CardShell card={card} selected={selected}>
+      <CardContent card={card} />
+    </CardShell>
+  );
+});
+
 function CardThumbnail({ card }: { card: CanvasCard }) {
   const color = card.color || TYPE_COLORS[card.type] || "#6B7280";
   const label = TYPE_LABELS[card.type] ?? "?";
@@ -78,8 +109,12 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
   const layoutVersion = useCardStore((s) => s.layoutVersion);
   const selectedCardIds = useCanvasStore((s) => s.selectedCardIds);
 
+  // fullCards 只存 id —— 真正渲染走 CardSlot 内部订阅，数据更新（dataVersion）
+  // 由每个 slot 自己感知，CardLayer 只负责"哪些 id 当前可见"这层几何过滤。
+  // thumbCards 维持 CanvasCard[]：缩略图只读几何 + color + type，全由 layoutVersion
+  // 通道覆盖，无需订阅式渲染。
   const [{ fullCards, thumbCards }, setVisible] = useState<{
-    fullCards: CanvasCard[];
+    fullCards: string[];
     thumbCards: CanvasCard[];
   }>({ fullCards: [], thumbCards: [] });
 
@@ -143,7 +178,7 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
         .sort((a, b) => a.zIndex - b.zIndex);
     }
 
-    const full: CanvasCard[] = [];
+    const full: string[] = [];
     const thumb: CanvasCard[] = [];
 
     for (const c of visibleCards) {
@@ -152,7 +187,7 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
       if (screenW < LOD_SCREEN_THRESHOLD && screenH < LOD_SCREEN_THRESHOLD) {
         thumb.push(c);
       } else {
-        full.push(c);
+        full.push(c.id);
       }
     }
 
@@ -217,14 +252,12 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
       {thumbCards.map((card) => (
         <CardThumbnail key={card.id} card={card} />
       ))}
-      {fullCards.map((card) => (
-        <CardShell
-          key={card.id}
-          card={card}
-          selected={selectedCardIds.has(card.id)}
-        >
-          <CardContent card={card} />
-        </CardShell>
+      {fullCards.map((id) => (
+        <CardSlot
+          key={id}
+          cardId={id}
+          selected={selectedCardIds.has(id)}
+        />
       ))}
     </>
   );

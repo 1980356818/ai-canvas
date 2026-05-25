@@ -22,6 +22,8 @@ function outputKindOf(sourceType: string): PayloadKind | null {
     case "ai_image": case "ai_multiangle": case "ai_tryon": return "image";
     case "text": case "sticky_note": case "ai_chat": return "text";
     case "audio": return "audio";
+    // frame_extractor 通过 ctx.createCard 派生独立的 ai_image 卡片,自身不向下游推送 payload。
+    case "frame_extractor": return null;
     default: return null;
   }
 }
@@ -33,6 +35,8 @@ function canKindFlowInto(kind: PayloadKind, targetType: string): boolean {
     case "ai_image": case "ai_multiangle": return kind === "text" || kind === "image";
     case "ai_video": return true;
     case "ai_tryon": return kind === "image";
+    // frame_extractor 接收上游 ai_chat 的分镜 JSON 文本 + 可选 ai_video 源
+    case "frame_extractor": return kind === "text" || kind === "video";
     default: return true;
   }
 }
@@ -45,6 +49,7 @@ function targetTypeLabel(type: string): string {
     case "ai_multiangle": return "多角度节点";
     case "ai_video": return "视频节点";
     case "ai_tryon": return "试衣节点";
+    case "frame_extractor": return "关键帧提取节点";
     default: return "该节点";
   }
 }
@@ -663,6 +668,25 @@ function injectIntoCard(
             d.refVideos = videos;
             changed = true;
           }
+        }
+      }
+      break;
+    }
+
+    case "frame_extractor": {
+      if (payload.kind === "text") {
+        // 上游 ai_chat 的分镜分析结果(包含 JSON shots)
+        if (d.upstreamChatResult !== payload.text) {
+          d.upstreamChatResult = payload.text;
+          d.upstreamChatCardId = sourceCardId;
+          changed = true;
+        }
+      } else if (payload.kind === "video") {
+        // 上游 ai_video 直接连过来,提供视频文件 URL
+        if (d.sourceVideoUrl !== payload.url) {
+          d.sourceVideoUrl = payload.url;
+          d.sourceVideoCardId = sourceCardId;
+          changed = true;
         }
       }
       break;

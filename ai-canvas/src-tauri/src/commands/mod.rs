@@ -9,6 +9,9 @@ pub mod http_util;
 // 删除任一行会让 ai.rs 编译失败 —— 这是故意的。
 pub mod ipc_guard;
 pub mod ipc_limits;
+// jijing_serde: JiJing 服务端响应反序列化的统一规约 (Long → String 兼容)。
+// 凡是解析 JiJing 响应的 struct 都要走这里, 详见模块顶部 doc。
+pub mod jijing_serde;
 pub mod project;
 pub mod tasks;
 // upload_local: 前端 → Rust 本地分块写盘 (规避 WebView2 IPC 3MB 上限)
@@ -16,4 +19,6 @@ pub mod tasks;
 // 两个模块语义完全不同, 绝不要互相替代。详见各自顶部注释。
 pub mod upload_local;
 pub mod upload_remote;
+// frame_extract: ffmpeg-sidecar 抽关键帧。前端解析分镜 JSON 后批量请求时间点的图像。
+pub mod frame_extract;
 pub mod util;

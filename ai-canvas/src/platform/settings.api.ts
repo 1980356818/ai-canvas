@@ -45,24 +45,8 @@ async function providerHasKey(providerId: string): Promise<boolean> {
   return !!legacyKey?.trim();
 }
 
-/**
- * Resolve the first usable API key for a provider (browser-side).
- * Same precedence as Rust `read_full_api_config`: JSON array → legacy single key.
- */
-export async function getProviderFirstKey(providerId: string): Promise<string> {
-  const keysJson = await getSetting(`${providerId}_api_keys`);
-  if (keysJson) {
-    try {
-      const keys: KeyEntry[] = JSON.parse(keysJson);
-      const first = keys.find((k) => k.key.trim());
-      if (first) return first.key.trim();
-    } catch { /* ignore */ }
-  }
-  const legacyKey = providerId === "comfly"
-    ? await getSetting("openai_api_key")
-    : await getSetting(`${providerId}_api_key`);
-  return legacyKey?.trim() ?? "";
-}
+// `getProviderFirstKey` / `readProviderFirstKey` 已统一搬到 `platform/auth.ts`，
+// 该模块是全应用 API key 读取的唯一入口（支持 keyTag、双后端透明）。
 
 // ── hasApiKey (cached) ──────────────────────────────────────
 

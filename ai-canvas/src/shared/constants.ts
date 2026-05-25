@@ -152,6 +152,7 @@ export const CARD_DEFAULTS: Record<CardType, CardDefaults> = {
   ai_multiangle: { ...sizeFromRatio(1), label: "多角度", data: { content: "h:0,v:0,z:5", size: "1:1", model: "qwen-image-edit-2511-multipie", h: 0, v: 0, z: 5 } },
   text:        { ...sizeFromRatio(4 / 3), label: "文本", data: { content: "" } },
   sticky_note: { ...sizeFromRatio(5 / 4), label: "便签", data: { content: "" } },
+  frame_extractor: { width: 300, height: 220, label: "关键帧提取", data: { extractedFrames: [] } },
 };
 
 export const TYPE_COLORS: Record<CardType, string> = {
@@ -163,6 +164,7 @@ export const TYPE_COLORS: Record<CardType, string> = {
   text: "#6B7280",
   sticky_note: "#F59E0B",
   audio: "#F97316",
+  frame_extractor: "#10B981",
 };
 
 export const CARD_COLOR_PRESETS = [

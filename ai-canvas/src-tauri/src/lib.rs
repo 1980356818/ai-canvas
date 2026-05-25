@@ -919,6 +919,7 @@ pub fn run() {
             commands::tasks::tasks_delete,
             commands::tasks::tasks_cleanup_terminal,
             commands::tasks::tasks_list_by_project,
+            commands::frame_extract::extract_frames_at_timestamps,
         ])
         .run(tauri::generate_context!());
 

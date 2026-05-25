@@ -16,7 +16,7 @@ import { providerService } from "@/services/provider.service";
 import { useProviderStore, parseModelRef } from "@/stores/providerStore";
 import { getAccumulatedToolCalls } from "@/providers/openai-compat/formatter";
 import { persistImage } from "@/lib/media";
-import { mediaToApiRef } from "@/platform/media";
+import { mediaToApiRef, uploadMediaBatch } from "@/platform/media";
 import { runWithLimit } from "@/lib/concurrency";
 import { useProjectStore } from "@/stores/projectStore";
 import {
@@ -925,13 +925,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         // 把当前用户消息附带的图片转成 referenceImages，传给生图模型；
         // 否则 chat 模型虽然"看过"图，但生图阶段只拿到文字 prompt，会丢失视觉特征
+        // imageUrls 与 uploaded URL 顺序一一对应,由 uploadMediaBatch 保证。
         const refImages = hasImages
-          ? await Promise.all(
-              imageUrls!.map(async (url, i) => ({
-                url: await mediaToApiRef(url),
-                role: `refImage${i}`,
-              })),
-            )
+          ? (await uploadMediaBatch(imageUrls!)).map((url, i) => ({
+              url,
+              role: `refImage${i}`,
+            }))
           : undefined;
 
         // jobCount 来源于 LLM tool call 输出，模型可能一次性要求 N 张图。
