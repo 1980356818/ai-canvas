@@ -38,7 +38,7 @@
   "bundle": {
     "active": true,
     "copyright": "© 2024 AI猫",
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "targets": [
       "nsis",
       "app"
