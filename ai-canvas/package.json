@@ -1,11 +1,13 @@
 {
   "name": "ai-canvas",
-  "version": "1.1.9",
+  "version": "1.2.1",
   "private": true,
   "type": "module",
   "scripts": {
     "version:sync": "node scripts/sync-version.mjs",
     "check:ipc-guards": "node scripts/check-ipc-guards.mjs",
+    "signing:generate": "node scripts/gen-signing-key.mjs",
+    "release": "python scripts/release.py",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
     "prebuild": "npm run check:ipc-guards",
     "dev": "vite",

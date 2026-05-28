@@ -27,6 +27,7 @@ import { CropDialog } from "@/features/overlays/CropDialog";
 import SideCapsule from "@/features/overlays/SideCapsule";
 import LoginWindow from "@/features/auth/LoginWindow";
 import RedeemWindow from "@/features/auth/RedeemWindow";
+import UpdateDialog from "@/features/overlays/UpdateDialog";
 
 function AuthenticatedApp() {
   const appView = useUIStore((s) => s.appView);
@@ -107,6 +108,10 @@ function AuthenticatedApp() {
         </ErrorBoundary>
         <ErrorBoundary fallback={null}>
           <CropDialog />
+        </ErrorBoundary>
+        {/* 启动后台查更新; 命中新版本弹自身,否则 render null。出错静默吞掉。 */}
+        <ErrorBoundary fallback={null}>
+          <UpdateDialog />
         </ErrorBoundary>
       </div>
     </ErrorBoundary>

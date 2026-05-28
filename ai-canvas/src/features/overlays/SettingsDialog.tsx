@@ -29,6 +29,7 @@ import {
   ExternalLink,
   Copy,
   Check,
+  Download,
 } from "lucide-react";
 import {
   getSetting,
@@ -59,8 +60,9 @@ import {
 } from "@/providers/jijing/baseUrl";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "./ConfirmDialog";
+import UpdatesTab from "./UpdatesTab";
 
-type SettingsTab = "platforms" | "general" | "backup" | "account";
+type SettingsTab = "platforms" | "general" | "backup" | "updates" | "account";
 type ConnStatus = "idle" | "testing" | "ok" | "error";
 type KeyTag = "default" | "gemini_premium";
 
@@ -408,6 +410,10 @@ export default function SettingsDialog() {
             ...(isTauri
               ? [{ key: "backup" as const, icon: Database, label: "数据备份" }]
               : []),
+            // updates: 仅 Tauri 桌面端有意义(走 tauri-plugin-updater 装包+重启)
+            ...(isTauri
+              ? [{ key: "updates" as const, icon: Download, label: "更新" }]
+              : []),
             { key: "account" as const, icon: UserCircle, label: "账号" },
           ]).map((t) => (
             <button
@@ -471,6 +477,8 @@ export default function SettingsDialog() {
           )}
 
           {tab === "backup" && <BackupTab />}
+
+          {tab === "updates" && <UpdatesTab />}
 
           {tab === "account" && <AccountTab onClose={toggleSettings} />}
 

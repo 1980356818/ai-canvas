@@ -134,4 +134,53 @@ export const adminApi = {
   getOperationLogs(page: number, size: number) {
     return api<{ records: any[]; total: number }>(`/admin/operation-logs?page=${page}&size=${size}`)
   },
+
+  // ── 客户端版本管理 ──────────────────────────────────────────────
+  getReleases(page: number, size: number, target?: string, arch?: string) {
+    let q = `?page=${page}&size=${size}`
+    if (target) q += `&target=${target}`
+    if (arch) q += `&arch=${arch}`
+    return api<{ records: any[]; total: number }>(`/admin/release/list${q}`)
+  },
+
+  // 上传走 multipart, 不能套 application/json,所以独立写;鉴权 token 复用模块作用域的 tokenGetter
+  async uploadRelease(form: FormData) {
+    const headers: Record<string, string> = {}
+    const token = tokenGetter()
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const res = await fetch(API_BASE + '/admin/release/upload', {
+      method: 'POST',
+      headers,
+      body: form,
+    })
+    const json = await res.json()
+    if (json.code === 40102) {
+      onAuthExpired()
+      throw new Error('登录过期')
+    }
+    if (json.code !== 0) {
+      ElMessage.error(json.msg || '上传失败')
+      throw new Error(json.msg || '上传失败')
+    }
+    return json.data
+  },
+
+  updateReleaseMeta(id: number, data: { releaseNotes?: string; minVersion?: string }) {
+    return api(`/admin/release/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
+  activateRelease(id: number) {
+    return api(`/admin/release/${id}/activate`, { method: 'POST' })
+  },
+
+  deactivateRelease(id: number) {
+    return api(`/admin/release/${id}/deactivate`, { method: 'POST' })
+  },
+
+  deleteRelease(id: number) {
+    return api(`/admin/release/${id}`, { method: 'DELETE' })
+  },
 }

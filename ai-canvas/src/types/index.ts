@@ -20,6 +20,14 @@ export type {
   PendingDrop,
 } from "./connection";
 
+export type { CardGroup, CardGroupRow } from "./group";
+export {
+  GROUP_PALETTE,
+  DEFAULT_GROUP_COLOR,
+  GROUP_PADDING,
+  GROUP_TITLE_HEIGHT,
+} from "./group";
+
 export type {
   ChatContentPart,
   ChatHistoryMessage,

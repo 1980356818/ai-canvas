@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useUIStore } from "@/stores/uiStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
+import { useGroupStore } from "@/stores/groupStore";
 import type { CanvasCard, CardType } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { deleteCard, updateProjectMeta } from "@/platform";
@@ -9,6 +10,16 @@ import { autoSave } from "@/lib/autoSave";
 import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { recordBatchDelete, recordUpdate } from "@/lib/history";
 import { cn } from "@/lib/utils";
+import {
+  groupFromSelection,
+  ungroup,
+  ungroupFromSelection,
+  toggleGroupCollapsed,
+  setGroupColor,
+} from "@/lib/groupActions";
+import { GROUP_PALETTE } from "@/types/group";
+import { pruneGroupsForRemovedCards } from "@/lib/groupConsistency";
+import { runGroup } from "@/services/groupRunner";
 import { CARD_DEFAULTS } from "@/shared/constants";
 import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import { extractCardMedia } from "@/config/model-ref-images";
@@ -184,7 +195,7 @@ function ContextMenuPanel({
     visible: boolean;
     x: number;
     y: number;
-    target: "canvas" | "card" | "multi" | "connection";
+    target: "canvas" | "card" | "multi" | "connection" | "group";
     targetId?: string;
     worldX?: number;
     worldY?: number;
@@ -354,6 +365,8 @@ function ContextMenuPanel({
         /* backend may be unavailable */
       }
     }
+    // 同步把这些卡片从所有组里移除(空组自动删,持久化由 groupConsistency 内部处理)
+    pruneGroupsForRemovedCards(ids);
     useCanvasStore.getState().clearSelection();
     autoSave.markDirty();
     if (projectId) syncNodeCount(projectId);
@@ -524,6 +537,16 @@ function ContextMenuPanel({
       videoCount > 0 ? `${videoCount}个视频` : "",
     ].filter(Boolean).join(" + ");
 
+    // 选区中是否有任意卡属于某个组(决定要不要显示"取消组合")
+    const groupStore = useGroupStore.getState();
+    let anyInGroup = false;
+    for (const cid of selectedCardIds) {
+      if (groupStore.getGroupByCardId(cid)) {
+        anyInGroup = true;
+        break;
+      }
+    }
+
     entries = [
       {
         type: "item",
@@ -532,6 +555,31 @@ function ContextMenuPanel({
         disabled: selectedCardIds.size === 0,
         onSelect: () => void runCopyCards(selectedCardIds),
       },
+      { type: "sep" },
+      {
+        type: "item",
+        label: "组合",
+        shortcut: `${mod}+G`,
+        disabled: selectedCardIds.size < 2,
+        onSelect: () => {
+          groupFromSelection();
+          hide();
+        },
+      },
+      ...(anyInGroup
+        ? [
+            {
+              type: "item" as const,
+              label: "取消组合",
+              shortcut: `${mod}+Shift+G`,
+              disabled: false,
+              onSelect: () => {
+                ungroupFromSelection();
+                hide();
+              },
+            },
+          ]
+        : []),
       {
         type: "item",
         label: mediaLabel ? `批量导出文件 (${mediaLabel})` : "批量导出文件",
@@ -594,6 +642,54 @@ function ContextMenuPanel({
           if (connId) {
             disconnectConnectionAndCleanup(connId);
           }
+          hide();
+        },
+      },
+    ];
+  } else if (contextMenu.target === "group") {
+    const groupId = contextMenu.targetId;
+    const group = groupId ? useGroupStore.getState().getGroup(groupId) : undefined;
+    entries = [
+      {
+        type: "item",
+        label: "运行此组",
+        disabled: !group || group.cardIds.length === 0,
+        onSelect: () => {
+          if (groupId) void runGroup(groupId);
+          hide();
+        },
+      },
+      {
+        type: "item",
+        label: group?.collapsed ? "展开" : "折叠",
+        disabled: !groupId,
+        onSelect: () => {
+          if (groupId) toggleGroupCollapsed(groupId);
+          hide();
+        },
+      },
+      {
+        type: "submenu",
+        label: "颜色",
+        disabled: !groupId,
+        children: GROUP_PALETTE.map((c) => ({
+          type: "item" as const,
+          label: c.name,
+          disabled: false,
+          onSelect: () => {
+            if (groupId) setGroupColor(groupId, c.value);
+            hide();
+          },
+        })),
+      },
+      { type: "sep" },
+      {
+        type: "item",
+        label: "取消组合",
+        shortcut: `${mod}+Shift+G`,
+        disabled: !groupId,
+        onSelect: () => {
+          if (groupId) ungroup(groupId);
           hide();
         },
       },

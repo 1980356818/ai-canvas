@@ -4,6 +4,7 @@ import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { getDisplayUrl } from "@/lib/media";
+import { ensureVideoPoster } from "@/lib/videoPoster";
 import { isPreloaded } from "@/lib/imagePreloader";
 import { autoSave } from "@/lib/autoSave";
 import { useElapsedTimer } from "@/hooks/useElapsedTimer";
@@ -278,6 +279,16 @@ function VideoPreview({ card }: { card: CanvasCard }) {
   const [decodeFailed, setDecodeFailed] = useState(false);
   useEffect(() => { setDecodeFailed(false); }, [displayUrl]);
 
+  // AI 生成的视频卡(taskBridge / VideoEditor 落卡)只写了 videoUrl,没抽 poster ——
+  // 只有文件 drop 路径会在 import 当场抽(useFileDrop)。给"有视频无 poster"的卡补抽
+  // 首帧,否则 preload="none" 的 <video> 在点播放前是全黑的。远程 URL 由 ensureVideoPoster
+  // 内部跳过(CORS taint),本地化完成后会带新 videoUrl 再触发。
+  useEffect(() => {
+    if (data.videoUrl && !data.posterUrl) {
+      ensureVideoPoster(card.id, data.videoUrl, card.projectId);
+    }
+  }, [card.id, card.projectId, data.videoUrl, data.posterUrl]);
+
   if (genProgress) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
@@ -325,6 +336,10 @@ function VideoPreview({ card }: { card: CanvasCard }) {
         {/* preload="none" 关键：画布上多视频卡同时 mount 时，默认 metadata 会让 WebView2
             同时拉远程视频元数据 + 启动 N 个解码器，叠加图片解码就会 OOM。
             用户点击 controls 播放时才真正拉数据。 */}
+        {/* onEnded 回 t=0 而不是加 loop:用户要求"播完回第一帧但不循环"。
+            原生 <video> 播完会停在最后一帧,WebView2 在 ended 后还会偶发清空
+            帧缓冲变成黑屏(尤其卡片不在视口时被节流后)。seek 回 0 让首帧重绘,
+            视觉效果接近最初的 poster。 */}
         <video
           src={displayUrl}
           poster={posterUrl}
@@ -333,6 +348,11 @@ function VideoPreview({ card }: { card: CanvasCard }) {
           muted
           preload="none"
           onError={() => setDecodeFailed(true)}
+          onEnded={(e) => {
+            const v = e.currentTarget;
+            v.pause();
+            try { v.currentTime = 0; } catch { /* seek 偶发抛 InvalidStateError,忽略 */ }
+          }}
         />
         {isRemote && (
           <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-amber-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm">

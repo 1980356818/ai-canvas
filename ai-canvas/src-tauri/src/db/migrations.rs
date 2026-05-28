@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: u32 = 8;
+const CURRENT_VERSION: u32 = 9;
 
 pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     let version: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -29,6 +29,9 @@ pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     }
     if version < 8 {
         migrate_v8(conn)?;
+    }
+    if version < 9 {
+        migrate_v9(conn)?;
     }
 
     Ok(())
@@ -265,6 +268,44 @@ fn migrate_v8(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
             ON uploaded_files(local_path_hint);
 
         PRAGMA user_version = 8;
+        ",
+    )?;
+
+    Ok(())
+}
+
+fn migrate_v9(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::info!("running migration v9: card groups");
+
+    // card_groups —— 节点分组(把多张卡圈成可一键运行的子单元)。
+    //
+    // card_ids 是 JSON 数组字符串(["uuid1","uuid2",...])。
+    // 一卡只能属一组 —— 不在 DB 层强制(SQLite 没法对 JSON 数组里的值建唯一约束),
+    // 由前端 groupStore + groupConsistency 维护这个不变式。
+    //
+    // 子卡被删时:
+    //   • cards.id 软引用 —— 我们不在 card_ids 上加 FK(JSON 内列不能),
+    //     而是由前端"删卡 lifecycle hook"调 groupConsistency.removeCardsFromGroups
+    //     同步移除;空组自动删。
+    //   • 整个 project 删时:走 ON DELETE CASCADE 一并清掉。
+    //
+    // 几何信息(bounds)**不存储** —— 实时按 cardIds + cards.x/y/w/h 计算,
+    // 持久化派生数据等于自找麻烦(数据漂移 / 历史脏数据等)。
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS card_groups (
+            id          TEXT PRIMARY KEY,
+            project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            card_ids    TEXT NOT NULL DEFAULT '[]',
+            title       TEXT NOT NULL DEFAULT '',
+            color       TEXT NOT NULL DEFAULT '#7C3AED',
+            collapsed   INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_card_groups_project ON card_groups(project_id);
+
+        PRAGMA user_version = 9;
         ",
     )?;
 

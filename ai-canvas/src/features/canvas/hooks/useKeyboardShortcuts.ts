@@ -13,6 +13,8 @@ import {
   disconnectConnectionAndCleanup,
   removeConnectionsForCardIdsAndCleanup,
 } from "@/lib/referenceConsistency";
+import { groupFromSelection, ungroupFromSelection } from "@/lib/groupActions";
+import { pruneGroupsForRemovedCards } from "@/lib/groupConsistency";
 
 function syncNodeCount(projectId: string) {
   const count = useCardStore.getState().getCardsByProject(projectId).length;
@@ -66,6 +68,8 @@ async function deleteSelected() {
       /* ok */
     }
   }
+  // 同步把删除的卡片从所有组里移除(空组自动删,落盘由 groupConsistency 处理)
+  pruneGroupsForRemovedCards(ids);
   useCanvasStore.getState().clearSelection();
   autoSave.markDirty();
   const pid = useProjectStore.getState().currentProjectId;
@@ -159,6 +163,20 @@ export function useKeyboardShortcuts() {
             worldX: lastPointerWorld.x,
             worldY: lastPointerWorld.y,
           });
+        }
+        return;
+      }
+
+      // ── Ctrl+G / Ctrl+Shift+G: group / ungroup selected ──
+      // 焦点在输入元素或编辑模式时不拦,避免误触组合键。
+      // 大小写都接(Shift+G 时 e.key 是大写 "G",普通 g 是小写)。
+      if (mod && (e.key === "g" || e.key === "G")) {
+        if (editingCardId || isFocusOnInput()) return;
+        e.preventDefault();
+        if (e.shiftKey) {
+          ungroupFromSelection();
+        } else if (selectedCardIds.size >= 2) {
+          groupFromSelection();
         }
         return;
       }

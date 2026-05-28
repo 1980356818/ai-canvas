@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { DataAnalysis, User, Ticket, Setting, Document } from '@element-plus/icons-vue'
+import { DataAnalysis, User, Ticket, Setting, Document, Download } from '@element-plus/icons-vue'
 
 defineProps<{ current: string }>()
 const emit = defineEmits<{ (e: 'navigate', page: string): void }>()
@@ -8,6 +8,7 @@ const menus = [
   { key: 'dashboard', label: '仪表盘', icon: DataAnalysis },
   { key: 'users', label: '用户管理', icon: User },
   { key: 'codes', label: '兑换码管理', icon: Ticket },
+  { key: 'releases', label: '版本管理', icon: Download },
   { key: 'config', label: '系统配置', icon: Setting },
   { key: 'logs', label: '操作日志', icon: Document },
 ]

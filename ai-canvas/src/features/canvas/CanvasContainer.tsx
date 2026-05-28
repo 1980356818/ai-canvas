@@ -9,11 +9,13 @@ import { useSpatialIndex } from "./hooks/useSpatialIndex";
 import { useBirdView } from "./hooks/useBirdView";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import CardLayer from "./CardLayer";
+import GroupLayer from "./GroupLayer";
 import FloatingEditor from "@/features/editor/FloatingEditor";
 import ConnectionLayer from "./ConnectionLayer";
 import CanvasBirdView from "./CanvasBirdView";
 import ZoomControls from "./ZoomControls";
 import ImageToolbar from "./ImageToolbar";
+import VideoToolbar from "./VideoToolbar";
 import WireDropMenu from "./WireDropMenu";
 
 export default function CanvasContainer() {
@@ -240,6 +242,13 @@ export default function CanvasContainer() {
             pointerEvents: isBirdView ? "none" : "auto",
           }}
         >
+          {/*
+           * GroupLayer 渲染在 CardLayer 之前(DOM 顺序 = 绘制顺序),
+           * 组矩形在卡片下方;组矩形 body 设 pointer-events:none,只在标题栏
+           * 接事件,保证点中组区域内的卡片仍能被命中。
+           */}
+          <GroupLayer projectId={currentProjectId} viewport={viewport} />
+
           <CardLayer projectId={currentProjectId} viewport={viewport} />
 
           {currentProjectId && (
@@ -281,6 +290,7 @@ export default function CanvasContainer() {
       <WireDropMenu />
 
       {!isBirdView && <ImageToolbar />}
+      {!isBirdView && <VideoToolbar />}
 
       <ZoomControls zoom={viewport.zoom} />
 

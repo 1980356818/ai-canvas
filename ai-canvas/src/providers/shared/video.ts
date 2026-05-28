@@ -35,15 +35,6 @@ export function isVeoModel(modelId: string | undefined | null): boolean {
   return false;
 }
 
-/**
- * Veo "参考图" (image-asset) 子家族。上游 dbgoc 硬约束: 16:9 + 8s + 1-3 张参考图。
- * 与首帧/首尾帧的 frame 模式走不同 pipeline，必须用 veo31-ref / veo31-ref-HD 上游。
- */
-export function isVeoRefModel(modelId: string | undefined | null): boolean {
-  if (!modelId) return false;
-  return modelId === "veo3.1-ref" || modelId === "veo3.1-ref-hd";
-}
-
 export function isGrokVideoModel(modelId: string | undefined | null): boolean {
   if (!modelId) return false;
   return modelId === "grok-video" || modelId.startsWith("grok-video-");
@@ -75,9 +66,28 @@ export function resolveSeedanceUpstreamModel(modelId: string | undefined): strin
   }
 }
 
+/**
+ * Canvas 现在统一发 Cat 命名的 Veo SKU (resolveVeoVariant 的输出, 见下方 VEO_TIERS).
+ * ComflyProvider 直连 Comfly API, 上游用旧 SKU 命名 (veo3.1-fast / veo3.1-1080p /
+ * veo3.1-pro-1080p), 这里把 Cat 6 档映射回 Comfly 近似 SKU.
+ * Comfly 没有独立 720p std/pro 档, 720p 三档统一 fallback 到 veo3.1-fast.
+ * JiJingProvider 不走这条 helper, 它直接透传 Cat 命名.
+ */
 export function resolveVeoUpstreamModel(modelId: string | undefined): string {
   if (!modelId || modelId === "veo3.1") return "veo3.1-fast";
-  return modelId;
+  switch (modelId) {
+    case "veo3.1-fast-720p":
+    case "veo3.1-720p":
+    case "veo3.1-pro-720p":
+      return "veo3.1-fast";
+    case "veo3.1-fast-1080p":
+    case "veo3.1-1080p":
+      return "veo3.1-1080p";
+    case "veo3.1-pro-1080p":
+      return "veo3.1-pro-1080p";
+    default:
+      return modelId;
+  }
 }
 
 /**
@@ -122,46 +132,92 @@ export function inferSeedanceTierFromLegacy(
 }
 
 /**
- * Veo 3.1 画质档 — UI 胶囊选择器直接对应的值。
+ * Veo 3.1 画质 × 分辨率档 — Cat 平台 6 档, UI 胶囊选择.
  *
- * 非参考模式 3 档:
- *   "fast-720p"       → veo3.1-fast      (upstream veo31-fast,    $0.20, ~20-60s)
- *   "standard-1080p"  → veo3.1-1080p     (upstream veo31-fast-HD, $0.30, ~60-150s)
- *   "pro-1080p"       → veo3.1-pro-1080p (upstream veo31-HD,      $0.35, ~80-240s)
+ * tier → JiJing 网关 model_route.model_name (prod DB 2026-05-29 实测, 无 -cat 后缀):
+ *   fast-720p    → veo3.1-fast-720p    (¥0.05/秒, ~60s)
+ *   std-720p     → veo3.1-720p         (¥0.08/秒, ~57s)
+ *   pro-720p     → veo3.1-pro-720p     (¥0.10/秒, ~66s)
+ *   fast-1080p   → veo3.1-fast-1080p   (¥0.10/秒, ~70s)
+ *   std-1080p    → veo3.1-1080p        (¥0.12/秒, ~70s)
+ *   pro-1080p    → veo3.1-pro-1080p    (¥0.15/秒, ~80s)
  *
- * 参考模式 2 档 (fast 引擎不支持 image-asset):
- *   "ref-720p"        → veo3.1-ref       (upstream veo31-ref,    $0.30)
- *   "ref-1080p"       → veo3.1-ref-hd    (upstream veo31-ref-HD, $0.35)
+ * 三模式分发由后端 CatVideoAdapter 看 body 字段决定 (不编码在 tier 里):
+ *   无图                     → type=1 纯文生, duration 4/6/8 自由
+ *   body.images 非空         → type=2 首尾帧 i2v, adapter 强制 duration=8
+ *   body.referenceImages 非空 → type=3 参考 ref (multipart), adapter 强制 duration=8
+ *                                fast 限 2 张参考图, std/pro 1-3 张
+ * 优先级: referenceImages > images > 纯文本.
  */
-export type VeoQualityTier = "fast-720p" | "standard-1080p" | "pro-1080p" | "ref-720p" | "ref-1080p";
+export type VeoQualityTier =
+  | "fast-720p"
+  | "std-720p"
+  | "pro-720p"
+  | "fast-1080p"
+  | "std-1080p"
+  | "pro-1080p";
 
-export const VEO_NON_REF_TIERS: readonly { value: VeoQualityTier; label: string; price: string }[] = [
-  { value: "fast-720p",      label: "快速 720P",  price: "0.5" },
-  { value: "standard-1080p", label: "标准 1080P", price: "1.0" },
-  { value: "pro-1080p",      label: "Pro 1080P",  price: "1.5" },
+export const VEO_TIERS: readonly { value: VeoQualityTier; label: string; price: string }[] = [
+  { value: "fast-720p",  label: "快速 720P",  price: "0.05" },
+  { value: "std-720p",   label: "标准 720P",  price: "0.08" },
+  { value: "pro-720p",   label: "Pro 720P",   price: "0.10" },
+  { value: "fast-1080p", label: "快速 1080P", price: "0.10" },
+  { value: "std-1080p",  label: "标准 1080P", price: "0.12" },
+  { value: "pro-1080p",  label: "Pro 1080P",  price: "0.15" },
 ];
 
-export const VEO_REF_TIERS: readonly { value: VeoQualityTier; label: string; price: string }[] = [
-  { value: "ref-720p",  label: "720P",  price: "1.0" },
-  { value: "ref-1080p", label: "1080P", price: "1.5" },
+/** Veo 画质维度: fast / std / pro. UI 上和分辨率分开成两个胶囊. */
+export type VeoQuality = "fast" | "std" | "pro";
+
+/** Veo 分辨率维度: 720p / 1080p. */
+export type VeoResolution = "720p" | "1080p";
+
+export const VEO_QUALITY_TIERS: readonly { value: VeoQuality; label: string }[] = [
+  { value: "fast", label: "快速" },
+  { value: "std",  label: "标准" },
+  { value: "pro",  label: "Pro" },
 ];
 
-export function resolveVeoVariantForMode(
-  mode: "text" | "firstFrame" | "firstLastFrame" | "reference",
-  tier: VeoQualityTier,
-): string {
-  if (mode === "reference") {
-    return tier === "ref-720p" ? "veo3.1-ref" : "veo3.1-ref-hd";
-  }
+export const VEO_RESOLUTION_TIERS: readonly { value: VeoResolution; label: string }[] = [
+  { value: "720p",  label: "720P" },
+  { value: "1080p", label: "1080P" },
+];
+
+/** 把(画质, 分辨率)拼成 VeoQualityTier (Cat 6 档 SKU). */
+export function composeVeoTier(quality: VeoQuality, resolution: VeoResolution): VeoQualityTier {
+  return `${quality}-${resolution}` as VeoQualityTier;
+}
+
+/** 把 VeoQualityTier 拆成(画质, 分辨率), 给 UI 两个胶囊 state 用. */
+export function decomposeVeoTier(tier: VeoQualityTier): { quality: VeoQuality; resolution: VeoResolution } {
   switch (tier) {
-    case "fast-720p": return "veo3.1-fast";
-    case "standard-1080p": return "veo3.1-1080p";
-    case "pro-1080p": return "veo3.1-pro-1080p";
-    default: return "veo3.1-fast";
+    case "fast-720p":  return { quality: "fast", resolution: "720p" };
+    case "std-720p":   return { quality: "std",  resolution: "720p" };
+    case "pro-720p":   return { quality: "pro",  resolution: "720p" };
+    case "fast-1080p": return { quality: "fast", resolution: "1080p" };
+    case "std-1080p":  return { quality: "std",  resolution: "1080p" };
+    case "pro-1080p":  return { quality: "pro",  resolution: "1080p" };
   }
 }
 
-/** 把历史卡片里的 Veo 变体 id 收敛回 canonical "veo3.1"，给收紧后的 dropdown 用。 */
+/** tier → Cat 6 个干净 model_name 之一. 模式由 imageMode + 参考图字段决定. */
+export function resolveVeoVariant(tier: VeoQualityTier): string {
+  switch (tier) {
+    case "fast-720p":  return "veo3.1-fast-720p";
+    case "std-720p":   return "veo3.1-720p";
+    case "pro-720p":   return "veo3.1-pro-720p";
+    case "fast-1080p": return "veo3.1-fast-1080p";
+    case "std-1080p":  return "veo3.1-1080p";
+    case "pro-1080p":  return "veo3.1-pro-1080p";
+  }
+}
+
+/** fast 档参考图上限 (Cat 上游硬约束: fast 1-2 张, std/pro 1-3 张). */
+export function veoRefImageMaxCount(tier: VeoQualityTier): number {
+  return tier === "fast-720p" || tier === "fast-1080p" ? 2 : 3;
+}
+
+/** 把历史卡片里的 Veo 变体 id 收敛回 canonical "veo3.1", 真实 SKU 由 tier 控制. */
 export function normalizeVeoModelToCanonical(modelId: string | undefined | null): string | null {
   if (!modelId) return null;
   if (!isVeoModel(modelId)) return modelId;
@@ -202,20 +258,42 @@ export function inferVeoTierFromLegacy(
   legacyFast?: boolean,
 ): VeoQualityTier {
   const lr = (legacyResolution ?? "").toLowerCase();
-  if (lr === "ref-1080") return "ref-1080p";
-  if (lr === "ref-720") return "ref-720p";
+  // 新 6 档原样
+  if (lr === "fast-720p") return "fast-720p";
+  if (lr === "std-720p") return "std-720p";
+  if (lr === "pro-720p") return "pro-720p";
+  if (lr === "fast-1080p") return "fast-1080p";
+  if (lr === "std-1080p") return "std-1080p";
+  if (lr === "pro-1080p") return "pro-1080p";
+  // 老档位映射 — 参考模式不再编码在 tier, 收敛到画质 × 分辨率
+  if (lr === "ref-1080" || lr === "ref-1080p") return "std-1080p";
+  if (lr === "ref-720" || lr === "ref-720p") return "fast-720p";
+  if (lr === "standard-1080p") return "std-1080p";
   if (lr === "pro") return "pro-1080p";
-  if (lr === "hd" || lr === "4k") return legacyFast === false ? "pro-1080p" : "standard-1080p";
-  if (lr === "1080p") return legacyFast === false ? "pro-1080p" : "standard-1080p";
+  if (lr === "hd" || lr === "4k") return legacyFast === false ? "pro-1080p" : "std-1080p";
+  if (lr === "1080p") return legacyFast === false ? "pro-1080p" : "std-1080p";
   if (lr === "fast" || lr === "720p") return "fast-720p";
 
   if (!modelId) return "fast-720p";
   const m = modelId.toLowerCase();
-  if (m === "veo3.1-pro-1080p" || m === "veo3.1-pro-4k") return "pro-1080p";
-  if (m === "veo3.1-1080p" || m === "veo3.1-4k") return "standard-1080p";
-  if (m === "veo3.1-ref-hd") return "ref-1080p";
-  if (m === "veo3.1-ref") return "ref-720p";
-  if (m.includes("1080p") || m.includes("4k") || m.includes("-hd") || m.endsWith("hd")) return "standard-1080p";
+  // 新 Cat 6 干净 SKU
+  if (m === "veo3.1-pro-1080p") return "pro-1080p";
+  if (m === "veo3.1-fast-1080p") return "fast-1080p";
+  if (m === "veo3.1-1080p") return "std-1080p";
+  if (m === "veo3.1-pro-720p") return "pro-720p";
+  if (m === "veo3.1-fast-720p") return "fast-720p";
+  if (m === "veo3.1-720p") return "std-720p";
+  // 老 dbgoc SKU + V157 -cat SKU 收敛
+  if (m === "veo3.1-pro-4k") return "pro-1080p";
+  if (m === "veo3.1-4k") return "std-1080p";
+  if (m === "veo3.1-fast") return "fast-720p";
+  if (m === "veo3.1-pro-1080p-cat") return "pro-1080p";
+  if (m === "veo3.1-fast-1080p-cat") return "fast-1080p";
+  if (m === "veo3.1-1080p-cat") return "std-1080p";
+  // 老 ref SKU 收敛(模式靠 imageMode 不在 tier)
+  if (m === "veo3.1-ref-hd") return "std-1080p";
+  if (m === "veo3.1-ref") return "fast-720p";
+  if (m.includes("1080p") || m.includes("4k") || m.includes("-hd") || m.endsWith("hd")) return "std-1080p";
   return "fast-720p";
 }
 
@@ -443,4 +521,81 @@ export function toVeoAspectRatio(size: string | undefined): string | undefined {
   const h = Number(m[2]);
   const d = gcd(w, h);
   return `${w / d}:${h / d}`;
+}
+
+
+// ═════════════════════════════════════════════════════════════════════
+// V161 火山方舟原生 Seedance 2.0 聚合 alias
+// ─────────────────────────────────────────────────────────────────────
+// 跟 V145 Nexus 系列 (`isSeedanceVipModel` + `seedance-2-0` alias) 完全分开:
+// 服务端 V161 接的是火山方舟官方 ark.cn-beijing.volces.com 直连,
+// 计费走 PER_TOKEN_PREPAID (按 token × 单价多退少补), 而 V145 是 Nexus 平台
+// 按次定价 (PER_REQUEST). 两条路径上游 / 协议 / 计费维度都不同, 不混用.
+//
+// 服务端注册 4 个独立 model_route:
+//   seedance-2-0                 标准 + 无视频参考 (上游 doubao-seedance-2-0-260128,      上游 46/M, 售价 51/M, 预扣 20)
+//   seedance-2-0-fast            fast + 无视频参考 (上游 doubao-seedance-2-0-fast-260128, 上游 37/M, 售价 41/M, 预扣 20)
+//   seedance-2-0-video-ref       标准 + 含视频参考                                         (上游 28/M, 售价 31/M, 预扣 40)
+//   seedance-2-0-fast-video-ref  fast + 含视频参考                                         (上游 22/M, 售价 25/M, 预扣 40)
+//
+// 火山真实计费维度只有"是否含视频参考"; 纯文本 + 图片参考 同算 no_video 档.
+// version (standard/fast) 是画质 / 速度档, 影响 token 单价, 不影响预扣金额.
+// ═════════════════════════════════════════════════════════════════════
+
+/** 画质 / 速度档 (用户在 UI 上选, 不影响预扣金额). */
+export type SeedanceV2Version = "standard" | "fast";
+
+/** UI button-group 选项 — VideoEditor 通过此数组渲染版本切换胶囊.
+ *  label 风格跟老 SEEDANCE_TIERS 一致 (快速 / 标准) — 画质胶囊只需表达档位,
+ *  不重复 "Seedance 2.0" 字样 (model 名已在 ModelSelector 显示). */
+export const SEEDANCE_V2_VERSION_TIERS: readonly { value: SeedanceV2Version; label: string }[] = [
+  { value: "fast",     label: "快速" },
+  { value: "standard", label: "标准" },
+];
+
+/** 聚合 alias model id (UI 显示这一项, 提交时按 resolve 函数转成 4 个具体 model). */
+export const SEEDANCE_V2_ALIAS_ID = "seedance-v2";
+
+const SEEDANCE_V2_MODEL_IDS = new Set<string>([
+  SEEDANCE_V2_ALIAS_ID,
+  "seedance-2-0",
+  "seedance-2-0-fast",
+  "seedance-2-0-video-ref",
+  "seedance-2-0-fast-video-ref",
+]);
+
+/** 整个 V161 火山方舟体系 (alias + 4 个具体 model) 的判定. */
+export function isSeedanceV2Model(modelId: string | undefined | null): boolean {
+  if (!modelId) return false;
+  return SEEDANCE_V2_MODEL_IDS.has(modelId);
+}
+
+/** 仅 alias 项判定 (用于 UI 是否渲染 version 切换胶囊). */
+export function isSeedanceV2AliasModel(modelId: string | undefined | null): boolean {
+  return modelId === SEEDANCE_V2_ALIAS_ID;
+}
+
+/**
+ * V161 火山方舟原生 Seedance 2.0 聚合 — 按 (version × 是否传视频参考) 选 4 个具体 model.
+ *
+ * 计费提示 (元/百万 token):
+ *   standard + no_video   → seedance-2-0                  上游 46 / 售价 51 / 预扣 20
+ *   fast     + no_video   → seedance-2-0-fast             上游 37 / 售价 41 / 预扣 20
+ *   standard + with_video → seedance-2-0-video-ref        上游 28 / 售价 31 / 预扣 40
+ *   fast     + with_video → seedance-2-0-fast-video-ref   上游 22 / 售价 25 / 预扣 40
+ *
+ * 火山按 token 计费, 提交时按 hasVideos 固定预扣, 完成后按上游
+ * usage.completion_tokens × 单价多退少补.
+ *
+ * 注意: 纯文本 + 图片参考 同算 no_video 档 (火山只看 content 数组里是否有
+ * video_url 类型). 只有 referenceVideos 非空才走 with_video.
+ */
+export function resolveSeedanceV2ModelId(
+  version: SeedanceV2Version,
+  hasVideos: boolean,
+): string {
+  if (hasVideos) {
+    return version === "fast" ? "seedance-2-0-fast-video-ref" : "seedance-2-0-video-ref";
+  }
+  return version === "fast" ? "seedance-2-0-fast" : "seedance-2-0";
 }

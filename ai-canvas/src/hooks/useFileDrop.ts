@@ -20,6 +20,7 @@ import {
 } from "@/lib/media";
 import { ensureDisplayableImage, isHeicFile } from "@/lib/heicConverter";
 import { runWithLimit } from "@/lib/concurrency";
+import { extractFirstFrame } from "@/lib/videoThumbnails";
 
 // Utility helpers
 
@@ -85,78 +86,6 @@ function filesKinds(files: File[]): DragFileKinds {
     if (isVideoFile(f)) hasVideo = true;
   }
   return { hasImage, hasVideo };
-}
-
-/**
- * import 时一次性做三件事：
- *   1. 试解码（codec 不支持就 resolve(null) → 调用方拒收）
- *   2. 拿尺寸（宽高用于建卡比例）
- *   3. 抽第一帧 → JPEG dataUrl（用作 `<video poster>` 缩略图，避免画布全黑）
- *
- * 缩略图失败（如 canvas 被 CORS taint）不影响视频本身可用 —— 返回 dataUrl: null。
- * `<video preload="none">` 不会自动解码视频帧，所以缩略图必须在 import 这一刻抽，
- * 否则就要每张卡都 preload metadata，多卡同屏会 OOM（参见 VideoPreview 注释）。
- */
-async function extractFirstFrame(srcUrl: string): Promise<{
-  dataUrl: string | null;
-  width: number;
-  height: number;
-} | null> {
-  return new Promise((resolve) => {
-    const video = document.createElement("video");
-    video.preload = "auto";
-    video.muted = true;
-    video.playsInline = true;
-    video.crossOrigin = "anonymous";
-
-    let done = false;
-    const finish = (result: { dataUrl: string | null; width: number; height: number } | null) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      video.onloadeddata = null;
-      video.onerror = null;
-      video.removeAttribute("src");
-      video.load();
-      resolve(result);
-    };
-
-    const timer = setTimeout(() => finish(null), 8000);
-
-    video.onloadeddata = () => {
-      const w = video.videoWidth;
-      const h = video.videoHeight;
-      if (w === 0 || h === 0) {
-        finish(null);
-        return;
-      }
-
-      let dataUrl: string | null = null;
-      try {
-        // 长边压到 480px，JPEG q=0.7 —— 典型 20-60KB 一张，画布上做卡片缩略图绰绰有余
-        const maxDim = 480;
-        const scale = Math.min(1, maxDim / Math.max(w, h));
-        const tw = Math.max(1, Math.round(w * scale));
-        const th = Math.max(1, Math.round(h * scale));
-        const canvas = document.createElement("canvas");
-        canvas.width = tw;
-        canvas.height = th;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, tw, th);
-          dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-        }
-      } catch {
-        // canvas 被 CORS taint(读像素被拒)。视频本身能播,只是这卡没缩略图。
-        dataUrl = null;
-      }
-
-      finish({ dataUrl, width: w, height: h });
-    };
-
-    video.onerror = () => finish(null);
-    video.src = srcUrl;
-  });
 }
 
 function getImageDimensions(src: string): Promise<{ width: number; height: number }> {

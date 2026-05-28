@@ -11,6 +11,14 @@ interface CanvasState {
   isDragging: boolean;
   pickMode: PickModeState | null;
   dragOffsets: Map<string, DragOffset>;
+  /**
+   * 视频卡的拖帧模式 — 非 null 时, 该卡片进入"挑帧"焦点模式:
+   *   - FloatingEditor 隐藏 (把卡下方空间让给时间轴)
+   *   - VideoToolbar 渲染 TimelineScrubber + FrameChip
+   *   - 用户可连续拖帧到画布, 不会触发 editor 弹出
+   * 设计动机见 docs (本提交): 挑帧 vs 放帧两阶段, scrubber 走剪辑软件惯例。
+   */
+  scrubberActiveCardId: string | null;
 
   setViewport: (viewport: Partial<Viewport>) => void;
   setTool: (tool: CanvasState["tool"]) => void;
@@ -19,6 +27,7 @@ interface CanvasState {
   removeSelectedCardId: (id: string) => void;
   clearSelection: () => void;
   setEditingCardId: (id: string | null) => void;
+  setScrubberActiveCardId: (id: string | null) => void;
   setIsDragging: (dragging: boolean) => void;
   setDragOffset: (cardId: string, offset: DragOffset | null) => void;
   setDragOffsets: (offsets: Map<string, DragOffset>) => void;
@@ -54,6 +63,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   isDragging: false,
   pickMode: null,
   dragOffsets: new Map(),
+  scrubberActiveCardId: null,
 
   setViewport: (partial) =>
     set((s) => {
@@ -89,6 +99,8 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   clearSelection: () => set({ selectedCardIds: new Set(), editingCardId: null }),
 
   setEditingCardId: (id) => set({ editingCardId: id }),
+
+  setScrubberActiveCardId: (id) => set({ scrubberActiveCardId: id }),
 
   setIsDragging: (dragging) => set({ isDragging: dragging }),
 

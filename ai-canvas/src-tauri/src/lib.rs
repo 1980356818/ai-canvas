@@ -664,6 +664,10 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        // updater + process: 自动更新 / 版本切换 / 安装后 restart。
+        // 详见 src/commands/update.rs 顶部注释 + tauri.conf.json plugins.updater。
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             boot_log("setup() entered");
 
@@ -882,6 +886,9 @@ pub fn run() {
             commands::project::load_connections,
             commands::project::save_connections_batch,
             commands::project::clear_project_connections,
+            commands::groups::load_groups,
+            commands::groups::save_groups_batch,
+            commands::groups::delete_group,
             commands::ai::ai_proxy,
             commands::ai::ai_proxy_stream,
             commands::ai::ai_proxy_stream_abort,
@@ -920,6 +927,13 @@ pub fn run() {
             commands::tasks::tasks_cleanup_terminal,
             commands::tasks::tasks_list_by_project,
             commands::frame_extract::extract_frames_at_timestamps,
+            commands::frame_extract::probe_video_duration,
+            commands::frame_extract::detect_scene_changes,
+            // update: 自动更新 + 版本切换 + 当前运行时信息
+            commands::update::check_for_update,
+            commands::update::install_latest_update,
+            commands::update::switch_to_version,
+            commands::update::get_runtime_info,
         ])
         .run(tauri::generate_context!());
 

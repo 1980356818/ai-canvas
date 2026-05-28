@@ -29,6 +29,9 @@ interface SizeComboProps {
   durationDisabled?: boolean;
   quality?: string;
   onQualityChange?: (q: string) => void;
+  /** 自定义 quality 槽位选项. 默认走 IMAGE_QUALITY_OPTIONS (图片用 low/medium/high).
+   *  视频侧 Veo 用 fast/std/pro 时传 VEO_QUALITY_TIERS. */
+  qualityOptions?: readonly { value: string; label: string }[];
 }
 
 function RatioIcon({
@@ -83,7 +86,9 @@ export default function SizeCombo({
   durationDisabled,
   quality,
   onQualityChange,
+  qualityOptions,
 }: SizeComboProps) {
+  const effectiveQualityOptions = qualityOptions ?? IMAGE_QUALITY_OPTIONS;
   const allOptions = sizeOptions ?? IMAGE_SIZE_OPTIONS;
   const baseOptions = allowedSizes
     ? allOptions.filter((o) => allowedSizes.includes(o.value))
@@ -163,7 +168,7 @@ export default function SizeCombo({
         <RatioIcon ratio={current.ratio} active={false} size={12} isAuto={isAuto} />
         <span>
           {current.label}
-          {quality && ` · ${IMAGE_QUALITY_OPTIONS.find((q) => q.value === quality)?.label ?? quality}`}
+          {quality && ` · ${effectiveQualityOptions.find((q) => q.value === quality)?.label ?? quality}`}
           {resolution && ` · ${resolutionOptions?.find((r) => r.value === resolution)?.label ?? resolution}`}
           {duration != null && ` · ${duration}s`}
           {currentUnsupported && " ⚠"}
@@ -189,7 +194,7 @@ export default function SizeCombo({
                   质量
                 </div>
                 <div className="flex gap-1.5">
-                  {IMAGE_QUALITY_OPTIONS.map((opt) => {
+                  {effectiveQualityOptions.map((opt) => {
                     const active = quality === opt.value;
                     return (
                       <button

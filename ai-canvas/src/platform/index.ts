@@ -30,6 +30,8 @@ export {
   clearProjectConnections,
 } from "./connection.api";
 
+export { loadGroups, saveGroupsBatch, deleteGroup } from "./group.api";
+
 export {
   listChatSessions,
   createChatSession,

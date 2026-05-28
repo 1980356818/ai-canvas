@@ -22,7 +22,7 @@ interface UIState {
     visible: boolean;
     x: number;
     y: number;
-    target: "canvas" | "card" | "multi" | "connection";
+    target: "canvas" | "card" | "multi" | "connection" | "group";
     targetId?: string;
     worldX?: number;
     worldY?: number;
@@ -45,7 +45,7 @@ interface UIState {
   showContextMenu: (
     x: number,
     y: number,
-    target: "canvas" | "card" | "multi" | "connection",
+    target: "canvas" | "card" | "multi" | "connection" | "group",
     targetId?: string,
     worldX?: number,
     worldY?: number,

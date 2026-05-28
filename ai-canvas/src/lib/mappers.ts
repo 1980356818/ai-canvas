@@ -1,4 +1,12 @@
-import type { CanvasCard, CardRow, Connection, ConnectionRow, CardType } from "@/types";
+import type {
+  CanvasCard,
+  CardRow,
+  Connection,
+  ConnectionRow,
+  CardType,
+  CardGroup,
+  CardGroupRow,
+} from "@/types";
 
 export function cardToRow(card: CanvasCard): CardRow {
   return {
@@ -57,5 +65,41 @@ export function rowToConnection(row: ConnectionRow): Connection {
     sourceCardId: row.source_card_id,
     targetCardId: row.target_card_id,
     createdAt: row.created_at,
+  };
+}
+
+export function groupToRow(group: CardGroup): CardGroupRow {
+  return {
+    id: group.id,
+    project_id: group.projectId,
+    card_ids: JSON.stringify(group.cardIds),
+    title: group.title,
+    color: group.color,
+    collapsed: group.collapsed,
+    created_at: group.createdAt,
+    updated_at: group.updatedAt,
+  };
+}
+
+export function rowToGroup(row: CardGroupRow): CardGroup {
+  let cardIds: string[] = [];
+  try {
+    const parsed = JSON.parse(row.card_ids);
+    if (Array.isArray(parsed)) {
+      // 防御 cardIds JSON 损坏:只保留字符串项,其它静默丢弃。
+      cardIds = parsed.filter((x): x is string => typeof x === "string");
+    }
+  } catch {
+    /* 留空数组,组会在下次 consistency 检查时被清理 */
+  }
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    cardIds,
+    title: row.title,
+    color: row.color,
+    collapsed: row.collapsed,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }

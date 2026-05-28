@@ -130,9 +130,9 @@ export const modelService = {
 
   async getDefaultVideoModel(): Promise<ModelRef> {
     const models = await aggregateModels("VIDEO");
-    // 视频默认走极境 seedance (Veo 已从 dropdown 隐藏, 2026-05-24)。
+    // 视频默认走极境 seedance-v2 (Veo 已从 dropdown 隐藏, 2026-05-24)。
     // 后端仍保留 veo3.1 路由 + normalizeVeoModelToCanonical, 老卡片可重生成。
-    return toRef(models[0], "seedance", "jijing");
+    return toRef(models[0], "seedance-v2", "jijing");
   },
 
   // ── Resolution helpers ───────────────────────────────────

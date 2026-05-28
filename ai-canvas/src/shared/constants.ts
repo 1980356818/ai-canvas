@@ -19,7 +19,7 @@ export function sizeFromRatio(ratio: number): { width: number; height: number } 
 
 export type { ImageSizeOption, QuickCreateItem, WorkflowCardPreset, WorkflowConnectionPreset, WorkflowTemplate } from "@/types";
 import type { ImageSizeOption } from "@/types";
-import { isSeedanceModel, isVeoModel, isGrokVideoModel, isSeedanceVipModel } from "@/providers/shared/video";
+import { isSeedanceModel, isVeoModel, isGrokVideoModel, isSeedanceVipModel, isSeedanceV2AliasModel } from "@/providers/shared/video";
 
 export const IMAGE_SIZE_OPTIONS: ImageSizeOption[] = [
   { value: "1:1",   label: "1:1",   ratio: 1 },
@@ -109,19 +109,23 @@ export function getAllowedSizesForModel(modelId: string): string[] | null {
 }
 
 // 视频模型可选比例 (上游 API 明确支持的). 不在此列表的会被 SizeCombo 标灰。
-//   Seedance 2.0 / 2.0 fast: 16:9 4:3 1:1 3:4 9:16 21:9 (UI 不再暴露 adaptive,
+//   Seedance 2.0 / 2.0 fast (Dale 老路): 16:9 4:3 1:1 3:4 9:16 21:9 (UI 不再暴露 adaptive,
 //     用户需明确选一个比例,避免 Dale 上游默认行为带来的不可预测尺寸)
+//   Seedance 2.0 火山原生 (V161 alias `seedance-v2`): 16:9 9:16 1:1 4:3 3:4 21:9
+//     (跟官方文档 https://www.volcengine.com/docs/82379/1520757 完全一致,
+//      仅排除 adaptive — canvas 卡片视觉尺寸需要明确 ratio, 自适应不可控)
 //   Seedance 2.0 VIP:        16:9 9:16 (Nexus form_schema 仅支持 1280x720 / 720x1280,
 //     传 21:9 等会让上游 size=null 默认值跑废)
 //   Veo 3.1 (Google):        16:9 9:16 1:1 (参考图模式由 VideoEditor 在 UI 层锁 16:9)
 const SEEDANCE_RATIOS = ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"] as const;
+const SEEDANCE_V2_RATIOS = ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"] as const;
 const SEEDANCE_VIP_RATIOS = ["16:9", "9:16"] as const;
 const VEO_RATIOS = ["16:9", "9:16", "1:1"] as const;
 const GROK_VIDEO_RATIOS = ["16:9", "9:16", "3:2", "2:3", "1:1"] as const;
-export const VEO_REF_RATIOS = ["16:9"] as const;
 
 export function getAllowedVideoSizesForModel(modelId: string): string[] | null {
   if (isSeedanceVipModel(modelId)) return [...SEEDANCE_VIP_RATIOS];
+  if (isSeedanceV2AliasModel(modelId)) return [...SEEDANCE_V2_RATIOS];
   if (isSeedanceModel(modelId)) return [...SEEDANCE_RATIOS];
   if (isVeoModel(modelId)) return [...VEO_RATIOS];
   if (isGrokVideoModel(modelId)) return [...GROK_VIDEO_RATIOS];
@@ -133,6 +137,7 @@ export function getAllowedVideoSizesForModel(modelId: string): string[] | null {
 // Seedance 2.0 实际分辨率统一固定为 720p (480p 在画布场景几乎无用),由 VideoEditor 出站时硬编码。
 
 export function getDefaultVideoSizeForModel(modelId: string): string {
+  if (isSeedanceV2AliasModel(modelId)) return "16:9"; // V161 火山原生: 默认 16:9 (V162 SQL adaptive 默认仅在 GATEWAY API; canvas 让用户明确选比例)
   if (isSeedanceModel(modelId)) return "16:9"; // seedance 不再默认 adaptive, 与 DEFAULT_VIDEO_SIZE 一致
   return DEFAULT_VIDEO_SIZE;
 }

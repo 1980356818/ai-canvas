@@ -220,3 +220,164 @@ fn compute_sha256(path: &Path) -> Result<String, String> {
     }
     Ok(hex)
 }
+
+// ── 视频时长探测 ──────────────────────────────────────────────────────
+//
+// 给 VideoToolbar 的「等间隔抽帧」「N 等分」算时间戳用。
+// 走 ffmpeg -i 走一遍, 解析 stderr 里的 `Duration: HH:MM:SS.xx` 行。
+// 不用 ffprobe (sidecar 默认只下 ffmpeg, 不下 ffprobe)。
+
+#[tauri::command]
+pub async fn probe_video_duration(
+    state: State<'_, AppState>,
+    video_path: String,
+) -> Result<f64, String> {
+    if video_path.starts_with("http://") || video_path.starts_with("https://") {
+        return Err("暂不支持远程视频 URL,请先把视频拖到画布做本地化".to_string());
+    }
+
+    let data_dir = state.data_dir.clone();
+    let abs_video = resolve_video_path(&video_path, &data_dir)?;
+    ensure_ffmpeg().await?;
+
+    let video_str = abs_video.to_string_lossy().to_string();
+    let join = tokio::task::spawn_blocking(move || -> Result<f64, String> {
+        use ffmpeg_sidecar::command::FfmpegCommand;
+        use ffmpeg_sidecar::event::FfmpegEvent;
+
+        // -i <file> 后不接输出 → ffmpeg 报"At least one output file must be specified",
+        // 但执行前会先把 input 元数据 (含 Duration) 打到 stderr, 我们取那部分就行。
+        let mut child = FfmpegCommand::new()
+            .args(["-hide_banner", "-i", &video_str])
+            .spawn()
+            .map_err(|e| format!("ffmpeg spawn 失败: {}", e))?;
+
+        let mut duration_sec: Option<f64> = None;
+        for ev in child.iter().map_err(|e| format!("ffmpeg iter 失败: {}", e))? {
+            match ev {
+                FfmpegEvent::ParsedDuration(d) => {
+                    duration_sec = Some(d.duration);
+                    break;
+                }
+                FfmpegEvent::Log(_, line) => {
+                    // 兜底解析,某些版本 ParsedDuration 没触发就走文本匹配
+                    if duration_sec.is_none() {
+                        if let Some(d) = parse_duration_line(&line) {
+                            duration_sec = Some(d);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        let _ = child.as_inner_mut().wait();
+        duration_sec.ok_or_else(|| "无法从 ffmpeg 输出解析视频时长".to_string())
+    })
+    .await
+    .map_err(|e| format!("ffmpeg 线程出错: {}", e))?;
+
+    join
+}
+
+fn parse_duration_line(line: &str) -> Option<f64> {
+    // 形如: "  Duration: 00:01:23.45, start: 0.000000, bitrate: 1234 kb/s"
+    let idx = line.find("Duration:")?;
+    let tail = &line[idx + "Duration:".len()..];
+    let comma = tail.find(',').unwrap_or(tail.len());
+    let ts = tail[..comma].trim();
+    if ts == "N/A" {
+        return None;
+    }
+    let parts: Vec<&str> = ts.split(':').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    let h: f64 = parts[0].trim().parse().ok()?;
+    let m: f64 = parts[1].trim().parse().ok()?;
+    let s: f64 = parts[2].trim().parse().ok()?;
+    Some(h * 3600.0 + m * 60.0 + s)
+}
+
+// ── 场景切换检测 ──────────────────────────────────────────────────────
+//
+// 用 ffmpeg 内置的 scene-change 滤镜 `select='gt(scene,threshold)'`,
+// 配 showinfo 把每个被选中的关键帧时间戳打到 stderr, 解析回来给前端。
+//
+// threshold:
+//   0.30  灵敏,容易把"快速运动"误判成切镜头
+//   0.40  默认,适合大多数剪辑节奏
+//   0.60  保守,只识别明显的镜头切换
+//
+// 返回的时间戳一定包含 0.0 (第一帧),前端可自行决定要不要去重。
+
+#[tauri::command]
+pub async fn detect_scene_changes(
+    state: State<'_, AppState>,
+    video_path: String,
+    threshold: Option<f64>,
+) -> Result<Vec<f64>, String> {
+    if video_path.starts_with("http://") || video_path.starts_with("https://") {
+        return Err("暂不支持远程视频 URL,请先把视频拖到画布做本地化".to_string());
+    }
+
+    let th = threshold.unwrap_or(0.4).clamp(0.05, 0.99);
+    let data_dir = state.data_dir.clone();
+    let abs_video = resolve_video_path(&video_path, &data_dir)?;
+    ensure_ffmpeg().await?;
+
+    let video_str = abs_video.to_string_lossy().to_string();
+    let join = tokio::task::spawn_blocking(move || -> Result<Vec<f64>, String> {
+        use ffmpeg_sidecar::command::FfmpegCommand;
+        use ffmpeg_sidecar::event::FfmpegEvent;
+
+        // -an 去掉音轨,纯走视频 pipeline,省 IO。
+        // -f null - 不写输出文件,只是为了让 ffmpeg 跑完 filter graph。
+        let filter = format!("select='gt(scene\\,{:.3})',showinfo", th);
+        let mut child = FfmpegCommand::new()
+            .args([
+                "-hide_banner",
+                "-i",
+                &video_str,
+                "-an",
+                "-vf",
+                &filter,
+                "-f",
+                "null",
+                "-",
+            ])
+            .spawn()
+            .map_err(|e| format!("ffmpeg spawn 失败: {}", e))?;
+
+        let mut timestamps: Vec<f64> = Vec::new();
+        for ev in child.iter().map_err(|e| format!("ffmpeg iter 失败: {}", e))? {
+            if let FfmpegEvent::Log(_, line) = ev {
+                if let Some(t) = parse_showinfo_pts_time(&line) {
+                    timestamps.push(t);
+                }
+            }
+        }
+        let status = child
+            .as_inner_mut()
+            .wait()
+            .map_err(|e| format!("ffmpeg wait 失败: {}", e))?;
+        if !status.success() {
+            return Err(format!("ffmpeg 退出码: {:?}", status.code()));
+        }
+        Ok(timestamps)
+    })
+    .await
+    .map_err(|e| format!("ffmpeg 线程出错: {}", e))?;
+
+    join
+}
+
+fn parse_showinfo_pts_time(line: &str) -> Option<f64> {
+    // 形如: "[Parsed_showinfo_1 @ 0x...] n:0 pts:24024 pts_time:1.001 pos:..."
+    let key = "pts_time:";
+    let idx = line.find(key)?;
+    let tail = &line[idx + key.len()..];
+    let end = tail
+        .find(|c: char| !c.is_ascii_digit() && c != '.' && c != '-')
+        .unwrap_or(tail.len());
+    tail[..end].parse::<f64>().ok()
+}

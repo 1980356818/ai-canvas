@@ -4,12 +4,16 @@ import { useCanvasStore } from "@/stores/canvasStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore } from "@/stores/connectionStore";
+import { useGroupStore } from "@/stores/groupStore";
 import type { Connection } from "@/types";
 import {
   loadCards,
   loadConnections,
+  loadGroups,
   saveCardsBatch,
   saveConnections,
+  saveGroupsBatch,
+  deleteGroup,
   saveProjectViewport,
   loadProjectViewport,
   migrateApiConfig,
@@ -17,11 +21,19 @@ import {
 } from "@/platform";
 import { rebuildMissingConnections } from "@/lib/connectionRecovery";
 import { cleanupDanglingReferencesInCards } from "@/lib/referenceConsistency";
+import { sanitizeGroupsAgainstCards } from "@/lib/groupConsistency";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
 import { startDataFlowWatcher } from "@/lib/dataFlow";
 import { initMediaService } from "@/lib/media";
-import { cardToRow, rowToCard, connectionToRow, rowToConnection } from "@/lib/mappers";
+import {
+  cardToRow,
+  rowToCard,
+  connectionToRow,
+  rowToConnection,
+  groupToRow,
+  rowToGroup,
+} from "@/lib/mappers";
 import { taskManager } from "@/services/taskManager";
 import { installTaskBridge, uninstallTaskBridge } from "@/services/taskBridge";
 
@@ -88,6 +100,7 @@ export function useProjectLifecycle() {
     if (!currentProjectId) {
       useCardStore.getState().clear();
       useConnectionStore.getState().clear();
+      useGroupStore.getState().clear();
       history.clear();
       return;
     }
@@ -116,6 +129,18 @@ export function useProjectLifecycle() {
       useCardStore.getState().setCards(cards);
       useConnectionStore.getState().setConnections(validConnections);
 
+      // ── groups ──
+      // 必须在 setCards 之后加载,因为 sanitizeGroupsAgainstCards 会按 cardStore
+      // 当前状态过滤掉指向不存在卡片的 group.cardIds。
+      const groupRows = await loadGroups(currentProjectId);
+      const loadedGroups = groupRows.map(rowToGroup);
+      const {
+        sanitized: validGroups,
+        changedIds: changedGroupIds,
+        droppedIds: droppedGroupIds,
+      } = sanitizeGroupsAgainstCards(loadedGroups);
+      useGroupStore.getState().setGroups(validGroups);
+
       const persistenceTasks: Promise<unknown>[] = [];
       if (validConnections.length !== persistedConnections.length) {
         persistenceTasks.push(saveConnections(currentProjectId, validConnections.map(connectionToRow)));
@@ -123,6 +148,13 @@ export function useProjectLifecycle() {
       if (changedCardIds.length > 0) {
         const changedCards = cards.filter((card) => changedCardIds.includes(card.id));
         persistenceTasks.push(saveCardsBatch(changedCards.map(cardToRow)));
+      }
+      if (changedGroupIds.length > 0) {
+        const changedGroups = validGroups.filter((g) => changedGroupIds.includes(g.id));
+        persistenceTasks.push(saveGroupsBatch(changedGroups.map(groupToRow)));
+      }
+      for (const gid of droppedGroupIds) {
+        persistenceTasks.push(deleteGroup(gid));
       }
       if (persistenceTasks.length > 0) {
         await Promise.all(persistenceTasks);

@@ -29,6 +29,12 @@ public enum ErrorCode {
     EMAIL_MISMATCH(40903, "邮箱与注册信息不匹配"),
     EMAIL_NOT_SET(40904, "该账号未绑定邮箱，无法重置密码"),
     OLD_PASSWORD_WRONG(40105, "原密码错误"),
+    RELEASE_NOT_FOUND(40410, "版本不存在"),
+    RELEASE_DISABLED(40311, "该版本已被停用，无法切换"),
+    RELEASE_FILE_MISSING(50010, "版本文件丢失，请联系管理员"),
+    RELEASE_DUPLICATE(40911, "该版本已存在"),
+    RELEASE_INVALID_VERSION(40012, "版本号格式无效"),
+    RELEASE_UPLOAD_FAILED(50011, "上传失败"),
     ;
 
     private final int code;

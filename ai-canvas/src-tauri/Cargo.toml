@@ -1,6 +1,6 @@
 [package]
 name = "ai-canvas"
-version = "1.1.9"
+version = "1.2.1"
 edition = "2021"
 
 [lib]
@@ -30,8 +30,18 @@ tracing-subscriber = "0.3"
 tracing-appender = "0.2"
 chrono = "0.4"
 tauri-plugin-clipboard-manager = "2"
+# 自动更新 + 版本切换:
+#   - updater 负责拉 manifest、minisign 校验、下载、跨平台安装。
+#     普通"检查更新"用 app.updater(),指向 tauri.conf.json 配的 check 端点;
+#     "切换到指定版本"用 app.updater_builder().endpoints(vec![...]),
+#     端点改成 /api/update/manifest/{id} 让它走同一套验签+安装流程。
+#   - process 提供 app.restart(),安装完后用它重启进程。
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 sha2 = "0.10"
 tokio = { version = "1", features = ["time", "sync"] }
+# url 解析:版本切换时用 Url::parse() 拼 manifest 端点,避免拼错字符串。
+url = "2"
 # ffmpeg-sidecar: 视频抽帧用。不走 C/C++ binding，直接调编译好的 ffmpeg 二进制 —
 # Windows/macOS/Linux 三端零 C 编译依赖，首次使用时 auto_download() 拉到 cache。
 ffmpeg-sidecar = "2"

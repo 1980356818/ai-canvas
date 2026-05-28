@@ -1,5 +1,5 @@
 import type { CanvasCard } from "@/types";
-import { isSeedanceModel, isVeoModel, isGrokVideoModel } from "@/providers/shared/video";
+import { isSeedanceModel, isVeoModel, isGrokVideoModel, type VeoQualityTier } from "@/providers/shared/video";
 
 export interface RefImageSlot {
   key: string;
@@ -77,8 +77,8 @@ const SEEDANCE_VIDEO_REF_SLOTS: RefImageSlot[] = Array.from({ length: 9 }, (_, i
   required: false,
 }));
 
-// Veo 3.1 参考模式 (image-asset): 1-3 张参考图, 上游 dbgoc veo31-ref / veo31-ref-HD
-// 由 resolveVeoVariantForMode 根据 (mode=reference, resolution) 决定真实变体。
+// Veo 3.1 参考模式 (ref / type=3): Cat 上游 std/pro 1-3 张, fast 限 2 张.
+// fast 档由 getRefSlotsForVideoModel 截取前 2 个 slot 实现.
 const VEO_REF_VIDEO_REF_SLOTS: RefImageSlot[] = [
   { key: "refImage0", label: "参考图 1", description: "角色 / 道具 / 场景参考", required: false },
   { key: "refImage1", label: "参考图 2", description: "角色 / 道具 / 场景参考", required: false },
@@ -137,10 +137,17 @@ export function resolveVideoImageMode(raw: string | undefined | null): VideoImag
 export function getRefSlotsForVideoModel(
   modelId: string,
   imageMode?: string,
+  veoTier?: VeoQualityTier,
 ): RefImageSlot[] {
   if (resolveVideoImageMode(imageMode) !== "reference") return [];
   if (isSeedanceModel(modelId)) return SEEDANCE_VIDEO_REF_SLOTS;
-  if (isVeoModel(modelId)) return VEO_REF_VIDEO_REF_SLOTS;
+  if (isVeoModel(modelId)) {
+    // Cat 上游: fast 档 1-2 张, std/pro 1-3 张. fast 档截取前 2 个 slot.
+    if (veoTier === "fast-720p" || veoTier === "fast-1080p") {
+      return VEO_REF_VIDEO_REF_SLOTS.slice(0, 2);
+    }
+    return VEO_REF_VIDEO_REF_SLOTS;
+  }
   if (isGrokVideoModel(modelId)) return GROK_VIDEO_REF_SLOTS;
   return VIDEO_REF_SLOTS;
 }

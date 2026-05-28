@@ -7,6 +7,10 @@ spring:
     username: root
     password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB
 
 mybatis-plus:
   configuration:
@@ -24,3 +28,8 @@ aicat:
     secret: ${JWT_SECRET:AiCatServerDefaultJwtSecretKeyMustBeAtLeast256BitsLong!!}
     full-expire-hours: 168
     restricted-expire-hours: 24
+  # 客户端发布存储路径（系统盘）。release.py 上传到 /api/admin/release/upload 时落到这里
+  release:
+    storage-path: ${RELEASE_STORAGE_PATH:./data/releases}
+    # 留空则从请求头/URL 推断；指定时形如 http://101.37.80.236
+    base-url: ${RELEASE_BASE_URL:}

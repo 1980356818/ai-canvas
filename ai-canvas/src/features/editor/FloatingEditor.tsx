@@ -24,6 +24,7 @@ const sizeMemory = new Map<string, { w: number; h: number }>();
 
 export default function FloatingEditor() {
   const editingCardId = useCanvasStore((s) => s.editingCardId);
+  const scrubberActiveCardId = useCanvasStore((s) => s.scrubberActiveCardId);
   const card = useCardStore((s) =>
     editingCardId ? s.cards.get(editingCardId) : undefined,
   );
@@ -161,6 +162,10 @@ export default function FloatingEditor() {
   }, [editingCardId, userSize]);
 
   if (!card) return null;
+
+  // 拖帧焦点模式: VideoToolbar 进入挑帧时把卡下方空间让给时间轴 + FrameChip,
+  // 此时不渲染编辑器。退出拖帧后 (scrubberActiveCardId 清空) 自动恢复。
+  if (scrubberActiveCardId === card.id) return null;
 
   const { height: baseHeight, minWidth } = EDITOR_SIZES[card.type] ?? DEFAULT_SIZE;
 

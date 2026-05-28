@@ -23,7 +23,6 @@ import {
   normalizeVideoSize,
   IMAGE_SIZE_OPTIONS,
   VIDEO_SIZE_OPTIONS,
-  VEO_REF_RATIOS,
   sizeFromRatio,
   getAllowedVideoSizesForModel,
   getDefaultVideoSizeForModel,
@@ -35,23 +34,34 @@ import {
   isSeedanceVipModel,
   isSeedanceVipAliasModel,
   isSeedanceVipEconomyModel,
-  resolveVeoVariantForMode,
+  resolveVeoVariant,
+  veoRefImageMaxCount,
+  composeVeoTier,
+  decomposeVeoTier,
   normalizeVeoModelToCanonical,
   inferVeoTierFromLegacy,
   resolveSeedanceVipModelId,
   resolveSeedanceVipSize,
   SEEDANCE_VIP_RESOLUTION_TIERS,
-  VEO_NON_REF_TIERS,
-  VEO_REF_TIERS,
+  VEO_TIERS,
+  VEO_QUALITY_TIERS,
+  VEO_RESOLUTION_TIERS,
   SEEDANCE_TIERS,
   GROK_DURATION_TIERS,
   resolveSeedanceVariantForTier,
   resolveGrokVariant,
   inferSeedanceTierFromLegacy,
   inferGrokTierFromLegacy,
+  // V161 火山方舟原生 Seedance 2.0 聚合 alias `seedance-v2`
+  isSeedanceV2AliasModel,
+  SEEDANCE_V2_VERSION_TIERS,
+  resolveSeedanceV2ModelId,
   type VeoQualityTier,
+  type VeoQuality,
+  type VeoResolution,
   type SeedanceQualityTier,
   type SeedanceVipResolution,
+  type SeedanceV2Version,
   type GrokDurationTier,
 } from "@/providers/shared/video";
 
@@ -117,6 +127,9 @@ interface VideoData {
   seedanceTier?: SeedanceQualityTier;
   /** Seedance 2.0 VIP (Nexus, V138) 分辨率档:720p / 1080p. 仅 alias 项 `seedance-2-0` 用. */
   seedanceVipResolution?: SeedanceVipResolution;
+  /** Seedance 2.0 火山原生 (V161) 画质档: standard / fast. 仅 alias 项 `seedance-v2` 用,
+   *  跟 seedanceTier (老 Dale 路) 区分; resolveSeedanceV2ModelId 按 (version × hasVideos) 4 路分发. */
+  seedanceV2Version?: SeedanceV2Version;
   /** Grok Video 时长档:12s / 16s / 20s。 */
   grokTier?: GrokDurationTier;
   generateAudio?: boolean;
@@ -177,6 +190,9 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const [currentSeedanceVipResolution, setCurrentSeedanceVipResolution] = useState<SeedanceVipResolution>(
     () => (card.data as VideoData).seedanceVipResolution ?? "720p",
   );
+  const [currentSeedanceV2Version, setCurrentSeedanceV2Version] = useState<SeedanceV2Version>(
+    () => (card.data as VideoData).seedanceV2Version ?? "standard",
+  );
   const [currentGrokTier, setCurrentGrokTier] = useState<GrokDurationTier>(
     () => (card.data as VideoData).grokTier ?? "12s",
   );
@@ -190,34 +206,38 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const isSeedanceVip = isSeedanceVipModel(currentModel);
   const isVipAlias = isSeedanceVipAliasModel(currentModel);
   const isVipEconomy = isSeedanceVipEconomyModel(currentModel);
+  const isSeedanceV2 = isSeedanceV2AliasModel(currentModel);
   const allowedVideoSizes = useMemo(() => getAllowedVideoSizesForModel(currentModel), [currentModel]);
-  const availableModes: VideoImageMode[] = (isSeedance || isVeo || isGrok || isSeedanceVip)
+  const availableModes: VideoImageMode[] = (isSeedance || isVeo || isGrok || isSeedanceVip || isSeedanceV2)
     ? ["firstLastFrame", "reference"]
     : ["firstLastFrame"];
   const imageMode: VideoImageMode = resolveVideoImageMode(data.imageMode);
-  // Veo 参考模式 (image-asset): dbgoc 上游硬约束 16:9 + 8s,UI 强制锁
-  const isVeoRefMode = isVeo && imageMode === "reference";
-  const veoTierOptions = isVeoRefMode ? VEO_REF_TIERS : VEO_NON_REF_TIERS;
-  const effectiveTier: VeoQualityTier = isVeoRefMode
-    ? (currentTier === "ref-720p" || currentTier === "ref-1080p" ? currentTier : "ref-1080p")
-    : (currentTier === "fast-720p" || currentTier === "standard-1080p" || currentTier === "pro-1080p" ? currentTier : "fast-720p");
-  const effectiveAllowedSizes = useMemo(
-    () => (isVeoRefMode ? [...VEO_REF_RATIOS] : allowedVideoSizes),
-    [isVeoRefMode, allowedVideoSizes],
-  );
+  // Veo 6 档 tier (画质 × 分辨率) 不再因 imageMode 切换列表; 三模式 (text/i2v/ref)
+  // 由后端 CatVideoAdapter 看 body 字段 (images / referenceImages) 自动分发.
+  // i2v 和 ref 模式后端强制 duration=8, UI 在有图时锁 8 给用户清晰预期.
+  const validVeoTier = isVeo && VEO_TIERS.some((t) => t.value === currentTier);
+  const effectiveTier: VeoQualityTier = validVeoTier ? currentTier : "fast-720p";
+  // 画质和分辨率独立选: UI 上 SizeCombo 的 quality 槽放 fast/std/pro,
+  // resolution 槽放 720p/1080p. 两者组合 → composeVeoTier → 6 档 SKU.
+  const { quality: veoQuality, resolution: veoResolution } = decomposeVeoTier(effectiveTier);
+  const effectiveAllowedSizes = allowedVideoSizes;
   const effectiveDurationOptions = isVeo
     ? VEO_DURATION_OPTIONS
     : isSeedanceVip
       ? SEEDANCE_VIP_DURATION_OPTIONS
       : SEEDANCE_DURATION_OPTIONS;
-  // VIP (V145): UI 暴露 duration 控件但只放 15s 单选, 切到 VIP 时强制 currentDuration=15
-  //              (见 handleModelChange + applyAndSet). 后端支持 5-15, 后续放开只需扩选项数组.
+  // V161 火山原生 Seedance 2.0 复用 SEEDANCE_DURATION_OPTIONS (4-15s).
+  // VIP (V145): UI 只放 15s 单选, 切到 VIP 时强制 currentDuration=15.
   // Grok 时长已编码在 tier(SKU) 里, 不需要独立 duration 控件.
 
   const refSlots = useMemo(
-    () => getRefSlotsForVideoModel(currentModel, imageMode),
-    [currentModel, imageMode],
+    () => getRefSlotsForVideoModel(currentModel, imageMode, isVeo ? effectiveTier : undefined),
+    [currentModel, imageMode, isVeo, effectiveTier],
   );
+
+  // Veo 时长前端不锁: 用户在 4/6/8 自由选. Cat 后端 CatVideoAdapter 在 i2v / ref 模式
+  // (body.images 或 body.referenceImages 非空) 会自动强制 duration=8 (L223 durationOverride),
+  // 纯文生模式按用户传的 duration. 前端宽松, 让 UI 始终能选; 实际生成时长以后端响应为准.
 
   const upstreamEntries = useMemo(
     () => Object.entries(data.upstreamTexts || {}),
@@ -229,16 +249,28 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const canGenerate = finalPrompt.length > 0;
 
   useEffect(() => {
-    // 旧卡片可能存了 veo3.1-fast / -4k / -pro-4k / -ref / -ref-hd 等 SKU + 旧 resolution/veoFast。
-    // 全部收敛成: model=canonical "veo3.1" + veoTier (画质档单维度)。
-    const migrateVeoFields = (modelId: string): { model?: string; veoTier?: VeoQualityTier } => {
-      const patch: { model?: string; veoTier?: VeoQualityTier } = {};
+    // 旧卡片可能存了 veo3.1-fast / -4k / -pro-4k / -ref / -ref-hd 等 SKU + 旧 resolution/veoFast,
+    // 以及老 5 档 veoTier (standard-1080p / ref-720p / ref-1080p). 全部收敛成: model=canonical
+    // "veo3.1" + veoTier (新 6 档画质 × 分辨率, ref 模式由 imageMode 表达不再编码在 tier 里).
+    const migrateVeoFields = (modelId: string): { model?: string; veoTier?: VeoQualityTier; duration?: number } => {
+      const patch: { model?: string; veoTier?: VeoQualityTier; duration?: number } = {};
       const canonical = normalizeVeoModelToCanonical(modelId);
       if (canonical && canonical !== modelId) {
         patch.model = canonical;
       }
-      if (isVeoModel(modelId) && !data.veoTier) {
-        patch.veoTier = inferVeoTierFromLegacy(modelId, data.resolution, data.veoFast);
+      if (isVeoModel(modelId)) {
+        if (!data.veoTier) {
+          patch.veoTier = inferVeoTierFromLegacy(modelId, data.resolution, data.veoFast);
+        } else if (!VEO_TIERS.some((t) => t.value === data.veoTier)) {
+          // 老 5 档 veoTier (standard-1080p / ref-720p / ref-1080p) 收敛到新 6 档.
+          // inferVeoTierFromLegacy 的 legacyResolution 分支兼容这些字符串.
+          patch.veoTier = inferVeoTierFromLegacy(undefined, data.veoTier);
+        }
+        // Veo 时长只接受 4/6/8 (Cat 上游约束). 老卡片或 currentDuration 默认 5 时,
+        // trigger 会显示"·5s"且下拉无 active 按钮, 兜底 8 让 UI 有明确选中态.
+        if (data.duration == null || ![4, 6, 8].includes(data.duration)) {
+          patch.duration = 8;
+        }
       }
       return patch;
     };
@@ -468,13 +500,15 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         newData.refAudios = undefined;
         newData.refVideos = undefined;
       }
-      // Veo 参考模式 (image-asset) 最多 3 张参考图,溢出的 slot 截断。
+      // Veo 参考模式: Cat 上游硬约束 fast 1-2 张, std/pro 1-3 张. 按当前 tier 算上限截断.
       if (newIsVeo && imageMode === "reference" && data.refImages) {
+        const safeTier = VEO_TIERS.some((t) => t.value === currentTier) ? currentTier : "fast-720p";
+        const maxCount = veoRefImageMaxCount(safeTier);
         const oldSlots = getRefSlotsForVideoModel(currentModel, "reference");
         const entries = oldSlots
           .map((s) => data.refImages?.[s.key])
           .filter((e): e is RefImageEntry => !!e)
-          .slice(0, 3);
+          .slice(0, maxCount);
         const refImages: Record<string, RefImageEntry> = {};
         entries.forEach((e, i) => { refImages[`refImage${i}`] = e; });
         newData.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
@@ -513,6 +547,16 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         setCurrentDuration(15);
         newData.duration = 15;
       }
+      // V161 火山方舟原生 alias `seedance-v2`: 首次进入时默认 standard 画质,
+      // duration 收敛到 [4,15] (老卡片可能是 grok 的 12s 之类, 直接保留亦合法).
+      if (isSeedanceV2AliasModel(modelId) && !data.seedanceV2Version) {
+        newData.seedanceV2Version = "standard";
+        setCurrentSeedanceV2Version("standard");
+      }
+      if (isSeedanceV2AliasModel(modelId) && (currentDuration < 4 || currentDuration > 15)) {
+        setCurrentDuration(5);
+        newData.duration = 5;
+      }
 
       updateCard(card.id, { data: newData });
       autoSave.markDirty(card.id);
@@ -544,6 +588,20 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     [card.id, data, updateCard],
   );
 
+  const handleVeoQualityChange = useCallback(
+    (q: VeoQuality) => {
+      handleTierChange(composeVeoTier(q, veoResolution));
+    },
+    [veoResolution, handleTierChange],
+  );
+
+  const handleVeoResolutionChange = useCallback(
+    (r: VeoResolution) => {
+      handleTierChange(composeVeoTier(veoQuality, r));
+    },
+    [veoQuality, handleTierChange],
+  );
+
   const handleSeedanceTierChange = useCallback(
     (tier: SeedanceQualityTier) => {
       setCurrentSeedanceTier(tier);
@@ -557,6 +615,15 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     (resolution: SeedanceVipResolution) => {
       setCurrentSeedanceVipResolution(resolution);
       updateCard(card.id, { data: { ...data, seedanceVipResolution: resolution } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard],
+  );
+
+  const handleSeedanceV2VersionChange = useCallback(
+    (version: SeedanceV2Version) => {
+      setCurrentSeedanceV2Version(version);
+      updateCard(card.id, { data: { ...data, seedanceV2Version: version } });
       autoSave.markDirty(card.id);
     },
     [card.id, data, updateCard],
@@ -749,7 +816,9 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       // 把卡片本身的 projectId 作为本次任务的归属，整个异步链都用这个快照。
       const ownerProjectId = card.projectId;
 
-      // Veo: canvas 只存 canonical "veo3.1",提交前按 (mode, tier) 解析真实 SKU。
+      // Veo: canvas 存 canonical "veo3.1", 按 tier (6 档画质×分辨率) 解析真实 SKU
+      //   到 Cat 6 个 model_name. 三模式 (text/i2v/ref) 由后端 CatVideoAdapter 看 body 字段
+      //   (images / referenceImages) 自动分发, 不编码在 model 里.
       // Seedance: canvas 也只存 canonical "seedance",按 tier 解析成 "seedance" / "seedance-fast"。
       // Grok: canvas 只存 "grok-video",按时长档解析成 "grok-video-12s" / -16s / -20s。
       // VIP alias (V138/V145): canvas 存 "seedance-2-0", 按 (分辨率, 是否传视频) resolve 到
@@ -757,14 +826,18 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       // VIP economy: 单独 model_name `seedance-2-0-720p-no-person`, 原样透传.
       const hasReferenceVideos = referenceVideos.length > 0;
       const effectiveModel = isVeo
-        ? resolveVeoVariantForMode(imageMode, effectiveTier)
+        ? resolveVeoVariant(effectiveTier)
         : isSeedance
           ? resolveSeedanceVariantForTier(currentSeedanceTier)
           : isGrok
             ? resolveGrokVariant(currentGrokTier)
             : isVipAlias
               ? resolveSeedanceVipModelId(currentSeedanceVipResolution, hasReferenceVideos)
-              : currentModel;
+              : isSeedanceV2
+                // V161 火山方舟原生 alias `seedance-v2` → 按 (version × hasVideos) 4 路分发到具体 model.
+                // 见 resolveSeedanceV2ModelId: standard/fast × no_video/with_video = 4 个 model_name.
+                ? resolveSeedanceV2ModelId(currentSeedanceV2Version, hasReferenceVideos)
+                : currentModel;
       // V138 VIP: size 必须是具体像素 (720P→1280x720/720x1280, 1080P→1920x1080/1080x1920).
       // alias 项按 currentSeedanceVipResolution + currentSize (ratio) resolve;
       // economy 固定 720P. 其他模型保持原 ratio 字符串.
@@ -773,16 +846,19 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         : isVipEconomy
           ? resolveSeedanceVipSize("720p", currentSize)
           : currentSize;
-      // Veo 参考模式 (image-asset) 上游强制 8s,前端就直接传 8 避免被 resolver 默默纠正。
+      // Veo: 用户选 4/6/8, 后端 CatVideoAdapter 在 i2v/ref 模式 (body.images 或 referenceImages
+      // 非空) 会自动强制 duration=8 (L223 durationOverride), 前端不替它做决策.
       // Grok 时长编码在 model SKU 里,不传 duration。
       // VIP (V145): UI 只放 15s 选项, currentDuration 经 handleModelChange/applyAndSet 强制 15.
       const effectiveDuration = isVeo
-        ? (isVeoRefMode ? 8 : currentDuration)
+        ? currentDuration
         : isSeedance
           ? currentDuration
           : isSeedanceVip
             ? currentDuration
-            : undefined;
+            : isSeedanceV2
+              ? currentDuration
+              : undefined;
 
       const result = await provider.generateVideo({
         prompt,
@@ -794,9 +870,13 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         duration: effectiveDuration,
         // Veo/Grok: resolution 已编码在 model id 中,不再单独发送。
         // Seedance: UI 改造后画质走 tier,实际分辨率统一 720p (2.0 系列上限)。
+        // Seedance V2 (V161 火山原生): 同样固定 720p (1080p 暂不通过 canvas 暴露,V162 服务端已支持但默认仅 GATEWAY 用).
         // VIP (V138): 不传 resolution, 后端只读 size 字段.
-        resolution: isSeedance ? "720p" : undefined,
-        generateAudio: (isSeedance || isVeo || isGrok) ? currentAudio : undefined,
+        resolution: (isSeedance || isSeedanceV2) ? "720p" : undefined,
+        // Veo 不传: Cat /v1/videos 协议没有 generate_audio 字段 (CatVideoAdapter.baseRequestBody
+        // 只接受 model/prompt/aspect_ratio/duration/fps/negative_prompt/seed). Cat 生成的视频
+        // 是否有声由上游模型决定, 前端控制不了.
+        generateAudio: (isSeedance || isGrok || isSeedanceV2) ? currentAudio : undefined,
         // V138 VIP: quality 字段废弃, 不传 (model_name 已细到具体上游).
         cardId: card.id,
         projectId: ownerProjectId,
@@ -835,7 +915,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
     } finally {
       setCardProgress(card.id, null);
     }
-  }, [data, card.id, card.projectId, generating, updateCard, currentModel, currentSize, effectiveTier, currentSeedanceTier, currentSeedanceVipResolution, currentGrokTier, currentDuration, currentAudio, setCardProgress, frames, imageMode, refSlots, isVeo, isVeoRefMode, isSeedance, isGrok, isSeedanceVip, isVipAlias, isVipEconomy]);
+  }, [data, card.id, card.projectId, generating, updateCard, currentModel, currentSize, effectiveTier, currentSeedanceTier, currentSeedanceVipResolution, currentSeedanceV2Version, currentGrokTier, currentDuration, currentAudio, setCardProgress, frames, imageMode, refSlots, isVeo, isSeedance, isGrok, isSeedanceVip, isVipAlias, isVipEconomy, isSeedanceV2]);
 
   const isLocked = !!data._locked;
 
@@ -1086,47 +1166,55 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
             onChange={handleSizeChange}
             sizeOptions={VIDEO_SIZE_OPTIONS}
             allowedSizes={effectiveAllowedSizes}
+            quality={isVeo ? veoQuality : undefined}
+            onQualityChange={isVeo ? (q: string) => handleVeoQualityChange(q as VeoQuality) : undefined}
+            qualityOptions={isVeo ? VEO_QUALITY_TIERS.map((t) => ({ value: t.value, label: t.label })) : undefined}
             resolution={
               isVeo
-                ? effectiveTier
+                ? veoResolution
                 : isVipAlias
                   ? currentSeedanceVipResolution
-                  : isSeedance
-                    ? currentSeedanceTier
-                    : isGrok
-                      ? currentGrokTier
-                      : undefined
+                  : isSeedanceV2
+                    ? currentSeedanceV2Version
+                    : isSeedance
+                      ? currentSeedanceTier
+                      : isGrok
+                        ? currentGrokTier
+                        : undefined
             }
             onResolutionChange={
               isVeo
-                ? (tier: string) => handleTierChange(tier as VeoQualityTier)
+                ? (r: string) => handleVeoResolutionChange(r as VeoResolution)
                 : isVipAlias
                   ? (r: string) => handleSeedanceVipResolutionChange(r as SeedanceVipResolution)
-                  : isSeedance
-                    ? (tier: string) => handleSeedanceTierChange(tier as SeedanceQualityTier)
-                    : isGrok
-                      ? (tier: string) => handleGrokTierChange(tier as GrokDurationTier)
-                      : undefined
+                  : isSeedanceV2
+                    ? (v: string) => handleSeedanceV2VersionChange(v as SeedanceV2Version)
+                    : isSeedance
+                      ? (tier: string) => handleSeedanceTierChange(tier as SeedanceQualityTier)
+                      : isGrok
+                        ? (tier: string) => handleGrokTierChange(tier as GrokDurationTier)
+                        : undefined
             }
             resolutionOptions={
               isVeo
-                ? veoTierOptions.map((t) => ({ value: t.value, label: t.label }))
+                ? VEO_RESOLUTION_TIERS.map((t) => ({ value: t.value, label: t.label }))
                 : isVipAlias
                   ? SEEDANCE_VIP_RESOLUTION_TIERS.map((t) => ({ value: t.value, label: t.label }))
-                  : isSeedance
-                    ? SEEDANCE_TIERS.map((t) => ({ value: t.value, label: t.label }))
-                    : isGrok
-                      ? GROK_DURATION_TIERS.map((t) => ({ value: t.value, label: t.label }))
-                      : undefined
+                  : isSeedanceV2
+                    ? SEEDANCE_V2_VERSION_TIERS.map((t) => ({ value: t.value, label: t.label }))
+                    : isSeedance
+                      ? SEEDANCE_TIERS.map((t) => ({ value: t.value, label: t.label }))
+                      : isGrok
+                        ? GROK_DURATION_TIERS.map((t) => ({ value: t.value, label: t.label }))
+                        : undefined
             }
-            duration={(isSeedance || isVeo || isSeedanceVip) ? (isVeoRefMode ? 8 : currentDuration) : undefined}
-            onDurationChange={(isSeedance || isVeo || isSeedanceVip) ? (n) => handleDurationChange(String(n)) : undefined}
-            durationOptions={(isSeedance || isVeo || isSeedanceVip) ? effectiveDurationOptions : undefined}
-            durationDisabled={isVeoRefMode}
+            duration={(isSeedance || isVeo || isSeedanceVip || isSeedanceV2) ? currentDuration : undefined}
+            onDurationChange={(isSeedance || isVeo || isSeedanceVip || isSeedanceV2) ? (n) => handleDurationChange(String(n)) : undefined}
+            durationOptions={(isSeedance || isVeo || isSeedanceVip || isSeedanceV2) ? effectiveDurationOptions : undefined}
             disabled={generating}
           />
         )}
-        {(isSeedance || isVeo || isGrok) && !isLocked && (
+        {(isSeedance || isGrok || isSeedanceV2) && !isLocked && (
           <button
             type="button"
             onClick={handleAudioToggle}
