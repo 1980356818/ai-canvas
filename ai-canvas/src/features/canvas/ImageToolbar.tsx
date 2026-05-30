@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo } from "react";
-import { Scissors, Crop, Download, ChevronDown, HardDriveDownload, Loader2, ZoomIn, RotateCw } from "lucide-react";
+import { Scissors, Crop, Download, ChevronDown, HardDriveDownload, Loader2, ZoomIn, RotateCw, Layers } from "lucide-react";
 import { useCanvasStore, liveViewport, subscribeViewport } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
@@ -13,6 +13,7 @@ import { autoSave } from "@/lib/autoSave";
 import { sizeFromRatio } from "@/shared/constants";
 import { updateProjectMeta } from "@/platform";
 import { HIDDEN_FEATURES } from "@/config/platforms";
+import { splitCompositeImage, isCompositeImage, pendingSplitCount } from "@/lib/frameSplit";
 import { cn } from "@/lib/utils";
 
 const GRID_OPTIONS = [
@@ -558,6 +559,8 @@ export default function ImageToolbar() {
   if (!imgData.imageUrl) return null;
 
   const showSaveLocal = isRemoteUrl(imgData.imageUrl);
+  const showSplitComposite = isCompositeImage(card);
+  const splitPending = showSplitComposite ? pendingSplitCount(card) : 0;
 
   const activeLabel = GRID_OPTIONS.find((o) => o.size === activeGrid)?.label;
 
@@ -576,6 +579,39 @@ export default function ImageToolbar() {
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* 关键帧合成图:一键拆分按钮 — 只在 data.compositeFrames 非空时露出。
+            放在最左,因为这是合成卡上最显著的动作(用户期望先看到它)。 */}
+        {showSplitComposite && (
+          <>
+            <button
+              title={
+                splitPending > 0
+                  ? `把合成图里 ${splitPending} 张帧拆成独立 ai_image 子卡`
+                  : "已全部拆分,点击可定位已生成的子卡"
+              }
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                splitPending > 0
+                  ? "bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25 dark:text-emerald-400"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+              onClick={() => {
+                if (!targetCardId) return;
+                void splitCompositeImage(targetCardId);
+              }}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>
+                拆分
+                {splitPending > 0 && (
+                  <span className="ml-1 opacity-75">({splitPending} 张)</span>
+                )}
+              </span>
+            </button>
+            <div className="mx-0.5 h-4 w-px bg-border" />
+          </>
+        )}
+
         {/* Grid split dropdown */}
         <div className="relative" ref={dropdownRef}>
           <button

@@ -17,7 +17,7 @@
 // 或自行构造 base64 dataURL 塞进请求体。eslint 规则会拦截误用。
 
 import { isTauri, ensureTauriAPIs, getInvoke } from "./runtime";
-import { buildProxyUrl } from "./storage";
+import { resolveProviderEndpoint } from "./storage";
 import { resolveAuthHeaders } from "./auth";
 
 /**
@@ -145,9 +145,25 @@ async function uploadViaTauri(input: string, provider: string, prewarm: boolean)
 }
 
 /**
- * Web 模式: 把 dataURL / blob: / 前端 asset / 相对路径都先 fetch 成 Blob,
- * 再 multipart POST 到服务端。Web 模式没有 sqlite 缓存, 重复使用同一张图会
- * 重传 — 但 Web 模式通常只用于开发预览, 实际用户都在 Tauri 桌面端。
+ * 把 dataURL / blob: / 前端 asset / 相对路径先 fetch 成 Blob, 再 multipart
+ * POST 到服务端。两个场景都走这里:
+ *
+ * 1. **Web 模式** (浏览器跑 `npm run dev`) — 全部上传都走这条路 (没有 Rust 端)。
+ *    URL 用 vite proxy 前缀, 由 dev server 代理到真实后端, 顺便规避 CORS。
+ * 2. **Tauri 模式但 input 是 WebView-only URL** (`data:` / `blob:` / `/src/...`
+ *    / `/assets/...`) — Rust 端 `upload_to_server` 不认这种路径 (`resolve_input_path`
+ *    返回 `文件不存在`), 只能在 WebView 里 fetch 出来 multipart 上传。
+ *
+ * **历史坑** (2026-05-29 修复): 早期版本两种场景都用 `buildProxyUrl` 拼相对
+ * 路径, Tauri 生产里没 vite proxy, WebView 解析为 `tauri://localhost/v1-jijing/...`
+ * 然后 SPA fallback 返 `index.html` 触发 `JSON.parse(<!doctype html>)` 炸。
+ * 现在统一走 `resolveProviderEndpoint`: Tauri 直连绝对 URL, Web/Dev 仍走代理。
+ *
+ * Tauri 模式下 Web 没有 sqlite 缓存的 sha256 单飞 + 双 semaphore 加持 (那是
+ * Rust `upload_to_server` 的能力), 等于走"灰色路径"。但 WebView-only URL
+ * 通常体积小 (vite asset / dataURL / 短期 blob), 偶尔重传影响很小; 用户的常态
+ * 媒体经过 `persistImage` 落盘后是 `local://media/<rel>` 形态, 走的是
+ * `uploadViaTauri` 主路径享受全套缓存。
  */
 async function uploadViaFetch(input: string, provider: string): Promise<string> {
   const blob = await resolveToBlob(input);
@@ -157,7 +173,9 @@ async function uploadViaFetch(input: string, provider: string): Promise<string> 
   form.append("file", blob, filename);
   form.append("purpose", "media-input");
 
-  const url = buildProxyUrl("/v1/files/upload", provider);
+  // resolveProviderEndpoint: Tauri 模式返绝对 URL (直连后端, 跳过 WebView SPA fallback),
+  // Web/Dev 返 vite proxy 相对前缀 (由 dev server 代理 + 规避 CORS)。
+  const url = resolveProviderEndpoint("/v1/files/upload", provider);
   // 不要手动设 Content-Type, 浏览器会自动加 boundary。
   // resolveAuthHeaders 走 settings.api -> Tauri 模式读 sqlite，Web 模式读 localStorage。
   // 不能用同步 getProviderAuthHeaders —— Tauri 模式 localStorage 永远为空 -> 401。
@@ -165,22 +183,46 @@ async function uploadViaFetch(input: string, provider: string): Promise<string> 
 
   const resp = await fetch(url, { method: "POST", headers, body: form });
   const bodyText = await resp.text();
+  const contentType = (resp.headers.get("content-type") ?? "").toLowerCase();
 
   if (!resp.ok) {
     const msg = extractServerErrorMessage(bodyText) ?? `HTTP ${resp.status}`;
-    throw new Error(`上传失败: ${msg}`);
+    throw new Error(`上传失败: ${msg} (url=${url})`);
+  }
+
+  // **防御性检测**: 服务端正确响应必然是 JSON。响应是 HTML / 其它 content-type
+  // 都说明 URL 路由错了 (打到了 SPA index.html / nginx 默认页 / 反代 404 兜底页),
+  // 这种情况下 JSON.parse 会失败, 错误信息显示一长串 HTML, 很难定位 —— 提前给
+  // 一条人话错误, 把 URL 也打出来便于排查。
+  if (!isLikelyJsonResponse(contentType, bodyText)) {
+    throw new Error(
+      `上传响应不是 JSON (content-type=${contentType || "<空>"}, url=${url}). ` +
+        `常见原因: Tauri 生产 WebView SPA fallback, 或后端域名/前缀配错。响应预览: ${bodyText.slice(0, 120)}`,
+    );
   }
 
   let envelope: ServerEnvelope<ServerFileUploadResponse>;
   try {
     envelope = JSON.parse(bodyText);
   } catch {
-    throw new Error(`上传响应解析失败: ${bodyText.slice(0, 200)}`);
+    throw new Error(`上传响应解析失败 (url=${url}): ${bodyText.slice(0, 200)}`);
   }
   if (envelope.code !== 200 || !envelope.data?.url) {
     throw new Error(`上传失败: ${envelope.message ?? `code=${envelope.code}`}`);
   }
   return envelope.data.url;
+}
+
+/**
+ * 判断响应"看起来像 JSON" —— content-type 优先, 没拿到时退到看 body 首字符。
+ * 服务端正常的 `R<T>` 信封是 `application/json`, 但某些代理 (nginx / Tauri 资源
+ * 协议 SPA fallback) 不会改 content-type 头, 所以加 body 首字符兜底。
+ */
+function isLikelyJsonResponse(contentType: string, body: string): boolean {
+  if (contentType.includes("application/json")) return true;
+  if (contentType.includes("text/html")) return false;
+  const head = body.trimStart().slice(0, 1);
+  return head === "{" || head === "[";
 }
 
 async function resolveToBlob(input: string): Promise<Blob> {

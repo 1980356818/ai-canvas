@@ -30,7 +30,7 @@
 import { useCardStore } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { modelService } from "@/services/models";
-import { runFrameExtraction, spawnAllUnextractedFrames } from "@/lib/frameExtraction";
+import { runFrameExtraction } from "@/lib/frameExtraction";
 import { hasApiKey } from "@/platform";
 import { uploadMediaBatch } from "@/platform/media";
 import { autoSave } from "@/lib/autoSave";
@@ -309,12 +309,10 @@ export async function runCard(cardId: string): Promise<RunCardResult> {
       case "ai_video":
         return await runVideoCard(card);
       case "frame_extractor":
-        // runFrameExtraction 现在只抽帧到条带,不再自动派生子卡。
-        // 组运行 / 自动管线场景要保留旧的"一把出 N 张子卡"行为,所以这里
-        // 紧跟一个 spawnAllUnextractedFrames(手点提取按钮只跑前者)。
-        // 两者内部都 toast + 写 card.data.status,不抛错;当作"已尽力跑过"返回 ok。
+        // runFrameExtraction 抽帧后会合成一张 ai_image 卡(挂在 frame_extractor 下方)
+        // 并自动建立连线;内部 toast + status,失败也不抛错,当 ok 返回。
+        // 若用户想拆成独立子卡,在合成卡上手点"拆分"即可。
         await runFrameExtraction(card.id);
-        await spawnAllUnextractedFrames(card.id);
         return { outcome: "ok" };
       case "ai_chat":
         return await runChatCard(card);

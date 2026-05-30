@@ -5,8 +5,9 @@
 //!   2. **错误集中**: 失败统一 toast + 早返回, UI 无需 try/catch;
 //!   3. **依赖隐式**: 直接 `useCardStore.getState()` / `useUIStore.getState()`,
 //!      调用方不传 deps;
-//!   4. **复用 frameExtraction**: 派生 ai_image 卡的构造直接借 `buildDerivedImageCards`
-//!      所沿用的 grid 排版,行为/外观对齐 frame_extractor 节点出图。
+//!   4. **抽帧统一走合成卡** — 智能切镜 / 等间隔 / N 等分 / 首尾帧四种策略,
+//!      派生产物统一是**一张**合成 ai_image 卡(走 `spawnCompositeImageCard`),
+//!      用户可在该卡上点"拆分"再展开成 N 张独立帧卡。
 
 import { useCardStore } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -21,10 +22,10 @@ import { updateProjectMeta } from "@/platform";
 import { cardToRow } from "@/lib/mappers";
 import { sizeFromRatio } from "@/shared/constants";
 import {
-  FRAME_GRID,
   formatTimestamp,
-  frameCardSize,
+  spawnCompositeImageCard,
 } from "@/lib/frameExtraction";
+import type { FrameInput } from "@/lib/frameComposite";
 import { isVeoModel } from "@/providers/shared/video";
 import type { CanvasCard, Connection } from "@/types";
 
@@ -53,50 +54,8 @@ async function callRust<T>(
   return invoke<T>(command, args);
 }
 
-// ── 通用:派生 ai_image 卡 ────────────────────────────────────────────
-//
-// 与 frameExtraction.buildDerivedImageCards 同样的 5 列网格,但允许
-// 调用方传 `titles` 自定义每张图的标题。
+// ── 工具:读图自然 aspect。失败兜底 16:9。单帧拖出用,合成走 frameComposite。
 
-function buildDerivedImageCards(args: {
-  anchor: { x: number; y: number };
-  size: { width: number; height: number };
-  shots: ExtractedShot[];
-  framePaths: string[];
-  projectId: string;
-}): CanvasCard[] {
-  const { anchor, size, shots, framePaths, projectId } = args;
-  const { width: W, height: H } = size;
-  const { cols, gapX, gapY } = FRAME_GRID;
-  const now = new Date().toISOString();
-
-  let zCursor = useCardStore.getState().maxZIndex;
-  return shots.map((shot, i): CanvasCard => {
-    zCursor += 1;
-    const title = shot.title ?? `帧 ${shot.index} · ${formatTimestamp(shot.timestamp)}`;
-    return {
-      id: crypto.randomUUID(),
-      projectId,
-      type: "ai_image",
-      x: anchor.x + (i % cols) * (W + gapX),
-      y: anchor.y + Math.floor(i / cols) * (H + gapY),
-      width: W,
-      height: H,
-      zIndex: zCursor,
-      locked: false,
-      collapsed: false,
-      title,
-      data: {
-        imageUrl: framePaths[i],
-        content: "",
-      },
-      createdAt: now,
-      updatedAt: now,
-    };
-  });
-}
-
-/** 读派生卡片的目标比例。失败 fallback 16:9, 不阻塞主流程。 */
 function probeAspectRatio(displayUrl: string): Promise<number> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -109,36 +68,29 @@ function probeAspectRatio(displayUrl: string): Promise<number> {
   });
 }
 
-async function commitDerivedCards(
+// ── 通用:从 shot 列表 + framePaths 派生合成 ai_image 卡 ──────────────
+
+async function commitCompositeCard(
   videoCard: CanvasCard,
   shots: ExtractedShot[],
   framePaths: string[],
-): Promise<CanvasCard[]> {
-  if (shots.length === 0 || framePaths.length === 0) return [];
+  label: string,
+): Promise<string | null> {
+  if (shots.length === 0 || framePaths.length === 0) return null;
 
-  const ratio = await probeAspectRatio(getDisplayUrl(framePaths[0]!));
-  const size = frameCardSize(ratio);
+  const frames: FrameInput[] = shots.map((shot, i) => ({
+    framePath: framePaths[i]!,
+    timestamp: shot.timestamp,
+    index: shot.index,
+    title: shot.title ?? `帧 ${shot.index} · ${formatTimestamp(shot.timestamp)}`,
+  }));
 
-  const derived = buildDerivedImageCards({
-    anchor: {
-      x: videoCard.x,
-      y: videoCard.y + videoCard.height + FRAME_GRID.topOffset,
-    },
-    size,
-    shots,
-    framePaths,
-    projectId: videoCard.projectId,
+  return await spawnCompositeImageCard({
+    frames,
+    anchorCard: videoCard,
+    title: `${label} · ${frames.length} 张`,
+    source: { kind: "video", sourceCardId: videoCard.id },
   });
-
-  await saveCardsBatch(derived.map(cardToRow));
-  const cardStore = useCardStore.getState();
-  for (const c of derived) cardStore.addCard(c);
-
-  const count = cardStore.getCardsByProject(videoCard.projectId).length;
-  useProjectStore.getState().updateProject(videoCard.projectId, { nodeCount: count });
-  void updateProjectMeta(videoCard.projectId, { nodeCount: count });
-
-  return derived;
 }
 
 // ── 时间戳生成策略 ────────────────────────────────────────────────────
@@ -283,18 +235,23 @@ export async function extractFramesFromVideo(
       throw new Error(`抽帧数量不匹配: 期望 ${timestamps.length},实际 ${framePaths.length}`);
     }
 
-    // 3. 构造派生卡 + 落库
+    // 3. 构造合成 ai_image 卡(单张),落库 + 入 store + 自动连线视频→合成卡。
     const shots: ExtractedShot[] = timestamps.map((t, i) => ({
       index: i + 1,
       timestamp: t,
       title: shotTitles[i],
     }));
-    const derived = await commitDerivedCards(videoCard, shots, framePaths);
+    const compositeId = await commitCompositeCard(videoCard, shots, framePaths, label);
+
+    if (compositeId) {
+      useCanvasStore.getState().setSelectedCardIds([compositeId]);
+    }
 
     uiStore.addToast({
       type: "info",
-      title: `${label} · 已生成 ${derived.length} 张图卡`,
-      duration: 2500,
+      title: `${label} · 已合成 ${shots.length} 张`,
+      description: shots.length >= 2 ? "在合成图上点「拆分」可展开成独立帧卡。" : undefined,
+      duration: 3000,
     });
   } catch (err) {
     uiStore.addToast({
