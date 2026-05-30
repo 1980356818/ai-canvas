@@ -4,6 +4,9 @@ pub mod chat;
 pub mod config;
 pub mod device;
 pub mod gateway;
+// http_request: 通用上行 HTTP 入口, 前端 platform/httpAdapter.ts 的 httpJson 走这里。
+// 详见模块顶部注释 —— 这是前端唯一调任意远程 HTTP host 的合规方式。
+pub mod http_request;
 pub mod http_util;
 // ipc_limits + ipc_guard 是 WebView2 渲染端不崩的最后防线,详见 ipc_guard.rs 顶部。
 // 删除任一行会让 ai.rs 编译失败 —— 这是故意的。

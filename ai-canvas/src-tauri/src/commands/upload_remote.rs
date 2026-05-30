@@ -154,8 +154,9 @@ struct ServerFileUploadResponse {
 }
 
 /// 把任意"本地媒体路径"上传到 JiJing server 并返 HTTP URL。
-/// 这是 ai-canvas 把媒体送上游 API 的**唯一**入口,前端通过 `platform/media.ts`
-/// 间接调用,所有 chat / 生图 / 生视频 / 编辑器引用图都走它。
+/// 这是 ai-canvas 把媒体送上游 API 的**主路径**入口 (文件路径形态),
+/// 前端通过 `platform/httpAdapter.ts::httpUploadBytes` 间接调用大部分场景,
+/// 文件路径形态走本 command。
 ///
 /// `path` 接受多种形态 (跟前端 `getBase64ForApi` 历史兼容):
 /// - `local://media/<rel>` Tauri 占位符
@@ -195,7 +196,103 @@ pub async fn upload_to_server(
     }
 
     let content_type = super::ai::mime_from_path(&abs_path).to_string();
-    let max_bytes = resolve_upload_max_bytes(&content_type);
+    enforce_upload_size_limit(size, &content_type)?;
+
+    // 流式 sha256 — 64KB chunk, 500MB 视频也只占 64KB 内存
+    let sha_path = abs_path.clone();
+    let sha256 = run_blocking(move || compute_sha256_streaming(&sha_path)).await?;
+
+    let filename = abs_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("upload.bin")
+        .to_string();
+
+    run_upload_pipeline(
+        &state,
+        &provider,
+        UploadSource::Path(abs_path.clone()),
+        &sha256,
+        &content_type,
+        &filename,
+        size,
+        prewarm,
+    )
+    .await
+}
+
+/// bytes 形态入口 —— 前端 WebView 拿到 `data:` / `blob:` / vite asset 之后,
+/// 用 `fetch()` 解析成 Blob 再通过本 command 上传。
+///
+/// 跟 [`upload_to_server`] 共享:
+/// - sha256 缓存 (uploaded_files 表) — 相同字节哈希直接命中已上传 URL
+/// - in-flight 单飞 — 同一进程内并发上传同 sha256 只跑一次 HTTP
+/// - 主/预热 semaphore — 控制全局并发
+/// - retry loop + failure isolation — follower 自动接力当 leader 兜底
+///
+/// 与 path 版本的差别:
+/// - sha256 用内存 in-memory 计算 (bytes 已经在内存里, 不需要流式读盘)
+/// - 不做路径越权校验 (没有路径)
+/// - 大小由调用方校验 + 服务端再次兜底
+///
+/// **IPC 大小约束**: 单次 invoke 受 IPC_PAYLOAD_HARD_LIMIT_BYTES 限制,
+/// 前端 `httpUploadBytes` 在 bytes 大于阈值时会自动转走 `upload_media_chunk`
+/// 分块路径再调 `upload_to_server`,避免在 IPC 层就报错。
+#[tauri::command]
+pub async fn upload_bytes_to_server(
+    state: State<'_, AppState>,
+    bytes: Vec<u8>,
+    filename: String,
+    content_type: String,
+    provider: Option<String>,
+    prewarm: Option<bool>,
+) -> Result<UploadResult, String> {
+    let provider = provider.unwrap_or_else(|| "jijing".to_string());
+    let prewarm = prewarm.unwrap_or(false);
+
+    let size = bytes.len() as u64;
+    if size == 0 {
+        return Err("空字节数据, 无法上传".to_string());
+    }
+
+    let content_type = if content_type.trim().is_empty() {
+        "application/octet-stream".to_string()
+    } else {
+        content_type
+    };
+    enforce_upload_size_limit(size, &content_type)?;
+
+    let bytes_arc = std::sync::Arc::new(bytes);
+    let bytes_for_sha = bytes_arc.clone();
+    let sha256 = run_blocking(move || compute_sha256_from_bytes(&bytes_for_sha)).await?;
+
+    let safe_filename = if filename.trim().is_empty() {
+        format!("upload.{}", extension_from_mime(&content_type))
+    } else {
+        // 防注入: 去掉路径分隔符, 只保留 basename
+        std::path::Path::new(&filename)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("upload.bin")
+            .to_string()
+    };
+
+    run_upload_pipeline(
+        &state,
+        &provider,
+        UploadSource::Bytes(bytes_arc),
+        &sha256,
+        &content_type,
+        &safe_filename,
+        size,
+        prewarm,
+    )
+    .await
+}
+
+/// 检查文件大小是否超过该 MIME 类型的上限,统一报错文案给两个入口共用。
+fn enforce_upload_size_limit(size: u64, content_type: &str) -> Result<(), String> {
+    let max_bytes = resolve_upload_max_bytes(content_type);
     if size > max_bytes {
         return Err(format!(
             "{} 文件 {}MB 超过 {}MB 上限, 请压缩或裁剪后再上传",
@@ -204,15 +301,42 @@ pub async fn upload_to_server(
             max_bytes / (1024 * 1024)
         ));
     }
+    Ok(())
+}
 
-    // 流式 sha256 — 64KB chunk, 500MB 视频也只占 64KB 内存
-    let sha_path = abs_path.clone();
-    let sha256 = run_blocking(move || compute_sha256_streaming(&sha_path)).await?;
+/// 上传源 —— path 走文件系统流式读, bytes 走内存直传。
+/// 用 Arc<Vec<u8>> 而不是 Vec<u8>, 让 follower → leader 接力时不复制大块内存。
+enum UploadSource {
+    Path(PathBuf),
+    Bytes(std::sync::Arc<Vec<u8>>),
+}
 
-    // 读 JiJing config + 计算 server_origin
+impl UploadSource {
+    fn clone_handle(&self) -> Self {
+        match self {
+            UploadSource::Path(p) => UploadSource::Path(p.clone()),
+            UploadSource::Bytes(b) => UploadSource::Bytes(b.clone()),
+        }
+    }
+}
+
+/// 共享 retry loop + cache lookup + in-flight 单飞调度。
+/// 抽出来后 path 版和 bytes 版只差一个 [`UploadSource`] 入参,
+/// 缓存/并发治理 100% 共用,不存在"两种实现一种漏 bug"的隐患。
+#[allow(clippy::too_many_arguments)]
+async fn run_upload_pipeline(
+    state: &State<'_, AppState>,
+    provider: &str,
+    source: UploadSource,
+    sha256: &str,
+    content_type: &str,
+    filename: &str,
+    size: u64,
+    prewarm: bool,
+) -> Result<UploadResult, String> {
     let (base_url, api_key) = {
         let db = state.db.lock().map_err(|e| format!("db lock: {}", e))?;
-        let config = read_full_api_config(&db, &provider)?;
+        let config = read_full_api_config(&db, provider)?;
         let key = config
             .keys
             .iter()
@@ -227,7 +351,7 @@ pub async fn upload_to_server(
         return Err(format!("provider {} 未配置 base_url", provider));
     }
     let server_origin = base_url.clone();
-    let key = flight_key(&sha256, &server_origin);
+    let key = flight_key(sha256, &server_origin);
 
     // ── Failure isolation retry loop ───────────────────────────────────
     //
@@ -245,15 +369,15 @@ pub async fn upload_to_server(
         attempt += 1;
 
         // 1. 缓存命中 → 直接返, 不进 in-flight / 不抢 semaphore
-        if let Some(cached) = lookup_cache(&state, &sha256, &server_origin)? {
-            touch_last_used(&state, &sha256, &server_origin)?;
+        if let Some(cached) = lookup_cache(state, sha256, &server_origin)? {
+            touch_last_used(state, sha256, &server_origin)?;
             tracing::info!(
                 "[upload_remote] cache_hit prewarm={} sha256={} server={} url={} attempt={}",
                 prewarm, sha256, server_origin, cached.remote_url, attempt
             );
             return Ok(UploadResult {
                 url: cached.remote_url,
-                sha256,
+                sha256: sha256.to_string(),
                 content_type: cached.content_type,
                 size,
                 cached: true,
@@ -316,13 +440,14 @@ pub async fn upload_to_server(
             FlightRole::Leader => {
                 // 3. leader 路径:占对应 semaphore → multipart → 写缓存 → 广播
                 let result = perform_leader_upload(
-                    &state,
-                    &provider,
+                    state,
+                    provider,
                     &base_url,
                     &api_key,
-                    &abs_path,
-                    &sha256,
-                    &content_type,
+                    source.clone_handle(),
+                    sha256,
+                    content_type,
+                    filename,
                     &server_origin,
                     size,
                     prewarm,
@@ -372,9 +497,10 @@ async fn perform_leader_upload(
     provider: &str,
     base_url: &str,
     api_key: &str,
-    abs_path: &Path,
+    source: UploadSource,
     sha256: &str,
     content_type: &str,
+    filename: &str,
     server_origin: &str,
     size: u64,
     prewarm: bool,
@@ -386,14 +512,18 @@ async fn perform_leader_upload(
         .map_err(|e| format!("upload semaphore: {}", e))?;
 
     let started = std::time::Instant::now();
+    let local_path_hint = match &source {
+        UploadSource::Path(p) => p.to_string_lossy().into_owned(),
+        UploadSource::Bytes(_) => format!("bytes:{}", sha256),
+    };
     let resp = do_multipart_upload(
-        state, provider, base_url, api_key, abs_path, sha256, content_type,
+        state, provider, base_url, api_key, source, sha256, content_type, filename,
     )
     .await?;
 
     insert_cache(
         state, sha256, server_origin, &resp.url, &resp.content_type, size,
-        abs_path.to_string_lossy().as_ref(),
+        &local_path_hint,
     )?;
 
     tracing::info!(
@@ -457,6 +587,39 @@ fn resolve_input_path(input: &str, data_dir: &Path) -> Result<PathBuf, String> {
     }
 
     Ok(canonical)
+}
+
+/// 在内存里算 bytes 的 sha256, 用于 `upload_bytes_to_server` 路径。
+/// bytes 已经全在内存里, 不需要流式;`run_blocking` 把这个 CPU-bound 操作
+/// 扔到 blocking pool, 避免几 MB sha256 占住 tokio worker。
+fn compute_sha256_from_bytes(bytes: &[u8]) -> Result<String, String> {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for b in digest.iter() {
+        use std::fmt::Write;
+        write!(&mut hex, "{:02x}", b).unwrap();
+    }
+    Ok(hex)
+}
+
+/// 从 MIME 推测扩展名 —— bytes 形态 filename 为空时兜底。
+/// 与前端 `media.ts::extFromMime` 行为对齐, 保持上下两端命名一致。
+fn extension_from_mime(mime: &str) -> &'static str {
+    let m = mime.to_ascii_lowercase();
+    match m.as_str() {
+        "image/jpeg" | "image/jpg" => "jpg",
+        "image/png" => "png",
+        "image/webp" => "webp",
+        "image/gif" => "gif",
+        "video/mp4" => "mp4",
+        "video/webm" => "webm",
+        "video/quicktime" => "mov",
+        "audio/mpeg" => "mp3",
+        "audio/wav" => "wav",
+        _ => "bin",
+    }
 }
 
 /// 流式计算 sha256, 64KB chunk —— 大视频 (500MB) 也只占 64KB 内存。
@@ -567,29 +730,32 @@ fn now_unix_secs() -> i64 {
 /// 实际发 multipart POST。不走 `send_with_retry` —— 因为 `reqwest::multipart::Form`
 /// 不能 clone, 每次发送会 consume 自己, 配 Fn 闭包不可重入。
 /// 重试由前端 UX 控制 (用户点"重试"按钮时自然重发)。
+#[allow(clippy::too_many_arguments)]
 async fn do_multipart_upload(
     state: &State<'_, AppState>,
     provider: &str,
     base_url: &str,
     api_key: &str,
-    abs_path: &Path,
+    source: UploadSource,
     sha256: &str,
     content_type: &str,
+    filename: &str,
 ) -> Result<ServerFileUploadResponse, String> {
     let url = format!("{}/v1/files/upload", base_url.trim_end_matches('/'));
-    let filename = abs_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("upload.bin")
-        .to_string();
+    let filename_owned = filename.to_string();
 
-    // tokio::fs::read 走的是 spawn_blocking,大文件不会卡 runtime
-    let bytes = tokio::fs::read(abs_path)
-        .await
-        .map_err(|e| format!("读取本地文件失败: {}", e))?;
+    // path 形态走 tokio::fs::read (内部 spawn_blocking 大文件不卡 runtime);
+    // bytes 形态直接拆 Arc — 这里假设没有第二个 owner,正常 leader 路径下 Arc
+    // strong_count 仅有当前线程持有,unwrap_or_else 兜底克隆一次保正确性。
+    let bytes: Vec<u8> = match source {
+        UploadSource::Path(abs_path) => tokio::fs::read(&abs_path)
+            .await
+            .map_err(|e| format!("读取本地文件失败: {}", e))?,
+        UploadSource::Bytes(arc) => std::sync::Arc::try_unwrap(arc).unwrap_or_else(|a| (*a).clone()),
+    };
 
     let part = reqwest::multipart::Part::bytes(bytes)
-        .file_name(filename)
+        .file_name(filename_owned)
         .mime_str(content_type)
         .map_err(|e| format!("multipart mime 设置失败: {}", e))?;
     let form = reqwest::multipart::Form::new()
@@ -671,6 +837,57 @@ mod tests {
         let r = compute_sha256_streaming(&p).unwrap();
         // 空文件的 sha256 是著名常量
         assert_eq!(r, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    }
+
+    /// path 流式 sha256 与 bytes 内存 sha256 必须一致 —— 这是
+    /// "两条入口共享同一 sqlite 缓存 key" 的前提。任何一边算错都会
+    /// 导致 cache miss + 重复上传, 等同于规范化失败。
+    #[test]
+    fn sha256_path_and_bytes_agree() {
+        let dir = make_test_data_dir();
+        let p = dir.path().join("payload.bin");
+        let payload: Vec<u8> = (0..150_000).map(|i| (i % 256) as u8).collect();
+        std::fs::write(&p, &payload).unwrap();
+
+        let from_path = compute_sha256_streaming(&p).unwrap();
+        let from_bytes = compute_sha256_from_bytes(&payload).unwrap();
+        assert_eq!(from_path, from_bytes);
+    }
+
+    #[test]
+    fn sha256_bytes_empty_matches_known_constant() {
+        let r = compute_sha256_from_bytes(b"").unwrap();
+        assert_eq!(r, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    }
+
+    #[test]
+    fn extension_from_mime_known_types() {
+        assert_eq!(extension_from_mime("image/png"), "png");
+        assert_eq!(extension_from_mime("Image/JPEG"), "jpg"); // 大小写不敏感
+        assert_eq!(extension_from_mime("video/mp4"), "mp4");
+        assert_eq!(extension_from_mime(""), "bin");
+        assert_eq!(extension_from_mime("application/x-weird"), "bin");
+    }
+
+    #[test]
+    fn enforce_upload_size_limit_image_ok() {
+        // 10MB JPEG 在 50MB 限额内
+        assert!(enforce_upload_size_limit(10 * 1024 * 1024, "image/jpeg").is_ok());
+    }
+
+    #[test]
+    fn enforce_upload_size_limit_image_too_big() {
+        // 60MB PNG 超 50MB
+        let r = enforce_upload_size_limit(60 * 1024 * 1024, "image/png");
+        assert!(r.is_err());
+        let msg = r.unwrap_err();
+        assert!(msg.contains("60MB") && msg.contains("50MB"));
+    }
+
+    #[test]
+    fn enforce_upload_size_limit_video_uses_video_quota() {
+        // 200MB 视频在 1GB 限额内通过 (若误用图片配额会失败)
+        assert!(enforce_upload_size_limit(200 * 1024 * 1024, "video/mp4").is_ok());
     }
 
     #[test]

@@ -1,4 +1,5 @@
 import { lsGet, lsSet, lsRemove } from "./storage";
+import { httpJson } from "./httpAdapter";
 
 const TOKEN_KEY = "auth_token";
 const USER_KEY = "auth_user";
@@ -63,16 +64,25 @@ export class BizError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const resp = await fetch(`${getBaseUrl()}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-    },
-    body: body ? JSON.stringify(body) : undefined,
+  // 走 Rust 端 http_request command —— ai-canvas 全局规约 "前端不直接 fetch 上游",
+  // 详见 src/platform/httpAdapter.ts 顶部注释。这里 body 是 object 时 httpJson
+  // 会自动 JSON 序列化 + 注入 Content-Type, 无 body 时不传。
+  const resp = await httpJson({
+    url: `${getBaseUrl()}${path}`,
+    method: method as "GET" | "POST" | "PUT" | "DELETE",
+    headers: authHeaders(),
+    body,
   });
 
-  const json: ApiResult<T> = await resp.json();
+  let json: ApiResult<T>;
+  try {
+    json = JSON.parse(resp.body);
+  } catch {
+    throw new BizError(
+      resp.status || -1,
+      `服务端响应非 JSON (HTTP ${resp.status}): ${resp.body.slice(0, 200)}`,
+    );
+  }
   if (json.code !== 0) {
     throw new BizError(json.code, json.msg || "请求失败");
   }

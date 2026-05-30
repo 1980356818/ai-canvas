@@ -566,3 +566,108 @@ sqlite 读 key。**只有"先把 dataURL/blob 上传成 server URL"这条 fetch 
     迟早会有人用。直接删，或者改成 `throw new Error(...)` 让运行时炸出来。
 18. **设置面板写到哪 / 业务代码读自哪必须对账**：每个 storage 后端（sqlite / localStorage /
     cookies / IndexedDB）的 reader 和 writer 都列在一起，PR 改了 writer 必须扫一遍所有 reader。
+
+---
+
+## 13. 前端上行 HTTP 规范（v11，2026-05-30 根治）
+
+### 13.1 唯一出口：[`src/platform/httpAdapter.ts`](../src/platform/httpAdapter.ts)
+
+ai-canvas 是 Tauri 桌面应用，**WebView 永远不允许直接发上行 HTTP 请求**。所有出站
+请求一律走 Rust invoke，前端 API 收口于 [`platform/httpAdapter.ts`](../src/platform/httpAdapter.ts)：
+
+```ts
+import { httpJson, httpJsonRequest, httpUploadBytes } from "@/platform/httpAdapter";
+
+// 通用 JSON 调用（auth / update / 任意 REST），拿到原始 status + body + headers
+const resp = await httpJson({
+  url: "http://101.37.80.236/api/auth/login",
+  method: "POST",
+  headers: { Authorization: `Bearer ${token}` },
+  body: { username, password },
+});
+
+// 200 校验 + JSON 自动解的便捷版
+const data = await httpJsonRequest<MyShape>({ url, method: "POST", body });
+
+// 媒体 bytes 上传（data: / blob: / vite asset），复用 sha256 缓存 + 单飞 + semaphore
+const { url: serverUrl } = await httpUploadBytes(input, { provider: "jijing", prewarm: false });
+```
+
+AI provider 调用走 [`platform/ai.api.ts`](../src/platform/ai.api.ts) 的
+`aiProxy` / `aiProxyStream`（内部 invoke `ai_proxy` / `ai_proxy_stream`），
+本地文件上传走 [`platform/media.ts::mediaToApiRef`](../src/platform/media.ts)
+（内部 invoke `upload_to_server`）。**没有任何场景需要 `fetch("https://...")`**。
+
+### 13.2 Rust 后端四个上行入口（契约）
+
+| Command | 用途 | 入参形态 | 是否带 sha256 缓存 |
+|---|---|---|---|
+| `ai_proxy` / `ai_proxy_stream` | AI provider 调用 | provider + endpoint + body | 否（上游有自己的幂等） |
+| `upload_to_server` | 本地文件路径上传 | path + provider + prewarm | **是**，in-flight 单飞 + sqlite 缓存 |
+| `upload_bytes_to_server` | bytes 上传（data:/blob:/vite asset） | bytes + filename + contentType + provider + prewarm | **是**，共享同一份缓存 |
+| `http_request` | 通用上行（auth / update / 任意非 AI） | url + method + body + headers | 否 |
+
+`upload_to_server` 和 `upload_bytes_to_server` **共享缓存**：同一字节内容无论
+从 path 还是 bytes 入口进来，sha256 一致就命中同一条 `uploaded_files` 记录，
+不会重复上传。详见 `commands/upload_remote.rs::run_upload_pipeline`。
+
+### 13.3 禁用清单（ESLint + check-ipc-guards 静态扫描）
+
+```ts
+// ❌ 任何字面量绝对 URL fetch
+fetch("https://api.example.com/foo");
+fetch(`${BASE}/api/bar`);  // 模板字符串拼绝对 URL
+
+// ❌ WebView 不该用的 HTTP 构造器
+new XMLHttpRequest();
+new EventSource(url);
+new WebSocket(url);
+
+// ❌ 已删除的"Web 模式"工具 import（CORS 事件根源）
+import { buildProxyUrl } from "@/platform/storage";
+import { resolveProviderEndpoint } from "@/platform/storage";
+import { getJiJingDevProxyPrefix } from "@/providers/jijing/baseUrl";
+```
+
+唯一合规的 `fetch` 用法：**WebView 内部资源**（data: / blob: / 同源 vite asset），
+样板见 [`httpAdapter.ts::resolveToBlob`](../src/platform/httpAdapter.ts)。
+ESLint 规则只拦截绝对 URL，不影响这条合规路径。
+
+### 13.4 踩过的坑（2026-05-30 CORS 事件）
+
+用户首次 `npm run tauri dev` 后，模板创建 → ChatEditor 自动初始同步 → 大量
+`/v1/files/upload` 调用全部失败：
+
+```
+Access to fetch at 'https://api.snoworangekeji.cn/v1/files/upload'
+from origin 'http://127.0.0.1:1620' has been blocked by CORS policy:
+Response to preflight request doesn't pass access control check:
+No 'Access-Control-Allow-Origin' header is present on the requested resource.
+```
+
+**根因链：**
+1. `media.ts::uploadViaFetch` 在 WebView-only URL 分支用浏览器原生 `fetch`
+2. `resolveProviderEndpoint` 在 `isTauri=true` 时返绝对 URL 而非相对路径
+3. Tauri **dev** 模式下 WebView origin 是 `http://127.0.0.1:1620`（vite），
+   不是 prod 的 `tauri://localhost`
+4. 服务端 CORS allowlist 不放行 vite origin → preflight 失败 → 所有上传挂掉
+
+prod 模式凑巧能跑是因为 `tauri://localhost` 在服务端 allowlist 里 ——
+**这种"凑巧"是脆弱的**，任何上游 CORS 策略变化或换 BaseUrl 都会复现。
+
+### 13.5 别再犯
+
+19. **"我直接发个 fetch 调外部 API"是错的**，无论看起来多简单。Tauri 桌面应用
+    的 WebView origin 在 dev / prod / Web 三个环境下完全不同，CORS / cookie /
+    mixed-content 行为不一致 —— 唯一"任何环境都一致"的做法是走 Rust HTTP 客户端。
+20. **"反正生产能跑"不是放过的理由**。CORS 在桌面端是个**架构性错误**，不是
+    某个端点的配置问题。修一个端点的 CORS allowlist 不解决任何问题，迟早会
+    在第 N 个端点踩到。
+21. **"按 isTauri 二选一"是双语义函数，bug 工厂**。`buildProxyUrl` /
+    `resolveProviderEndpoint` 这种"Tauri 走 A，Web 走 B"的函数，看起来对称
+    但永远会有一边的语义被忽视（尤其是 dev 模式这个第三象限）。直接砍掉一边
+    才能根治。
+22. **删除 `vite.config.ts::server.proxy`** 不是顺手清理，是约束 —— 留着 proxy
+    就有人会"暂时用一下"，然后这个"暂时"就永远不会消失。删干净才能让 ESLint
+    规则有意义。

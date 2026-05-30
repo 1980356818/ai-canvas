@@ -15,42 +15,33 @@
 // **规范**:任何要送给 generateImage / generateVideo / chat / agent 等
 // 上游 API 的本地媒体引用,都走 mediaToApiRef,不允许直接调 getBase64ForApi
 // 或自行构造 base64 dataURL 塞进请求体。eslint 规则会拦截误用。
+//
+// ## 2026-05-30 根治: 砍掉 Web 模式,统一走 httpAdapter
+//
+// 历史 `uploadViaFetch` 在 Tauri dev 模式下用浏览器原生 fetch 调
+// `https://api.snoworangekeji.cn/v1/files/upload`, dev 模式 origin 是 vite
+// 的 `http://127.0.0.1:1620` → 服务端 CORS allowlist 不放行 → preflight 失败,
+// 上传全挂。根治结论: WebView 永远不直接发上行请求, 一切走 Rust HTTP 客户端。
+//
+// 现在分两条路:
+//   1. 本地存储路径 (`local://media/...` / `media/...` / 绝对路径)
+//        → invoke `upload_to_server` (Rust 直接读文件 + multipart)
+//   2. WebView-only URL (`data:` / `blob:` / `/src/...` / `/assets/...`)
+//        → `httpUploadBytes()` (httpAdapter): 先 WebView fetch 成 Blob,
+//          再 invoke `upload_bytes_to_server` (<2.5MB) 或走 chunked pipeline
+//          (大文件)。两条路径共享 sha256 缓存 + in-flight 单飞 + semaphore 治理。
 
-import { isTauri, ensureTauriAPIs, getInvoke } from "./runtime";
-import { resolveProviderEndpoint } from "./storage";
-import { resolveAuthHeaders } from "./auth";
+import { ensureTauriAPIs, getInvoke, isTauri } from "./runtime";
+import {
+  httpUploadBytes,
+  type UploadResult as HttpUploadResult,
+} from "./httpAdapter";
 
 /**
- * Rust 端 `upload_to_server` command 返回结构。跟
+ * Rust 端 `upload_to_server` / `upload_bytes_to_server` 返回结构。跟
  * `src-tauri/src/commands/upload_remote.rs::UploadResult` 对齐。
  */
-export interface UploadResult {
-  url: string;
-  sha256: string;
-  contentType: string;
-  size: number;
-  /** true = 命中本地或服务端缓存, 没有实际产生上传 HTTP */
-  cached: boolean;
-}
-
-/**
- * 服务端 `R<T>` 信封, 跟 jijing-common-core 的 `R.java` 对齐。
- */
-interface ServerEnvelope<T> {
-  code: number;
-  message?: string;
-  data?: T;
-}
-
-interface ServerFileUploadResponse {
-  id: string;
-  url: string;
-  sha256: string;
-  contentType: string;
-  size: number;
-  purpose: string;
-  cached?: boolean;
-}
+export type UploadResult = HttpUploadResult;
 
 export interface MediaToApiRefOptions {
   /** 哪个 provider 的 base_url 走上传 (默认 jijing) */
@@ -71,9 +62,10 @@ export interface MediaToApiRefOptions {
  *
  * 接受输入:
  * - `http://` / `https://` URL — 原样返回 (已是远端)
- * - `local://<rel>` Tauri 占位符 — invoke Rust 上传
- * - `data:<mime>;base64,...` dataURL — Web 模式直接 multipart 上传
- * - 相对存储路径 / Vite 前端 asset / blob: URL — 内部 fetch 转 Blob 再上传
+ * - `local://<rel>` / `media/<rel>` / 绝对路径 — invoke `upload_to_server` 主路径
+ * - `data:` / `blob:` / `/src/...` / `/assets/...` WebView-only URL — 走
+ *   `httpUploadBytes` 把 bytes 喂给 Rust `upload_bytes_to_server`,
+ *   共享同一份 sha256 缓存 / semaphore 治理
  *
  * 永远返回 HTTPS URL。失败抛 Error, 调用方按错误信息决定 UX (展示 toast /
  * 切换 provider / 等)。
@@ -91,50 +83,25 @@ export async function mediaToApiRef(
     return input;
   }
 
+  if (!isTauri) {
+    throw new Error(
+      "[media] mediaToApiRef 仅支持 Tauri 环境。前端不允许直接 fetch 上游 (规约见 src/platform/httpAdapter.ts)。",
+    );
+  }
+
   const provider = opts?.provider ?? "jijing";
   const prewarm = opts?.prewarm ?? false;
 
-  // WebView-only URLs (Vite asset / dataURL / blob:) the Rust backend cannot
-  // open as filesystem paths. Fetch them as bytes in the WebView and upload
-  // via multipart — same code path as Web mode. Without this branch Rust's
-  // resolve_input_path returns `文件不存在: <url>` and ChatEditor surfaces
-  // the rejection (see commit 683a9c7 / 48acaa0 — uploadViaTauri previously
-  // forwarded any string straight to Rust).
+  // WebView-only URL: Rust 文件系统打不开 (data: / blob: 是 WebView 内存对象;
+  // vite asset `/src/` `/assets/` 是 dev/build 中间件服务的虚拟资源)。
+  // 必须先在 WebView 里 fetch 成 Blob, 通过 invoke 喂给 Rust。
   if (isWebViewOnlyUrl(input)) {
-    return uploadViaFetch(input, provider);
+    const result = await httpUploadBytes(input, { provider, prewarm });
+    return result.url;
   }
 
-  if (isTauri) {
-    return uploadViaTauri(input, provider, prewarm);
-  }
-
-  return uploadViaFetch(input, provider);
-}
-
-/**
- * WebView 能 fetch 但 Rust 文件系统打不开的 URL 形式。
- * - `data:` / `blob:` — 内存对象, 只有 WebView 知道
- * - Vite asset — dev 下 `/src/...`, 构建后 `/assets/...`, 由 vite 中间件服务,
- *   不是真的磁盘路径
- *
- * 这类 input 必须在 WebView 里 fetch 成 Blob 再 multipart 上传, 不能塞给
- * Rust 的 upload_to_server (它会报 `文件不存在: <url>`)。
- *
- * 代价: 绕过 Rust 端 sha256 单飞 + sqlite 缓存。对模板静态 asset 影响极小
- * (不会反复用同一张), 对用户拖入的 blob: 影响也有限 (拖完很快就 persist 成
- * storagePath, 之后的 ref 走的是 storagePath 而不是 blob: URL)。
- */
-function isWebViewOnlyUrl(input: string): boolean {
-  if (input.startsWith("data:") || input.startsWith("blob:")) return true;
-  if (input.startsWith("/src/") || input.startsWith("/assets/")) return true;
-  return false;
-}
-
-/**
- * Tauri 模式: Rust 端走 `upload_to_server` command, 自带 sha256 流式 + sqlite
- * 缓存 + in-flight 单飞 + 双 semaphore (main / prewarm) 分桶。
- */
-async function uploadViaTauri(input: string, provider: string, prewarm: boolean): Promise<string> {
+  // 本地存储路径 — Rust 直接读文件, 享受流式 sha256 + sqlite 缓存 +
+  // in-flight 单飞 + 双 semaphore (main / prewarm)。
   await ensureTauriAPIs();
   const result = await getInvoke()<UploadResult>("upload_to_server", {
     path: input,
@@ -145,153 +112,19 @@ async function uploadViaTauri(input: string, provider: string, prewarm: boolean)
 }
 
 /**
- * 把 dataURL / blob: / 前端 asset / 相对路径先 fetch 成 Blob, 再 multipart
- * POST 到服务端。两个场景都走这里:
+ * WebView 能 fetch 但 Rust 文件系统打不开的 URL 形式。
+ * - `data:` / `blob:` — 内存对象, 只有 WebView 知道
+ * - Vite asset — dev 下 `/src/...`, 构建后 `/assets/...`, 由 vite 中间件服务,
+ *   不是真的磁盘路径
  *
- * 1. **Web 模式** (浏览器跑 `npm run dev`) — 全部上传都走这条路 (没有 Rust 端)。
- *    URL 用 vite proxy 前缀, 由 dev server 代理到真实后端, 顺便规避 CORS。
- * 2. **Tauri 模式但 input 是 WebView-only URL** (`data:` / `blob:` / `/src/...`
- *    / `/assets/...`) — Rust 端 `upload_to_server` 不认这种路径 (`resolve_input_path`
- *    返回 `文件不存在`), 只能在 WebView 里 fetch 出来 multipart 上传。
- *
- * **历史坑** (2026-05-29 修复): 早期版本两种场景都用 `buildProxyUrl` 拼相对
- * 路径, Tauri 生产里没 vite proxy, WebView 解析为 `tauri://localhost/v1-jijing/...`
- * 然后 SPA fallback 返 `index.html` 触发 `JSON.parse(<!doctype html>)` 炸。
- * 现在统一走 `resolveProviderEndpoint`: Tauri 直连绝对 URL, Web/Dev 仍走代理。
- *
- * Tauri 模式下 Web 没有 sqlite 缓存的 sha256 单飞 + 双 semaphore 加持 (那是
- * Rust `upload_to_server` 的能力), 等于走"灰色路径"。但 WebView-only URL
- * 通常体积小 (vite asset / dataURL / 短期 blob), 偶尔重传影响很小; 用户的常态
- * 媒体经过 `persistImage` 落盘后是 `local://media/<rel>` 形态, 走的是
- * `uploadViaTauri` 主路径享受全套缓存。
+ * 这类 input 走 [`httpUploadBytes`]: WebView 里 fetch 成 Blob → invoke 喂给
+ * Rust → multipart 上传。跟本地路径上传**共享同一份 sqlite 缓存** (按 sha256
+ * 命中),不存在"两条路径两份缓存"的问题。
  */
-async function uploadViaFetch(input: string, provider: string): Promise<string> {
-  const blob = await resolveToBlob(input);
-  const filename = guessFilename(input, blob.type);
-
-  const form = new FormData();
-  form.append("file", blob, filename);
-  form.append("purpose", "media-input");
-
-  // resolveProviderEndpoint: Tauri 模式返绝对 URL (直连后端, 跳过 WebView SPA fallback),
-  // Web/Dev 返 vite proxy 相对前缀 (由 dev server 代理 + 规避 CORS)。
-  const url = resolveProviderEndpoint("/v1/files/upload", provider);
-  // 不要手动设 Content-Type, 浏览器会自动加 boundary。
-  // resolveAuthHeaders 走 settings.api -> Tauri 模式读 sqlite，Web 模式读 localStorage。
-  // 不能用同步 getProviderAuthHeaders —— Tauri 模式 localStorage 永远为空 -> 401。
-  const headers: Record<string, string> = { ...(await resolveAuthHeaders(provider)) };
-
-  const resp = await fetch(url, { method: "POST", headers, body: form });
-  const bodyText = await resp.text();
-  const contentType = (resp.headers.get("content-type") ?? "").toLowerCase();
-
-  if (!resp.ok) {
-    const msg = extractServerErrorMessage(bodyText) ?? `HTTP ${resp.status}`;
-    throw new Error(`上传失败: ${msg} (url=${url})`);
-  }
-
-  // **防御性检测**: 服务端正确响应必然是 JSON。响应是 HTML / 其它 content-type
-  // 都说明 URL 路由错了 (打到了 SPA index.html / nginx 默认页 / 反代 404 兜底页),
-  // 这种情况下 JSON.parse 会失败, 错误信息显示一长串 HTML, 很难定位 —— 提前给
-  // 一条人话错误, 把 URL 也打出来便于排查。
-  if (!isLikelyJsonResponse(contentType, bodyText)) {
-    throw new Error(
-      `上传响应不是 JSON (content-type=${contentType || "<空>"}, url=${url}). ` +
-        `常见原因: Tauri 生产 WebView SPA fallback, 或后端域名/前缀配错。响应预览: ${bodyText.slice(0, 120)}`,
-    );
-  }
-
-  let envelope: ServerEnvelope<ServerFileUploadResponse>;
-  try {
-    envelope = JSON.parse(bodyText);
-  } catch {
-    throw new Error(`上传响应解析失败 (url=${url}): ${bodyText.slice(0, 200)}`);
-  }
-  if (envelope.code !== 200 || !envelope.data?.url) {
-    throw new Error(`上传失败: ${envelope.message ?? `code=${envelope.code}`}`);
-  }
-  return envelope.data.url;
-}
-
-/**
- * 判断响应"看起来像 JSON" —— content-type 优先, 没拿到时退到看 body 首字符。
- * 服务端正常的 `R<T>` 信封是 `application/json`, 但某些代理 (nginx / Tauri 资源
- * 协议 SPA fallback) 不会改 content-type 头, 所以加 body 首字符兜底。
- */
-function isLikelyJsonResponse(contentType: string, body: string): boolean {
-  if (contentType.includes("application/json")) return true;
-  if (contentType.includes("text/html")) return false;
-  const head = body.trimStart().slice(0, 1);
-  return head === "{" || head === "[";
-}
-
-async function resolveToBlob(input: string): Promise<Blob> {
-  if (input.startsWith("data:")) {
-    return dataUrlToBlob(input);
-  }
-  // blob: / 前端 asset / 相对路径 都能 fetch
-  const resp = await fetch(input);
-  if (!resp.ok) {
-    throw new Error(`无法读取本地媒体 (${resp.status}): ${input}`);
-  }
-  return await resp.blob();
-}
-
-function dataUrlToBlob(dataUrl: string): Blob {
-  const commaIdx = dataUrl.indexOf(",");
-  if (!dataUrl.startsWith("data:") || commaIdx < 0) {
-    throw new Error("非合法 dataURL");
-  }
-  const meta = dataUrl.slice(5, commaIdx);
-  const isBase64 = meta.endsWith(";base64");
-  const mime = isBase64 ? meta.slice(0, -7) : meta;
-  const payload = dataUrl.slice(commaIdx + 1);
-  if (isBase64) {
-    const binary = atob(payload);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return new Blob([bytes], { type: mime || "application/octet-stream" });
-  }
-  return new Blob([decodeURIComponent(payload)], { type: mime || "text/plain" });
-}
-
-function guessFilename(input: string, mime: string): string {
-  if (input.startsWith("data:")) {
-    return `upload.${extFromMime(mime)}`;
-  }
-  const tail = input.split(/[?#]/)[0]!.split("/").pop();
-  if (tail && tail.includes(".")) return tail;
-  return `upload.${extFromMime(mime)}`;
-}
-
-function extFromMime(mime: string): string {
-  const m = mime.toLowerCase();
-  if (m === "image/jpeg" || m === "image/jpg") return "jpg";
-  if (m === "image/png") return "png";
-  if (m === "image/webp") return "webp";
-  if (m === "image/gif") return "gif";
-  if (m === "video/mp4") return "mp4";
-  if (m === "video/webm") return "webm";
-  if (m === "video/quicktime") return "mov";
-  if (m === "audio/mpeg") return "mp3";
-  if (m === "audio/wav") return "wav";
-  return "bin";
-}
-
-/**
- * 4xx/5xx 时尝试从服务端 `R<T>` 信封拿 message,
- * 拿不到就返 null 让调用方走兜底 HTTP code。
- */
-function extractServerErrorMessage(bodyText: string): string | null {
-  if (!bodyText) return null;
-  try {
-    const obj = JSON.parse(bodyText);
-    if (typeof obj.message === "string") return obj.message;
-    if (typeof obj.error?.message === "string") return obj.error.message;
-  } catch {
-    /* fallthrough */
-  }
-  return null;
+function isWebViewOnlyUrl(input: string): boolean {
+  if (input.startsWith("data:") || input.startsWith("blob:")) return true;
+  if (input.startsWith("/src/") || input.startsWith("/assets/")) return true;
+  return false;
 }
 
 // ─── 批量入口 + 预热入口 ─────────────────────────────────────────────

@@ -1,41 +1,29 @@
 import type { AiProxyResponse, StreamCallbacks, ModelInfo, TaskInfo } from "@/types";
 import { isTauri, ensureTauriAPIs, getInvoke, getListen } from "./runtime";
-import { buildProxyUrl } from "./storage";
-import {
-  readProviderKeys,
-  resolveAuthHeaders,
-  setActiveKey,
-  isAutoRotateEnabled,
-  type ProviderKeyEntry,
-} from "./auth";
-import { getComflyKeyTag } from "@/providers/comfly/models";
 import { diagError, diagWarn } from "@/lib/diag";
 
 // 跨次流式调用累计的"活监听器"计数。监听器泄漏是历史 bug 的根源
-// （done/error/onDone 抛错时旧实现会漏 unlisten），现在每个 stream 都进/出
-// 这个 Set，diag 通过它能在出错时拉到现场。
+// (done/error/onDone 抛错时旧实现会漏 unlisten),现在每个 stream 都进/出
+// 这个 Set,diag 通过它能在出错时拉到现场。
 const _activeStreamListeners = new Set<string>();
 
-const DEBUG = import.meta.env.DEV;
-
-function isRetryableStatus(status: number): boolean {
-  return status >= 400;
-}
-
-/**
- * 根据 provider + 请求体派生 key 槽位 tag。
- * 仅 comfly 启用槽位路由；其他 provider 返回 undefined（不过滤）。
- */
-function resolveKeyTag(provider: string, body: Record<string, unknown>): string | undefined {
-  if (provider !== "comfly") return undefined;
-  const model = typeof body.model === "string" ? body.model : undefined;
-  return getComflyKeyTag(model);
-}
-
-function keyTagLabel(tag: string | undefined): string {
-  if (tag === "gemini_premium") return "Gemini 优质";
-  if (tag === "default") return "普通默认";
-  return "";
+// ── Tauri-only 守门 ──────────────────────────────────────────────────────
+//
+// ai-canvas 是 Tauri 桌面应用, 前端**不允许**直接发出站 HTTP 请求 (CORS /
+// cookie / mixed-content 等浏览器层风险, 2026-05-30 CORS 事件根治结论)。
+// 历史 Web 模式分支 (浏览器原生 fetch 直连 provider) 已全部移除, 这里加 guard
+// 防止"哪天有人重新引入" —— 调用方在非 Tauri 环境下立刻报错而不是静默 fetch。
+//
+// 走 Rust invoke 的入口:
+//   ai_proxy / ai_proxy_stream / ai_proxy_stream_abort  → AI 模型 API
+//   list_models / poll_task / validate_connection       → gateway
+//   http_request                                         → 通用上行 (见 httpAdapter)
+function requireTauri(fn: string): void {
+  if (!isTauri) {
+    throw new Error(
+      `[ai.api] ${fn} 仅支持 Tauri 环境。前端不允许在 Web 上直接调 AI API (规约: 详见 src/platform/httpAdapter.ts 顶部注释)。`,
+    );
+  }
 }
 
 function notifyKeyRotation(keyName: string | null | undefined) {
@@ -51,73 +39,26 @@ export async function aiProxy(
   endpoint: string,
   body: Record<string, unknown>,
 ): Promise<AiProxyResponse> {
-  if (isTauri) {
-    console.log("[platform.aiProxy] invoke ai_proxy start", {
-      provider,
-      endpoint,
-      bodyKeys: Object.keys(body),
-      debugRequestId: typeof body._debug_request_id === "string" ? body._debug_request_id : undefined,
-    });
-    const started = performance.now();
-    await ensureTauriAPIs();
-    const result = await getInvoke()<AiProxyResponse>("ai_proxy", { provider, endpoint, body });
-    console.log("[platform.aiProxy] invoke ai_proxy returned", {
-      provider,
-      endpoint,
-      status: result.status,
-      elapsedMs: Math.round(performance.now() - started),
-      bodyBytes: result.body.length,
-      debugRequestId: typeof body._debug_request_id === "string" ? body._debug_request_id : undefined,
-    });
-    notifyKeyRotation(result.rotated_key_name);
-    return result;
-  }
-
-  const url = buildProxyUrl(endpoint, provider);
-  const keyTag = resolveKeyTag(provider, body);
-  const keys = await readProviderKeys(provider, keyTag);
-  const canRotate = (await isAutoRotateEnabled(provider)) && keys.length > 1;
-
-  if (keys.length === 0) {
-    const tagLabel = keyTagLabel(keyTag);
-    const message = tagLabel
-      ? `Provider '${provider}' 的「${tagLabel}」槽位未配置 API Key，请在设置中填写`
-      : `Provider '${provider}' 未配置 API Key，请在设置中填写`;
-    return {
-      body: JSON.stringify({ error: { message } }),
-      status: 401,
-    };
-  }
-
-  let lastBody = "";
-  let lastStatus = 0;
-
-  for (let i = 0; i < keys.length; i++) {
-    const entry = keys[i]!;
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${entry.key}`,
-    };
-
-    const resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
-    const text = await resp.text();
-
-    if (resp.status < 400 || !canRotate || !isRetryableStatus(resp.status)) {
-      if (i > 0) {
-        await setActiveKey(provider, entry);
-        notifyKeyRotation(entry.name);
-      }
-      return { body: text, status: resp.status, rotated_key_name: i > 0 ? entry.name : undefined, tried_count: i + 1 };
-    }
-
-    if (DEBUG) {
-      console.warn(`[key_rotation][browser] key "${entry.name}" failed: HTTP ${resp.status}, rotating`);
-    }
-    lastBody = text;
-    lastStatus = resp.status;
-  }
-
-  return { body: lastBody, status: lastStatus, tried_count: keys.length };
+  requireTauri("aiProxy");
+  console.log("[platform.aiProxy] invoke ai_proxy start", {
+    provider,
+    endpoint,
+    bodyKeys: Object.keys(body),
+    debugRequestId: typeof body._debug_request_id === "string" ? body._debug_request_id : undefined,
+  });
+  const started = performance.now();
+  await ensureTauriAPIs();
+  const result = await getInvoke()<AiProxyResponse>("ai_proxy", { provider, endpoint, body });
+  console.log("[platform.aiProxy] invoke ai_proxy returned", {
+    provider,
+    endpoint,
+    status: result.status,
+    elapsedMs: Math.round(performance.now() - started),
+    bodyBytes: result.body.length,
+    debugRequestId: typeof body._debug_request_id === "string" ? body._debug_request_id : undefined,
+  });
+  notifyKeyRotation(result.rotated_key_name);
+  return result;
 }
 
 export async function aiProxyStream(
@@ -126,213 +67,94 @@ export async function aiProxyStream(
   body: Record<string, unknown>,
   callbacks: StreamCallbacks,
 ): Promise<{ streamId: string; abort: () => Promise<void> }> {
+  requireTauri("aiProxyStream");
   const streamId = crypto.randomUUID();
 
-  if (isTauri) {
-    await ensureTauriAPIs();
+  await ensureTauriAPIs();
 
-    interface StreamEvent {
-      stream_id: string;
-      event: "chunk" | "done" | "error" | "key_switched";
-      data: string;
-    }
-
-    // ── 统一 cleanup：done / error / abort / 用户回调抛错都走这里。
-    // 旧版只在 done 分支调 unlisten，error 路径直接漏；连发几次生成就攒一堆
-    // 监听器，每个 chunk 触发 N 个回调，最终 WebView 渲染进程 OOM 白屏。
-    let cleaned = false;
-    let unlistenFn: (() => void) | null = null;
-    const cleanup = () => {
-      if (cleaned) return;
-      cleaned = true;
-      _activeStreamListeners.delete(streamId);
-      try {
-        unlistenFn?.();
-      } catch (err) {
-        diagWarn("ai-stream", "unlisten failed", { streamId, err: String(err) });
-      }
-    };
-
-    unlistenFn = await getListen()<StreamEvent>("ai-stream", (event) => {
-      if (cleaned) return;
-      const payload = event.payload;
-      if (payload.stream_id !== streamId) return;
-
-      // 用户回调抛错不能影响 cleanup —— 全部包 try/catch，错误转交 diag。
-      try {
-        switch (payload.event) {
-          case "chunk":
-            callbacks.onChunk(payload.data);
-            break;
-          case "key_switched": {
-            try {
-              const info = JSON.parse(payload.data);
-              notifyKeyRotation(info.key_name);
-              callbacks.onKeySwitched?.(info.key_name, info.tried_count);
-            } catch { /* ignore parse error */ }
-            break;
-          }
-          case "done":
-            try { callbacks.onDone(); } finally { cleanup(); }
-            break;
-          case "error":
-            try { callbacks.onError(payload.data); } finally { cleanup(); }
-            break;
-        }
-      } catch (err) {
-        diagError("ai-stream", err, { streamId, event: payload.event });
-        // 回调炸了照样要释放监听器
-        cleanup();
-      }
-    });
-
-    _activeStreamListeners.add(streamId);
-    if (_activeStreamListeners.size > 8) {
-      diagWarn("ai-stream", `${_activeStreamListeners.size} active listeners (possible leak)`, {
-        ids: Array.from(_activeStreamListeners),
-      });
-    }
-
-    // 后端 invoke 失败也要 cleanup，否则监听器永远挂着
-    try {
-      await getInvoke()("ai_proxy_stream", {
-        provider,
-        endpoint,
-        body: { ...body, stream: true },
-        streamId,
-      });
-    } catch (err) {
-      cleanup();
-      throw err;
-    }
-
-    return {
-      streamId,
-      abort: async () => {
-        try {
-          await getInvoke()("ai_proxy_stream_abort", { streamId });
-        } finally {
-          cleanup();
-        }
-      },
-    };
+  interface StreamEvent {
+    stream_id: string;
+    event: "chunk" | "done" | "error" | "key_switched";
+    data: string;
   }
 
-  const abortController = new AbortController();
-  const url = buildProxyUrl(endpoint, provider);
-  const keyTag = resolveKeyTag(provider, body);
-
-  (async () => {
-    const keys: ProviderKeyEntry[] = await readProviderKeys(provider, keyTag);
-    const canRotate = (await isAutoRotateEnabled(provider)) && keys.length > 1;
-
-    const tryStreamWithKey = async (apiKey: string): Promise<{ ok: boolean; retryable: boolean }> => {
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        Authorization: apiKey ? `Bearer ${apiKey}` : "",
-      };
-
-      const resp = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ ...body, stream: true }),
-        signal: abortController.signal,
-      });
-
-      if (!resp.ok) {
-        const errText = await resp.text();
-        const retryable = isRetryableStatus(resp.status);
-        if (!retryable) {
-          callbacks.onError(`HTTP ${resp.status}: ${errText}`);
-        }
-        return { ok: false, retryable };
-      }
-
-      const reader = resp.body?.getReader();
-      if (!reader) {
-        callbacks.onError("No readable stream");
-        return { ok: false, retryable: false };
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        buffer += chunk;
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed.startsWith(":")) continue;
-          if (trimmed === "data: [DONE]") {
-            callbacks.onDone();
-            return { ok: true, retryable: false };
-          }
-          if (trimmed.startsWith("data: ")) {
-            callbacks.onChunk(trimmed.slice(6));
-          }
-        }
-      }
-
-      if (buffer.trim()) {
-        const trimmed = buffer.trim();
-        if (trimmed !== "data: [DONE]" && trimmed.startsWith("data: ")) {
-          callbacks.onChunk(trimmed.slice(6));
-        }
-      }
-
-      callbacks.onDone();
-      return { ok: true, retryable: false };
-    };
-
+  // ── 统一 cleanup:done / error / abort / 用户回调抛错都走这里。
+  // 旧版只在 done 分支调 unlisten,error 路径直接漏;连发几次生成就攒一堆
+  // 监听器,每个 chunk 触发 N 个回调,最终 WebView 渲染进程 OOM 白屏。
+  let cleaned = false;
+  let unlistenFn: (() => void) | null = null;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    _activeStreamListeners.delete(streamId);
     try {
-      if (keys.length === 0) {
-        const tagLabel = keyTagLabel(keyTag);
-        const message = tagLabel
-          ? `Provider '${provider}' 的「${tagLabel}」槽位未配置 API Key，请在设置中填写`
-          : `Provider '${provider}' 未配置 API Key，请在设置中填写`;
-        callbacks.onError(message);
-        return;
-      }
-
-      for (let i = 0; i < keys.length; i++) {
-        const entry = keys[i]!;
-        const result = await tryStreamWithKey(entry.key);
-
-        if (result.ok) {
-          if (i > 0) {
-            await setActiveKey(provider, entry);
-            notifyKeyRotation(entry.name);
-            callbacks.onKeySwitched?.(entry.name, i + 1);
-          }
-          return;
-        }
-
-        if (!result.retryable || !canRotate) return;
-
-        if (DEBUG) {
-          console.warn(`[key_rotation][browser][stream] key "${entry.name}" failed, rotating`);
-        }
-      }
-
-      callbacks.onError(`所有 API Key 均不可用 (尝试了 ${keys.length} 个)`);
+      unlistenFn?.();
     } catch (err) {
-      if ((err as Error).name !== "AbortError") {
-        console.error("[Stream][Browser] fetch error:", err);
-        callbacks.onError(err instanceof Error ? err.message : String(err));
-      }
+      diagWarn("ai-stream", "unlisten failed", { streamId, err: String(err) });
     }
-  })();
+  };
+
+  unlistenFn = await getListen()<StreamEvent>("ai-stream", (event) => {
+    if (cleaned) return;
+    const payload = event.payload;
+    if (payload.stream_id !== streamId) return;
+
+    // 用户回调抛错不能影响 cleanup —— 全部包 try/catch,错误转交 diag。
+    try {
+      switch (payload.event) {
+        case "chunk":
+          callbacks.onChunk(payload.data);
+          break;
+        case "key_switched": {
+          try {
+            const info = JSON.parse(payload.data);
+            notifyKeyRotation(info.key_name);
+            callbacks.onKeySwitched?.(info.key_name, info.tried_count);
+          } catch { /* ignore parse error */ }
+          break;
+        }
+        case "done":
+          try { callbacks.onDone(); } finally { cleanup(); }
+          break;
+        case "error":
+          try { callbacks.onError(payload.data); } finally { cleanup(); }
+          break;
+      }
+    } catch (err) {
+      diagError("ai-stream", err, { streamId, event: payload.event });
+      // 回调炸了照样要释放监听器
+      cleanup();
+    }
+  });
+
+  _activeStreamListeners.add(streamId);
+  if (_activeStreamListeners.size > 8) {
+    diagWarn("ai-stream", `${_activeStreamListeners.size} active listeners (possible leak)`, {
+      ids: Array.from(_activeStreamListeners),
+    });
+  }
+
+  // 后端 invoke 失败也要 cleanup,否则监听器永远挂着
+  try {
+    await getInvoke()("ai_proxy_stream", {
+      provider,
+      endpoint,
+      body: { ...body, stream: true },
+      streamId,
+    });
+  } catch (err) {
+    cleanup();
+    throw err;
+  }
 
   return {
     streamId,
     abort: async () => {
-      abortController.abort();
+      try {
+        await getInvoke()("ai_proxy_stream_abort", { streamId });
+      } finally {
+        cleanup();
+      }
     },
   };
 }
@@ -340,17 +162,10 @@ export async function aiProxyStream(
 // ── Gateway ─────────────────────────────────────────────────
 
 export async function listModels(provider?: string): Promise<ModelInfo[]> {
-  if (isTauri) {
-    await ensureTauriAPIs();
-    const raw = await getInvoke()<{ data?: ModelInfo[] }>("list_models", { provider });
-    return raw.data ?? [];
-  }
-
-  const url = buildProxyUrl("/v1/models", provider);
-  const resp = await fetch(url, { headers: await resolveAuthHeaders(provider) });
-  if (!resp.ok) throw new Error(`Failed to list models: ${resp.status}`);
-  const data = await resp.json();
-  return data.data ?? [];
+  requireTauri("listModels");
+  await ensureTauriAPIs();
+  const raw = await getInvoke()<{ data?: ModelInfo[] }>("list_models", { provider });
+  return raw.data ?? [];
 }
 
 function extractNestedUrl(raw: Record<string, unknown>): string | undefined {
@@ -373,11 +188,11 @@ function extractNestedUrl(raw: Record<string, unknown>): string | undefined {
 /**
  * 上游响应里的 progress 字段规范化。
  *
- * 设计要点：**"没给进度"和"进度真的是 0"必须区分开**——后端经常返回
- * `progress: null` / 字段缺失 / `progress: 0`（用作占位），如果都塌缩成数字 0，
- * 客户端就拿不到"该用时间外推"的信号，UI 会卡死在 0%。
+ * 设计要点:**"没给进度"和"进度真的是 0"必须区分开**——后端经常返回
+ * `progress: null` / 字段缺失 / `progress: 0`(用作占位),如果都塌缩成数字 0,
+ * 客户端就拿不到"该用时间外推"的信号,UI 会卡死在 0%。
  *
- * 规则：
+ * 规则:
  *   - null / undefined / 缺失   → undefined
  *   - 数字 > 0                  → 透传
  *   - 数字 <= 0 / NaN           → undefined
@@ -414,7 +229,7 @@ function parseFirstUrl(raw: string | undefined): string | undefined {
 }
 
 export function normalizeTaskInfo(raw: Record<string, unknown>): TaskInfo {
-  if (DEBUG) {
+  if (import.meta.env.DEV) {
     console.log("[TaskPoll] raw fields:", Object.keys(raw));
   }
   const rawUrl = (raw.resultUrl ?? raw.result_url ?? raw.video_url ?? extractNestedUrl(raw)) as string | undefined;
@@ -437,28 +252,18 @@ export async function pollTask(
   provider?: string,
   keyTag?: string,
 ): Promise<TaskInfo> {
-  if (isTauri) {
-    await ensureTauriAPIs();
-    const raw = await getInvoke()<Record<string, unknown>>("poll_task", { taskId, endpoint, provider, keyTag });
-    return normalizeTaskInfo(raw);
-  }
-
-  const path = endpoint
-    ? endpoint.replace("{task_id}", taskId)
-    : `/v1/tasks/${taskId}`;
-  const url = buildProxyUrl(path, provider);
-  const resp = await fetch(url, { headers: await resolveAuthHeaders(provider, keyTag) });
-  if (!resp.ok) throw new Error(`Failed to poll task: ${resp.status}`);
-  const raw = await resp.json();
+  requireTauri("pollTask");
+  await ensureTauriAPIs();
+  const raw = await getInvoke()<Record<string, unknown>>("poll_task", { taskId, endpoint, provider, keyTag });
   return normalizeTaskInfo(raw);
 }
 
 export interface ValidateConnectionOverrides {
-  /** 当前表单里填写的 key（未保存），优先于数据库中的值。 */
+  /** 当前表单里填写的 key (未保存),优先于数据库中的值。 */
   apiKey?: string;
-  /** 当前表单里填写的 base URL（未保存），优先于数据库中的值。 */
+  /** 当前表单里填写的 base URL (未保存),优先于数据库中的值。 */
   baseUrl?: string;
-  /** 可选 key 槽位（comfly: "default" / "gemini_premium"）；用于按槽位测试连接。 */
+  /** 可选 key 槽位 (comfly: "default" / "gemini_premium");用于按槽位测试连接。 */
   keyTag?: string;
 }
 
@@ -466,23 +271,12 @@ export async function validateConnection(
   provider?: string,
   overrides?: ValidateConnectionOverrides,
 ): Promise<boolean> {
-  if (isTauri) {
-    await ensureTauriAPIs();
-    return getInvoke()<boolean>("validate_connection", {
-      provider,
-      apiKey: overrides?.apiKey,
-      baseUrl: overrides?.baseUrl,
-      keyTag: overrides?.keyTag,
-    });
-  }
-
-  const apiKey = overrides?.apiKey?.trim();
-  const headers: Record<string, string> = apiKey
-    ? { Authorization: `Bearer ${apiKey}` }
-    : await resolveAuthHeaders(provider ?? "comfly", overrides?.keyTag);
-  const url = buildProxyUrl("/v1/models", provider);
-  const resp = await fetch(url, { headers });
-  if (!resp.ok)
-    throw new Error(`连接失败: HTTP ${resp.status}`);
-  return true;
+  requireTauri("validateConnection");
+  await ensureTauriAPIs();
+  return getInvoke()<boolean>("validate_connection", {
+    provider,
+    apiKey: overrides?.apiKey,
+    baseUrl: overrides?.baseUrl,
+    keyTag: overrides?.keyTag,
+  });
 }

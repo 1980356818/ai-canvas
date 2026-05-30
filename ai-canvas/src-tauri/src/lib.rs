@@ -902,6 +902,10 @@ pub fn run() {
             commands::upload_local::upload_media_cleanup,
             // upload_remote: Rust → JiJing /v1/files/upload (规避上游 API body 上限)
             commands::upload_remote::upload_to_server,
+            commands::upload_remote::upload_bytes_to_server,
+            // http_request: 通用上行 HTTP, 前端 platform/httpAdapter.ts::httpJson 走这里。
+            // 消灭 WebView 直连出站 fetch, 规避 CORS / cookie / mixed-content 等浏览器层问题。
+            commands::http_request::http_request,
             commands::gateway::list_models,
             commands::gateway::poll_task,
             commands::gateway::validate_connection,

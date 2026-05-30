@@ -72,6 +72,41 @@ export default tseslint.config(
           message:
             "禁止 getBase64ForApi —— 用 mediaToApiRef (@/platform/media) 替代。getBase64ForApi 走 local:// → Rust inline base64 路径,撞 IPC 64MB / nginx 100MB / MySQL request_params 上限。详见 docs/media-upload-refactor.md。",
         },
+        // ─── 前端上行 HTTP 规约 (2026-05-30 CORS 事件根治) ──────────────
+        //
+        // ai-canvas 是 Tauri 桌面应用, WebView 永远不允许直接发上行请求。
+        // 浏览器层 CORS / cookie / mixed-content / referer 等行为在 Tauri
+        // dev / prod / Web 三个环境下完全不一致, 任何"绝对 URL fetch"都是
+        // 脆弱的 — dev 跑得通 prod 挂、prod 凑巧 OK 哪天 CORS 收紧就挂。
+        //
+        // 唯一合规: 走 httpAdapter (httpJson / httpJsonRequest / httpUploadBytes)
+        // → Rust invoke → reqwest 客户端。CORS 在桌面端不应该存在。
+        {
+          // 禁止 `fetch("https://...")` —— 任何字面量绝对 URL fetch
+          selector:
+            "CallExpression[callee.name='fetch'][arguments.0.type='Literal'][arguments.0.value=/^https?:\\/\\//]",
+          message:
+            "禁止 fetch(absoluteUrl) (前端上行 HTTP 规约)。WebView 永远不直接发跨域请求。改用 @/platform/httpAdapter 的 httpJson / httpJsonRequest / httpUploadBytes,或对 AI provider 调用走 @/platform/ai.api 的 aiProxy / aiProxyStream。详见 src/platform/httpAdapter.ts 顶部注释。",
+        },
+        {
+          // 禁止 `fetch(\`${base}/path\`)` —— 模板字符串绝对 URL fetch
+          selector:
+            "CallExpression[callee.name='fetch'][arguments.0.type='TemplateLiteral']:has([quasis.0.value.raw=/^https?:\\/\\//])",
+          message:
+            "禁止 fetch 模板字符串绝对 URL (前端上行 HTTP 规约)。改用 @/platform/httpAdapter::httpJson 等入口走 Rust invoke。详见 src/platform/httpAdapter.ts 顶部注释。",
+        },
+        {
+          // 禁止 XMLHttpRequest —— 跟 fetch 一样会出 CORS / cookie 问题
+          selector: "NewExpression[callee.name='XMLHttpRequest']",
+          message:
+            "禁止 new XMLHttpRequest() (前端上行 HTTP 规约)。改用 @/platform/httpAdapter 的 httpJson 等入口走 Rust invoke。",
+        },
+        {
+          // 禁止 EventSource —— 流式服务端推送应该走 ai_proxy_stream (Tauri event)
+          selector: "NewExpression[callee.name='EventSource']",
+          message:
+            "禁止 new EventSource() (前端上行 HTTP 规约)。流式调用走 @/platform/ai.api::aiProxyStream (Tauri event channel)。",
+        },
       ],
     },
   },

@@ -1,5 +1,10 @@
 export { isTauri } from "./runtime";
-export { lsGet, lsSet, lsRemove, buildProxyUrl } from "./storage";
+export { lsGet, lsSet, lsRemove } from "./storage";
+// 上行 HTTP 统一入口 —— 见 httpAdapter.ts 顶部注释。
+// 任何上游请求一律走 httpJson / httpJsonRequest / httpUploadBytes,
+// 禁止前端用 fetch(absoluteUrl)。ESLint 规则 + check-ipc-guards.mjs 会拦截。
+export { httpJson, httpJsonRequest, httpUploadBytes } from "./httpAdapter";
+export type { HttpJsonOptions, HttpMethod, HttpResponse, UploadResult, UploadBytesOptions } from "./httpAdapter";
 export {
   readProviderKeys,
   readProviderFirstKey,

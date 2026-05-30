@@ -9,6 +9,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { lsGet, lsSet } from "./storage";
+import { httpJsonRequest } from "./httpAdapter";
 
 // ── 服务端 base url ──────────────────────────────────────────────────
 // 跟 auth.api.ts 同一个 key,改了一处两处都跟着变。
@@ -56,10 +57,10 @@ export async function apiListAvailableVersions(
   target: string,
   arch: string,
 ): Promise<VersionItem[]> {
+  // 走 Rust http_request command, 遵守"前端不直接 fetch 上游"规约
+  // (详见 src/platform/httpAdapter.ts 顶部注释)。
   const url = `${getServerBaseUrl()}/api/update/list/${target}/${arch}`;
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`列出版本失败: HTTP ${resp.status}`);
-  const json: ApiResult<VersionItem[]> = await resp.json();
+  const json = await httpJsonRequest<ApiResult<VersionItem[]>>({ url });
   if (json.code !== 0) throw new Error(json.msg || "列出版本失败");
   return json.data;
 }

@@ -184,6 +184,57 @@ if [ -f "$auth_file" ]; then
     done
 fi
 
+# 9. Frontend outbound HTTP guard (2026-05-30 CORS event root cause). Same
+#    design rationale as the IPC guards above -- fail at build time instead
+#    of discovering the bug at runtime in dev. See scripts/check-ipc-guards.ps1
+#    section 11 for the full docstring.
+http_adapter="src/platform/httpAdapter.ts"
+if [ ! -f "$http_adapter" ]; then
+    errors+=("src/platform/httpAdapter.ts MUST exist -- single outbound HTTP entry point")
+fi
+checks=$((checks + 1))
+
+banned_imports="buildProxyUrl|resolveProviderEndpoint|getProviderAbsoluteBaseUrl|getJiJingDevProxyPrefix|getComflyDevProxyPrefix"
+banned_ctors="XMLHttpRequest|EventSource|WebSocket"
+
+while IFS= read -r f; do
+    rel="${f#./}"
+    is_platform=0
+    case "$rel" in
+        src/platform/*) is_platform=1;;
+    esac
+    safe_name=$(echo "$rel" | tr '/' '_')
+    clean="$ts_files_clean_dir/http_$safe_name"
+    perl -0777 -pe 's{/\*.*?\*/}{}gs' "$f" | grep -v '^[[:space:]]*//' > "$clean" || true
+
+    # 9a. fetch("http(s)://...") / fetch(`http(s)://...`) absolute URL literal.
+    #     Allowed inside src/platform/ only (httpAdapter never receives one
+    #     by design, but keep the rule simple).
+    if [ "$is_platform" -eq 0 ]; then
+        if grep -Eq 'fetch[[:space:]]*\([[:space:]]*[`"'"'"']https?://' "$clean"; then
+            errors+=("$rel uses fetch(absoluteUrl) -- forbidden in WebView. Use @/platform/httpAdapter.")
+        fi
+        checks=$((checks + 1))
+    fi
+
+    # 9b. Forbidden HTTP constructors.
+    for ctor in $(echo "$banned_ctors" | tr '|' ' '); do
+        if grep -Eq "\\bnew[[:space:]]+${ctor}[[:space:]]*\\(" "$clean"; then
+            errors+=("$rel uses new ${ctor}() -- forbidden in WebView. Use @/platform/httpAdapter or aiProxyStream.")
+        fi
+        checks=$((checks + 1))
+    done
+
+    # 9c. Removed Web-mode helper imports/re-exports.
+    for name in $(echo "$banned_imports" | tr '|' ' '); do
+        if grep -Eq "\\bimport\\b[^;]*\\b${name}\\b" "$clean" || \
+           grep -Eq "\\bexport[[:space:]]*\\{[^}]*\\b${name}\\b" "$clean"; then
+            errors+=("$rel imports/re-exports '${name}' -- removed (2026-05-30 CORS fix). Use @/platform/httpAdapter.")
+        fi
+        checks=$((checks + 1))
+    done
+done < <(find src -type f \( -name '*.ts' -o -name '*.tsx' \) 2>/dev/null)
+
 if [ ${#errors[@]} -eq 0 ]; then
     echo "[check-ipc-guards] OK: $checks checks passed"
     exit 0

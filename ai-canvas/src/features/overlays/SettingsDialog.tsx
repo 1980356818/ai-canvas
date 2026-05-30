@@ -330,8 +330,8 @@ export default function SettingsDialog() {
           await setSetting("openai_api_key", activeKey);
         }
 
-        // 极境「海外用户」开关持久化。Rust 端 resolve_base_url 与 dev 模式
-        // buildProxyUrl 都从 JIJING_OVERSEAS_SETTING_KEY 读取该值决定最终线路。
+        // 极境「海外用户」开关持久化。Rust 端 resolve_base_url 从 sqlite
+        // 读 JIJING_OVERSEAS_SETTING_KEY 决定最终线路 (前端不再直连上游)。
         if (p.id === "jijing") {
           await setSetting(JIJING_OVERSEAS_SETTING_KEY, String(p.overseas));
         }

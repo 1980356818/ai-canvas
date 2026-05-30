@@ -245,6 +245,75 @@ if (Test-Path $authFile) {
     }
 }
 
+# 11. Frontend outbound HTTP guard (2026-05-30 CORS event root cause).
+#     The WebView must never fetch upstream URLs directly. All outbound HTTP
+#     goes through Rust invoke (httpAdapter -> http_request / ai_proxy /
+#     upload_bytes_to_server). Same design rationale as the IPC guards in
+#     section 1-7: fail at build time rather than discover the bug in dev.
+#
+#     Forbidden patterns scanned outside src/platform/:
+#       - fetch("https://...") / fetch("http://...") literal absolute URL
+#       - fetch(`https://...` template literal absolute URL
+#       - new XMLHttpRequest() / new EventSource() / new WebSocket() (we don't
+#         use these anywhere; flag if anyone introduces them).
+#       - Import of removed symbols: buildProxyUrl / resolveProviderEndpoint /
+#         getProviderAbsoluteBaseUrl / getJiJingDevProxyPrefix /
+#         getComflyDevProxyPrefix. These were the Web/dev fetch helpers and
+#         shouldn't come back; the failure mode is silent CORS in dev only.
+$bannedImports = @(
+    'buildProxyUrl',
+    'resolveProviderEndpoint',
+    'getProviderAbsoluteBaseUrl',
+    'getJiJingDevProxyPrefix',
+    'getComflyDevProxyPrefix'
+)
+$platformDir = Join-Path $root 'src/platform'
+$httpAdapter = Join-Path $platformDir 'httpAdapter.ts'
+
+$checks++
+if (-not (Test-Path $httpAdapter)) {
+    AddError "src/platform/httpAdapter.ts MUST exist -- it is the single outbound HTTP entry point"
+}
+
+$srcFiles = Get-ChildItem -Path (Join-Path $root 'src') -Recurse -Include *.ts,*.tsx -File
+foreach ($f in $srcFiles) {
+    $isPlatformFile = $f.FullName.StartsWith($platformDir)
+    $raw = Get-Content $f.FullName -Raw -Encoding UTF8
+    $stripped = StripBlockComments $raw
+    $relPath = $f.FullName.Substring($root.Length+1)
+
+    # 11a. fetch("http(s)://...") / fetch(`http(s)://...`) literal absolute URL.
+    #      Allowed ONLY inside src/platform/ (httpAdapter resolveToBlob is OK
+    #      because it never receives absolute URLs by design; we still block
+    #      the literal pattern to keep the rule simple).
+    if (-not $isPlatformFile) {
+        $checks++
+        if ($stripped -match '(?m)^(?!\s*//).*\bfetch\s*\(\s*[`"'']https?://') {
+            AddError "$relPath uses fetch(absoluteUrl) -- WebView must not fetch upstream directly. Use @/platform/httpAdapter (httpJson / httpJsonRequest / httpUploadBytes)."
+        }
+    }
+
+    # 11b. new XMLHttpRequest / EventSource / WebSocket -- same rationale.
+    foreach ($ctor in @('XMLHttpRequest', 'EventSource', 'WebSocket')) {
+        $checks++
+        if ($stripped -match ('(?m)^(?!\s*//).*\bnew\s+' + $ctor + '\s*\(')) {
+            AddError "$relPath uses new $ctor() -- forbidden in WebView (CORS / cookie unreliable). Use @/platform/httpAdapter or aiProxyStream (Tauri event)."
+        }
+    }
+
+    # 11c. Imports of removed Web-mode helpers. Scan ALL files including
+    #      platform/ -- those helpers were deleted, so even storage.ts should
+    #      not import them.
+    foreach ($name in $bannedImports) {
+        $checks++
+        # Match `import { ..., NAME, ... } from "..."` or named re-export.
+        if ($stripped -match ('(?m)^(?!\s*//).*\bimport\b[^;]*\b' + $name + '\b') -or
+            $stripped -match ('(?m)^(?!\s*//).*\bexport\s*\{[^}]*\b' + $name + '\b')) {
+            AddError "$relPath imports/re-exports '$name' -- this symbol was removed (2026-05-30 CORS root cause fix). Use @/platform/httpAdapter."
+        }
+    }
+}
+
 # Output
 if ($errors.Count -eq 0) {
     Write-Host "[check-ipc-guards] OK: $checks/$checks checks passed" -ForegroundColor Green
