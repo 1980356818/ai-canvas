@@ -1,6 +1,6 @@
 [package]
 name = "ai-canvas"
-version = "1.2.4"
+version = "1.2.5"
 edition = "2021"
 
 [lib]
@@ -39,12 +39,16 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 sha2 = "0.10"
-tokio = { version = "1", features = ["time", "sync"] }
+tokio = { version = "1", features = ["time", "sync", "fs", "io-util"] }
 # url 解析:版本切换时用 Url::parse() 拼 manifest 端点,避免拼错字符串。
 url = "2"
 # ffmpeg-sidecar: 视频抽帧用。不走 C/C++ binding，直接调编译好的 ffmpeg 二进制 —
-# Windows/macOS/Linux 三端零 C 编译依赖，首次使用时 auto_download() 拉到 cache。
+# Windows/macOS/Linux 三端零 C 编译依赖。1.2.5+ 不再走它的 download_ffmpeg 路径,
+# 改用我们自己服务器 + SHA 校验,但 FfmpegCommand / event 解析继续用它。
 ffmpeg-sidecar = "2"
+# 流式下载 ffmpeg.exe 用,reqwest::Response::bytes_stream() 返 Stream，
+# StreamExt::next() 在 futures-util 里。已被 reqwest 间接拉进来,这里显式声明。
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 # upload_remote 单测要写临时文件并验 sha256

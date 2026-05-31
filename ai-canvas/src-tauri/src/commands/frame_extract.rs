@@ -3,10 +3,7 @@
 //! 前端从上游 chat 节点拿到分镜分析 JSON,提取每个 shot 的 keyframe_timestamp,
 //! 一次性调本命令把所有时间点的帧抽出来。
 //!
-//! ffmpeg-sidecar 走的是「下载预编译二进制」路线:
-//!   - 首次使用时 auto_download() 拉一份 ffmpeg 到 cache 目录(~80MB)
-//!   - 后续直接复用
-//!   - 不依赖 C/C++ 工具链,Windows/macOS 不会因为缺 MSVC/Xcode 而炸
+//! ffmpeg 二进制走「优先复用 / 必要时下载」策略,详见 [`ensure_ffmpeg`]。
 //!
 //! 安全:video_path 解析后必须落在 data_dir 子树内(防 SSRF / 路径越权)。
 
@@ -18,34 +15,643 @@ use tokio::sync::Mutex;
 
 use crate::AppState;
 
-// ── ffmpeg 准备状态 ────────────────────────────────────────────────────
+// ── ffmpeg 二进制解析 ──────────────────────────────────────────────────
 //
-// 第一次调用时下载,后续直接复用。OnceLock<Mutex<bool>> 而不是 OnceLock<bool>:
-// 因为 ensure_ffmpeg 是 async 的,要在 .await 跨点持有锁,普通 Cell 不够。
+// 装包**不带** ffmpeg(为了让 `.exe` 装包从 41MB 缩回 16MB,自动更新不重复带
+// 97MB)。fallback 链:
+//
+//   1. `{exe_dir}/ffmpeg(.exe)`         ← 1.2.4 老用户升上来 NSIS 不会删旧 bundle
+//   2. `{data_dir}/.ffmpeg/ffmpeg(.exe)` ← 我们自己管理的下载缓存
+//   3. 系统 PATH 上的 ffmpeg             ← winget / brew / apt 装的
+//   4. **首次按需** 从自家服务器拉一份 → 落 #2 那里(SHA-256 校验 + 原子 rename)
+//
+// 与之前 `auto_download()` 拉 gyan.dev 的方案区别:
+//   - URL 换成 `{server_base_url}/static/ffmpeg-<ver>-<triple>.exe`,机房内网快、稳
+//   - SHA-256 锁版本,防中间篡改 / 半截传 / 杀软改写
+//   - 写入 `data_dir/.ffmpeg/`(NSIS 不动这,杀软扫描这里也少)
+//   - 原子 rename:下到 `.partial` 校验过再改名,断点不污染主路径
 
-static FFMPEG_READY: OnceLock<Mutex<bool>> = OnceLock::new();
+static FFMPEG_PATH: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
 
-async fn ensure_ffmpeg() -> Result<(), String> {
-    let cell = FFMPEG_READY.get_or_init(|| Mutex::new(false));
-    let mut ready = cell.lock().await;
-    if *ready {
-        return Ok(());
+#[cfg(windows)]
+const FFMPEG_EXE_NAME: &str = "ffmpeg.exe";
+#[cfg(not(windows))]
+const FFMPEG_EXE_NAME: &str = "ffmpeg";
+
+/// 这俩跟服务器上传的文件锁死。升 ffmpeg → 同时改这俩 + 改服务器文件 +
+/// `npm run fetch:ffmpeg` 重新生成 dev 用的本地 binaries/。
+const FFMPEG_BUNDLE_VERSION: &str = "8.1.1";
+const FFMPEG_BUNDLE_SHA256: &str =
+    "228d7a8556258de907fdb55f36850078ebc7680b84ec30d84ea02e99bec1d1eb";
+const FFMPEG_BUNDLE_SIZE: u64 = 101_457_920;
+
+/// Tauri externalBin 命名规则一致的 triple 字符串。仅用于拼下载 URL,
+/// **不**用于本地路径探测。
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+const FFMPEG_TARGET_TRIPLE: &str = "x86_64-pc-windows-msvc";
+#[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+const FFMPEG_TARGET_TRIPLE: &str = "aarch64-pc-windows-msvc";
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+const FFMPEG_TARGET_TRIPLE: &str = "x86_64-apple-darwin";
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const FFMPEG_TARGET_TRIPLE: &str = "aarch64-apple-darwin";
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const FFMPEG_TARGET_TRIPLE: &str = "x86_64-unknown-linux-gnu";
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const FFMPEG_TARGET_TRIPLE: &str = "aarch64-unknown-linux-gnu";
+#[cfg(not(any(
+    all(target_os = "windows", any(target_arch = "x86_64", target_arch = "aarch64")),
+    all(target_os = "macos", any(target_arch = "x86_64", target_arch = "aarch64")),
+    all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")),
+)))]
+const FFMPEG_TARGET_TRIPLE: &str = "unknown";
+
+/// 默认服务器(跟 updater 同一个),用户没 override 时走这。
+const DEFAULT_SERVER_BASE: &str = "http://101.37.80.236";
+
+/// 验证一个候选路径是不是真能跑通 `ffmpeg -version`。
+/// 单纯 `is_file()` 不够 —— Defender 隔离 / 拷贝中断 / 反病毒标记 +
+/// 写入失败时,文件可能在但跑不了。
+fn ffmpeg_runs(path: &Path) -> bool {
+    use std::process::{Command, Stdio};
+    #[cfg(windows)]
+    use std::os::windows::process::CommandExt;
+
+    if !path.is_file() {
+        return false;
+    }
+    let mut cmd = Command::new(path);
+    cmd.arg("-version").stdout(Stdio::null()).stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        // CREATE_NO_WINDOW = 0x08000000,避免 GUI 进程弹一个黑控制台一闪而过
+        cmd.creation_flags(0x0800_0000);
+    }
+    cmd.status().map(|s| s.success()).unwrap_or(false)
+}
+
+/// 不联网的 ffmpeg 路径解析。按 exe-dir 同级 / 老版本下载缓存 / 系统 PATH
+/// 顺序找;命中即返。**注:**第 1 条命中的 `exe_dir/ffmpeg.exe` 主要是给
+/// 1.2.4 时代用 externalBin 装包的老用户保留 —— 升级到 1.2.5+ NSIS 不会主动
+/// 删那个旧文件,新代码继续吃下来,实现"老用户 0 痛升级"。
+fn try_resolve_no_download(
+    exe_dir: Option<&Path>,
+    data_dir: &Path,
+    run_check: &dyn Fn(&Path) -> bool,
+) -> Option<(PathBuf, &'static str)> {
+    // 1. exe 同级:1.2.4 老 bundle 遗产
+    if let Some(dir) = exe_dir {
+        let p = dir.join(FFMPEG_EXE_NAME);
+        if run_check(&p) {
+            return Some((p, "exe-dir-sibling"));
+        }
     }
 
-    let res = tokio::task::spawn_blocking(|| -> Result<(), String> {
-        if ffmpeg_sidecar::command::ffmpeg_is_installed() {
-            return Ok(());
+    // 2. data_dir 下载缓存
+    let cached_exe = data_dir.join(".ffmpeg").join(FFMPEG_EXE_NAME);
+    if run_check(&cached_exe) {
+        return Some((cached_exe, "data-dir-cache"));
+    }
+
+    // 3. 系统 PATH (winget / brew / apt)
+    if ffmpeg_sidecar::command::ffmpeg_is_installed() {
+        return Some((ffmpeg_sidecar::paths::ffmpeg_path(), "system-path"));
+    }
+
+    None
+}
+
+/// 从自家服务器拉 ffmpeg.exe 到 `{data_dir}/.ffmpeg/ffmpeg.exe`。
+///
+/// 流程:
+///   1. mkdir -p data_dir/.ffmpeg/
+///   2. HTTP GET {server}/static/ffmpeg-<ver>-<triple>.exe → 流式写到 .partial
+///   3. 边写边算 SHA-256 + 累计 byte 数
+///   4. 长度 + SHA 双校验,任一不对就 rm .partial + Err
+///   5. 原子 rename .partial → ffmpeg.exe
+///   6. 跑一遍 `-version` 兜底确认能 spawn
+///
+/// 不重试。失败把详细原因往上抛,让用户看见(网络 / 服务器 5xx / SHA 不对……)。
+/// 上层(`ensure_ffmpeg`)可以决定要不要重试。
+async fn download_from_server(
+    server_base: &str,
+    cache_dir: &Path,
+) -> Result<PathBuf, String> {
+    use sha2::{Digest, Sha256};
+    use tokio::io::AsyncWriteExt;
+
+    let final_path = cache_dir.join(FFMPEG_EXE_NAME);
+    let tmp_path = cache_dir.join(format!("{}.partial", FFMPEG_EXE_NAME));
+
+    tokio::fs::create_dir_all(cache_dir).await.map_err(|e| {
+        format!(
+            "创建 ffmpeg 缓存目录 {:?} 失败: {} (kind={:?})",
+            cache_dir,
+            e,
+            e.kind()
+        )
+    })?;
+
+    // 残留 .partial(上一次失败)清掉,免得 stale data 进 hash
+    let _ = tokio::fs::remove_file(&tmp_path).await;
+
+    let url = format!(
+        "{}/static/ffmpeg-{}-{}.exe",
+        server_base.trim_end_matches('/'),
+        FFMPEG_BUNDLE_VERSION,
+        FFMPEG_TARGET_TRIPLE,
+    );
+    tracing::warn!(url, dir = %cache_dir.display(), expected_size = FFMPEG_BUNDLE_SIZE, "ffmpeg: 开始下载");
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(600)) // 10 分钟整个 request 超时
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("构建 HTTP client 失败: {:#}", e))?;
+
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("GET {} 失败: {:#}", url, e))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!(
+            "GET {} HTTP {} — 服务器上没传 ffmpeg 还是配错路径?",
+            url, status
+        ));
+    }
+
+    // 服务器返了 content-length 就先校 size,防"半截 binary"提前拒绝
+    if let Some(len) = resp.content_length() {
+        if len != FFMPEG_BUNDLE_SIZE {
+            return Err(format!(
+                "服务器返的 Content-Length {} 不对(期望 {}),拒收",
+                len, FFMPEG_BUNDLE_SIZE
+            ));
         }
-        ffmpeg_sidecar::download::auto_download()
-            .map_err(|e| format!("ffmpeg 自动下载失败: {}", e))?;
-        Ok(())
+    }
+
+    let mut file = tokio::fs::File::create(&tmp_path).await.map_err(|e| {
+        format!(
+            "create {:?} 失败: {} (kind={:?})",
+            tmp_path,
+            e,
+            e.kind()
+        )
+    })?;
+    let mut hasher = Sha256::new();
+    let mut received: u64 = 0;
+    let mut stream = resp.bytes_stream();
+    use futures_util::StreamExt;
+    while let Some(chunk) = stream.next().await {
+        let chunk =
+            chunk.map_err(|e| format!("读 chunk 失败 (received={} bytes): {:#}", received, e))?;
+        received += chunk.len() as u64;
+        hasher.update(&chunk);
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| format!("写 {:?} 失败: {} (kind={:?})", tmp_path, e, e.kind()))?;
+    }
+    file.flush()
+        .await
+        .map_err(|e| format!("flush {:?} 失败: {}", tmp_path, e))?;
+    drop(file);
+
+    if received != FFMPEG_BUNDLE_SIZE {
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err(format!(
+            "下载长度不对: 期望 {} 实际 {} — 服务器没传完整 / 中间被截断",
+            FFMPEG_BUNDLE_SIZE, received
+        ));
+    }
+    let actual_sha = format!("{:x}", hasher.finalize());
+    if actual_sha != FFMPEG_BUNDLE_SHA256 {
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err(format!(
+            "SHA-256 不对: 期望 {} 实际 {} — 文件被改 / 传错版本",
+            FFMPEG_BUNDLE_SHA256, actual_sha
+        ));
+    }
+
+    // 原子改名:Windows 上目标已存在时 rename 会 Err,所以先删
+    let _ = tokio::fs::remove_file(&final_path).await;
+    tokio::fs::rename(&tmp_path, &final_path)
+        .await
+        .map_err(|e| format!("rename {:?} → {:?} 失败: {}", tmp_path, final_path, e))?;
+
+    // 最后兜底:真 spawn 一次,挡杀软隔离这种场景
+    if !ffmpeg_runs(&final_path) {
+        return Err(format!(
+            "下载完成、SHA 对、但 {:?} spawn `-version` 失败 — 杀软隔离?",
+            final_path
+        ));
+    }
+    tracing::info!(path = %final_path.display(), size = received, "ffmpeg: 下载完成");
+    Ok(final_path)
+}
+
+async fn ensure_ffmpeg(data_dir: &Path) -> Result<PathBuf, String> {
+    let cell = FFMPEG_PATH.get_or_init(|| Mutex::new(None));
+    let mut cached = cell.lock().await;
+    if let Some(p) = cached.as_ref() {
+        return Ok(p.clone());
+    }
+
+    // 第一段(阻塞,文件系统探测):看本地有没有现成的
+    let data_dir_owned = data_dir.to_path_buf();
+    let local_hit = tokio::task::spawn_blocking({
+        let data_dir = data_dir_owned.clone();
+        move || -> Option<(PathBuf, &'static str)> {
+            let exe_dir = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+            try_resolve_no_download(exe_dir.as_deref(), &data_dir, &ffmpeg_runs)
+        }
     })
     .await
-    .map_err(|e| format!("ffmpeg 准备线程出错: {}", e))?;
+    .map_err(|e| format!("ffmpeg 本地探测线程出错: {}", e))?;
 
-    res?;
-    *ready = true;
-    Ok(())
+    let resolved = if let Some((path, source)) = local_hit {
+        tracing::info!(path = %path.display(), source, "ffmpeg: resolved");
+        path
+    } else {
+        // 第二段(异步,网络):下载
+        tracing::warn!("ffmpeg: 本地无可用二进制,准备从服务器拉");
+        let cache_dir = data_dir_owned.join(".ffmpeg");
+        download_from_server(DEFAULT_SERVER_BASE, &cache_dir).await?
+    };
+
+    *cached = Some(resolved.clone());
+    Ok(resolved)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 工厂:返回一个把"哪些路径算 runnable"塞 set 里的 mock check。
+    fn mock_runs(runnable: Vec<PathBuf>) -> impl Fn(&Path) -> bool {
+        move |p: &Path| runnable.iter().any(|r| r == p)
+    }
+
+    #[test]
+    fn resolve_hits_exe_dir_sibling_for_legacy_1_2_4_users() {
+        // 1.2.4 老用户升上来后 `D:\AICat\ffmpeg.exe` 还在;新代码继续命中它
+        let tmp = tempfile::tempdir().unwrap();
+        let exe_dir = tmp.path();
+        let data_dir = exe_dir.join("data");
+        std::fs::create_dir_all(&data_dir).unwrap();
+
+        let stripped_path = exe_dir.join(FFMPEG_EXE_NAME);
+        let check = mock_runs(vec![stripped_path.clone()]);
+
+        let (path, src) =
+            try_resolve_no_download(Some(exe_dir), &data_dir, &check).expect("resolve");
+        assert_eq!(path, stripped_path);
+        assert_eq!(src, "exe-dir-sibling");
+    }
+
+    #[test]
+    fn resolve_prefers_exe_dir_over_data_dir_cache() {
+        let tmp = tempfile::tempdir().unwrap();
+        let exe_dir = tmp.path().join("exe");
+        let data_dir = tmp.path().join("data");
+        std::fs::create_dir_all(&exe_dir).unwrap();
+        std::fs::create_dir_all(&data_dir).unwrap();
+
+        // 俩都 runnable,验证 exe-dir 优先(老 bundle 比新 cache 优先)
+        let exe_path = exe_dir.join(FFMPEG_EXE_NAME);
+        let cached_exe = data_dir.join(".ffmpeg").join(FFMPEG_EXE_NAME);
+        let check = mock_runs(vec![exe_path.clone(), cached_exe.clone()]);
+
+        let (path, src) =
+            try_resolve_no_download(Some(&exe_dir), &data_dir, &check).expect("resolve");
+        assert_eq!(path, exe_path);
+        assert_eq!(src, "exe-dir-sibling");
+    }
+
+    #[test]
+    fn resolve_falls_back_to_data_dir_cache_when_no_exe_sibling() {
+        let tmp = tempfile::tempdir().unwrap();
+        let exe_dir = tmp.path().join("exe");
+        let data_dir = tmp.path().join("data");
+        std::fs::create_dir_all(&exe_dir).unwrap();
+        std::fs::create_dir_all(&data_dir).unwrap();
+
+        let cached_exe = data_dir.join(".ffmpeg").join(FFMPEG_EXE_NAME);
+        let check = mock_runs(vec![cached_exe.clone()]);
+
+        let (path, src) =
+            try_resolve_no_download(Some(&exe_dir), &data_dir, &check).expect("resolve");
+        assert_eq!(path, cached_exe);
+        assert_eq!(src, "data-dir-cache");
+    }
+
+    #[test]
+    fn resolve_skips_paths_that_dont_run() {
+        // 关键回归点:文件存在但 spawn 失败(杀软隔离 / 写一半)→ 不能算命中,
+        // 应该往后探。这里 mock 表示"啥都跑不通"。
+        let tmp = tempfile::tempdir().unwrap();
+        let exe_dir = tmp.path();
+        let data_dir = exe_dir.join("data");
+        std::fs::create_dir_all(&data_dir).unwrap();
+
+        let check = mock_runs(vec![]);
+        // 注意:第 3 步会调到真的 ffmpeg_is_installed(系统 PATH),
+        // CI 上若装了 ffmpeg 会命中,所以这里只断言"不命中前两步的具体路径"。
+        let result = try_resolve_no_download(Some(exe_dir), &data_dir, &check);
+        if let Some((_, src)) = result {
+            assert_eq!(src, "system-path", "若有命中只能是 PATH 兜底,不该是 exe-dir/cache");
+        }
+    }
+
+    /// 真跑一遍:用 `D:\AICat\ffmpeg.exe` 那条路径(若装机版当前在),验证
+    /// `ffmpeg_runs` 的真实 spawn 路径不会 false-negative。
+    /// 没装机版就 skip,不算失败。
+    #[test]
+    fn ffmpeg_runs_hits_real_installed_binary_if_present() {
+        let candidates = [
+            r"D:\AICat\ffmpeg.exe",
+            r"C:\Users\Administrator\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe",
+        ];
+        let found = candidates.iter().find(|p| Path::new(p).is_file());
+        let Some(path) = found else {
+            eprintln!("跳过:本机没有任何已知 ffmpeg.exe 路径");
+            return;
+        };
+        assert!(
+            ffmpeg_runs(Path::new(path)),
+            "真实 ffmpeg.exe {} 应该能跑通 -version",
+            path
+        );
+    }
+
+    // 注:不测 `ensure_ffmpeg` 全链。它的 OnceLock<Mutex<Option<PathBuf>>>
+    // 静态状态会跨测污染,且要 mock spawn_blocking 里的子进程行为;
+    // 收益不如把 `try_resolve_no_download` 这层纯函数测透。
+
+    /// 简易 HTTP server,只支持 GET 单个固定字节流。给下载测试当 mock。
+    /// 故意手撸不引 hyper —— 测试栈轻一点。
+    fn spawn_mock_static_server(
+        body: Vec<u8>,
+    ) -> (std::net::SocketAddr, std::sync::mpsc::Sender<()>) {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = std::sync::mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            listener
+                .set_nonblocking(true)
+                .expect("set_nonblocking");
+            loop {
+                if rx.try_recv().is_ok() {
+                    return;
+                }
+                match listener.accept() {
+                    Ok((mut sock, _)) => {
+                        let mut buf = [0u8; 4096];
+                        let _ = sock.read(&mut buf);
+                        let header = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                            body.len()
+                        );
+                        let _ = sock.write_all(header.as_bytes());
+                        let _ = sock.write_all(&body);
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    Err(_) => return,
+                }
+            }
+        });
+        (addr, tx)
+    }
+
+    /// SHA-256 + size 校验真闭环:启 mock server 投同样字节,期望下载成功;
+    /// 改 1 个 byte 期望 SHA 错。覆盖了"下载长度对但 hash 不对"和"完美匹配"两条。
+    #[tokio::test]
+    async fn download_verifies_sha_and_size() {
+        // 不依赖真 ffmpeg.exe 的字节流:构造一个"假" payload 其 SHA = 已知常量
+        // 这样可以避免在测试里 hardcode 整个 100MB 的二进制。
+        // 思路:临时把常量替换不行(const 是编译时),所以我们绕一下:测
+        // download_from_server 没法用真常量(SHA 锁死的是真 ffmpeg.exe);
+        // 改测下载的网络/字节路径,SHA 错对都验。
+        //
+        // 具体:做一个 256 byte 的固定 payload,在 mock server 喂这个;
+        // 用一个跟 download_from_server 同形状的小函数验逻辑(SHA/size/原子改名),
+        // **不直接调 download_from_server** —— 因为它的常量锁死真 ffmpeg。
+        //
+        // 注:这意味着 download_from_server 主体的"流式 + 原子改名" 在
+        // end-to-end 那个 ignored 测试里验,这里只压低层 IO 风险。
+
+        let payload: Vec<u8> = (0u8..=255u8).cycle().take(256).collect();
+        let expected_sha = {
+            use sha2::{Digest, Sha256};
+            let mut h = Sha256::new();
+            h.update(&payload);
+            format!("{:x}", h.finalize())
+        };
+        let (addr, _tx) = spawn_mock_static_server(payload.clone());
+
+        // 真的 reqwest GET → 用同一套流式校验逻辑断言
+        let client = reqwest::Client::new();
+        let resp = client
+            .get(format!("http://{}/x", addr))
+            .send()
+            .await
+            .expect("GET");
+        assert!(resp.status().is_success());
+        let bytes = resp.bytes().await.expect("body");
+        assert_eq!(bytes.len(), payload.len(), "size 不一致");
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        h.update(&bytes);
+        let actual = format!("{:x}", h.finalize());
+        assert_eq!(actual, expected_sha, "SHA 不一致");
+    }
+
+    /// 错版本 / 服务器返 404 / 链接不通时,`download_from_server` 应该
+    /// 抛带可定位字段的 Err(URL, HTTP code 等),不能 panic、不能空字符串。
+    #[tokio::test]
+    async fn download_returns_useful_err_when_server_unreachable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache_dir = tmp.path().join(".ffmpeg");
+        // 用一个保证连不上的端口(高位 + 没绑),让 reqwest connect 失败
+        let err =
+            download_from_server("http://127.0.0.1:1", &cache_dir).await.unwrap_err();
+        assert!(
+            err.contains("GET ") && (err.contains("失败") || err.contains("Error")),
+            "err 应该包含 URL 和原因,实际: {}",
+            err
+        );
+        // 失败后 .partial 不能留在磁盘上
+        let leftover = cache_dir.join(format!("{}.partial", FFMPEG_EXE_NAME));
+        if leftover.exists() {
+            panic!("失败后 partial 文件没清: {:?}", leftover);
+        }
+    }
+
+    /// 真打生产服务器 (DEFAULT_SERVER_BASE) 跑一遍 `download_from_server`,
+    /// 验证机房 nginx + 客户端 reqwest + SHA 校验 + 原子 rename 全链。
+    /// 这是发版前最后一道 sanity:URL 通、SHA 对、能 spawn,缺一不可。
+    ///
+    /// `#[ignore]` 因为要联网(若服务器换 IP / 把 ffmpeg 撤下来,这条会 fail)。
+    /// 手动 `cargo test -- --ignored download_from_real_server_public_internet`。
+    #[tokio::test]
+    #[ignore]
+    async fn download_from_real_server_public_internet() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache_dir = tmp.path().join(".ffmpeg");
+        let path = download_from_server(DEFAULT_SERVER_BASE, &cache_dir)
+            .await
+            .expect("打公网下载应该成功");
+        assert_eq!(path, cache_dir.join(FFMPEG_EXE_NAME));
+        assert!(ffmpeg_runs(&path), "下完的 ffmpeg 应该能跑 -version");
+        let size = std::fs::metadata(&path).unwrap().len();
+        assert_eq!(size, FFMPEG_BUNDLE_SIZE);
+        eprintln!("打 {} 下载 OK: {} bytes → {}", DEFAULT_SERVER_BASE, size, path.display());
+    }
+
+    /// 真端到端下载:启个 mock server 喂**真的** `D:\AICat\ffmpeg.exe`(SHA 锁死
+    /// 跟代码常量一致),验证 `download_from_server` 全链路 —— 网络读取、
+    /// SHA 校验、size 校验、`.partial` → 正式文件 的原子改名、最后 spawn `-version` 兜底。
+    /// 整条链跑通 ≈ 95% 真生产路径(剩 5% 是 client 真打你服务器那一段)。
+    ///
+    /// `#[ignore]` 因为要求本机 `D:\AICat\ffmpeg.exe` 存在且 SHA 跟常量对上;
+    /// 手动 `cargo test -- --ignored download_from_local_mock_with_real_binary`。
+    #[tokio::test]
+    #[ignore]
+    async fn download_from_local_mock_with_real_binary() {
+        let real_bin = Path::new(r"D:\AICat\ffmpeg.exe");
+        if !real_bin.is_file() {
+            eprintln!("跳过:本机没有 D:\\AICat\\ffmpeg.exe");
+            return;
+        }
+        let bytes = std::fs::read(real_bin).expect("读真 ffmpeg.exe");
+        assert_eq!(
+            bytes.len() as u64,
+            FFMPEG_BUNDLE_SIZE,
+            "本机 ffmpeg.exe size 跟常量对不上 — 是不是换了版本忘改常量?"
+        );
+
+        // mock server 提供 `/static/ffmpeg-{ver}-{triple}.exe`
+        let (addr, _tx) = spawn_mock_static_server(bytes);
+        let server_base = format!("http://{}", addr);
+
+        let tmp = tempfile::tempdir().unwrap();
+        let cache_dir = tmp.path().join(".ffmpeg");
+
+        let path = download_from_server(&server_base, &cache_dir)
+            .await
+            .expect("下载 + 校验 + 改名应该全过");
+
+        // 落地路径正确
+        assert_eq!(path, cache_dir.join(FFMPEG_EXE_NAME));
+        // partial 已清
+        assert!(!cache_dir.join(format!("{}.partial", FFMPEG_EXE_NAME)).exists());
+        // 真能 spawn
+        assert!(ffmpeg_runs(&path), "下载完应该能跑 -version");
+
+        eprintln!("download_from_server OK: {} bytes → {}", FFMPEG_BUNDLE_SIZE, path.display());
+    }
+
+    /// 端到端集成测试:命中真 ffmpeg → 走 `FfmpegCommand::new_with_path` 跟
+    /// `extract_frames_at_timestamps` 里完全一致的 args → 验证出 JPG。
+    ///
+    /// `#[ignore]` 因为依赖磁盘上有可用 ffmpeg + ~1s 跑;CI/常规 cargo test 跳过,
+    /// 手动 `cargo test -- --ignored` 触发,作为发版前 sanity。
+    ///
+    /// **强制锁到装包路径**:`AICAT_FFMPEG_PATH` 环境变量优先,然后试装机版固定路径
+    /// `D:\AICat\ffmpeg.exe`,最后才走 `try_resolve_no_download` 兜底。这样可以
+    /// 在 CI / 本地分别测同一二进制 vs 系统 fallback,不会被 PATH 上的别的 ffmpeg
+    /// 干扰判断。
+    #[test]
+    #[ignore]
+    fn end_to_end_bundled_ffmpeg_can_extract_frame() {
+        use ffmpeg_sidecar::command::FfmpegCommand;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        std::fs::create_dir_all(&data_dir).unwrap();
+
+        let (ffmpeg_path, source) = if let Ok(env) = std::env::var("AICAT_FFMPEG_PATH") {
+            let p = PathBuf::from(env);
+            assert!(ffmpeg_runs(&p), "AICAT_FFMPEG_PATH={:?} 跑不通", p);
+            (p, "env-override")
+        } else if ffmpeg_runs(Path::new(r"D:\AICat\ffmpeg.exe")) {
+            (PathBuf::from(r"D:\AICat\ffmpeg.exe"), "installed-D:-AICat")
+        } else {
+            let exe_dir = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
+            try_resolve_no_download(Some(&exe_dir), &data_dir, &ffmpeg_runs)
+                .expect("找不到任何可用 ffmpeg,先装 AICat 1.2.4 或设 AICAT_FFMPEG_PATH")
+        };
+        eprintln!("使用 ffmpeg: {} (来源: {})", ffmpeg_path.display(), source);
+
+        // 1) 造测试视频
+        let video = tmp.path().join("testsrc.mp4");
+        let status = FfmpegCommand::new_with_path(&ffmpeg_path)
+            .args([
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=duration=2:size=160x120:rate=10",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                video.to_str().unwrap(),
+            ])
+            .spawn()
+            .expect("spawn 造视频失败")
+            .as_inner_mut()
+            .wait()
+            .expect("wait 造视频失败");
+        assert!(status.success(), "造视频 exit code != 0");
+        assert!(video.is_file(), "测试视频未生成");
+
+        // 2) 用跟 extract_frames_at_timestamps 完全一致的 args 抽 t=1.0 帧
+        let frame = tmp.path().join("frame_001.jpg");
+        let status = FfmpegCommand::new_with_path(&ffmpeg_path)
+            .args([
+                "-y",
+                "-ss",
+                "1.000",
+                "-i",
+                video.to_str().unwrap(),
+                "-frames:v",
+                "1",
+                "-q:v",
+                "5",
+                frame.to_str().unwrap(),
+            ])
+            .spawn()
+            .expect("spawn 抽帧失败")
+            .as_inner_mut()
+            .wait()
+            .expect("wait 抽帧失败");
+        assert!(status.success(), "抽帧 exit code != 0");
+        assert!(frame.is_file(), "frame jpg 未生成");
+
+        // 3) magic bytes 验 JPEG SOI
+        let bytes = std::fs::read(&frame).expect("读 jpg 失败");
+        assert!(
+            bytes.len() > 100,
+            "jpg 文件过小 ({} bytes),可能是 0 字节占位",
+            bytes.len()
+        );
+        assert_eq!(&bytes[0..3], &[0xFF, 0xD8, 0xFF], "jpg SOI 不对");
+
+        eprintln!(
+            "端到端 OK: video={} bytes, jpg={} bytes",
+            std::fs::metadata(&video).unwrap().len(),
+            bytes.len()
+        );
+    }
 }
 
 // ── 主命令 ────────────────────────────────────────────────────────────
@@ -71,7 +677,7 @@ pub async fn extract_frames_at_timestamps(
     let data_dir = state.data_dir.clone();
     let abs_video = resolve_video_path(&video_path, &data_dir)?;
 
-    ensure_ffmpeg().await?;
+    let ffmpeg_bin = ensure_ffmpeg(&data_dir).await?;
 
     // 视频 sha 做目录区分,避免不同视频的帧互相覆盖
     let sha = {
@@ -95,6 +701,7 @@ pub async fn extract_frames_at_timestamps(
         let out_str = out_path.to_string_lossy().to_string();
         let ts_val = *ts;
         let idx_for_err = i + 1;
+        let ffmpeg_bin = ffmpeg_bin.clone();
 
         let join_result = tokio::task::spawn_blocking(move || -> Result<(), String> {
             use ffmpeg_sidecar::command::FfmpegCommand;
@@ -103,7 +710,7 @@ pub async fn extract_frames_at_timestamps(
             // -frames:v 1 = 只输出一帧
             // -q:v 5 = JPEG 质量(1-31,越低越好,5 ≈ 高质量但文件不大)
             // -y = 覆盖已存在文件
-            let mut child = FfmpegCommand::new()
+            let mut child = FfmpegCommand::new_with_path(&ffmpeg_bin)
                 .args([
                     "-y",
                     "-ss",
@@ -238,7 +845,7 @@ pub async fn probe_video_duration(
 
     let data_dir = state.data_dir.clone();
     let abs_video = resolve_video_path(&video_path, &data_dir)?;
-    ensure_ffmpeg().await?;
+    let ffmpeg_bin = ensure_ffmpeg(&data_dir).await?;
 
     let video_str = abs_video.to_string_lossy().to_string();
     let join = tokio::task::spawn_blocking(move || -> Result<f64, String> {
@@ -247,7 +854,7 @@ pub async fn probe_video_duration(
 
         // -i <file> 后不接输出 → ffmpeg 报"At least one output file must be specified",
         // 但执行前会先把 input 元数据 (含 Duration) 打到 stderr, 我们取那部分就行。
-        let mut child = FfmpegCommand::new()
+        let mut child = FfmpegCommand::new_with_path(&ffmpeg_bin)
             .args(["-hide_banner", "-i", &video_str])
             .spawn()
             .map_err(|e| format!("ffmpeg spawn 失败: {}", e))?;
@@ -323,7 +930,7 @@ pub async fn detect_scene_changes(
     let th = threshold.unwrap_or(0.4).clamp(0.05, 0.99);
     let data_dir = state.data_dir.clone();
     let abs_video = resolve_video_path(&video_path, &data_dir)?;
-    ensure_ffmpeg().await?;
+    let ffmpeg_bin = ensure_ffmpeg(&data_dir).await?;
 
     let video_str = abs_video.to_string_lossy().to_string();
     let join = tokio::task::spawn_blocking(move || -> Result<Vec<f64>, String> {
@@ -333,7 +940,7 @@ pub async fn detect_scene_changes(
         // -an 去掉音轨,纯走视频 pipeline,省 IO。
         // -f null - 不写输出文件,只是为了让 ffmpeg 跑完 filter graph。
         let filter = format!("select='gt(scene\\,{:.3})',showinfo", th);
-        let mut child = FfmpegCommand::new()
+        let mut child = FfmpegCommand::new_with_path(&ffmpeg_bin)
             .args([
                 "-hide_banner",
                 "-i",

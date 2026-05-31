@@ -8,3 +8,12 @@ release/
 Thumbs.db
 *.env
 *.env.local
+
+# ffmpeg sidecar — 装包带的二进制,~100MB,不进 git;
+# 缺失时 `npm run fetch:ffmpeg` 拉一份,详见 scripts/fetch-ffmpeg.mjs。
+src-tauri/binaries/ffmpeg-*
+
+# 调试时记的签名密钥路径,纯本机产物,绝不入库
+.signing-key-path
+# 临时探查脚本(含 SSH 明文密码,只在 fresh-checkout 调试时手写,不进库)
+scripts/probe-server.py

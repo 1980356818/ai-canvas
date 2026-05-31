@@ -31,11 +31,12 @@ dependencies = [
 
 [[package]]
 name = "ai-canvas"
-version = "1.2.3"
+version = "1.2.5"
 dependencies = [
  "base64 0.22.1",
  "chrono",
  "ffmpeg-sidecar",
+ "futures-util",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",

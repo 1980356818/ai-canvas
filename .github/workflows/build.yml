@@ -60,6 +60,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # tauri-action 自动识别这俩;有了才会签 .sig,updater 才认
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: ai-canvas
           tagName: ${{ github.ref_name }}
@@ -98,9 +101,15 @@ jobs:
         run: npm ci
 
       - name: Build Tauri (aarch64)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build -- --target aarch64-apple-darwin
 
       - name: Build Tauri (x86_64)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build -- --target x86_64-apple-darwin
 
       - name: Read version
@@ -187,6 +196,20 @@ jobs:
 
           ls -lh "$PKG"
 
+      - name: Sign pkg for updater
+        working-directory: ai-canvas
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APP_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          # pkgbuild 出来的 .pkg 是 Tauri 流程之外手攒的,Tauri 不会自动 sign,
+          # 这里用 `tauri signer sign` 显式补一份 .pkg.sig,让 updater(release.py
+          # → /api/admin/release/upload)走得通 — 跟 Windows .exe.sig 对称。
+          PKG="${{ env.APP_NAME }}_${APP_VERSION}_universal.pkg"
+          npx tauri signer sign --private-key "$TAURI_SIGNING_PRIVATE_KEY" --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$PKG"
+          ls -lh "$PKG" "$PKG.sig"
+
       - name: Upload to release
         working-directory: ai-canvas
         env:
@@ -196,5 +219,5 @@ jobs:
           TAG="v${APP_VERSION}"
           PKG="${{ env.APP_NAME }}_${APP_VERSION}_universal.pkg"
           gh release create "$TAG" --draft --title "${{ env.APP_NAME }} $TAG" --notes "See the assets below to download the installer." 2>/dev/null || true
-          gh release upload "$TAG" "$PKG" --clobber
+          gh release upload "$TAG" "$PKG" "$PKG.sig" --clobber
 # end
