@@ -53,5 +53,16 @@ export const DEFAULT_GROUP_COLOR = GROUP_PALETTE[0].value;
 
 /** padding(world 单位)= 组矩形向外扩展的留白。也是子卡定位的最小安全边距。 */
 export const GROUP_PADDING = 16;
-/** 组标题栏高度(world 单位)。和 padding 一起用于 bounds 计算。 */
-export const GROUP_TITLE_HEIGHT = 28;
+/**
+ * 组标题栏高度(world 单位)。和 padding 一起用于 bounds 计算。
+ * 加高到 44 是为了让"运行/标题/计数"在不同 DPI 下都能清楚显示,
+ * 非技术用户不需要眯眼找小按钮。文字大小见 GroupLayer.tsx。
+ */
+export const GROUP_TITLE_HEIGHT = 44;
+/**
+ * 标题栏底部到子卡顶部的额外预留高度(world 单位)。
+ * 子卡上方有 CardLabel(浮在卡片顶部上方约 40px, z-30),会盖住组标题。
+ * 这里预留 44 = 卡片标签 34 + translateY 6 + 安全余量 4,确保标签和标题栏不重叠。
+ * 仅影响 bounds 计算,不影响 padding 语义。改 CardLabel 高度时同步调整。
+ */
+export const GROUP_LABEL_RESERVE = 44;

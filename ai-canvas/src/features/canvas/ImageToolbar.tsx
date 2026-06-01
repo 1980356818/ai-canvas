@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo } from "react";
-import { Scissors, Crop, Download, ChevronDown, HardDriveDownload, Loader2, ZoomIn, RotateCw, Layers } from "lucide-react";
+import { Scissors, Crop, Download, ChevronDown, HardDriveDownload, Loader2, ZoomIn, RotateCw, Layers, Hand } from "lucide-react";
 import { useCanvasStore, liveViewport, subscribeViewport } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
@@ -13,7 +13,8 @@ import { autoSave } from "@/lib/autoSave";
 import { sizeFromRatio } from "@/shared/constants";
 import { updateProjectMeta } from "@/platform";
 import { HIDDEN_FEATURES } from "@/config/platforms";
-import { splitCompositeImage, isCompositeImage, pendingSplitCount } from "@/lib/frameSplit";
+import { splitCompositeImage, spawnSingleFrameCard, isCompositeImage, pendingSplitCount } from "@/lib/frameSplit";
+import type { CompositeImageData } from "@/lib/frameSplit";
 import { cn } from "@/lib/utils";
 
 const GRID_OPTIONS = [
@@ -46,17 +47,24 @@ interface CellDragInfo {
 
 interface GridOverlayProps {
   cardId: string;
-  gridSize: number;
+  /** 列数 — 宫格拆分时 = activeGrid;合成卡拖帧时 = compositeLayout.cols。 */
+  cols: number;
+  /** 行数 — 宫格拆分时 = activeGrid;合成卡拖帧时 = compositeLayout.rows。 */
+  rows: number;
+  /** Hover 时显示的角标文字,默认"拖拽提取"。合成卡拖帧用"拖出此帧"。 */
+  hoverLabel?: string;
   onCellDrop: (info: CellDragInfo) => void;
   disabled: boolean;
-  // 由父级共享的 ref，imperative 同步 left/top/width/height/borderRadius，
+  // 由父级共享的 ref,imperative 同步 left/top/width/height/borderRadius,
   // 避免 GridOverlay 在 viewport / dragOffset 变化时重渲染。
   overlayRef: React.RefObject<HTMLDivElement | null>;
 }
 
 const GridOverlay = memo(function GridOverlay({
   cardId,
-  gridSize,
+  cols,
+  rows,
+  hoverLabel = "拖拽提取",
   onCellDrop,
   disabled,
   overlayRef,
@@ -77,7 +85,8 @@ const GridOverlay = memo(function GridOverlay({
   const dragRef = useRef(dragging);
   dragRef.current = dragging;
 
-  const cellPercent = 100 / gridSize;
+  const cellPercentW = 100 / cols;
+  const cellPercentH = 100 / rows;
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, row: number, col: number) => {
@@ -87,18 +96,18 @@ const GridOverlay = memo(function GridOverlay({
       setDragging({ row, col, cx: e.clientX, cy: e.clientY });
 
       const onMove = (ev: PointerEvent) => {
-        // imperative 移动浮动框，避免 setState 触发重渲染
+        // imperative 移动浮动框,避免 setState 触发重渲染
         const fl = draggingFloatRef.current;
         const ov = overlayRef.current;
         if (fl && ov) {
-          const cellW = ov.offsetWidth / gridSize;
-          const cellH = ov.offsetHeight / gridSize;
+          const cellW = ov.offsetWidth / cols;
+          const cellH = ov.offsetHeight / rows;
           fl.style.left = `${ev.clientX - cellW / 2}px`;
           fl.style.top = `${ev.clientY - cellH / 2}px`;
           fl.style.width = `${cellW}px`;
           fl.style.height = `${cellH}px`;
         }
-        // 同步坐标到 ref（onUp 时使用）
+        // 同步坐标到 ref(onUp 时使用)
         const cur = dragRef.current;
         if (cur) dragRef.current = { ...cur, cx: ev.clientX, cy: ev.clientY };
       };
@@ -129,26 +138,26 @@ const GridOverlay = memo(function GridOverlay({
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
     },
-    [disabled, gridSize, onCellDrop, overlayRef],
+    [disabled, cols, rows, onCellDrop, overlayRef],
   );
 
-  // 浮动框初始位置：拖拽刚开始时设置一次（之后由 onMove imperative 更新）
+  // 浮动框初始位置:拖拽刚开始时设置一次(之后由 onMove imperative 更新)
   useLayoutEffect(() => {
     if (!dragging) return;
     const fl = draggingFloatRef.current;
     const ov = overlayRef.current;
     if (!fl || !ov) return;
-    const cellW = ov.offsetWidth / gridSize;
-    const cellH = ov.offsetHeight / gridSize;
+    const cellW = ov.offsetWidth / cols;
+    const cellH = ov.offsetHeight / rows;
     fl.style.left = `${dragging.cx - cellW / 2}px`;
     fl.style.top = `${dragging.cy - cellH / 2}px`;
     fl.style.width = `${cellW}px`;
     fl.style.height = `${cellH}px`;
-  }, [dragging, gridSize, overlayRef]);
+  }, [dragging, cols, rows, overlayRef]);
 
   const cells = [];
-  for (let r = 0; r < gridSize; r++) {
-    for (let c = 0; c < gridSize; c++) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
       const isHovered = hoveredCell?.row === r && hoveredCell?.col === c;
       const isDraggingThis = dragging?.row === r && dragging?.col === c;
       cells.push(
@@ -164,12 +173,11 @@ const GridOverlay = memo(function GridOverlay({
               : "crop-cell-idle",
             isDraggingThis && "opacity-40",
           )}
-          // 使用百分比定位：尺寸完全独立于 zoom，无需在 viewport 变化时重渲染
           style={{
-            left: `${c * cellPercent}%`,
-            top: `${r * cellPercent}%`,
-            width: `${cellPercent}%`,
-            height: `${cellPercent}%`,
+            left: `${c * cellPercentW}%`,
+            top: `${r * cellPercentH}%`,
+            width: `${cellPercentW}%`,
+            height: `${cellPercentH}%`,
           }}
           onPointerEnter={() => setHoveredCell({ row: r, col: c })}
           onPointerLeave={() => setHoveredCell(null)}
@@ -178,7 +186,7 @@ const GridOverlay = memo(function GridOverlay({
           {isHovered && !dragging && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="rounded-md bg-black/60 px-2 py-1 text-[10px] font-medium text-white shadow-lg backdrop-blur-sm">
-                拖拽提取
+                {hoverLabel}
               </div>
             </div>
           )}
@@ -231,6 +239,10 @@ export default function ImageToolbar() {
   const [activeGrid, setActiveGrid] = useState<number | null>(null);
   const [cropping, setCropping] = useState(false);
   const gridCardId = useRef<string | null>(null);
+
+  // 合成卡拖帧模式 — 与宫格拆分(activeGrid)互斥,同一 overlayRef 复用。
+  const [frameDragMode, setFrameDragMode] = useState(false);
+  const frameDragCardId = useRef<string | null>(null);
 
   // imperative 跟随：toolbar 容器和 grid overlay 的位置由 ref + rAF 同步，
   // 不参与 React 渲染。这样 viewport / dragOffset 高频变化都不会触发本组件重渲染。
@@ -305,17 +317,34 @@ export default function ImageToolbar() {
     };
   }, [targetCardId]);
 
-  // GridOverlay 挂载/卸载后立刻同步一次位置（overlayRef.current 此时刚就绪）
+  // GridOverlay 挂载/卸载后立刻同步一次位置(overlayRef.current 此时刚就绪)
   useLayoutEffect(() => {
     scheduleSyncRef.current?.();
-  }, [activeGrid]);
+  }, [activeGrid, frameDragMode]);
 
   useEffect(() => {
     if (activeGrid && gridCardId.current && targetCardId !== gridCardId.current) {
       setActiveGrid(null);
       gridCardId.current = null;
     }
-  }, [targetCardId, activeGrid]);
+    if (frameDragMode && frameDragCardId.current && targetCardId !== frameDragCardId.current) {
+      setFrameDragMode(false);
+      frameDragCardId.current = null;
+    }
+  }, [targetCardId, activeGrid, frameDragMode]);
+
+  // Esc 退出拖帧态(与宫格拆分独立计:用户可能 Esc 先收掉拖帧再开宫格)
+  useEffect(() => {
+    if (!frameDragMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setFrameDragMode(false);
+        frameDragCardId.current = null;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [frameDragMode]);
 
   const handleCellDrop = useCallback(
     async (info: CellDragInfo) => {
@@ -384,6 +413,25 @@ export default function ImageToolbar() {
       }
     },
     [card, activeGrid, cropping],
+  );
+
+  const handleFrameCellDrop = useCallback(
+    async (info: CellDragInfo) => {
+      if (!card || !frameDragMode) return;
+      const data = card.data as CompositeImageData;
+      const layout = data.compositeLayout;
+      const frames = data.compositeFrames;
+      if (!layout || !frames) return;
+
+      // 行主序映射到 compositeFrames 的 index。frame.index 是 1 起步,数组下标 0 起步。
+      const arrayIdx = info.row * layout.cols + info.col;
+      const frame = frames[arrayIdx];
+      if (!frame) return;
+
+      const dropPos = screenToCanvas(info.clientX, info.clientY);
+      await spawnSingleFrameCard(card.id, frame.index, dropPos);
+    },
+    [card, frameDragMode],
   );
 
   const [gridDropdownOpen, setGridDropdownOpen] = useState(false);
@@ -608,6 +656,30 @@ export default function ImageToolbar() {
                 )}
               </span>
             </button>
+            <button
+              title="拖帧模式:从合成图里挑任一帧拖到画布空白处出独立图卡(再按一次或 Esc 退出)"
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                frameDragMode
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+              onClick={() => {
+                if (!targetCardId) return;
+                if (frameDragMode) {
+                  setFrameDragMode(false);
+                  frameDragCardId.current = null;
+                } else {
+                  setActiveGrid(null);
+                  gridCardId.current = null;
+                  setFrameDragMode(true);
+                  frameDragCardId.current = targetCardId;
+                }
+              }}
+            >
+              <Hand className="h-3.5 w-3.5" />
+              <span>{frameDragMode ? "拖帧中" : "拖帧"}</span>
+            </button>
             <div className="mx-0.5 h-4 w-px bg-border" />
           </>
         )}
@@ -645,6 +717,8 @@ export default function ImageToolbar() {
                       setActiveGrid(null);
                       gridCardId.current = null;
                     } else {
+                      setFrameDragMode(false);
+                      frameDragCardId.current = null;
                       setActiveGrid(size);
                       gridCardId.current = targetCardId ?? null;
                     }
@@ -737,15 +811,32 @@ export default function ImageToolbar() {
       </div>
       </div>
 
-      {activeGrid && targetCardId && (
+      {activeGrid && targetCardId && !frameDragMode && (
         <GridOverlay
           cardId={targetCardId}
-          gridSize={activeGrid}
+          cols={activeGrid}
+          rows={activeGrid}
           onCellDrop={handleCellDrop}
           disabled={cropping}
           overlayRef={overlayRef}
         />
       )}
+
+      {frameDragMode && targetCardId && card && (() => {
+        const layout = (card.data as CompositeImageData).compositeLayout;
+        if (!layout) return null;
+        return (
+          <GridOverlay
+            cardId={targetCardId}
+            cols={layout.cols}
+            rows={layout.rows}
+            hoverLabel="拖出此帧"
+            onCellDrop={handleFrameCellDrop}
+            disabled={false}
+            overlayRef={overlayRef}
+          />
+        );
+      })()}
 
     </>
   );

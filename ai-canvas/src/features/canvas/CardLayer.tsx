@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, memo } from "react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
+import { useGroupStore } from "@/stores/groupStore";
 import type { CanvasCard, Viewport } from "@/types";
 import CardShell from "@/features/cards/CardShell";
 import CardContent from "@/features/cards/CardContent";
@@ -9,6 +10,7 @@ import { hexAlpha } from "@/lib/utils";
 import { spatialIndex } from "@/lib/spatial-index";
 import { preloadImages } from "@/lib/imagePreloader";
 import { getDisplayUrl } from "@/lib/media";
+import { buildCollapsedCardIndex } from "@/lib/groupBounds";
 
 const LOD_SCREEN_THRESHOLD = 80;
 const VIEWPORT_MARGIN = 200;
@@ -107,6 +109,7 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
   // 不应导致整层重算。只订阅 layoutVersion；effect 内 imperative 取 cards。
   // bringToFront / sendToBack 也走 layoutVersion 通道，覆盖层级变化。
   const layoutVersion = useCardStore((s) => s.layoutVersion);
+  const groupVersion = useGroupStore((s) => s.version);
   const selectedCardIds = useCanvasStore((s) => s.selectedCardIds);
 
   // fullCards 只存 id —— 真正渲染走 CardSlot 内部订阅，数据更新（dataVersion）
@@ -151,6 +154,9 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
     }
 
     const cards = useCardStore.getState().cards;
+    // 折叠组覆盖的卡:不渲染(F7 真折叠)。索引在组 collapsed 切换或组 cardIds 变时重建,
+    // 触发器是 groupVersion(deps 已包含)。
+    const collapsedIdx = buildCollapsedCardIndex(projectId);
 
     const worldLeft = -viewport.x / viewport.zoom - VIEWPORT_MARGIN;
     const worldTop = -viewport.y / viewport.zoom - VIEWPORT_MARGIN;
@@ -163,13 +169,17 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
       const ids = spatialIndex.query(worldLeft, worldTop, worldRight, worldBottom);
       visibleCards = ids
         .map((id) => cards.get(id))
-        .filter((c): c is CanvasCard => c !== undefined && c.projectId === projectId)
+        .filter(
+          (c): c is CanvasCard =>
+            c !== undefined && c.projectId === projectId && !collapsedIdx.has(c.id),
+        )
         .sort((a, b) => a.zIndex - b.zIndex);
     } else {
       visibleCards = Array.from(cards.values())
         .filter(
           (c) =>
             c.projectId === projectId &&
+            !collapsedIdx.has(c.id) &&
             c.x + c.width > worldLeft &&
             c.x < worldRight &&
             c.y + c.height > worldTop &&
@@ -209,6 +219,7 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
     viewport.height,
     projectId,
     layoutVersion,
+    groupVersion,
   ]);
 
   const prevVp = useRef({ x: viewport.x, y: viewport.y });

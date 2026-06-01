@@ -39,6 +39,34 @@ fn resize_window(
 }
 
 pub struct AppState {
+    /// 全局 SQLite 连接,由 `std::sync::Mutex` 保护。
+    ///
+    /// **不可重入** —— 同一线程在已持有 guard 时再次 `lock()` 会**永久阻塞**(死锁),
+    /// 表现为 UI 卡死、鼠标转圈。规避规则:
+    ///
+    /// 1. 任何"读 setting / 查 project title"类工具函数,签名一律是
+    ///    `(db: &rusqlite::Connection, ...)`,**禁止**改成 `state: &AppState` 然后
+    ///    内部偷偷 `state.db.lock()` —— 那是把锁状态藏起来的陷阱设计,
+    ///    调用方一旦在已持锁状态下调用就死锁。
+    ///    现存的 `ai::resolve_save_dir` / `ai::resolve_export_dir` /
+    ///    `ai::candidate_save_dirs` 已经按此规范。
+    ///
+    /// 2. 每个 `#[tauri::command]` 内部需要多次读 db 时,**用一个 inner block 一次锁完**:
+    ///    ```rust
+    ///    let result = {
+    ///        let db = state.db.lock().map_err(|e| e.to_string())?;
+    ///        // 在 block 内做所有 SELECT/UPDATE 和工具函数调用
+    ///        ...
+    ///    };  // ← guard 在这里 drop, 之后才做 fs / 网络 IO
+    ///    ```
+    ///    不要让 guard 跨越多个语句然后中间调一个"接收 &AppState"的函数。
+    ///
+    /// 3. 改任何会被多人复用的 helper 时,**优先选 `&Connection` 参数**,把锁责任丢给调用方;
+    ///    这样借用检查就能在编译期挡住"嵌套锁"的写法。
+    ///
+    /// 历史教训: `rename_project` 曾在持有 db 锁的情况下调
+    /// `candidate_save_dirs(&state)`,后者又 `state.db.lock()` → 死锁,
+    /// 双击改名按回车 UI 永久转圈。修复见该函数与 ai.rs 工具函数注释。
     pub db: Mutex<rusqlite::Connection>,
     http_client: OnceLock<reqwest::Client>,
     stream_client: OnceLock<reqwest::Client>,
@@ -933,6 +961,9 @@ pub fn run() {
             commands::frame_extract::extract_frames_at_timestamps,
             commands::frame_extract::probe_video_duration,
             commands::frame_extract::detect_scene_changes,
+            // 启动时 ffmpeg 探测 + 主动下载 (前端 FfmpegSetupDialog 用)
+            commands::frame_extract::check_ffmpeg_status,
+            commands::frame_extract::download_ffmpeg,
             // update: 自动更新 + 版本切换 + 当前运行时信息
             commands::update::check_for_update,
             commands::update::install_latest_update,

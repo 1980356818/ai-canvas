@@ -1,6 +1,13 @@
-import type { CanvasCard, Connection, Viewport } from "@/types";
+import type { CanvasCard, CardGroup, Connection, Viewport } from "@/types";
 import { TYPE_COLORS } from "@/shared/constants";
 import { getDisplayUrl } from "@/lib/media";
+import {
+  computeGroupBounds,
+  collapsedCapsuleCenter,
+  collapsedHitBox,
+} from "@/lib/groupBounds";
+import { hexAlpha } from "@/lib/utils";
+import { GROUP_TITLE_HEIGHT } from "@/types/group";
 
 // --- Image cache for Canvas rendering ---
 
@@ -99,9 +106,15 @@ export function drawCards(
   zoom: number,
   projectId: string,
   imageCache?: CardImageCache,
+  /** F7: 折叠组覆盖的 cardId 跳过(鸟瞰也走 DOM 端同语义)。 */
+  collapsedCardIds?: ReadonlySet<string>,
 ) {
   const sorted = Array.from(cards.values())
-    .filter((c) => c.projectId === projectId)
+    .filter(
+      (c) =>
+        c.projectId === projectId &&
+        (!collapsedCardIds || !collapsedCardIds.has(c.id)),
+    )
     .sort((a, b) => a.zIndex - b.zIndex);
 
   const bg = cardBg();
@@ -193,6 +206,13 @@ function bezierPath(
   ctx.bezierCurveTo(x1 + cp, y1, x2 - cp, y2, x2, y2);
 }
 
+export interface ConnectionRenderContext {
+  /** F7: cardId → 它所在的折叠组(用于端点收到胶囊)。 */
+  collapsedIdx?: Map<string, CardGroup>;
+  /** F13: cardId → 它所在的任何组 id(用于跨组判定)。 */
+  cardGroupIdx?: Map<string, string>;
+}
+
 export function drawConnections(
   ctx: CanvasRenderingContext2D,
   connections: Map<string, Connection>,
@@ -200,6 +220,7 @@ export function drawConnections(
   projectId: string,
   selectedConnectionId: string | null,
   zoom: number = 1,
+  groupCtx?: ConnectionRenderContext,
 ) {
   const minLine = Math.max(2, 1.5 / zoom);
   const minSelectedLine = Math.max(3, 2 / zoom);
@@ -211,18 +232,140 @@ export function drawConnections(
     const tgt = cards.get(conn.targetCardId);
     if (!src || !tgt) continue;
 
-    const x1 = src.x + src.width;
-    const y1 = src.y + src.height / 2;
-    const x2 = tgt.x;
-    const y2 = tgt.y + tgt.height / 2;
+    // F7: 端点 reroute + 同组隐藏
+    const srcCollapsed = groupCtx?.collapsedIdx?.get(src.id);
+    const tgtCollapsed = groupCtx?.collapsedIdx?.get(tgt.id);
+    if (srcCollapsed && tgtCollapsed && srcCollapsed.id === tgtCollapsed.id) {
+      continue;
+    }
+
+    let x1 = src.x + src.width;
+    let y1 = src.y + src.height / 2;
+    let x2 = tgt.x;
+    let y2 = tgt.y + tgt.height / 2;
+    if (srcCollapsed) {
+      const c = collapsedCapsuleCenter(srcCollapsed, cards);
+      if (c) {
+        x1 = c.x;
+        y1 = c.y;
+      }
+    }
+    if (tgtCollapsed) {
+      const c = collapsedCapsuleCenter(tgtCollapsed, cards);
+      if (c) {
+        x2 = c.x;
+        y2 = c.y;
+      }
+    }
 
     const srcColor = src.color || TYPE_COLORS[src.type] || "#6B7280";
     const isSelected = conn.id === selectedConnectionId;
 
+    // F13: 跨组虚线(鸟瞰沿用 DOM 端语义)
+    const srcGroupId = groupCtx?.cardGroupIdx?.get(src.id);
+    const tgtGroupId = groupCtx?.cardGroupIdx?.get(tgt.id);
+    const crossGroup =
+      (!!srcGroupId || !!tgtGroupId) && srcGroupId !== tgtGroupId;
+
     bezierPath(ctx, x1, y1, x2, y2);
+    ctx.save();
     ctx.strokeStyle = isSelected ? "#818cf8" : srcColor + alphaHex;
     ctx.lineWidth = isSelected ? minSelectedLine : minLine;
+    if (crossGroup) {
+      const dashScale = Math.max(1, 1 / zoom);
+      ctx.setLineDash([8 * dashScale, 6 * dashScale]);
+    }
     ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/**
+ * 在卡片之下绘制所有组矩形 + 标题胶囊。
+ *
+ * 顺序契约(由调用方保证): drawGrid → drawGroups → drawConnections → drawCards
+ * 这样组矩形作为"卡片的视觉背景",连线在组上,卡片在最前。
+ */
+export function drawGroups(
+  ctx: CanvasRenderingContext2D,
+  groups: CardGroup[],
+  cards: Map<string, CanvasCard>,
+  zoom: number,
+) {
+  if (groups.length === 0) return;
+  const lineW = Math.max(1, 1.5 / zoom);
+  const titleFontPx = Math.max(10, 12 / zoom);
+
+  for (const g of groups) {
+    const bounds = computeGroupBounds(g, cards);
+    if (!bounds) continue;
+
+    if (g.collapsed) {
+      // 折叠态只画胶囊
+      const cap = collapsedHitBox(bounds);
+      const r = cap.height / 2;
+      ctx.save();
+      ctx.fillStyle = hexAlpha(g.color, 0.22);
+      ctx.strokeStyle = hexAlpha(g.color, 0.6);
+      ctx.lineWidth = lineW;
+      ctx.beginPath();
+      ctx.moveTo(cap.x + r, cap.y);
+      ctx.lineTo(cap.x + cap.width - r, cap.y);
+      ctx.quadraticCurveTo(cap.x + cap.width, cap.y, cap.x + cap.width, cap.y + r);
+      ctx.lineTo(cap.x + cap.width, cap.y + cap.height - r);
+      ctx.quadraticCurveTo(
+        cap.x + cap.width,
+        cap.y + cap.height,
+        cap.x + cap.width - r,
+        cap.y + cap.height,
+      );
+      ctx.lineTo(cap.x + r, cap.y + cap.height);
+      ctx.quadraticCurveTo(cap.x, cap.y + cap.height, cap.x, cap.y + cap.height - r);
+      ctx.lineTo(cap.x, cap.y + r);
+      ctx.quadraticCurveTo(cap.x, cap.y, cap.x + r, cap.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+      continue;
+    }
+
+    // 展开态:整个 bounds 半透明 + 顶部标题栏底色
+    ctx.save();
+    ctx.fillStyle = hexAlpha(g.color, 0.08);
+    ctx.strokeStyle = hexAlpha(g.color, 0.5);
+    ctx.lineWidth = lineW;
+    roundRect(ctx, bounds.x, bounds.y, bounds.width, bounds.height, 14);
+    ctx.fill();
+    ctx.stroke();
+
+    // 标题栏顶条
+    ctx.fillStyle = hexAlpha(g.color, 0.18);
+    roundRect(
+      ctx,
+      bounds.x,
+      bounds.y,
+      bounds.width,
+      GROUP_TITLE_HEIGHT,
+      14,
+    );
+    ctx.fill();
+
+    // 标题文字(zoom 小则省略)
+    if (zoom > 0.25) {
+      ctx.fillStyle = g.color;
+      ctx.font = `600 ${titleFontPx}px system-ui, -apple-system, sans-serif`;
+      ctx.textBaseline = "middle";
+      const text = g.title;
+      const padX = 8;
+      ctx.fillText(
+        text,
+        bounds.x + padX,
+        bounds.y + GROUP_TITLE_HEIGHT / 2,
+        bounds.width - padX * 2,
+      );
+    }
+    ctx.restore();
   }
 }
 

@@ -1,10 +1,15 @@
 import { memo, useMemo, useCallback } from "react";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useCardStore } from "@/stores/cardStore";
+import { useGroupStore } from "@/stores/groupStore";
 import type { CanvasCard, Connection, Viewport } from "@/types";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { TYPE_COLORS } from "@/shared/constants";
 import { disconnectConnectionAndCleanup } from "@/lib/referenceConsistency";
+import {
+  buildCollapsedCardIndex,
+  collapsedCapsuleCenter,
+} from "@/lib/groupBounds";
 
 const CURVE_OFFSET = 80;
 /** 视口外多少世界像素仍渲染——给曲线弧线和滚动惯性留缓冲 */
@@ -51,6 +56,8 @@ interface WireProps {
   selected: boolean;
   hovered: boolean;
   flowing: boolean;
+  /** F13: 跨组连线视觉差异化(虚线 dash + 略提亮)。 */
+  crossGroup: boolean;
   x1: number;
   y1: number;
   x2: number;
@@ -70,6 +77,7 @@ const Wire = memo(function Wire({
   selected,
   hovered,
   flowing,
+  crossGroup,
   x1,
   y1,
   x2,
@@ -83,6 +91,8 @@ const Wire = memo(function Wire({
   const baseId = `base-${id}`;
   const pulseId = `pulse-${id}`;
   const mid = bezierMidpoint(x1, y1, x2, y2);
+  // F13: 跨组连线视觉差异 — base 加 dash,pulse 不变以保留动画感
+  const baseDash = crossGroup ? "8 6" : undefined;
 
   return (
     <g>
@@ -125,13 +135,14 @@ const Wire = memo(function Wire({
         />
       )}
 
-      {/* Base solid line — always visible */}
+      {/* Base solid line — always visible. 跨组用 dash 提示边界。 */}
       <path
         d={d}
         fill="none"
         stroke={active ? `url(#${pulseId})` : `url(#${baseId})`}
         strokeWidth={active ? 4.5 : 4}
         strokeLinecap="round"
+        strokeDasharray={baseDash}
         style={{ pointerEvents: "none" }}
       />
 
@@ -241,6 +252,7 @@ export default memo(function ConnectionLayer({
   // 都换新，旧写法会让 projectConns useMemo deps 触发，但实际上靠数字 deps 等价。
   const connectionsVersion = useConnectionStore((s) => s.connectionsVersion);
   const layoutVersion = useCardStore((s) => s.layoutVersion);
+  const groupVersion = useGroupStore((s) => s.version);
   const dragOffsets = useCanvasStore((s) => s.dragOffsets);
   const selectedId = useConnectionStore((s) => s.selectedConnectionId);
   const hoveredId = useConnectionStore((s) => s.hoveredConnectionId);
@@ -261,6 +273,15 @@ export default memo(function ConnectionLayer({
   const projectConns = useMemo(() => {
     const cards = useCardStore.getState().cards;
     const connections = useConnectionStore.getState().connections;
+    // F7: collapsed 索引 = cardId → 它所属的折叠组(用于端点 reroute / 整条隐藏)
+    const collapsedIdx = buildCollapsedCardIndex(projectId);
+    // F13: cardId → 它所属的任何组(用于跨组连线视觉差异)
+    // 注意:展开组也算"在某个组里",跨组判定看的是 sourceGroup !== targetGroup。
+    const cardGroupIdx = new Map<string, string>();
+    for (const g of useGroupStore.getState().getGroupsByProject(projectId)) {
+      for (const cid of g.cardIds) cardGroupIdx.set(cid, g.id);
+    }
+
     const result: Array<{
       conn: Connection;
       d: string;
@@ -270,6 +291,8 @@ export default memo(function ConnectionLayer({
       y1: number;
       x2: number;
       y2: number;
+      /** 跨组(含 collapsed 端点替换) → 视觉差异化(F13) */
+      crossGroup: boolean;
     }> = [];
 
     for (const conn of connections.values()) {
@@ -278,8 +301,29 @@ export default memo(function ConnectionLayer({
       const tgt = cards.get(conn.targetCardId);
       if (!src || !tgt) continue;
 
-      const srcPort = getPortPositions(src, dragOffsets).output;
-      const tgtPort = getPortPositions(tgt, dragOffsets).input;
+      const srcCollapsedGroup = collapsedIdx.get(src.id);
+      const tgtCollapsedGroup = collapsedIdx.get(tgt.id);
+
+      // 两端都在同一个 collapsed 组 → 整条隐藏(组内引用不应在折叠态可见)
+      if (
+        srcCollapsedGroup &&
+        tgtCollapsedGroup &&
+        srcCollapsedGroup.id === tgtCollapsedGroup.id
+      ) {
+        continue;
+      }
+
+      // F7: 端点 reroute 到折叠胶囊中心(拖拽期间也带 dragOffsets,胶囊跟手)
+      let srcPort = getPortPositions(src, dragOffsets).output;
+      let tgtPort = getPortPositions(tgt, dragOffsets).input;
+      if (srcCollapsedGroup) {
+        const c = collapsedCapsuleCenter(srcCollapsedGroup, cards, dragOffsets);
+        if (c) srcPort = c;
+      }
+      if (tgtCollapsedGroup) {
+        const c = collapsedCapsuleCenter(tgtCollapsedGroup, cards, dragOffsets);
+        if (c) tgtPort = c;
+      }
 
       // 视口剔除：连线的 bbox 与视口 bbox 不相交 → 跳过。
       // 用 source/target 端点构造 bbox（贝塞尔控制点不会超出 |x1-x2| × max(|y1-y2|, CURVE_OFFSET)）
@@ -301,6 +345,13 @@ export default memo(function ConnectionLayer({
       const d = bezierPath(srcPort.x, srcPort.y, tgtPort.x, tgtPort.y);
       const srcColor = TYPE_COLORS[src.type] || "#6B7280";
       const tgtColor = TYPE_COLORS[tgt.type] || END_COLOR;
+
+      // F13: 跨组判定 — 任一端在某组而另一端不在同一组 → 跨组
+      const srcGroupId = cardGroupIdx.get(src.id);
+      const tgtGroupId = cardGroupIdx.get(tgt.id);
+      const crossGroup =
+        (!!srcGroupId || !!tgtGroupId) && srcGroupId !== tgtGroupId;
+
       result.push({
         conn,
         d,
@@ -310,11 +361,12 @@ export default memo(function ConnectionLayer({
         y1: srcPort.y,
         x2: tgtPort.x,
         y2: tgtPort.y,
+        crossGroup,
       });
     }
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionsVersion, layoutVersion, projectId, dragOffsets, vpBounds]);
+  }, [connectionsVersion, layoutVersion, groupVersion, projectId, dragOffsets, vpBounds]);
 
   const handleDelete = useCallback((id: string) => {
     disconnectConnectionAndCleanup(id);
@@ -332,7 +384,7 @@ export default memo(function ConnectionLayer({
 
   return (
     <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
-      {projectConns.map(({ conn, d, srcColor, tgtColor, x1, y1, x2, y2 }) => (
+      {projectConns.map(({ conn, d, srcColor, tgtColor, x1, y1, x2, y2, crossGroup }) => (
         <Wire
           key={conn.id}
           id={conn.id}
@@ -343,6 +395,7 @@ export default memo(function ConnectionLayer({
           selected={selectedId === conn.id}
           hovered={hoveredId === conn.id}
           flowing={flowingIds.has(conn.id)}
+          crossGroup={crossGroup}
           x1={x1}
           y1={y1}
           x2={x2}

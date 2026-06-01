@@ -5,24 +5,42 @@ import {
   type Connection,
 } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { useGroupStore } from "@/stores/groupStore";
 import { useUIStore } from "@/stores/uiStore";
-import { clipboardWriteText, clipboardReadText, updateProjectMeta } from "@/platform";
+import { clipboardWriteText, clipboardReadText, updateProjectMeta, saveGroupsBatch } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
 import { recordBatchCreate } from "@/lib/history";
+import { groupToRow } from "@/lib/mappers";
+import { DEFAULT_GROUP_COLOR } from "@/types/group";
+import type { CardGroup } from "@/types";
 import {
   cleanupDanglingReferencesInCards,
   cleanupDanglingReferencesInStore,
 } from "@/lib/referenceConsistency";
 
-const CLIPBOARD_KIND = "ai-canvas-card/v2";
+// v3 增加 groups 字段;v2/v1 仍可读(无 groups)
+const CLIPBOARD_KIND = "ai-canvas-card/v3";
+const CLIPBOARD_KIND_V2 = "ai-canvas-card/v2";
 const CLIPBOARD_KIND_V1 = "ai-canvas-card/v1";
 
 let inMemoryClipboard: string | null = null;
+
+/** 剪贴板上承载的组快照(去掉 id/时间戳/projectId,粘贴时新建)。 */
+interface ClipboardGroup {
+  /** 原 group id,用来在 payload 内部把 cardIds 关联起来(paste 时不复用)。 */
+  refId: string;
+  title: string;
+  color: string;
+  collapsed: boolean;
+  /** 原 cardIds,paste 时通过 idMap 映射到新 id。 */
+  cardIds: string[];
+}
 
 interface ClipboardPayload {
   kind: string;
   cards: CanvasCard[];
   connections: Connection[];
+  groups?: ClipboardGroup[];
 }
 
 // ---------------------------------------------------------------------------
@@ -43,6 +61,7 @@ function syncNodeCount(projectId: string) {
 export function collectSelected(cardIds: Set<string>): {
   cards: CanvasCard[];
   connections: Connection[];
+  groups: ClipboardGroup[];
 } {
   const cardStore = useCardStore.getState();
   const cards: CanvasCard[] = [];
@@ -59,6 +78,22 @@ export function collectSelected(cardIds: Set<string>): {
     }
   }
 
+  // 组复制语义:只复制"selection 完全包住"的组,部分选中的组不带组结构。
+  // 这样避免"复制半个组"产生粘贴后的不完整组身份。
+  const groups: ClipboardGroup[] = [];
+  const groupStore = useGroupStore.getState();
+  for (const g of groupStore.groups.values()) {
+    const allIn = g.cardIds.every((cid) => cardIds.has(cid));
+    if (!allIn) continue;
+    groups.push({
+      refId: g.id,
+      title: g.title,
+      color: g.color,
+      collapsed: g.collapsed,
+      cardIds: [...g.cardIds],
+    });
+  }
+
   // Strip connection-derived references (refImages, upstreamTexts, etc.) whose
   // source card is NOT included in the copy set. This ensures the clipboard
   // payload only carries "owned" data; connection-injected data will be
@@ -66,7 +101,7 @@ export function collectSelected(cardIds: Set<string>): {
   // recreated at paste time.
   const { cards: cleanedCards } = cleanupDanglingReferencesInCards(cards, connections);
 
-  return { cards: cleanedCards, connections };
+  return { cards: cleanedCards, connections, groups };
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +117,13 @@ export function parseClipboard(text: string): ClipboardPayload | null {
   }
 
   const kind = parsed.kind as string | undefined;
-  if (kind !== CLIPBOARD_KIND && kind !== CLIPBOARD_KIND_V1) return null;
+  if (
+    kind !== CLIPBOARD_KIND &&
+    kind !== CLIPBOARD_KIND_V2 &&
+    kind !== CLIPBOARD_KIND_V1
+  ) {
+    return null;
+  }
 
   let cards: CanvasCard[];
   if (Array.isArray(parsed.cards)) {
@@ -97,7 +138,11 @@ export function parseClipboard(text: string): ClipboardPayload | null {
     ? (parsed.connections as Connection[])
     : [];
 
-  return { kind: CLIPBOARD_KIND, cards, connections };
+  const groups: ClipboardGroup[] = Array.isArray(parsed.groups)
+    ? (parsed.groups as ClipboardGroup[])
+    : [];
+
+  return { kind: CLIPBOARD_KIND, cards, connections, groups };
 }
 
 // ---------------------------------------------------------------------------
@@ -107,25 +152,33 @@ export function parseClipboard(text: string): ClipboardPayload | null {
 export async function copyCards(cardIds: Set<string>): Promise<number> {
   if (cardIds.size === 0) return 0;
 
-  const { cards, connections } = collectSelected(cardIds);
+  const { cards, connections, groups } = collectSelected(cardIds);
   if (cards.length === 0) return 0;
 
-  const payload: ClipboardPayload = { kind: CLIPBOARD_KIND, cards, connections };
+  const payload: ClipboardPayload = {
+    kind: CLIPBOARD_KIND,
+    cards,
+    connections,
+    groups: groups.length > 0 ? groups : undefined,
+  };
   const text = JSON.stringify(payload);
   inMemoryClipboard = text;
-  const connMsg = connections.length > 0 ? `和 ${connections.length} 条连线` : "";
+  const parts: string[] = [];
+  if (connections.length > 0) parts.push(`${connections.length} 条连线`);
+  if (groups.length > 0) parts.push(`${groups.length} 个组`);
+  const extras = parts.length > 0 ? `和 ${parts.join(" / ")}` : "";
   try {
     await clipboardWriteText(text);
     useUIStore.getState().addToast({
       type: "info",
-      title: `已复制 ${cards.length} 张卡片${connMsg}`,
+      title: `已复制 ${cards.length} 张卡片${extras}`,
       duration: 1500,
     });
   } catch (e) {
     console.error("[clipboard.copyCards] write failed, in-memory fallback only", e);
     useUIStore.getState().addToast({
       type: "info",
-      title: `已复制 ${cards.length} 张卡片${connMsg}（应用内）`,
+      title: `已复制 ${cards.length} 张卡片${extras}（应用内）`,
       duration: 1500,
     });
   }
@@ -239,6 +292,33 @@ function materialize(
       createdAt: now,
     };
     useConnectionStore.getState().addConnection(conn);
+  }
+
+  // Recreate groups with remapped IDs(只重建 selection 完整包住的组,parseClipboard 已保证)
+  const srcGroups = payload.groups ?? [];
+  if (srcGroups.length > 0) {
+    const groupStore = useGroupStore.getState();
+    for (const sg of srcGroups) {
+      const mapped = sg.cardIds
+        .map((cid) => idMap.get(cid))
+        .filter((id): id is string => !!id);
+      if (mapped.length < 2) continue; // 跳过残缺组
+      const newGroup: CardGroup = {
+        id: crypto.randomUUID(),
+        projectId,
+        cardIds: mapped,
+        title: sg.title ?? "新建组",
+        color: sg.color ?? DEFAULT_GROUP_COLOR,
+        collapsed: !!sg.collapsed,
+        createdAt: now,
+        updatedAt: now,
+      };
+      groupStore.addGroup(newGroup);
+    }
+    const all = groupStore.getGroupsByProject(projectId);
+    void saveGroupsBatch(all.map(groupToRow)).catch((e) =>
+      console.warn("[clipboard.materialize] saveGroupsBatch failed:", e),
+    );
   }
 
   syncNodeCount(projectId);

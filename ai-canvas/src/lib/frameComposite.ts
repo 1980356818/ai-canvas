@@ -57,10 +57,17 @@ export interface ComposeFramesArgs {
 
 // ── 图像加载 ──────────────────────────────────────────────────────────
 
-/** 加载一张帧到 HTMLImageElement。失败 reject,由调用方决定是否兜底。 */
+/** 加载一张帧到 HTMLImageElement。失败 reject,由调用方决定是否兜底。
+ *
+ * `crossOrigin = "anonymous"` 是必须的:帧路径走 `convertFileSrc` 变成
+ * `asset://localhost/...`,跟 webview origin 不同源;若 `<img>` 没声明 CORS,
+ * 后面 `drawImage` 一画 canvas 就被 tainted,`canvas.toDataURL` 直接抛
+ * `SecurityError: Tainted canvases may not be exported`。Tauri v2 的 asset
+ * 协议默认回 `Access-Control-Allow-Origin: *`,加了 anonymous 不会触发 onerror。 */
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error(`加载帧失败: ${src}`));
     img.src = src;

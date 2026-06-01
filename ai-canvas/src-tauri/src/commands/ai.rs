@@ -1315,43 +1315,41 @@ pub async fn save_media(
         dest
     );
 
-    tracing::info!("[save_media] acquiring db lock (auto_save_base)…");
-    let lock1_start = Instant::now();
-    let auto_save_base = resolve_save_dir(&state);
-    tracing::info!(
-        "[save_media] auto_save_base resolved: {:?}, total_lock1_block_ms={}",
-        auto_save_base,
-        lock1_start.elapsed().as_millis()
-    );
-    let target_dir = if let Some(ref pid) = project_id {
-        tracing::info!("[save_media] acquiring db lock (project title) for pid={}…", pid);
-        let lock2_start = Instant::now();
-        let folder = {
-            let db = state.db.lock().map_err(|e| e.to_string())?;
-            tracing::info!(
-                "[save_media] db lock #2 acquired, elapsed_ms={}",
-                lock2_start.elapsed().as_millis()
-            );
-            db.query_row(
-                "SELECT title FROM projects WHERE id = ?1",
-                rusqlite::params![pid],
-                |row| row.get::<_, String>(0),
-            )
-            .ok()
-            .map(|t| build_project_folder_name(&t, pid))
-        };
+    // 单次 db 锁: 读 auto_save_base + project title, 一次锁内连查两次,
+    // 锁的 scope 严格限定在这个 block 内, 出块即 drop。
+    tracing::info!("[save_media] acquiring db lock…");
+    let lock_start = Instant::now();
+    let target_dir = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
         tracing::info!(
-            "[save_media] project folder lookup done: folder={:?}, total_lock2_block_ms={}",
-            folder,
-            lock2_start.elapsed().as_millis()
+            "[save_media] db lock acquired, elapsed_ms={}",
+            lock_start.elapsed().as_millis()
         );
-        match folder {
-            Some(f) => auto_save_base.join(f),
-            None => auto_save_base.clone(),
+        let auto_save_base = resolve_save_dir(&db, &state.data_dir);
+        tracing::info!("[save_media] auto_save_base resolved: {:?}", auto_save_base);
+        if let Some(ref pid) = project_id {
+            let folder = db
+                .query_row(
+                    "SELECT title FROM projects WHERE id = ?1",
+                    rusqlite::params![pid],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok()
+                .map(|t| build_project_folder_name(&t, pid));
+            tracing::info!("[save_media] project folder lookup done: folder={:?}", folder);
+            match folder {
+                Some(f) => auto_save_base.join(f),
+                None => auto_save_base,
+            }
+        } else {
+            auto_save_base
         }
-    } else {
-        auto_save_base.clone()
     };
+    tracing::info!(
+        "[save_media] target_dir resolved: {:?}, total_lock_block_ms={}",
+        target_dir,
+        lock_start.elapsed().as_millis()
+    );
 
     let friendly_name = build_friendly_filename(&title, &file_id, &ext);
     let user_dest = target_dir.join(&friendly_name);
@@ -1446,25 +1444,26 @@ pub async fn export_file(
 
     let export_name = build_friendly_filename(&title, &file_id, ext);
 
-    let base_dir = resolve_export_dir(&state);
-
-    let target_dir = if let Some(ref pid) = project_id {
-        let folder = {
-            let db = state.db.lock().map_err(|e| e.to_string())?;
-            db.query_row(
-                "SELECT title FROM projects WHERE id = ?1",
-                rusqlite::params![pid],
-                |row| row.get::<_, String>(0),
-            )
-            .ok()
-            .map(|t| build_project_folder_name(&t, pid))
-        };
-        match folder {
-            Some(f) => base_dir.join(f),
-            None => base_dir,
+    // 单次 db 锁: 读 base_dir + project title, scope 严格限定。
+    let target_dir = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let base_dir = resolve_export_dir(&db, &state.data_dir);
+        if let Some(ref pid) = project_id {
+            let folder = db
+                .query_row(
+                    "SELECT title FROM projects WHERE id = ?1",
+                    rusqlite::params![pid],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok()
+                .map(|t| build_project_folder_name(&t, pid));
+            match folder {
+                Some(f) => base_dir.join(f),
+                None => base_dir,
+            }
+        } else {
+            base_dir
         }
-    } else {
-        base_dir
     };
 
     let dest = target_dir.join(&export_name);
@@ -1500,18 +1499,21 @@ pub async fn open_in_explorer(
         if let Some(user_path) = resolve_user_media_path(&state, data_dir, &path, &project_id) {
             user_path
         } else {
-            // Friendly copy not found — try opening the auto-save project directory
-            let save_dir = resolve_save_dir(&state);
-            let proj_dir = project_id.as_ref().and_then(|pid| {
-                let db = state.db.lock().ok()?;
-                db.query_row(
-                    "SELECT title FROM projects WHERE id = ?1",
-                    rusqlite::params![pid],
-                    |row| row.get::<_, String>(0),
-                )
-                .ok()
-                .map(|t| save_dir.join(build_project_folder_name(&t, pid)))
-            });
+            // Friendly copy not found — try opening the auto-save project directory.
+            // 单次 db 锁: 读 save_dir + project title, scope 限定在 block 内。
+            let proj_dir = {
+                let db = state.db.lock().map_err(|e| e.to_string())?;
+                let save_dir = resolve_save_dir(&db, &state.data_dir);
+                project_id.as_ref().and_then(|pid| {
+                    db.query_row(
+                        "SELECT title FROM projects WHERE id = ?1",
+                        rusqlite::params![pid],
+                        |row| row.get::<_, String>(0),
+                    )
+                    .ok()
+                    .map(|t| save_dir.join(build_project_folder_name(&t, pid)))
+                })
+            };
             if let Some(ref dir) = proj_dir {
                 if dir.is_dir() {
                     return reveal_path(dir);
@@ -1555,18 +1557,24 @@ fn resolve_user_media_path(
         .as_ref()
         .map(|pid| &pid[..8.min(pid.len())]);
 
-    let project_folder = project_id.as_ref().and_then(|pid| {
-        let db = state.db.lock().ok()?;
-        db.query_row(
-            "SELECT title FROM projects WHERE id = ?1",
-            rusqlite::params![pid],
-            |row| row.get::<_, String>(0),
-        )
-        .ok()
-        .map(|t| build_project_folder_name(&t, pid))
-    });
-
-    let candidate_dirs = candidate_save_dirs(state);
+    // 单次 db 锁: 读 project_folder + candidate_dirs, scope 限定在 block 内。
+    // (历史: 这里曾经分两次锁,虽然不嵌套但白白付了两次锁的开销;合并后更清晰。)
+    let (project_folder, candidate_dirs) = {
+        let Ok(db) = state.db.lock() else {
+            return None;
+        };
+        let project_folder = project_id.as_ref().and_then(|pid| {
+            db.query_row(
+                "SELECT title FROM projects WHERE id = ?1",
+                rusqlite::params![pid],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .map(|t| build_project_folder_name(&t, pid))
+        });
+        let candidate_dirs = candidate_save_dirs(&db, &state.data_dir);
+        (project_folder, candidate_dirs)
+    };
 
     let search_dirs: Vec<std::path::PathBuf> = candidate_dirs
         .iter()
@@ -1799,49 +1807,55 @@ pub(crate) fn read_nonempty_setting(
     .filter(|v| !v.is_empty())
 }
 
-/// 自动保存目录（生成图片/视频后自动写入的位置）。
-/// 唯一数据源：DB `file_auto_save_path`（启动时已确保有值）。
-pub(crate) fn resolve_save_dir(state: &AppState) -> std::path::PathBuf {
-    state
-        .db
-        .lock()
-        .ok()
-        .and_then(|db| read_nonempty_setting(&db, "file_auto_save_path"))
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| state.data_dir.join("文件自动保存"))
+// ─── setting → 路径 的解析工具 ────────────────────────────────────────────
+//
+// 规范: 这三个函数**只接受 `&rusqlite::Connection`**, 不接受 `&AppState`,
+// 也不在内部 `state.db.lock()`。锁责任**强制上提**给调用方。
+//
+// 历史教训: 它们原本签名是 `state: &AppState`、内部偷偷 lock,
+// 导致 `rename_project` 在已持锁的情况下调用 → 同线程二次锁
+// `std::sync::Mutex` 永久阻塞 → UI 卡死。
+//
+// 调用约定(任何新调用点都要照做):
+// ```
+// let result = {
+//     let db = state.db.lock().map_err(...)?;
+//     resolve_save_dir(&db, &state.data_dir)        // 在锁的 scope 内调
+// };  // ← guard 在这里 drop, 后续 IO / 嵌套调用都安全
+// ```
+// 如果调用方已经持锁,直接把现成的 `&db` 传进来即可,不会再锁一次。
+
+/// 自动保存目录(生成图片/视频后自动写入的位置)。
+/// 唯一数据源: DB `file_auto_save_path`(启动时已确保有值)。
+pub(crate) fn resolve_save_dir(db: &rusqlite::Connection, data_dir: &Path) -> PathBuf {
+    read_nonempty_setting(db, "file_auto_save_path")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| data_dir.join("文件自动保存"))
 }
 
-/// 导出目录（用户手动"下载/导出"时的目标位置）。
-/// 优先 `file_export_path`，没设则回退到自动保存目录。
-pub(crate) fn resolve_export_dir(state: &AppState) -> std::path::PathBuf {
-    state
-        .db
-        .lock()
-        .ok()
-        .and_then(|db| {
-            read_nonempty_setting(&db, "file_export_path")
-                .or_else(|| read_nonempty_setting(&db, "file_auto_save_path"))
-        })
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| state.data_dir.join("文件自动保存"))
+/// 导出目录(用户手动"下载/导出"时的目标位置)。
+/// 优先 `file_export_path`,没设则回退到自动保存目录。
+pub(crate) fn resolve_export_dir(db: &rusqlite::Connection, data_dir: &Path) -> PathBuf {
+    read_nonempty_setting(db, "file_export_path")
+        .or_else(|| read_nonempty_setting(db, "file_auto_save_path"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| data_dir.join("文件自动保存"))
 }
 
-/// 所有可能存有用户友好副本的候选目录（用于"在文件夹中打开"搜索）。
-pub(crate) fn candidate_save_dirs(state: &AppState) -> Vec<std::path::PathBuf> {
-    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
-    if let Ok(db) = state.db.lock() {
-        if let Some(v) = read_nonempty_setting(&db, "file_export_path") {
-            dirs.push(std::path::PathBuf::from(v));
-        }
-        if let Some(v) = read_nonempty_setting(&db, "file_auto_save_path") {
-            let p = std::path::PathBuf::from(v);
-            if !dirs.contains(&p) {
-                dirs.push(p);
-            }
+/// 所有可能存有用户友好副本的候选目录(用于"在文件夹中打开"搜索)。
+pub(crate) fn candidate_save_dirs(db: &rusqlite::Connection, data_dir: &Path) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    if let Some(v) = read_nonempty_setting(db, "file_export_path") {
+        dirs.push(PathBuf::from(v));
+    }
+    if let Some(v) = read_nonempty_setting(db, "file_auto_save_path") {
+        let p = PathBuf::from(v);
+        if !dirs.contains(&p) {
+            dirs.push(p);
         }
     }
     // 旧版兼容
-    let legacy = state.data_dir.join("auto-save");
+    let legacy = data_dir.join("auto-save");
     if legacy.is_dir() && !dirs.contains(&legacy) {
         dirs.push(legacy);
     }

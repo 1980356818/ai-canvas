@@ -5,7 +5,7 @@
 //!   2. **错误集中**: 失败统一 toast + 早返回, UI 无需 try/catch;
 //!   3. **依赖隐式**: 直接 `useCardStore.getState()` / `useUIStore.getState()`,
 //!      调用方不传 deps;
-//!   4. **抽帧统一走合成卡** — 智能切镜 / 等间隔 / N 等分 / 首尾帧四种策略,
+//!   4. **抽帧统一走合成卡** — 智能切镜 / 等间隔 / 首尾帧三种策略,
 //!      派生产物统一是**一张**合成 ai_image 卡(走 `spawnCompositeImageCard`),
 //!      用户可在该卡上点"拆分"再展开成 N 张独立帧卡。
 
@@ -17,9 +17,7 @@ import { useConnectionStore } from "@/stores/connectionStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
 import { getDisplayUrl } from "@/lib/media";
-import { saveCardsBatch } from "@/platform";
 import { updateProjectMeta } from "@/platform";
-import { cardToRow } from "@/lib/mappers";
 import { sizeFromRatio } from "@/shared/constants";
 import {
   formatTimestamp,
@@ -95,16 +93,6 @@ async function commitCompositeCard(
 
 // ── 时间戳生成策略 ────────────────────────────────────────────────────
 
-/** N 等分:[t/N, 2t/N, ..., (N-1)t/N] — 不取 0 和末尾 (黑帧/淡出兜底)。 */
-function equalSplits(durationSec: number, n: number): number[] {
-  if (n <= 0 || durationSec <= 0) return [];
-  const ts: number[] = [];
-  for (let i = 1; i <= n; i++) {
-    ts.push((durationSec * i) / (n + 1));
-  }
-  return ts;
-}
-
 /** 等间隔:0, step, 2*step, ... 直到 duration-step (排除末尾,避免末帧黑屏)。 */
 function evenInterval(durationSec: number, stepSec: number): number[] {
   if (stepSec <= 0 || durationSec <= 0) return [];
@@ -126,19 +114,17 @@ function firstAndLast(durationSec: number): number[] {
   return [0.1, Math.max(0.1, durationSec - 0.1)];
 }
 
-// ── 公开:抽帧入口 (4 种策略) ─────────────────────────────────────────
+// ── 公开:抽帧入口 (3 种策略) ─────────────────────────────────────────
 
 export type ExtractMode =
   | { kind: "scene"; threshold?: number }
   | { kind: "interval"; stepSec: number }
-  | { kind: "equal"; count: number }
   | { kind: "firstLast" };
 
 function modeLabel(mode: ExtractMode): string {
   switch (mode.kind) {
     case "scene": return "智能关键帧";
     case "interval": return `每 ${mode.stepSec}s 抽帧`;
-    case "equal": return `${mode.count} 等分`;
     case "firstLast": return "首尾帧";
   }
 }
@@ -178,7 +164,7 @@ export async function extractFramesFromVideo(
         uiStore.addToast({
           type: "warning",
           title: "未检测到镜头切换",
-          description: "可能是单镜头视频,试试 N 等分或等间隔抽帧",
+          description: "可能是单镜头视频,试试等间隔抽帧或首尾帧",
           duration: 4000,
         });
         return;
@@ -194,9 +180,7 @@ export async function extractFramesFromVideo(
       const dur = await callRust<number>("probe_video_duration", {
         videoPath: target.videoUrl,
       });
-      timestamps = mode.kind === "interval"
-        ? evenInterval(dur, mode.stepSec)
-        : equalSplits(dur, mode.count);
+      timestamps = evenInterval(dur, mode.stepSec);
     }
 
     if (timestamps.length === 0) {
@@ -443,81 +427,6 @@ export function canContinueShot(modelId: string | undefined): { ok: boolean; rea
   // 当前所有 4 个视频家族 (Seedance / Veo / Grok / SeedanceVip) 都支持首帧.
   // 文本-only 的"未来视频模型"暂没有, 留这层方便后续扩展.
   return { ok: true };
-}
-
-// ── 公开:生成变体 (克隆 N-1 张) ─────────────────────────────────────
-
-/**
- * 克隆当前视频卡 N-1 次 (N 总数, 默认 3 → 多生成 2 张), 水平排列在右侧。
- *
- * 设计权衡:不自动触发生成 — 视频生成贵且模型/参数可能需要微调,
- * 自动并发 N 次 = 烧 N 倍钱;改成留 2 张空卡 + toast 提示用户双击各张生成,
- * 既能"原地比对", 也避免无意义重复消费。卡片上保留所有连线快照 (refFrames /
- * refImages / refAudios / refVideos 的 url + sourceCardId), 但不重建 Connection
- * 对象, 用户在编辑器里改一张不会影响另一张。
- */
-export async function spawnVariants(target: ExtractTarget, total: number = 3): Promise<void> {
-  const cardStore = useCardStore.getState();
-  const uiStore = useUIStore.getState();
-  const videoCard = cardStore.getCard(target.videoCardId);
-  if (!videoCard) return;
-
-  const copies = Math.max(1, Math.min(8, total - 1));
-  const { maxZIndex } = cardStore;
-  const GAP = 40;
-  const now = new Date().toISOString();
-  const newCards: CanvasCard[] = [];
-
-  for (let i = 0; i < copies; i++) {
-    const cloneData = JSON.parse(JSON.stringify(videoCard.data)) as Record<string, unknown>;
-    // 清掉结果, 保留 prompt / model / refs / size
-    delete cloneData.videoUrl;
-    delete cloneData.posterUrl;
-    cloneData._resultStale = false;
-
-    newCards.push({
-      id: crypto.randomUUID(),
-      projectId: videoCard.projectId,
-      type: "ai_video",
-      x: videoCard.x + (videoCard.width + GAP) * (i + 1),
-      y: videoCard.y,
-      width: videoCard.width,
-      height: videoCard.height,
-      zIndex: maxZIndex + 1 + i,
-      locked: false,
-      collapsed: false,
-      title: `变体 ${i + 2}`,
-      data: cloneData,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-
-  try {
-    await saveCardsBatch(newCards.map(cardToRow));
-    for (const c of newCards) cardStore.addCard(c);
-    for (const c of newCards) autoSave.markDirty(c.id);
-
-    useCanvasStore.getState().setSelectedCardIds(newCards.map((c) => c.id));
-
-    const count = cardStore.getCardsByProject(videoCard.projectId).length;
-    useProjectStore.getState().updateProject(videoCard.projectId, { nodeCount: count });
-    void updateProjectMeta(videoCard.projectId, { nodeCount: count });
-
-    uiStore.addToast({
-      type: "info",
-      title: `已克隆 ${copies} 张变体卡`,
-      description: "双击进入分别生成,可单独调整 prompt / 参数",
-      duration: 3500,
-    });
-  } catch (err) {
-    uiStore.addToast({
-      type: "error",
-      title: "克隆变体失败",
-      description: err instanceof Error ? err.message : String(err),
-      duration: 5000,
-    });
-  }
 }
 
 // ── 公开:抽到视频时长 (UI 用) ───────────────────────────────────────

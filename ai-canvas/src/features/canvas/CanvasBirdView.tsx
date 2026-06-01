@@ -3,9 +3,18 @@ import { useCanvasStore } from "@/stores/canvasStore";
 import type { Viewport } from "@/types";
 import { useCardStore } from "@/stores/cardStore";
 import { useConnectionStore } from "@/stores/connectionStore";
+import { useGroupStore } from "@/stores/groupStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
-import { drawCards, drawConnections, drawSelectionBox, drawGrid, CardImageCache } from "@/lib/canvas-renderer";
+import {
+  drawCards,
+  drawConnections,
+  drawSelectionBox,
+  drawGrid,
+  drawGroups,
+  CardImageCache,
+} from "@/lib/canvas-renderer";
+import { buildCollapsedCardIndex } from "@/lib/groupBounds";
 import { spatialIndex } from "@/lib/spatial-index";
 import { autoSave } from "@/lib/autoSave";
 
@@ -34,6 +43,7 @@ export default function CanvasBirdView({
   // connections 同理：订 connectionsVersion 数字，effect 内 imperative 取 Map（v5 规范）。
   const layoutVersion = useCardStore((s) => s.layoutVersion);
   const connectionsVersion = useConnectionStore((s) => s.connectionsVersion);
+  const groupVersion = useGroupStore((s) => s.version);
   const selectedCardIds = useCanvasStore((s) => s.selectedCardIds);
   const selectedConnectionId = useConnectionStore((s) => s.selectedConnectionId);
   const projectId = useProjectStore((s) => s.currentProjectId);
@@ -89,10 +99,36 @@ export default function CanvasBirdView({
       // imperative 取最新快照，避免把整个 cards/connections Map 放进订阅与 deps
       const cards = useCardStore.getState().cards;
       const connections = useConnectionStore.getState().connections;
+      // F7/F9/F13: 组数据 + 折叠/跨组索引(订阅 groupVersion 触发重绘)
+      const groups = useGroupStore.getState().getGroupsByProject(projectId);
+      const collapsedIdx = buildCollapsedCardIndex(projectId);
+      const collapsedCardIds = new Set<string>(collapsedIdx.keys());
+      const cardGroupIdx = new Map<string, string>();
+      for (const g of groups) {
+        for (const cid of g.cardIds) cardGroupIdx.set(cid, g.id);
+      }
 
       drawGrid(ctx, viewport);
-      drawConnections(ctx, connections, cards, projectId, selectedConnectionId, viewport.zoom);
-      drawCards(ctx, cards, selectedCardIds, viewport.zoom, projectId, imageCacheRef.current ?? undefined);
+      // 顺序: 组矩形(背景) → 连线 → 卡片
+      drawGroups(ctx, groups, cards, viewport.zoom);
+      drawConnections(
+        ctx,
+        connections,
+        cards,
+        projectId,
+        selectedConnectionId,
+        viewport.zoom,
+        { collapsedIdx, cardGroupIdx },
+      );
+      drawCards(
+        ctx,
+        cards,
+        selectedCardIds,
+        viewport.zoom,
+        projectId,
+        imageCacheRef.current ?? undefined,
+        collapsedCardIds,
+      );
 
       if (selBox) {
         const bx = Math.min(selBox.startX, selBox.endX);
@@ -112,7 +148,7 @@ export default function CanvasBirdView({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [viewport, connectionsVersion, selectedCardIds, selectedConnectionId, projectId, selBox, layoutVersion, imgVersion]);
+  }, [viewport, connectionsVersion, selectedCardIds, selectedConnectionId, projectId, selBox, layoutVersion, groupVersion, imgVersion]);
 
   // --- pointer interactions ---
   // Matches original CanvasContainer behavior:

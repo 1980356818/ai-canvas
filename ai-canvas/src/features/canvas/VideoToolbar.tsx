@@ -1,13 +1,11 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from "react";
 import {
-  Scissors,
   Film,
   ChevronDown,
   Download,
   HardDriveDownload,
   Loader2,
   Link2,
-  Copy,
   Crosshair,
   Image as ImageIcon,
 } from "lucide-react";
@@ -23,7 +21,6 @@ import {
   extractFramesFromVideo,
   extractFrameAtTimestamp,
   continueShotFromVideo,
-  spawnVariants,
   canContinueShot,
   isVeoReferenceMode,
   probeDuration,
@@ -77,16 +74,9 @@ const INTERVAL_OPTIONS = [
   { value: 5, label: "5s" },
 ];
 
-const EQUAL_OPTIONS = [
-  { value: 4, label: "4 等分" },
-  { value: 6, label: "6 等分" },
-  { value: 9, label: "9 等分" },
-];
-
 function ExtractMenu({ open, onClose, onChoose }: ExtractMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [intervalOpen, setIntervalOpen] = useState(false);
-  const [equalOpen, setEqualOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -112,13 +102,12 @@ function ExtractMenu({ open, onClose, onChoose }: ExtractMenuProps) {
       >
         <Crosshair className="h-3.5 w-3.5 text-emerald-500" />
         <span className="flex-1">智能关键帧</span>
-        <span className="text-[10px] text-muted-foreground">推荐</span>
       </button>
 
       <div className="relative">
         <button
           className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
-          onClick={() => { setIntervalOpen((v) => !v); setEqualOpen(false); }}
+          onClick={() => setIntervalOpen((v) => !v)}
         >
           <Film className="h-3.5 w-3.5 text-sky-500" />
           <span className="flex-1">等间隔 N 秒</span>
@@ -131,30 +120,6 @@ function ExtractMenu({ open, onClose, onChoose }: ExtractMenuProps) {
                 key={value}
                 className="block w-full rounded-md px-3 py-1.5 text-left text-xs text-foreground hover:bg-accent"
                 onClick={() => { onChoose({ kind: "interval", stepSec: value }); onClose(); }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="relative">
-        <button
-          className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
-          onClick={() => { setEqualOpen((v) => !v); setIntervalOpen(false); }}
-        >
-          <Scissors className="h-3.5 w-3.5 text-violet-500" />
-          <span className="flex-1">N 等分</span>
-          <ChevronDown className="h-3 w-3" />
-        </button>
-        {equalOpen && (
-          <div className="absolute left-full top-0 ml-1 min-w-[100px] rounded-lg border border-border bg-popover p-1 shadow-lg">
-            {EQUAL_OPTIONS.map(({ value, label }) => (
-              <button
-                key={value}
-                className="block w-full rounded-md px-3 py-1.5 text-left text-xs text-foreground hover:bg-accent"
-                onClick={() => { onChoose({ kind: "equal", count: value }); onClose(); }}
               >
                 {label}
               </button>
@@ -958,11 +923,6 @@ export default function VideoToolbar() {
     void continueShotFromVideo(target);
   }, [target]);
 
-  const handleVariants = useCallback(() => {
-    if (!target) return;
-    void spawnVariants(target, 3);
-  }, [target]);
-
   const handleDownload = useCallback(async () => {
     if (!card) return;
     const d = card.data as VideoData;
@@ -1094,15 +1054,6 @@ export default function VideoToolbar() {
           >
             <Link2 className="h-3.5 w-3.5" />
             <span>续拍</span>
-          </button>
-
-          <button
-            title="克隆 2 张相同参数的视频卡到右侧,便于生成变体对比"
-            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            onClick={handleVariants}
-          >
-            <Copy className="h-3.5 w-3.5" />
-            <span>变体 ×3</span>
           </button>
 
           <div className="mx-0.5 h-4 w-px bg-border" />

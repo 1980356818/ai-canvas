@@ -19,6 +19,16 @@ interface CanvasState {
    * 设计动机见 docs (本提交): 挑帧 vs 放帧两阶段, scrubber 走剪辑软件惯例。
    */
   scrubberActiveCardId: string | null;
+  /**
+   * 拖卡时"悬停在哪个组上方"的候选 id。
+   *   - 拖卡 onMove 时由 CardShell 写;
+   *   - GroupLayer 订阅它给该组矩形换实线+浓边框,提示"放手即加入";
+   *   - 拖卡结束(pointerup)由 CardShell 写 null 清除。
+   *
+   * 不属于 dragOffsets 通道:dragOffsets 是 60fps 的几何流,version 频繁 bump 会
+   * 让所有订阅它的组件抖动;hoverGroupId 仅在跨越组边界时才变,适合走独立 selector。
+   */
+  hoverGroupId: string | null;
 
   setViewport: (viewport: Partial<Viewport>) => void;
   setTool: (tool: CanvasState["tool"]) => void;
@@ -32,6 +42,7 @@ interface CanvasState {
   setDragOffset: (cardId: string, offset: DragOffset | null) => void;
   setDragOffsets: (offsets: Map<string, DragOffset>) => void;
   clearDragOffsets: (cardIds: string[]) => void;
+  setHoverGroupId: (groupId: string | null) => void;
   enterPickMode: (state: Omit<PickModeState, "active">) => void;
   exitPickMode: () => void;
 }
@@ -64,6 +75,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   pickMode: null,
   dragOffsets: new Map(),
   scrubberActiveCardId: null,
+  hoverGroupId: null,
 
   setViewport: (partial) =>
     set((s) => {
@@ -129,6 +141,9 @@ export const useCanvasStore = create<CanvasState>((set) => ({
       }
       return { dragOffsets: next };
     }),
+
+  setHoverGroupId: (groupId) =>
+    set((s) => (s.hoverGroupId === groupId ? s : { hoverGroupId: groupId })),
 
   enterPickMode: (state) =>
     set({ pickMode: { ...state, active: true } }),

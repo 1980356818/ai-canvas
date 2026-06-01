@@ -28,6 +28,7 @@ import SideCapsule from "@/features/overlays/SideCapsule";
 import LoginWindow from "@/features/auth/LoginWindow";
 import RedeemWindow from "@/features/auth/RedeemWindow";
 import UpdateDialog from "@/features/overlays/UpdateDialog";
+import FfmpegSetupDialog from "@/features/overlays/FfmpegSetupDialog";
 
 function AuthenticatedApp() {
   const appView = useUIStore((s) => s.appView);
@@ -112,6 +113,10 @@ function AuthenticatedApp() {
         {/* 启动后台查更新; 命中新版本弹自身,否则 render null。出错静默吞掉。 */}
         <ErrorBoundary fallback={null}>
           <UpdateDialog />
+        </ErrorBoundary>
+        {/* 启动后台查 ffmpeg; 本地缺则弹安装提示,否则 render null。 */}
+        <ErrorBoundary fallback={null}>
+          <FfmpegSetupDialog />
         </ErrorBoundary>
       </div>
     </ErrorBoundary>

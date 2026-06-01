@@ -150,21 +150,25 @@ pub fn permanently_delete_project(state: State<AppState>, id: String) -> Result<
 
 #[tauri::command]
 pub fn rename_project(state: State<AppState>, id: String, title: String) -> Result<(), String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let old_title: Option<String> = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
 
-    let old_title: Option<String> = db
-        .query_row(
-            "SELECT title FROM projects WHERE id = ?1",
-            rusqlite::params![id],
-            |row| row.get(0),
+        let old_title: Option<String> = db
+            .query_row(
+                "SELECT title FROM projects WHERE id = ?1",
+                rusqlite::params![id],
+                |row| row.get(0),
+            )
+            .ok();
+
+        db.execute(
+            "UPDATE projects SET title = ?1, updated_at = datetime('now') WHERE id = ?2",
+            rusqlite::params![title, id],
         )
-        .ok();
+        .map_err(|e| e.to_string())?;
 
-    db.execute(
-        "UPDATE projects SET title = ?1, updated_at = datetime('now') WHERE id = ?2",
-        rusqlite::params![title, id],
-    )
-    .map_err(|e| e.to_string())?;
+        old_title
+    };
 
     if let Some(old) = old_title {
         if old != title {
@@ -172,7 +176,12 @@ pub fn rename_project(state: State<AppState>, id: String, title: String) -> Resu
             let new_folder = super::ai::build_project_folder_name_pub(&title, &id);
 
             if old_folder != new_folder {
-                let bases = super::ai::candidate_save_dirs(&state);
+                // 重新锁一次 db 来读候选目录, scope 严格限定。
+                // candidate_save_dirs 现在签名是 (&Connection, &Path), 不会再嵌套锁。
+                let bases = {
+                    let db = state.db.lock().map_err(|e| e.to_string())?;
+                    super::ai::candidate_save_dirs(&db, &state.data_dir)
+                };
 
                 for base in &bases {
                     let old_path = base.join(&old_folder);

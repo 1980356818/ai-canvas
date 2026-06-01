@@ -18,7 +18,6 @@ import { cardToRow, connectionToRow } from "@/lib/mappers";
 import { autoSave } from "@/lib/autoSave";
 import { composeFrameGrid, type FrameInput } from "@/lib/frameComposite";
 import type { CompositeImageData } from "@/lib/frameSplit";
-import { CARD_MAX_EDGE } from "@/shared/constants";
 import type { CanvasCard, Connection } from "@/types";
 
 // ── 类型 ──────────────────────────────────────────────────────────────
@@ -60,6 +59,20 @@ export interface FrameExtractorData {
 
 /** 派生 ai_image 卡片的最长边像素。16:9 → 240×135,9:16 → 135×240。 */
 export const FRAME_CARD_MAX_EDGE = 240;
+
+/**
+ * 合成卡最长边 — 按帧数自适应。
+ *
+ * 合成卡是 N 张帧的 grid,grid 越扁/帧数越多,需要的总宽度就越大才能
+ * 保证单格视觉够大;否则会出现"卡片很扁、单格只有几十像素"的小卡问题。
+ * 写死 340 (常规图片卡) 在 N=7 时只能撑出 77px 高 → 实际不可用。
+ */
+export function compositeCardMaxEdge(frameCount: number): number {
+  if (frameCount <= 3) return 480;
+  if (frameCount <= 6) return 600;
+  if (frameCount <= 12) return 760;
+  return 900;
+}
 
 /** 一键拆分时派生卡片的网格布局参数。给 lib/frameSplit.ts + 旧调用方共用。 */
 export const FRAME_GRID = {
@@ -153,16 +166,17 @@ export async function spawnCompositeImageCard(
     title: title ?? "关键帧合成",
   });
 
-  // 2. 算卡片视觉尺寸 — 保持与合成图同 aspect,最长边 = CARD_MAX_EDGE
+  // 2. 算卡片视觉尺寸 — 保持与合成图同 aspect,最长边按帧数动态。
+  const maxEdge = compositeCardMaxEdge(frames.length);
   const cardAspect = result.width / result.height;
   let cardW: number;
   let cardH: number;
   if (cardAspect >= 1) {
-    cardW = CARD_MAX_EDGE;
-    cardH = Math.round(CARD_MAX_EDGE / cardAspect);
+    cardW = maxEdge;
+    cardH = Math.round(maxEdge / cardAspect);
   } else {
-    cardH = CARD_MAX_EDGE;
-    cardW = Math.round(CARD_MAX_EDGE * cardAspect);
+    cardH = maxEdge;
+    cardW = Math.round(maxEdge * cardAspect);
   }
 
   // 3. 位置:锚点卡下方,水平居中对齐

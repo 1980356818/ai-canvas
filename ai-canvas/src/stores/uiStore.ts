@@ -31,6 +31,11 @@ interface UIState {
   appView: AppView;
   generatingCards: Map<string, CardGenProgress>;
   cardErrors: Map<string, string>;
+  /**
+   * 正在重命名中的组 id。GroupLayer 的标题栏 span 监听它,匹配时切换为 contentEditable。
+   * 双击标题、右键菜单"重命名"、键盘 F2(M+) 都走这条统一通道。
+   */
+  editingGroupId: string | null;
 
   toggleSidebar: () => void;
   toggleAgentPanel: () => void;
@@ -58,6 +63,7 @@ interface UIState {
   setAppView: (view: AppView) => void;
   setCardProgress: (cardId: string, progress: CardGenProgress | null) => void;
   setCardError: (cardId: string, error: string | null) => void;
+  setEditingGroupId: (groupId: string | null) => void;
 }
 
 let toastCounter = 0;
@@ -75,6 +81,7 @@ export const useUIStore = create<UIState>((set) => ({
   appView: "home",
   generatingCards: new Map(),
   cardErrors: new Map(),
+  editingGroupId: null,
 
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   toggleAgentPanel: () =>
@@ -136,4 +143,7 @@ export const useUIStore = create<UIState>((set) => ({
       else next.delete(cardId);
       return { cardErrors: next };
     }),
+
+  setEditingGroupId: (groupId) =>
+    set((s) => (s.editingGroupId === groupId ? s : { editingGroupId: groupId })),
 }));

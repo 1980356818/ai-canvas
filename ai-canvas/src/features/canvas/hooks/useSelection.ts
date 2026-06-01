@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { groupsFullyInRect } from "@/lib/groupBounds";
 
 interface SelectionBox {
   x: number;
@@ -78,7 +79,7 @@ export function useSelection(
 
       const projectId = useProjectStore.getState().currentProjectId;
       const cards = useCardStore.getState().cards;
-      const hits: string[] = [];
+      const hits = new Set<string>();
 
       for (const card of cards.values()) {
         if (card.projectId !== projectId) continue;
@@ -88,16 +89,25 @@ export function useSelection(
           card.y < worldBox.y + worldBox.height &&
           card.y + card.height > worldBox.y
         ) {
-          hits.push(card.id);
+          hits.add(card.id);
+        }
+      }
+
+      // 框选感知组:bounds 完全落在框内的组,把其全部 cardIds 加入 hits。
+      // 折叠组(只有胶囊)只要胶囊在框内就生效——由 groupsFullyInRect 内部处理。
+      if (projectId) {
+        const fullyIn = groupsFullyInRect(projectId, worldBox);
+        for (const g of fullyIn) {
+          for (const cid of g.cardIds) hits.add(cid);
         }
       }
 
       if (ctrlKey) {
         const prev = useCanvasStore.getState().selectedCardIds;
-        const merged = [...new Set([...prev, ...hits])];
-        useCanvasStore.getState().setSelectedCardIds(merged);
+        const merged = new Set([...prev, ...hits]);
+        useCanvasStore.getState().setSelectedCardIds([...merged]);
       } else {
-        useCanvasStore.getState().setSelectedCardIds(hits);
+        useCanvasStore.getState().setSelectedCardIds([...hits]);
       }
 
       setSelectionBox(null);

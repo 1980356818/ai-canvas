@@ -2,6 +2,49 @@ import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import { MIN_ZOOM } from "@/shared/constants";
 
+export interface FocusOnCardOptions {
+  /** 居中后的最小缩放(防止小卡被放大过头)。默认 0.75。 */
+  minZoom?: number;
+  /** 居中后的最大缩放。默认保持当前缩放,不强制。 */
+  maxZoom?: number;
+}
+
+/**
+ * 把视口居中到指定卡片。用于:
+ *   - 组运行失败时跳转到失败节点 (F8)
+ *   - Agent 工具调用 navigate_to_card
+ *   - 通用"定位"场景
+ *
+ * 不改 zoom 除非当前太小看不清(<minZoom)。返回 true=移动了,false=卡片不存在。
+ */
+export function focusOnCard(
+  cardId: string,
+  opts: FocusOnCardOptions = {},
+): boolean {
+  const card = useCardStore.getState().getCard(cardId);
+  if (!card) return false;
+
+  const vp = useCanvasStore.getState().viewport;
+  const vw = vp.width || window.innerWidth;
+  const vh = vp.height || window.innerHeight;
+  if (vw <= 0 || vh <= 0) return false;
+
+  const minZoom = opts.minZoom ?? 0.75;
+  const maxZoom = opts.maxZoom ?? vp.zoom;
+  let zoom = vp.zoom;
+  if (zoom < minZoom) zoom = minZoom;
+  if (zoom > maxZoom) zoom = maxZoom;
+
+  const cx = card.x + card.width / 2;
+  const cy = card.y + card.height / 2;
+  useCanvasStore.getState().setViewport({
+    zoom,
+    x: vw / 2 - cx * zoom,
+    y: vh / 2 - cy * zoom,
+  });
+  return true;
+}
+
 /**
  * Fit all cards of a project into the current canvas viewport.
  * Returns false when there are no cards or the viewport hasn't been

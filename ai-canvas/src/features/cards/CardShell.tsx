@@ -19,6 +19,9 @@ import {
 import {
   canAcceptConnection,
 } from "@/lib/dataFlow";
+import { hitGroupAt } from "@/lib/groupBounds";
+import { useGroupStore } from "@/stores/groupStore";
+import { addCardsToGroup, removeCardsFromGroup } from "@/lib/groupActions";
 import CardLabel from "./CardLabel";
 
 function findInputPortAt(
@@ -326,6 +329,13 @@ export default memo(
           selectedIds = useCanvasStore.getState().selectedCardIds;
         }
         const isGroupDrag = selectedIds.has(card.id) && selectedIds.size > 1;
+        // 拖入/拖出组判定:仅对"单卡拖拽"启用。多卡拖整组时(用户通常是已组好的整组在移动)
+        // 不触发,避免误把整组拽进另一个组造成意外合并。
+        const currentGroupId = isGroupDrag
+          ? null
+          : useGroupStore.getState().getGroupByCardId(card.id)?.id ?? null;
+        const enableGroupHitTest = !isGroupDrag;
+        let lastHoverGroupId: string | null = null;
         const peerStarts = new Map<string, { cx: number; cy: number; el: HTMLElement | null }>();
         if (isGroupDrag) {
           const allCards = useCardStore.getState().cards;
@@ -381,6 +391,23 @@ export default memo(
           }
           if (!pendingFrame) {
             pendingFrame = requestAnimationFrame(flushDragOffsets);
+          }
+
+          // 拖卡入组高亮:用卡的中心点(而非指针)做命中,体验更稳定。
+          // 排除自己当前所属组,避免在原组内拖动也常亮提示。
+          if (enableGroupHitTest && card.projectId) {
+            const centerX = card.x + card.width / 2 + dx;
+            const centerY = card.y + card.height / 2 + dy;
+            const hit = hitGroupAt(card.projectId, centerX, centerY, {
+              excludeGroupIds: currentGroupId
+                ? new Set([currentGroupId])
+                : undefined,
+            });
+            const hitId = hit?.group.id ?? null;
+            if (hitId !== lastHoverGroupId) {
+              lastHoverGroupId = hitId;
+              useCanvasStore.getState().setHoverGroupId(hitId);
+            }
           }
 
           const slotEl = findSlotBelow(ev.clientX, ev.clientY);
@@ -449,6 +476,12 @@ export default memo(
             useCanvasStore.getState().clearDragOffsets([card.id, ...peerStarts.keys()]);
           } else {
             useCanvasStore.getState().setDragOffset(card.id, null);
+          }
+
+          // 拖卡入组高亮清除(无论后续走哪条分支)
+          if (lastHoverGroupId !== null) {
+            useCanvasStore.getState().setHoverGroupId(null);
+            lastHoverGroupId = null;
           }
 
           lastHoveredSlot?.dispatchEvent(
@@ -546,6 +579,25 @@ export default memo(
 
             if (!ev.ctrlKey && !ev.metaKey && !isGroupDrag) {
               useCanvasStore.getState().setSelectedCardIds([card.id]);
+            }
+
+            // 入组 / 出组结算(仅单卡拖)。落点用卡片新中心,而非指针,
+            // 与 onMove 高亮逻辑保持一致;否则会出现"明明高亮了 A 组,松手却没加入"的错位。
+            if (enableGroupHitTest && card.projectId) {
+              const newCenterX = dragStart.current.cx + dx + card.width / 2;
+              const newCenterY = dragStart.current.cy + dy + card.height / 2;
+              const hit = hitGroupAt(card.projectId, newCenterX, newCenterY, {
+                excludeGroupIds: currentGroupId
+                  ? new Set([currentGroupId])
+                  : undefined,
+              });
+              if (hit) {
+                // 加入命中组(若属于另一组,addCardsToGroup → groupStore 的 maintainSingleMembership 自动挤出)
+                addCardsToGroup(hit.group.id, [card.id]);
+              } else if (currentGroupId) {
+                // 落点在所有组外,而原本属于某组 → 出组
+                removeCardsFromGroup([card.id]);
+              }
             }
           } else {
             const pm = useCanvasStore.getState().pickMode;

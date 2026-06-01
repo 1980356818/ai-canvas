@@ -16,10 +16,12 @@ import {
   ungroupFromSelection,
   toggleGroupCollapsed,
   setGroupColor,
+  layoutGroup,
 } from "@/lib/groupActions";
 import { GROUP_PALETTE } from "@/types/group";
 import { pruneGroupsForRemovedCards } from "@/lib/groupConsistency";
-import { runGroup } from "@/services/groupRunner";
+import { runGroup, cancelGroup } from "@/services/groupRunner";
+import { useGroupRunStatusStore } from "@/stores/groupRunStatusStore";
 import { CARD_DEFAULTS } from "@/shared/constants";
 import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import { extractCardMedia } from "@/config/model-ref-images";
@@ -458,6 +460,8 @@ function ContextMenuPanel({
     const hasLocalMedia = !!cardMediaPath && !cardMediaPath.startsWith("data:") && !cardMediaPath.startsWith("http");
     const isVideo = card?.type === "ai_video";
     const showLabel = !!(card?.data as { _showLabel?: boolean } | undefined)?._showLabel;
+    // F10: 该卡属于某组 → 显示"从此节点向下运行此组"
+    const cardOwnerGroup = id ? useGroupStore.getState().getGroupByCardId(id) : undefined;
     entries = [
       {
         type: "item",
@@ -466,6 +470,19 @@ function ContextMenuPanel({
         disabled: !id || !card,
         onSelect: () => void runCopyCards(new Set(id ? [id] : [])),
       },
+      ...(cardOwnerGroup
+        ? [
+            {
+              type: "item" as const,
+              label: "从此节点向下运行",
+              disabled: !id,
+              onSelect: () => {
+                if (id) void runGroup(cardOwnerGroup.id, { startNodeIds: [id] });
+                hide();
+              },
+            },
+          ]
+        : []),
       {
         type: "item",
         label: showLabel ? "隐藏标签" : "显示标签",
@@ -649,13 +666,43 @@ function ContextMenuPanel({
   } else if (contextMenu.target === "group") {
     const groupId = contextMenu.targetId;
     const group = groupId ? useGroupStore.getState().getGroup(groupId) : undefined;
+    // F10: 失败态显示"只重跑失败节点";若组当前在跑显示"停止运行"
+    const groupRunStatus = groupId
+      ? useGroupRunStatusStore.getState().runningGroups.get(groupId)
+      : undefined;
+    const isGroupRunning = groupRunStatus?.phase === "running";
+    const isGroupFailed = groupRunStatus?.phase === "failed";
     entries = [
       {
         type: "item",
-        label: "运行此组",
+        label: isGroupRunning ? "停止运行" : "运行此组",
         disabled: !group || group.cardIds.length === 0,
         onSelect: () => {
-          if (groupId) void runGroup(groupId);
+          if (!groupId) return;
+          if (isGroupRunning) cancelGroup(groupId);
+          else void runGroup(groupId);
+          hide();
+        },
+      },
+      ...(isGroupFailed
+        ? [
+            {
+              type: "item" as const,
+              label: "只重跑失败节点",
+              disabled: false,
+              onSelect: () => {
+                if (groupId) void runGroup(groupId, { onlyFailed: true });
+                hide();
+              },
+            },
+          ]
+        : []),
+      {
+        type: "item",
+        label: "重命名",
+        disabled: !groupId,
+        onSelect: () => {
+          if (groupId) useUIStore.getState().setEditingGroupId(groupId);
           hide();
         },
       },
@@ -681,6 +728,40 @@ function ContextMenuPanel({
             hide();
           },
         })),
+      },
+      {
+        type: "submenu",
+        label: "组内排版",
+        disabled: !groupId || !group || group.cardIds.length < 2,
+        children: [
+          {
+            type: "item",
+            label: "横向排列",
+            disabled: false,
+            onSelect: () => {
+              if (groupId) layoutGroup(groupId, "horizontal");
+              hide();
+            },
+          },
+          {
+            type: "item",
+            label: "纵向排列",
+            disabled: false,
+            onSelect: () => {
+              if (groupId) layoutGroup(groupId, "vertical");
+              hide();
+            },
+          },
+          {
+            type: "item",
+            label: "网格排列",
+            disabled: false,
+            onSelect: () => {
+              if (groupId) layoutGroup(groupId, "grid");
+              hide();
+            },
+          },
+        ],
       },
       { type: "sep" },
       {

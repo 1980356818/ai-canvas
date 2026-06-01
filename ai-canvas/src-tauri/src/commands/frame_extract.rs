@@ -10,7 +10,7 @@
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 use crate::AppState;
@@ -26,7 +26,7 @@ use crate::AppState;
 //   4. **首次按需** 从自家服务器拉一份 → 落 #2 那里(SHA-256 校验 + 原子 rename)
 //
 // 与之前 `auto_download()` 拉 gyan.dev 的方案区别:
-//   - URL 换成 `{server_base_url}/static/ffmpeg-<ver>-<triple>.exe`,机房内网快、稳
+//   - URL 换成 `{FFMPEG_DOWNLOAD_BASE_URL}/ffmpeg-<ver>-<triple>[ext]`,机房直连快、稳
 //   - SHA-256 锁版本,防中间篡改 / 半截传 / 杀软改写
 //   - 写入 `data_dir/.ffmpeg/`(NSIS 不动这,杀软扫描这里也少)
 //   - 原子 rename:下到 `.partial` 校验过再改名,断点不污染主路径
@@ -38,36 +38,68 @@ const FFMPEG_EXE_NAME: &str = "ffmpeg.exe";
 #[cfg(not(windows))]
 const FFMPEG_EXE_NAME: &str = "ffmpeg";
 
-/// 这俩跟服务器上传的文件锁死。升 ffmpeg → 同时改这俩 + 改服务器文件 +
+/// 一份服务器端 ffmpeg 二进制的版本号 / triple / 扩展名 / SHA-256 / 字节数。
+/// 升 ffmpeg → 同时改对应平台的这块 + 重新上传服务器(`scripts/deploy-ffmpeg-static.py`) +
 /// `npm run fetch:ffmpeg` 重新生成 dev 用的本地 binaries/。
-const FFMPEG_BUNDLE_VERSION: &str = "8.1.1";
-const FFMPEG_BUNDLE_SHA256: &str =
-    "228d7a8556258de907fdb55f36850078ebc7680b84ec30d84ea02e99bec1d1eb";
-const FFMPEG_BUNDLE_SIZE: u64 = 101_457_920;
+///
+/// 三个平台版本号可不一致:Mac arm64 osxexperts 8.1(8.1.1 还没出),其他用 8.1.1。
+struct FfmpegBundle {
+    version: &'static str,
+    triple: &'static str,
+    /// 远端文件扩展名(Win = `.exe`,Mac/Linux 无扩展名)。本地缓存文件名永远用
+    /// [`FFMPEG_EXE_NAME`],跟系统 PATH 上的 ffmpeg 命名一致;只有 URL 拼接需要 ext。
+    ext: &'static str,
+    sha256: &'static str,
+    size: u64,
+}
 
-/// Tauri externalBin 命名规则一致的 triple 字符串。仅用于拼下载 URL,
-/// **不**用于本地路径探测。
 #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-const FFMPEG_TARGET_TRIPLE: &str = "x86_64-pc-windows-msvc";
-#[cfg(all(target_os = "windows", target_arch = "aarch64"))]
-const FFMPEG_TARGET_TRIPLE: &str = "aarch64-pc-windows-msvc";
-#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-const FFMPEG_TARGET_TRIPLE: &str = "x86_64-apple-darwin";
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-const FFMPEG_TARGET_TRIPLE: &str = "aarch64-apple-darwin";
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-const FFMPEG_TARGET_TRIPLE: &str = "x86_64-unknown-linux-gnu";
-#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-const FFMPEG_TARGET_TRIPLE: &str = "aarch64-unknown-linux-gnu";
-#[cfg(not(any(
-    all(target_os = "windows", any(target_arch = "x86_64", target_arch = "aarch64")),
-    all(target_os = "macos", any(target_arch = "x86_64", target_arch = "aarch64")),
-    all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")),
-)))]
-const FFMPEG_TARGET_TRIPLE: &str = "unknown";
+const FFMPEG_BUNDLE: FfmpegBundle = FfmpegBundle {
+    version: "8.1.1",
+    triple: "x86_64-pc-windows-msvc",
+    ext: ".exe",
+    sha256: "228d7a8556258de907fdb55f36850078ebc7680b84ec30d84ea02e99bec1d1eb",
+    size: 101_457_920,
+};
 
-/// 默认服务器(跟 updater 同一个),用户没 override 时走这。
-const DEFAULT_SERVER_BASE: &str = "http://101.37.80.236";
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const FFMPEG_BUNDLE: FfmpegBundle = FfmpegBundle {
+    version: "8.1",
+    triple: "aarch64-apple-darwin",
+    ext: "",
+    sha256: "9a08d61f9328e8164ba560ee7a79958e357307fcfeea6fe626b7d66cdc287028",
+    size: 51_860_280,
+};
+
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+const FFMPEG_BUNDLE: FfmpegBundle = FfmpegBundle {
+    version: "8.1.1",
+    triple: "x86_64-apple-darwin",
+    ext: "",
+    sha256: "3a0ea97adddecfbf87b865da3bcbb321edfce4bab18a98ae1ba4ba9f0bd1f93a",
+    size: 80_126_240,
+};
+
+/// 其余平台(Win arm64 / Linux / 别的)暂无服务器二进制。
+/// `download_from_server` 在 size==0 时直接返错,不发请求。
+#[cfg(not(any(
+    all(target_os = "windows", target_arch = "x86_64"),
+    all(target_os = "macos", target_arch = "aarch64"),
+    all(target_os = "macos", target_arch = "x86_64"),
+)))]
+const FFMPEG_BUNDLE: FfmpegBundle = FfmpegBundle {
+    version: "",
+    triple: "unsupported",
+    ext: "",
+    sha256: "",
+    size: 0,
+};
+
+/// ffmpeg 下载源。跟前端 `server_base_url`(auth/updater)解耦 ——
+/// 文件物理位置:`192.168.31.244:/mnt/nas/ec_system/aicanvas-static/`,
+/// nginx 反代:`ai.snoworangekeji.cn/aicanvas-static/`,配置在
+/// `/www/server/panel/vhost/nginx/ai.snoworangekeji.cn.conf`。
+const FFMPEG_DOWNLOAD_BASE_URL: &str = "https://ai.snoworangekeji.cn/aicanvas-static";
 
 /// 验证一个候选路径是不是真能跑通 `ffmpeg -version`。
 /// 单纯 `is_file()` 不够 —— Defender 隔离 / 拷贝中断 / 反病毒标记 +
@@ -133,15 +165,29 @@ fn try_resolve_no_download(
 ///
 /// 不重试。失败把详细原因往上抛,让用户看见(网络 / 服务器 5xx / SHA 不对……)。
 /// 上层(`ensure_ffmpeg`)可以决定要不要重试。
+///
+/// `progress` 是可选的字节计数回调,(received, total)。`download_ffmpeg` Tauri
+/// 命令传一个发 `ffmpeg:download_progress` 事件的闭包给前端进度条,
+/// `ensure_ffmpeg`(lazy 兜底)传 None。
 async fn download_from_server(
     server_base: &str,
     cache_dir: &Path,
+    progress: Option<Box<dyn Fn(u64, u64) + Send + Sync>>,
 ) -> Result<PathBuf, String> {
     use sha2::{Digest, Sha256};
     use tokio::io::AsyncWriteExt;
 
     let final_path = cache_dir.join(FFMPEG_EXE_NAME);
     let tmp_path = cache_dir.join(format!("{}.partial", FFMPEG_EXE_NAME));
+
+    // 平台没有对应的 BUNDLE → 直接返错,别发空版本号 / 空 SHA 的请求
+    if FFMPEG_BUNDLE.size == 0 || FFMPEG_BUNDLE.sha256.is_empty() {
+        return Err(format!(
+            "当前平台 ({} / {}) 暂未提供官方 ffmpeg 二进制,请装到系统 PATH 后重试",
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+        ));
+    }
 
     tokio::fs::create_dir_all(cache_dir).await.map_err(|e| {
         format!(
@@ -156,12 +202,13 @@ async fn download_from_server(
     let _ = tokio::fs::remove_file(&tmp_path).await;
 
     let url = format!(
-        "{}/static/ffmpeg-{}-{}.exe",
+        "{}/ffmpeg-{}-{}{}",
         server_base.trim_end_matches('/'),
-        FFMPEG_BUNDLE_VERSION,
-        FFMPEG_TARGET_TRIPLE,
+        FFMPEG_BUNDLE.version,
+        FFMPEG_BUNDLE.triple,
+        FFMPEG_BUNDLE.ext,
     );
-    tracing::warn!(url, dir = %cache_dir.display(), expected_size = FFMPEG_BUNDLE_SIZE, "ffmpeg: 开始下载");
+    tracing::warn!(url, dir = %cache_dir.display(), expected_size = FFMPEG_BUNDLE.size, "ffmpeg: 开始下载");
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(600)) // 10 分钟整个 request 超时
@@ -185,10 +232,10 @@ async fn download_from_server(
 
     // 服务器返了 content-length 就先校 size,防"半截 binary"提前拒绝
     if let Some(len) = resp.content_length() {
-        if len != FFMPEG_BUNDLE_SIZE {
+        if len != FFMPEG_BUNDLE.size {
             return Err(format!(
                 "服务器返的 Content-Length {} 不对(期望 {}),拒收",
-                len, FFMPEG_BUNDLE_SIZE
+                len, FFMPEG_BUNDLE.size
             ));
         }
     }
@@ -213,25 +260,28 @@ async fn download_from_server(
         file.write_all(&chunk)
             .await
             .map_err(|e| format!("写 {:?} 失败: {} (kind={:?})", tmp_path, e, e.kind()))?;
+        if let Some(ref cb) = progress {
+            cb(received, FFMPEG_BUNDLE.size);
+        }
     }
     file.flush()
         .await
         .map_err(|e| format!("flush {:?} 失败: {}", tmp_path, e))?;
     drop(file);
 
-    if received != FFMPEG_BUNDLE_SIZE {
+    if received != FFMPEG_BUNDLE.size {
         let _ = tokio::fs::remove_file(&tmp_path).await;
         return Err(format!(
             "下载长度不对: 期望 {} 实际 {} — 服务器没传完整 / 中间被截断",
-            FFMPEG_BUNDLE_SIZE, received
+            FFMPEG_BUNDLE.size, received
         ));
     }
     let actual_sha = format!("{:x}", hasher.finalize());
-    if actual_sha != FFMPEG_BUNDLE_SHA256 {
+    if actual_sha != FFMPEG_BUNDLE.sha256 {
         let _ = tokio::fs::remove_file(&tmp_path).await;
         return Err(format!(
             "SHA-256 不对: 期望 {} 实际 {} — 文件被改 / 传错版本",
-            FFMPEG_BUNDLE_SHA256, actual_sha
+            FFMPEG_BUNDLE.sha256, actual_sha
         ));
     }
 
@@ -280,11 +330,131 @@ async fn ensure_ffmpeg(data_dir: &Path) -> Result<PathBuf, String> {
         // 第二段(异步,网络):下载
         tracing::warn!("ffmpeg: 本地无可用二进制,准备从服务器拉");
         let cache_dir = data_dir_owned.join(".ffmpeg");
-        download_from_server(DEFAULT_SERVER_BASE, &cache_dir).await?
+        // 无 progress 回调 — 启动时若已通过 download_ffmpeg 命令预下载,
+        // 这条 lazy 路径不会再触发。
+        download_from_server(FFMPEG_DOWNLOAD_BASE_URL, &cache_dir, None).await?
     };
 
     *cached = Some(resolved.clone());
     Ok(resolved)
+}
+
+// ── 启动时 ffmpeg 状态检查 + 主动下载 (前端 FfmpegSetupDialog 用) ───────
+//
+// 跟 `ensure_ffmpeg` 的 lazy 兜底分工:前端在 App mount 后调
+// `check_ffmpeg_status` 查状态;返回 `Missing` 时弹框让用户决定要不要
+// 现在下载,用户同意才调 `download_ffmpeg`,带进度事件给进度条。
+//
+// 用户拒绝下载也不报错 —— 进 app 后真到点关键帧时 `ensure_ffmpeg` 会再
+// 触发一次下载(无进度),作为 fallback。
+
+#[derive(serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum FfmpegStatus {
+    /// 本地已有可用 ffmpeg(exe 同级 / data_dir 缓存 / 系统 PATH)
+    Ready { source: String },
+    /// 本地没,可从服务器下载
+    Missing {
+        url: String,
+        size_bytes: u64,
+        version: String,
+        triple: String,
+    },
+    /// 当前平台没准备 bundle(Win arm / Linux / 其它)
+    Unsupported { os: String, arch: String },
+}
+
+/// 启动时同步检查本地有没有 ffmpeg。**不发网络请求**,~ms 级返回。
+///
+/// 命中本地 → 一并把路径塞进 `FFMPEG_PATH` cache,让 `ensure_ffmpeg`
+/// 后续走 O(1) 路径。
+#[tauri::command]
+pub async fn check_ffmpeg_status(
+    state: State<'_, crate::AppState>,
+) -> Result<FfmpegStatus, String> {
+    let data_dir = state.data_dir.clone();
+
+    let local = tokio::task::spawn_blocking(move || {
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+        try_resolve_no_download(exe_dir.as_deref(), &data_dir, &ffmpeg_runs)
+    })
+    .await
+    .map_err(|e| format!("ffmpeg 本地探测线程出错: {}", e))?;
+
+    if let Some((path, source)) = local {
+        // 顺手 warm 一下 cache,避免后续 ensure_ffmpeg 再 spawn_blocking 一遍
+        let cell = FFMPEG_PATH.get_or_init(|| Mutex::new(None));
+        let mut guard = cell.lock().await;
+        if guard.is_none() {
+            *guard = Some(path);
+        }
+        return Ok(FfmpegStatus::Ready {
+            source: source.to_string(),
+        });
+    }
+
+    if FFMPEG_BUNDLE.size == 0 || FFMPEG_BUNDLE.sha256.is_empty() {
+        return Ok(FfmpegStatus::Unsupported {
+            os: std::env::consts::OS.to_string(),
+            arch: std::env::consts::ARCH.to_string(),
+        });
+    }
+
+    let url = format!(
+        "{}/ffmpeg-{}-{}{}",
+        FFMPEG_DOWNLOAD_BASE_URL,
+        FFMPEG_BUNDLE.version,
+        FFMPEG_BUNDLE.triple,
+        FFMPEG_BUNDLE.ext,
+    );
+    Ok(FfmpegStatus::Missing {
+        url,
+        size_bytes: FFMPEG_BUNDLE.size,
+        version: FFMPEG_BUNDLE.version.to_string(),
+        triple: FFMPEG_BUNDLE.triple.to_string(),
+    })
+}
+
+/// 真下载 ffmpeg。前端 FfmpegSetupDialog 在用户点"现在下载"后调。
+///
+/// 流程跟 `ensure_ffmpeg` 的下载分支一致(共用 `download_from_server`),
+/// 但带 progress 回调,每收一个 chunk emit 一次 `ffmpeg:download_progress`
+/// 给前端进度条。
+///
+/// 完成后把路径塞 `FFMPEG_PATH` cache,后续 `ensure_ffmpeg` O(1) 命中。
+#[tauri::command]
+pub async fn download_ffmpeg(
+    state: State<'_, crate::AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let cache_dir = state.data_dir.join(".ffmpeg");
+
+    let app_for_cb = app.clone();
+    let cb: Box<dyn Fn(u64, u64) + Send + Sync> = Box::new(move |received, total| {
+        // emit 失败(window 已关)不影响下载本身,吞掉
+        let _ = app_for_cb.emit(
+            "ffmpeg:download_progress",
+            serde_json::json!({
+                "received": received,
+                "total": total,
+            }),
+        );
+    });
+
+    let path = download_from_server(FFMPEG_DOWNLOAD_BASE_URL, &cache_dir, Some(cb)).await?;
+
+    // 完成事件 — 前端可以基于这个关弹框
+    let _ = app.emit(
+        "ffmpeg:download_done",
+        serde_json::json!({ "path": path.display().to_string() }),
+    );
+
+    let cell = FFMPEG_PATH.get_or_init(|| Mutex::new(None));
+    *cell.lock().await = Some(path);
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -481,8 +651,9 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let cache_dir = tmp.path().join(".ffmpeg");
         // 用一个保证连不上的端口(高位 + 没绑),让 reqwest connect 失败
-        let err =
-            download_from_server("http://127.0.0.1:1", &cache_dir).await.unwrap_err();
+        let err = download_from_server("http://127.0.0.1:1", &cache_dir, None)
+            .await
+            .unwrap_err();
         assert!(
             err.contains("GET ") && (err.contains("失败") || err.contains("Error")),
             "err 应该包含 URL 和原因,实际: {}",
@@ -495,7 +666,7 @@ mod tests {
         }
     }
 
-    /// 真打生产服务器 (DEFAULT_SERVER_BASE) 跑一遍 `download_from_server`,
+    /// 真打生产服务器 (FFMPEG_DOWNLOAD_BASE_URL) 跑一遍 `download_from_server`,
     /// 验证机房 nginx + 客户端 reqwest + SHA 校验 + 原子 rename 全链。
     /// 这是发版前最后一道 sanity:URL 通、SHA 对、能 spawn,缺一不可。
     ///
@@ -506,14 +677,14 @@ mod tests {
     async fn download_from_real_server_public_internet() {
         let tmp = tempfile::tempdir().unwrap();
         let cache_dir = tmp.path().join(".ffmpeg");
-        let path = download_from_server(DEFAULT_SERVER_BASE, &cache_dir)
+        let path = download_from_server(FFMPEG_DOWNLOAD_BASE_URL, &cache_dir, None)
             .await
             .expect("打公网下载应该成功");
         assert_eq!(path, cache_dir.join(FFMPEG_EXE_NAME));
         assert!(ffmpeg_runs(&path), "下完的 ffmpeg 应该能跑 -version");
         let size = std::fs::metadata(&path).unwrap().len();
-        assert_eq!(size, FFMPEG_BUNDLE_SIZE);
-        eprintln!("打 {} 下载 OK: {} bytes → {}", DEFAULT_SERVER_BASE, size, path.display());
+        assert_eq!(size, FFMPEG_BUNDLE.size);
+        eprintln!("打 {} 下载 OK: {} bytes → {}", FFMPEG_DOWNLOAD_BASE_URL, size, path.display());
     }
 
     /// 真端到端下载:启个 mock server 喂**真的** `D:\AICat\ffmpeg.exe`(SHA 锁死
@@ -534,18 +705,18 @@ mod tests {
         let bytes = std::fs::read(real_bin).expect("读真 ffmpeg.exe");
         assert_eq!(
             bytes.len() as u64,
-            FFMPEG_BUNDLE_SIZE,
+            FFMPEG_BUNDLE.size,
             "本机 ffmpeg.exe size 跟常量对不上 — 是不是换了版本忘改常量?"
         );
 
-        // mock server 提供 `/static/ffmpeg-{ver}-{triple}.exe`
+        // mock server 提供 `/ffmpeg-{ver}-{triple}{ext}`(server_base 不带 /aicanvas-static/ 前缀)
         let (addr, _tx) = spawn_mock_static_server(bytes);
         let server_base = format!("http://{}", addr);
 
         let tmp = tempfile::tempdir().unwrap();
         let cache_dir = tmp.path().join(".ffmpeg");
 
-        let path = download_from_server(&server_base, &cache_dir)
+        let path = download_from_server(&server_base, &cache_dir, None)
             .await
             .expect("下载 + 校验 + 改名应该全过");
 
@@ -556,7 +727,7 @@ mod tests {
         // 真能 spawn
         assert!(ffmpeg_runs(&path), "下载完应该能跑 -version");
 
-        eprintln!("download_from_server OK: {} bytes → {}", FFMPEG_BUNDLE_SIZE, path.display());
+        eprintln!("download_from_server OK: {} bytes → {}", FFMPEG_BUNDLE.size, path.display());
     }
 
     /// 端到端集成测试:命中真 ffmpeg → 走 `FfmpegCommand::new_with_path` 跟

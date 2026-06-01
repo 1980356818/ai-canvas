@@ -9,6 +9,7 @@
 import { useCardStore } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { useCanvasStore } from "@/stores/canvasStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { saveCardsBatch, saveConnections, updateProjectMeta } from "@/platform";
 import { cardToRow, connectionToRow } from "@/lib/mappers";
@@ -31,6 +32,66 @@ export interface CompositeImageData {
   };
   /** 拆分后给子卡 id 数组,二次点击拆分时跳过(避免重复)。 */
   compositeDerivedCardIds?: string[];
+}
+
+// ── 内部:派生卡 + 连线工厂 ───────────────────────────────────────────
+
+/** 单帧子卡构造的契约集中点 — splitCompositeImage(批量) 和 spawnSingleFrameCard(单张)共用,
+ *  避免血缘字段 / size 计算在两处漂移。 */
+interface BuildChildFrameOptions {
+  composite: CanvasCard;
+  frame: FrameInput;
+  cellAspect: number;
+  /** 子卡左上角(画布坐标)。批量拆分按 grid 算,单张拖出按 mouse 中心算。 */
+  position: { x: number; y: number };
+  zIndex: number;
+  createdAt: string;
+}
+
+function buildChildFrameCard(
+  opts: BuildChildFrameOptions,
+): { card: CanvasCard; conn: Connection } {
+  const { composite, frame, cellAspect, position, zIndex, createdAt } = opts;
+  const size = frameCardSize(cellAspect);
+
+  const card: CanvasCard = {
+    id: crypto.randomUUID(),
+    projectId: composite.projectId,
+    type: "ai_image",
+    x: position.x,
+    y: position.y,
+    width: size.width,
+    height: size.height,
+    zIndex,
+    locked: false,
+    collapsed: false,
+    title: frame.title ?? `帧 ${frame.index} · ${formatTimestamp(frame.timestamp)}`,
+    data: {
+      imageUrl: frame.framePath,
+      content: "",
+      sourceCompositeCardId: composite.id,
+      sourceFrameIndex: frame.index,
+      sourceTimestamp: frame.timestamp,
+    },
+    createdAt,
+    updatedAt: createdAt,
+  };
+
+  const conn: Connection = {
+    id: crypto.randomUUID(),
+    projectId: composite.projectId,
+    sourceCardId: composite.id,
+    targetCardId: card.id,
+    createdAt,
+  };
+
+  return { card, conn };
+}
+
+/** 从合成卡的尺寸 + layout 反推单格 aspect,兜底 16:9。 */
+function deriveCellAspect(composite: CanvasCard, layout: { cols: number; rows: number }): number {
+  if (layout.cols <= 0 || layout.rows <= 0) return 16 / 9;
+  return (composite.width / layout.cols) / (composite.height / layout.rows);
 }
 
 // ── 入口 ──────────────────────────────────────────────────────────────
@@ -83,29 +144,17 @@ export async function splitCompositeImage(
       title: "已拆分过,无新增帧",
       duration: 2500,
     });
-    // 选中所有子卡方便用户找到它们
-    const canvas = await import("@/stores/canvasStore");
-    canvas.useCanvasStore.getState().setSelectedCardIds(existingIds);
+    useCanvasStore.getState().setSelectedCardIds(existingIds);
     return;
   }
 
   try {
-    // 子卡 size:基于合成卡里单格的 aspect = compositeLayout.cols * compositeLayout.rows
-    // 的视觉占比反推。退而求 16:9 兜底。
     const layout = data.compositeLayout ?? { cols: 1, rows: 1 };
-    const cellAspect =
-      layout.cols > 0 && layout.rows > 0
-        ? (card.width / layout.cols) / (card.height / layout.rows)
-        : 16 / 9;
-    const size = frameCardSize(cellAspect);
+    const cellAspect = deriveCellAspect(card, layout);
+    const sampleSize = frameCardSize(cellAspect);
 
     const { cols, gapX, gapY, topOffset } = FRAME_GRID;
     const anchor = { x: card.x, y: card.y + card.height + topOffset };
-
-    let zCursor = cardStore.maxZIndex;
-    const now = new Date().toISOString();
-    const newCards: CanvasCard[] = [];
-    const newConns: Connection[] = [];
 
     // 已派生帧的 index 集合 — 跳过它们,只补缺。
     const derivedFrameIndices = new Set<number>();
@@ -118,52 +167,28 @@ export async function splitCompositeImage(
     }
 
     const todo = frames.filter((f) => !derivedFrameIndices.has(f.index));
-    let placed = 0;
+    const now = new Date().toISOString();
+    const newCards: CanvasCard[] = [];
+    const newConns: Connection[] = [];
+    let zCursor = cardStore.maxZIndex;
 
-    for (const frame of todo) {
+    todo.forEach((frame, placed) => {
       zCursor += 1;
-      const childId = crypto.randomUUID();
-      const pos = {
-        x: anchor.x + (placed % cols) * (size.width + gapX),
-        y: anchor.y + Math.floor(placed / cols) * (size.height + gapY),
+      const position = {
+        x: anchor.x + (placed % cols) * (sampleSize.width + gapX),
+        y: anchor.y + Math.floor(placed / cols) * (sampleSize.height + gapY),
       };
-      placed += 1;
-
-      const title =
-        frame.title ?? `帧 ${frame.index} · ${formatTimestamp(frame.timestamp)}`;
-
-      newCards.push({
-        id: childId,
-        projectId: card.projectId,
-        type: "ai_image",
-        x: pos.x,
-        y: pos.y,
-        width: size.width,
-        height: size.height,
+      const built = buildChildFrameCard({
+        composite: card,
+        frame,
+        cellAspect,
+        position,
         zIndex: zCursor,
-        locked: false,
-        collapsed: false,
-        title,
-        data: {
-          imageUrl: frame.framePath,
-          content: "",
-          // 血缘元数据 — 与 frameExtraction 派生卡保持一致
-          sourceCompositeCardId: card.id,
-          sourceFrameIndex: frame.index,
-          sourceTimestamp: frame.timestamp,
-        },
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      newConns.push({
-        id: crypto.randomUUID(),
-        projectId: card.projectId,
-        sourceCardId: card.id,
-        targetCardId: childId,
         createdAt: now,
       });
-    }
+      newCards.push(built.card);
+      newConns.push(built.conn);
+    });
 
     if (newCards.length === 0) {
       uiStore.addToast({
@@ -211,6 +236,83 @@ export async function splitCompositeImage(
     });
   }
 }
+
+// ── 入口:单帧拖出 ────────────────────────────────────────────────────
+
+/**
+ * 从合成卡里抽一张帧 → 新建独立 ai_image 卡到 `dropCanvasPos`(以鼠标为中心)。
+ *
+ * 与 splitCompositeImage 的区别:
+ *   - 不查重不跳过 — 同一帧多拖几次就生成几张子卡(用户可能想用不同 prompt 派生变体);
+ *   - 位置以鼠标落点为中心,不走 FRAME_GRID 排版;
+ *   - 仍把新 id append 到 compositeDerivedCardIds,血缘记录保持完整。
+ */
+export async function spawnSingleFrameCard(
+  compositeCardId: string,
+  frameIndex: number,
+  dropCanvasPos: { x: number; y: number },
+): Promise<void> {
+  const cardStore = useCardStore.getState();
+  const uiStore = useUIStore.getState();
+  const connStore = useConnectionStore.getState();
+
+  const composite = cardStore.getCard(compositeCardId);
+  if (!composite || composite.type !== "ai_image") {
+    uiStore.addToast({ type: "error", title: "抽帧失败", description: "找不到合成卡", duration: 4000 });
+    return;
+  }
+
+  const data = composite.data as CompositeImageData & Record<string, unknown>;
+  const frame = data.compositeFrames?.find((f) => f.index === frameIndex);
+  if (!frame) {
+    uiStore.addToast({ type: "error", title: "抽帧失败", description: "该格没有可用帧", duration: 4000 });
+    return;
+  }
+
+  try {
+    const layout = data.compositeLayout ?? { cols: 1, rows: 1 };
+    const cellAspect = deriveCellAspect(composite, layout);
+    const sampleSize = frameCardSize(cellAspect);
+
+    const built = buildChildFrameCard({
+      composite,
+      frame,
+      cellAspect,
+      position: {
+        x: dropCanvasPos.x - sampleSize.width / 2,
+        y: dropCanvasPos.y - sampleSize.height / 2,
+      },
+      zIndex: cardStore.maxZIndex + 1,
+      createdAt: new Date().toISOString(),
+    });
+
+    await saveCardsBatch([cardToRow(built.card)]);
+    await saveConnections(composite.projectId, [connectionToRow(built.conn)]);
+    cardStore.addCard(built.card);
+    connStore.addConnection(built.conn);
+
+    const updatedDerivedIds = [...(data.compositeDerivedCardIds ?? []), built.card.id];
+    cardStore.updateCardData(composite.id, {
+      compositeDerivedCardIds: updatedDerivedIds,
+    } satisfies Partial<CompositeImageData>);
+    autoSave.markDirty(composite.id);
+
+    const count = cardStore.getCardsByProject(composite.projectId).length;
+    useProjectStore.getState().updateProject(composite.projectId, { nodeCount: count });
+    void updateProjectMeta(composite.projectId, { nodeCount: count });
+
+    useCanvasStore.getState().setSelectedCardIds([built.card.id]);
+  } catch (err) {
+    uiStore.addToast({
+      type: "error",
+      title: "抽帧失败",
+      description: err instanceof Error ? err.message : String(err),
+      duration: 5000,
+    });
+  }
+}
+
+// ── 查询工具 ──────────────────────────────────────────────────────────
 
 /** 判断一张 ai_image 卡是否带可拆分的合成元数据。供 UI 决定是否露 "拆分" 按钮。 */
 export function isCompositeImage(card: CanvasCard): boolean {
