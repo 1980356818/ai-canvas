@@ -941,6 +941,13 @@ async fn do_stream(
     // 守门(chunk / line buffer 上限)走 super::ipc_guard 函数,不要内联。
     let mut buffer: Vec<u8> = Vec::with_capacity(8 * 1024);
 
+    // —— 临时诊断(定位 gpt-5.5 空回复:后端到底从上游读到了什么) ——
+    // 定位完连同前端 base.ts / streamChatToResult.ts / ChatEditor.tsx 的诊断日志一起摘掉。
+    let mut dbg_total_bytes: usize = 0;
+    let mut dbg_data_lines: usize = 0;
+    let mut dbg_other_lines: usize = 0;
+    let mut dbg_first_sample = String::new();
+
     let mut stream = resp;
     loop {
         if cancelled.load(Ordering::Relaxed) {
@@ -971,6 +978,11 @@ async fn do_stream(
         };
 
         buffer.extend_from_slice(&chunk);
+        dbg_total_bytes += chunk.len();
+        if dbg_first_sample.is_empty() && !chunk.is_empty() {
+            let take = chunk.len().min(400);
+            dbg_first_sample = String::from_utf8_lossy(&chunk[..take]).to_string();
+        }
 
         // 行缓冲累积守门:上游异常输出(超 limit 无换行) → 中断,避免 OOM
         check_stream_buffer(&buffer)?;
@@ -993,8 +1005,14 @@ async fn do_stream(
 
             if let Some(data) = line.strip_prefix("data: ") {
                 if data.trim() == "[DONE]" {
+                    tracing::info!(
+                        "[stream][diag] 流正常结束([DONE]): total_bytes={} data_lines={} other_lines={} first_sample={:?}",
+                        dbg_total_bytes, dbg_data_lines, dbg_other_lines, dbg_first_sample
+                    );
                     return Ok(());
                 }
+
+                dbg_data_lines += 1;
 
                 // chunk 大小守门:IPC 单条 emit 太大会拖崩 WebView 渲染端
                 check_stream_chunk(data)?;
@@ -1004,10 +1022,17 @@ async fn do_stream(
                     event: "chunk".into(),
                     data: data.to_string(),
                 });
+            } else {
+                // 非 `data: ` 开头的行(可能 `data:` 没空格 / 非 SSE 的错误 JSON / HTML 错误页)。
+                dbg_other_lines += 1;
             }
         }
     }
 
+    tracing::info!(
+        "[stream][diag] 流结束(EOF/断开,非[DONE]): total_bytes={} data_lines={} other_lines={} first_sample={:?}",
+        dbg_total_bytes, dbg_data_lines, dbg_other_lines, dbg_first_sample
+    );
     Ok(())
 }
 

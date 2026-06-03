@@ -315,7 +315,7 @@ file_export_path → file_auto_save_path → state.auto_save_default_dir
 ```
 ┌─ 首次启动（数据库迁移 v4）──────────────────────────────────┐
 │  Rust: INSERT OR IGNORE INTO settings                     │
-│        openai_base_url = "https://ai.comfly.chat"         │
+│        openai_base_url = "https://ai.comfly.org"          │
 │  → 只写入默认 base_url，不写入 API Key                      │
 │  → API Key 完全由用户在设置界面配置，不打包在程序中             │
 └──────────────────────────────────────────────────────────┘

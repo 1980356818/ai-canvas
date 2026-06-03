@@ -207,18 +207,7 @@ export async function extractFramesFromVideo(
       return;
     }
 
-    // 安全护栏: Rust 端硬上限 100, 这里提前截断 + 警告。
-    if (timestamps.length > 50) {
-      uiStore.addToast({
-        type: "warning",
-        title: `${label} 计算到 ${timestamps.length} 帧,已截断到前 50`,
-        description: "如需更多请调整策略",
-        duration: 4000,
-      });
-      timestamps = timestamps.slice(0, 50);
-      shotTitles = shotTitles.slice(0, 50);
-    }
-
+    // 帧数无上限 (产品需求)。Rust 端的硬上限也已移除; 抽帧串行执行, 大量帧只是更慢。
     setExtractProgress(target.videoCardId, `正在抽 ${timestamps.length} 帧…`);
 
     // 2. 调 Rust 抽帧

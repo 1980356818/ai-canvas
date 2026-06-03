@@ -29,6 +29,17 @@ import {
 } from "@/lib/videoOps";
 import { generateVideoThumbnails } from "@/lib/videoThumbnails";
 
+// ── 功能可见性开关 (产品裁剪) ────────────────────────────────────────
+// 暂时下线这些视频卡 UI 入口,只保留「等间隔 N 秒」抽帧 (无帧数上限)。底层实现
+// (videoOps 的 scene/firstLast/续拍/拖帧 函数、TimelineScrubber 组件) 全部保留,
+// 未来恢复某项把对应开关改回 true 即可。
+const VIDEO_FEATURES: Record<string, boolean> = {
+  sceneExtract: false,     // 抽帧下拉: 智能关键帧 (智能分镜)
+  firstLastExtract: false, // 抽帧下拉: 首尾帧
+  dragFrame: false,        // 拖帧 (timeline scrubber 挑帧拖出)
+  continueShot: false,     // 续拍 (尾帧 → 新视频卡首帧)
+};
+
 const TOOLBAR_GAP = 10;
 // 拖帧焦点模式下, scrubber 钉在视频卡 *下方* (FloatingEditor 此时被 store 切换
 // 强制收起, 让出位置). 这是剪辑软件的标准布局: 时间轴在画面下方, 眼睛流自然。
@@ -95,14 +106,16 @@ function ExtractMenu({ open, onClose, onChoose }: ExtractMenuProps) {
       ref={ref}
       className="absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-lg border border-border bg-popover p-1 shadow-lg"
     >
-      <button
-        className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
-        onClick={() => { onChoose({ kind: "scene", threshold: 0.4 }); onClose(); }}
-        title="ffmpeg 场景检测 → 每个镜头切点出一张图"
-      >
-        <Crosshair className="h-3.5 w-3.5 text-emerald-500" />
-        <span className="flex-1">智能关键帧</span>
-      </button>
+      {VIDEO_FEATURES.sceneExtract && (
+        <button
+          className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
+          onClick={() => { onChoose({ kind: "scene", threshold: 0.4 }); onClose(); }}
+          title="ffmpeg 场景检测 → 每个镜头切点出一张图"
+        >
+          <Crosshair className="h-3.5 w-3.5 text-emerald-500" />
+          <span className="flex-1">智能关键帧</span>
+        </button>
+      )}
 
       <div className="relative">
         <button
@@ -128,14 +141,16 @@ function ExtractMenu({ open, onClose, onChoose }: ExtractMenuProps) {
         )}
       </div>
 
-      <button
-        className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
-        onClick={() => { onChoose({ kind: "firstLast" }); onClose(); }}
-        title="首帧 + 尾帧 (适合接「首尾帧生视频」)"
-      >
-        <ImageIcon className="h-3.5 w-3.5 text-amber-500" />
-        <span className="flex-1">首尾帧</span>
-      </button>
+      {VIDEO_FEATURES.firstLastExtract && (
+        <button
+          className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-xs font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
+          onClick={() => { onChoose({ kind: "firstLast" }); onClose(); }}
+          title="首帧 + 尾帧 (适合接「首尾帧生视频」)"
+        >
+          <ImageIcon className="h-3.5 w-3.5 text-amber-500" />
+          <span className="flex-1">首尾帧</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -418,7 +433,7 @@ function TimelineScrubber({ cardId, target, duration, onClose }: ScrubberProps) 
         if (lbl) lbl.textContent = formatTs(ts);
       };
 
-      const onUp = (_ev: PointerEvent) => {
+      const onUp = () => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
 
@@ -1025,36 +1040,41 @@ export default function VideoToolbar() {
             />
           </div>
 
-          <button
-            title="拖帧模式: 用时间轴 playhead 挑帧, 从当前帧浮窗拖到画布抽帧 (再按一次或 Esc 退出)"
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-              scrubberOpen
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-            onClick={toggleScrubber}
-          >
-            <Crosshair className="h-3.5 w-3.5" />
-            <span>拖帧</span>
-          </button>
-
-          <div className="mx-0.5 h-4 w-px bg-border" />
+          {VIDEO_FEATURES.dragFrame && (
+            <button
+              title="拖帧模式: 用时间轴 playhead 挑帧, 从当前帧浮窗拖到画布抽帧 (再按一次或 Esc 退出)"
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                scrubberOpen
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+              onClick={toggleScrubber}
+            >
+              <Crosshair className="h-3.5 w-3.5" />
+              <span>拖帧</span>
+            </button>
+          )}
 
           {/* 创作组 */}
-          <button
-            title={continueTitle}
-            disabled={continueDisabled}
-            className={cn(
-              "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-              "text-muted-foreground hover:bg-muted hover:text-foreground",
-              continueDisabled && "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-muted-foreground",
-            )}
-            onClick={handleContinue}
-          >
-            <Link2 className="h-3.5 w-3.5" />
-            <span>续拍</span>
-          </button>
+          {VIDEO_FEATURES.continueShot && (
+            <>
+              <div className="mx-0.5 h-4 w-px bg-border" />
+              <button
+                title={continueTitle}
+                disabled={continueDisabled}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                  "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  continueDisabled && "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-muted-foreground",
+                )}
+                onClick={handleContinue}
+              >
+                <Link2 className="h-3.5 w-3.5" />
+                <span>续拍</span>
+              </button>
+            </>
+          )}
 
           <div className="mx-0.5 h-4 w-px bg-border" />
 

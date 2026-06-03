@@ -1,4 +1,4 @@
-`POST https://ai.comfly.chat/api/v3/contents/generations/tasks`  
+`POST https://ai.comfly.org/api/v3/contents/generations/tasks`  
 :::
 **模型能力==^new^==**
 

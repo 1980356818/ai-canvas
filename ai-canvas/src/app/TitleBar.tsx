@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Minus, Square, X, PanelLeft, Plus, Pencil, MessageSquare } from "lucide-react";
+import { Minus, Square, X, PanelLeft, Plus, Pencil, MessageSquare, Download } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { NewProjectDialog } from "@/features/overlays/NewProjectDialog";
 import { useUIStore } from "@/stores/uiStore";
 import type { SaveStatus } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { renameProject } from "@/platform";
+import { exportProjectToFile } from "@/lib/projectTransfer";
 import { cn } from "@/lib/utils";
 
 const isTauri =
@@ -42,11 +43,12 @@ interface TabContextMenuProps {
   x: number;
   y: number;
   onRename: () => void;
+  onExport: () => void;
   onClose: () => void;
   onCloseTab: () => void;
 }
 
-function TabContextMenu({ x, y, onRename, onClose, onCloseTab }: TabContextMenuProps) {
+function TabContextMenu({ x, y, onRename, onExport, onClose, onCloseTab }: TabContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
 
@@ -94,6 +96,14 @@ function TabContextMenu({ x, y, onRename, onClose, onCloseTab }: TabContextMenuP
       >
         <Pencil className="h-3.5 w-3.5" />
         重命名
+      </button>
+      <button
+        type="button"
+        onClick={() => { onExport(); onClose(); }}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground hover:bg-accent hover:text-accent-foreground"
+      >
+        <Download className="h-3.5 w-3.5" />
+        另存为…
       </button>
       <div className="my-1 h-px bg-border" role="separator" />
       <button
@@ -367,6 +377,10 @@ export default function TitleBar() {
               setEditingTabId(ctxMenu.projectId);
               setRenameDraft(proj.title);
             }
+          }}
+          onExport={() => {
+            const proj = projects.find((p) => p.id === ctxMenu.projectId);
+            if (proj) void exportProjectToFile({ id: proj.id, title: proj.title });
           }}
           onCloseTab={() => {
             const remaining = openProjectIds.filter((pid) => pid !== ctxMenu.projectId);

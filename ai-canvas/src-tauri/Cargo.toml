@@ -1,6 +1,6 @@
 [package]
 name = "ai-canvas"
-version = "1.2.8"
+version = "1.2.9"
 edition = "2021"
 
 [lib]
@@ -25,6 +25,11 @@ uuid = { version = "1", features = ["v4"] }
 # 详见 docs/性能与IPC规范.md §11.1。
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots", "stream", "http2", "multipart"] }
 base64 = "0.22"
+# zip: 项目「导出/导入」(.aicat) 的打包格式。default-features=false 只保留核心
+# 读写 + Stored(不压缩)—— 媒体(图/视频)本就是压缩格式,再 Deflate 纯浪费 CPU;
+# canvas.json 也用 Stored 即可。关掉默认 feature 顺带避免 bzip2/zstd 的 C 编译依赖,
+# 与本仓「零 C 依赖」基调(rustls / ffmpeg-sidecar)一致。详见 commands/transfer.rs。
+zip = { version = "2", default-features = false }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 tracing-appender = "0.2"

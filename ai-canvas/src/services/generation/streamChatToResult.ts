@@ -22,6 +22,7 @@
 
 import type { AIProvider, ChatRequest } from "@/providers/types";
 import { useUIStore } from "@/stores/uiStore";
+import { diagInfo, diagError } from "@/lib/diag";
 
 export interface ChatStreamResult {
   /** 累积的答案文本(不含 reasoning)。空串表示模型没吐任何答案。 */
@@ -61,6 +62,13 @@ export function streamChatToResult(
     const defaultFinishReason: "stop" | "tool_calls" | "length" = "stop";
     let settled = false;
     let handle: { abort: () => void } | null = null;
+    // 诊断计数:区分「一个 chunk 都没来(后端/网络断)」「只来 reasoning 没 content
+    // (上游答案落错字段)」「content 来了但空(上游真没答)」三种空回复成因。
+    let textChunks = 0;
+    let reasoningChunks = 0;
+    let reasoningChars = 0;
+    let firstEventMs = 0;
+    const startMs = performance.now();
 
     const settle = (action: () => void): void => {
       if (settled) return;
@@ -78,22 +86,45 @@ export function streamChatToResult(
 
     opts?.signal?.addEventListener("abort", onAbort, { once: true });
 
+    diagInfo("chat-stream", "⑥ streamChat 开始(即将 invoke 后端)", { model: req.model });
+
     provider
       .streamChat(req, (event) => {
+        if (firstEventMs === 0) firstEventMs = Math.round(performance.now() - startMs);
         switch (event.type) {
           case "text":
+            textChunks += 1;
             content += event.text;
             opts?.onText?.(content, event.text);
             break;
           case "reasoning":
+            reasoningChunks += 1;
+            reasoningChars += event.text.length;
             opts?.onReasoning?.(event.text);
             break;
           case "done":
+            diagInfo("chat-stream", "⑧ done 事件(textChunks=0 说明只收到思考或啥都没收到)", {
+              model: req.model,
+              textChunks,
+              reasoningChunks,
+              reasoningChars,
+              contentLen: content.length,
+              finishReason: event.finishReason ?? defaultFinishReason,
+              firstEventMs,
+              totalMs: Math.round(performance.now() - startMs),
+            });
             settle(() =>
               resolve({ content, finishReason: event.finishReason ?? defaultFinishReason }),
             );
             break;
           case "error":
+            diagError("chat-stream", new Error(event.message), {
+              model: req.model,
+              textChunks,
+              reasoningChunks,
+              contentLen: content.length,
+              totalMs: Math.round(performance.now() - startMs),
+            });
             settle(() => reject(new Error(event.message)));
             break;
           // tool_call_* : 对话节点不挂工具,忽略。
@@ -101,13 +132,15 @@ export function streamChatToResult(
       })
       .then((h) => {
         handle = h;
+        diagInfo("chat-stream", "⑦ streamChat invoke 已建立(底层 HTTP 出网已发起)", { model: req.model });
         // streamChat 自身的 invoke 在 resolve 这个 handle 之前,abort 可能已经发生过 ——
         // 这里补一刀,确保底层出网被停掉(onAbort 当时 handle 还是 null)。
         if (opts?.signal?.aborted) h.abort();
       })
-      .catch((err) =>
-        settle(() => reject(err instanceof Error ? err : new Error(String(err)))),
-      );
+      .catch((err) => {
+        diagError("chat-stream", err, { model: req.model, phase: "streamChat invoke 建立失败(没走到后端)" });
+        settle(() => reject(err instanceof Error ? err : new Error(String(err))));
+      });
   });
 }
 

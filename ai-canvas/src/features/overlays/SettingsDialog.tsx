@@ -152,8 +152,8 @@ const ALL_PLATFORMS: { id: string; name: string; apiBaseUrl: string; homepageUrl
   {
     id: "comfly",
     name: "Comfly",
-    apiBaseUrl: "https://ai.comfly.chat",
-    homepageUrl: "https://ai.comfly.chat",
+    apiBaseUrl: "https://ai.comfly.org",
+    homepageUrl: "https://ai.comfly.org",
   },
   {
     id: "jijing",

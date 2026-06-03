@@ -208,14 +208,25 @@ export function captureFrameFromVideo(
  * 仅缩略图失败 (canvas 被 CORS taint, 远程无 CORS 头) 返回 `{ dataUrl: null, width, height }`
  * —— 视频本身能播, 只是没 poster。
  *
- * @param srcUrl 通常是 `asset://localhost/...` (本地) 或 `blob:` (drop 的 File)。
- *               远程 `http(s)://` 会因 CORS taint 抽不出像素 → dataUrl: null。
+ * @param src 可传视频 URL(`asset://localhost/...` 本地、`http(s)://` 远程),或直接传
+ *            drop 进来的 `File` —— 后者由本函数内部 createObjectURL,并在 <video>
+ *            teardown 之后才 revokeObjectURL,调用方无需自己管 blob 生命周期。
+ *            远程 `http(s)://` 会因 CORS taint 抽不出像素 → dataUrl: null。
  */
-export async function extractFirstFrame(srcUrl: string): Promise<{
+export async function extractFirstFrame(src: string | File): Promise<{
   dataUrl: string | null;
   width: number;
   height: number;
 } | null> {
+  // 传 File 时本函数闭环管理 blob URL。关键时序坑:抽完帧后**不能**同步 revoke。
+  // preload="auto" 的 <video> 在 loadeddata(首帧就绪)后仍在后台缓冲整段 blob;finish
+  // 里 removeAttribute+load() 让 WebView2 abort 这些在途 range 请求,但 abort 在 media
+  // 线程异步执行、比主线程慢一拍。若主线程此刻已 revokeObjectURL,迟到的请求就找不到
+  // blob → 控制台刷 `GET blob:... net::ERR_FILE_NOT_FOUND`(无害但扰人)。解法:把 revoke
+  // 推迟到 load() 清空 pipeline 触发的 `emptied` 之后,再加兜底 timer。
+  const srcUrl = typeof src === "string" ? src : URL.createObjectURL(src);
+  const objectUrl = typeof src === "string" ? null : srcUrl;
+
   return new Promise((resolve) => {
     const video = document.createElement("video");
     video.preload = "auto";
@@ -224,6 +235,20 @@ export async function extractFirstFrame(srcUrl: string): Promise<{
     video.crossOrigin = "anonymous";
 
     let done = false;
+
+    // emptied = media pipeline 已清空、在途 blob 请求已 abort → 此刻 revoke 才安全。
+    const scheduleRevoke = () => {
+      if (!objectUrl) return;
+      let fallback: ReturnType<typeof setTimeout> | null = null;
+      const doRevoke = () => {
+        video.removeEventListener("emptied", doRevoke);
+        if (fallback) clearTimeout(fallback);
+        URL.revokeObjectURL(objectUrl);
+      };
+      video.addEventListener("emptied", doRevoke, { once: true });
+      fallback = setTimeout(doRevoke, 2000); // emptied 万一不来的兜底
+    };
+
     const finish = (result: { dataUrl: string | null; width: number; height: number } | null) => {
       if (done) return;
       done = true;
@@ -231,6 +256,7 @@ export async function extractFirstFrame(srcUrl: string): Promise<{
       video.onloadeddata = null;
       video.onerror = null;
       video.removeAttribute("src");
+      scheduleRevoke(); // 必须在 load() 之前挂好 emptied 监听
       video.load();
       resolve(result);
     };

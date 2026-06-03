@@ -15,6 +15,7 @@ import { buildChatRequest } from "@/services/generation/buildChatRequest";
 import { streamChatToCard } from "@/services/generation/streamChatToResult";
 import { runEditorGeneration } from "@/services/generation/runEditorGeneration";
 import { cn } from "@/lib/utils";
+import { diagInfo, diagWarn, diagError } from "@/lib/diag";
 import {
   getRefSlotsForChatModel,
   compactRefImages,
@@ -366,7 +367,22 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     const rawUpstream = (data as Record<string, unknown>).upstreamTexts as
       Record<string, string> | undefined;
     const hasUpstreamText = rawUpstream && Object.keys(rawUpstream).length > 0;
-    if ((!displayPrompt.trim() && !hasUpstreamText) || generating) return;
+    diagInfo("chat-gen", "① handleGenerate 触发", {
+      cardId: card.id,
+      model: data.model,
+      generating,
+      promptLen: displayPrompt.trim().length,
+      hasUpstreamText: !!hasUpstreamText,
+    });
+    if ((!displayPrompt.trim() && !hasUpstreamText) || generating) {
+      diagWarn("chat-gen", "① 静默 return：无提示词 或 generating 仍为 true(卡死的标志会让后续点击全部无反应)", {
+        cardId: card.id,
+        generating,
+        promptLen: displayPrompt.trim().length,
+        hasUpstreamText: !!hasUpstreamText,
+      });
+      return;
+    }
 
     // 十步骨架(API Key 预检 / 进度开关 / 错误兜底)统一走 runEditorGeneration;
     // submitLabel 用"正在生成…"(对话语义,区别于生图/视频的"正在提交请求…")。
@@ -374,6 +390,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       setError,
       submitLabel: "正在生成…",
       run: async () => {
+        diagInfo("chat-gen", "③ runEditorGeneration.run 开始，构建请求", { cardId: card.id });
         if (data.result) {
           updateCard(card.id, { data: { ...data, _resultStale: true } });
         }
@@ -388,6 +405,11 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
               }),
           });
           if (!built.ok) {
+            diagWarn("chat-gen", "③ buildChatRequest 未通过(跳过/失败)", {
+              cardId: card.id,
+              outcome: built.outcome,
+              reason: built.reason,
+            });
             // 理论上编辑器侧 prompt 已守卫,这里兜底提示。
             useUIStore.getState().addToast({
               type: "warning",
@@ -397,6 +419,13 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
             });
             return;
           }
+          diagInfo("chat-gen", "④ buildChatRequest 成功", {
+            cardId: card.id,
+            model: built.request.model,
+            providerId: built.providerId,
+            messages: built.request.messages.length,
+            maxTokens: built.request.maxTokens,
+          });
           if (built.warning) {
             // 模型不支持媒体已忽略等非致命提示。
             useUIStore.getState().addToast({
@@ -408,12 +437,23 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
           }
 
           const provider = modelService.resolveProvider(built.request.model, built.providerId);
+          diagInfo("chat-gen", "⑤ provider 已解析，开始流式 streamChatToCard", {
+            cardId: card.id,
+            model: built.request.model,
+            providerId: built.providerId,
+            providerName: provider?.descriptor?.id,
+          });
 
           // 对话走流式(streamChatToCard)而非 provider.chat:gpt-5.5 等推理模型单次响应
           // 90–140s,非流式长连接会被 Cloudflare/反代切成 524(源站已完成并计费,前端却拿不到
           // = 用户报的「后台完成、前端不显示」)。流式持续吐 SSE 字节,反代不空闲超时,根治该问题;
           // streamChatToCard 顺带把思考过程 / 答案流实时写进卡片进度(见该文件注释)。
           const { content, finishReason } = await streamChatToCard(provider, built.request, card.id);
+          diagInfo("chat-gen", "⑨ streamChatToCard 返回(空内容即会写「无回复」)", {
+            cardId: card.id,
+            contentLen: content.length,
+            finishReason,
+          });
 
           // content 为空串也兜底(实测 gpt-5.5 偶发返 200 但空 content);用 || 而非 ??。
           let result = content || "（无回复 — 模型未返回任何内容）";
@@ -436,6 +476,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
           });
         } catch (err) {
           // 保留对话特有诊断日志;再抛给 runEditorGeneration 统一兜错(setError + 红框)。
+          diagError("chat-gen", err, { cardId: card.id, phase: "run() 抛错(会显示红框错误)" });
           console.error("[ChatEditor] AI 请求异常:", err);
           throw err;
         }

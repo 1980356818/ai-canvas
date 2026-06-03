@@ -2,7 +2,7 @@ import json
 import urllib.request
 import time
 
-API_URL = "https://ai.comfly.chat/v1/images/generations"
+API_URL = "https://ai.comfly.org/v1/images/generations"
 API_KEY = "sk-PcGW28MxA0vyShZTKaYjtbr7Za8LxO94xRYxtgJeLpLS8oSt"
 
 body = {

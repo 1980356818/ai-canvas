@@ -41,7 +41,7 @@
 | `{provider}_api_keys` | 所有 Key 列表 (JSON) | `[{"id":"abc","name":"主力","key":"sk-xxx"},{"id":"def","name":"备用","key":"sk-yyy"}]` |
 | `{provider}_active_key_id` | 当前激活的 Key ID | `"abc"` |
 | `{provider}_api_key` | 当前激活 Key 的值 (冗余) | `"sk-xxx"` |
-| `{provider}_base_url` | API 地址 | `"https://ai.comfly.chat"` |
+| `{provider}_base_url` | API 地址 | `"https://ai.comfly.org"` |
 
 **问题**：Rust 的 `read_api_config()` 只读 `{provider}_api_key`，拿到的永远是同一个 Key。
 

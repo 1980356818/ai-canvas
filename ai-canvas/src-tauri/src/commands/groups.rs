@@ -12,7 +12,7 @@ use crate::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CardGroupRow {
     pub id: String,
     pub project_id: String,
@@ -24,7 +24,7 @@ pub struct CardGroupRow {
     pub updated_at: String,
 }
 
-fn upsert_group(
+pub(crate) fn upsert_group(
     conn: &rusqlite::Connection,
     group: &CardGroupRow,
 ) -> Result<(), rusqlite::Error> {
@@ -50,38 +50,40 @@ fn upsert_group(
     Ok(())
 }
 
+/// 读取某项目的全部分组(`&Connection` 版,锁责任在调用方)。
+/// `load_groups` 命令与「导出项目」共用。
+pub(crate) fn query_groups(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> Result<Vec<CardGroupRow>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "SELECT id, project_id, card_ids, title, color, collapsed, created_at, updated_at
+         FROM card_groups WHERE project_id = ?1 ORDER BY created_at",
+    )?;
+
+    let rows = stmt.query_map(rusqlite::params![project_id], |row| {
+        let collapsed_i: i64 = row.get(5)?;
+        Ok(CardGroupRow {
+            id: row.get(0)?,
+            project_id: row.get(1)?,
+            card_ids: row.get(2)?,
+            title: row.get(3)?,
+            color: row.get(4)?,
+            collapsed: collapsed_i != 0,
+            created_at: row.get(6)?,
+            updated_at: row.get(7)?,
+        })
+    })?;
+    rows.collect()
+}
+
 #[tauri::command]
 pub fn load_groups(
     state: State<AppState>,
     project_id: String,
 ) -> Result<Vec<CardGroupRow>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    let mut stmt = db
-        .prepare(
-            "SELECT id, project_id, card_ids, title, color, collapsed, created_at, updated_at
-             FROM card_groups WHERE project_id = ?1 ORDER BY created_at",
-        )
-        .map_err(|e| e.to_string())?;
-
-    let rows = stmt
-        .query_map(rusqlite::params![project_id], |row| {
-            let collapsed_i: i64 = row.get(5)?;
-            Ok(CardGroupRow {
-                id: row.get(0)?,
-                project_id: row.get(1)?,
-                card_ids: row.get(2)?,
-                title: row.get(3)?,
-                color: row.get(4)?,
-                collapsed: collapsed_i != 0,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-
-    Ok(rows)
+    query_groups(&db, &project_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

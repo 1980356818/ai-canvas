@@ -25,7 +25,10 @@ export {
   permanentlyDeleteProject,
   renameProject,
   updateProjectMeta,
+  exportProject,
+  importProject,
 } from "./project.api";
+export type { ExportSummary } from "./project.api";
 
 export { loadCards, saveCardsBatch, deleteCard } from "./card.api";
 

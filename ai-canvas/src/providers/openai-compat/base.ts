@@ -23,6 +23,7 @@ import { uploadMediaBatch } from "@/platform/media";
 import { executeAsyncMediaTask } from "../shared/asyncMediaTask";
 import { PROGRESS_EXPECTED_SEC } from "../shared/progress";
 import { normalizeResolution } from "@/shared/constants";
+import { diagInfo } from "@/lib/diag";
 import type { ModelInfo } from "@/types";
 
 function gcd(a: number, b: number): number {
@@ -161,13 +162,38 @@ export abstract class OpenAICompatProvider implements AIProvider {
     if (req.maxTokens) body.max_tokens = req.maxTokens;
     if (req.temperature != null) body.temperature = req.temperature;
 
+    // 诊断:确认出参里是否误带 image_url(纯文本模型如极境 gpt-5.5 收到图会回「请求参数有误」)。
+    const _msgsJson = JSON.stringify(messages);
+    diagInfo("ai-stream-raw", "⑤b 出参请求体", {
+      model: req.model,
+      maxTokens: req.maxTokens,
+      hasImageUrl: _msgsJson.includes("image_url"),
+      bodyBytes: JSON.stringify(body).length,
+      messagesPreview: _msgsJson.slice(0, 600),
+    });
+
+    // 诊断:后端(Rust do_stream)到底 emit 了几条 raw `data:` chunk、第一条长啥样。
+    // 用来区分「后端一条都没发(app 的 reqwest 拿到空 body)」vs「发了但是 error 对象
+    // 被 parseOpenAIStreamChunk 静默丢弃(只认 choices[0].delta)」两种空回复成因。
+    let _rawChunkCount = 0;
+    let _rawSample = "";
     const { abort } = await aiProxyStream(
       this.providerId,
       "/v1/chat/completions",
       body,
       {
-        onChunk: (raw) => parseOpenAIStreamChunk(raw, onEvent),
+        onChunk: (raw) => {
+          _rawChunkCount += 1;
+          if (_rawChunkCount <= 3) _rawSample += `[${_rawChunkCount}] ${raw.slice(0, 240)}\n`;
+          parseOpenAIStreamChunk(raw, onEvent);
+        },
         onDone: () => {
+          diagInfo("ai-stream-raw", "⑦b 后端 chunk 流结束(rawChunkCount=0 即后端没收到任何 data 行)", {
+            model: req.model,
+            provider: this.providerId,
+            rawChunkCount: _rawChunkCount,
+            sample: _rawSample.slice(0, 720) || "(无任何 chunk)",
+          });
           const tcs = getAccumulatedToolCalls();
           for (const tc of tcs) {
             onEvent({ type: "tool_call_end", id: tc.id });

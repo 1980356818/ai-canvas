@@ -14,6 +14,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { createProject, updateProjectMeta, loadCards } from "@/platform";
+import { importProjectFromFile } from "@/lib/projectTransfer";
+import { NameProjectDialog } from "@/features/overlays/NameProjectDialog";
 import { getDisplayUrl } from "@/lib/media";
 import { useProjectStore } from "@/stores/projectStore";
 import type { ProjectInfo } from "@/types";
@@ -199,86 +201,6 @@ const TEMPLATE_OPTIONS: {
 ];
 
 
-function NameProjectDialog({
-  open,
-  onConfirm,
-  onCancel,
-}: {
-  open: boolean;
-  onConfirm: (name: string) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (open) {
-      setName("");
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onCancel();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onCancel]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onCancel();
-      }}
-    >
-      <div
-        className="w-full max-w-sm rounded-xl border border-border bg-background p-5 shadow-2xl"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <h3 className="mb-4 text-base font-semibold">新建项目</h3>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            onConfirm(name.trim() || "未命名项目");
-          }}
-        >
-          <input
-            ref={inputRef}
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="输入项目名称..."
-            className="mb-4 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="rounded-lg px-4 py-2 text-sm text-muted-foreground hover:bg-accent"
-            >
-              取消
-            </button>
-            <button
-              type="submit"
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              创建
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 export interface NewProjectDialogProps {
   open: boolean;
   onClose: () => void;
@@ -417,6 +339,19 @@ export function NewProjectDialog({
     }
   };
 
+  const handleImport = useCallback(async () => {
+    if (loading) return;
+    setLoading(true);
+    const project = await importProjectFromFile();
+    if (!project) {
+      setLoading(false); // 用户取消或导入失败(失败已在 helper 内 toast)
+      return;
+    }
+    useProjectStore.getState().openProject(project.id);
+    setAppView("canvas");
+    onClose();
+  }, [loading, setAppView, onClose]);
+
   if (!open) return null;
 
   const recentProjects = projects.slice(0, 5);
@@ -538,6 +473,10 @@ export function NewProjectDialog({
         open={showNameDialog}
         onConfirm={handleCreateBlank}
         onCancel={() => setShowNameDialog(false)}
+        onImport={() => {
+          setShowNameDialog(false);
+          void handleImport();
+        }}
       />
     </div>
   );

@@ -152,6 +152,22 @@ export function parseOpenAIStreamChunk(
 ): void {
   try {
     const parsed = JSON.parse(raw);
+
+    // 上游(极境 / OpenAI 兼容网关)会把错误塞进 HTTP 200 的 SSE 流里:`data: {"error":{...}}`,
+    // 后面再跟一条 `data: [DONE]`。历史实现只看 choices[0].delta,这种 error chunk 被静默丢弃 →
+    // 前端最终拿到空 content、显示「无回复 — 模型未返回任何内容」,真正的报错(如极境的
+    // 「请求参数有误，请检查输入内容」)完全不可见。这里显式捞出来 emit error 事件 →
+    // streamChatToResult reject → 编辑器红框显示真实原因。
+    if (parsed.error) {
+      const errObj = parsed.error;
+      const msg =
+        typeof errObj === "string"
+          ? errObj
+          : (errObj.message ?? JSON.stringify(errObj));
+      emit({ type: "error", message: String(msg) });
+      return;
+    }
+
     const choice = parsed.choices?.[0];
     const delta = choice?.delta;
     if (!delta) return;

@@ -22,7 +22,7 @@ permissions:
 env:
   APP_NAME: AICat
   CARGO_INCREMENTAL: 0
-  VITE_COMFLY_BASE_URL: https://ai.comfly.chat
+  VITE_COMFLY_BASE_URL: https://ai.comfly.org
 
 defaults:
   run:

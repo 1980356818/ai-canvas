@@ -66,10 +66,17 @@ export function invalidateApiKeyCache() {
   _apiKeyCache = undefined;
 }
 
-const COMFLY_BASE_URL = import.meta.env.VITE_COMFLY_BASE_URL ?? "https://ai.comfly.chat";
+const COMFLY_BASE_URL = import.meta.env.VITE_COMFLY_BASE_URL ?? "https://ai.comfly.org";
 
 export async function migrateApiConfig(): Promise<void> {
   const currentUrl = await getSetting("openai_base_url");
-  if (currentUrl) return;
-  await setSetting("openai_base_url", COMFLY_BASE_URL);
+  if (!currentUrl) {
+    await setSetting("openai_base_url", COMFLY_BASE_URL);
+    return;
+  }
+  // Comfly 域名搬家 (.chat → .org)：把仍是旧默认值的存量配置升级到新域名，
+  // 用户自定义过的 base_url 不动。Tauri/sqlite 端同款迁移见 db/migrations.rs::migrate_v10。
+  if (currentUrl === "https://ai.comfly.chat") {
+    await setSetting("openai_base_url", COMFLY_BASE_URL);
+  }
 }

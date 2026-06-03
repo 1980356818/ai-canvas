@@ -908,9 +908,8 @@ pub async fn extract_frames_at_timestamps(
     if timestamps.is_empty() {
         return Err("时间戳列表为空".to_string());
     }
-    if timestamps.len() > 100 {
-        return Err(format!("时间戳过多({} > 100),请缩减", timestamps.len()));
-    }
+    // 不限制帧数上限 (产品需求: 等间隔抽帧无上限)。抽帧是串行的 (见下方循环),
+    // 大量帧只会更慢、不会爆资源; ffmpeg 每帧独立 spawn, 单帧失败不影响整体。
 
     // 远程 URL 暂不支持(需要先下载,留给后续迭代)
     if video_path.starts_with("http://") || video_path.starts_with("https://") {

@@ -18,6 +18,8 @@ pub mod jijing_serde;
 pub mod project;
 // groups: 节点分组(card_groups 表)的 Tauri commands。详见 groups.rs 顶部注释。
 pub mod groups;
+// transfer: 项目「导出/导入」为 .aicat 可移植文件。详见 transfer.rs 顶部注释。
+pub mod transfer;
 pub mod tasks;
 // upload_local: 前端 → Rust 本地分块写盘 (规避 WebView2 IPC 3MB 上限)
 // upload_remote: Rust → JiJing /v1/files/upload (规避上游 API body 上限)

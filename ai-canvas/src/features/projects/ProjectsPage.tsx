@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Plus, FolderOpen, Trash2, Search, Undo2, Trash, ChevronDown, ChevronRight, Pencil, Layers } from "lucide-react";
+import { Plus, FolderOpen, Trash2, Search, Undo2, Trash, ChevronDown, ChevronRight, Pencil, Layers, Download, Upload } from "lucide-react";
 import { NewProjectDialog } from "@/features/overlays/NewProjectDialog";
 import { ConfirmDialog } from "@/features/overlays/ConfirmDialog";
 import {
@@ -12,6 +12,7 @@ import {
   permanentlyDeleteProject,
   loadCards,
 } from "@/platform";
+import { exportProjectToFile, importProjectFromFile } from "@/lib/projectTransfer";
 import { getDisplayUrl } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/stores/projectStore";
@@ -42,11 +43,12 @@ interface ProjectContextMenuProps {
   x: number;
   y: number;
   onRename: () => void;
+  onExport: () => void;
   onDelete: () => void;
   onClose: () => void;
 }
 
-function ProjectContextMenu({ x, y, onRename, onDelete, onClose }: ProjectContextMenuProps) {
+function ProjectContextMenu({ x, y, onRename, onExport, onDelete, onClose }: ProjectContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
 
@@ -94,6 +96,14 @@ function ProjectContextMenu({ x, y, onRename, onDelete, onClose }: ProjectContex
       >
         <Pencil className="h-3.5 w-3.5" />
         重命名
+      </button>
+      <button
+        type="button"
+        onClick={() => { onExport(); onClose(); }}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground hover:bg-accent hover:text-accent-foreground"
+      >
+        <Download className="h-3.5 w-3.5" />
+        另存为…
       </button>
       <div className="my-1 h-px bg-border" role="separator" />
       <button
@@ -431,6 +441,13 @@ export default function ProjectsPage() {
     [addToast, updateProject],
   );
 
+  const handleExport = useCallback(
+    (project: ProjectInfo) => exportProjectToFile({ id: project.id, title: project.title }),
+    [],
+  );
+
+  const handleImport = useCallback(() => importProjectFromFile(), []);
+
   const handleConfirmDelete = useCallback(() => {
     if (!pendingDelete) return;
     const id = pendingDelete.id;
@@ -480,14 +497,24 @@ export default function ProjectsPage() {
                 共 {projects.length} 个项目
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setDialogOpen(true)}
-              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:opacity-90"
-            >
-              <Plus className="h-4 w-4" />
-              新建项目
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleImport()}
+                className="flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent"
+              >
+                <Upload className="h-4 w-4" />
+                导入项目
+              </button>
+              <button
+                type="button"
+                onClick={() => setDialogOpen(true)}
+                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:opacity-90"
+              >
+                <Plus className="h-4 w-4" />
+                新建项目
+              </button>
+            </div>
           </div>
 
           {projects.length > 3 && (
@@ -599,6 +626,7 @@ export default function ProjectsPage() {
           x={ctxMenu.x}
           y={ctxMenu.y}
           onRename={() => setEditingCardId(ctxMenu.project.id)}
+          onExport={() => void handleExport(ctxMenu.project)}
           onDelete={() => setPendingDelete(ctxMenu.project)}
           onClose={() => setCtxMenu(null)}
         />,

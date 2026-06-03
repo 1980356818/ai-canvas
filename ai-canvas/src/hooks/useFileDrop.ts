@@ -485,9 +485,8 @@ export function useFileDrop(
               const idx = files.findIndex(isVideoFile);
               if (idx !== -1) {
                 const vf = files[idx]!;
-                const blobUrl = URL.createObjectURL(vf);
-                const frame = await extractFirstFrame(blobUrl);
-                URL.revokeObjectURL(blobUrl);
+                // extractFirstFrame 收 File,内部闭环管理 blob URL(teardown 后才 revoke)
+                const frame = await extractFirstFrame(vf);
                 if (frame) {
                   const saved = await persistFile(vf, undefined, currentProjectId);
                   const posterPath = await persistPoster(frame.dataUrl, currentProjectId);
@@ -538,9 +537,8 @@ export function useFileDrop(
           // 典型踩坑:iPhone/QuickTime 导出的 HEVC mp4 在无 HEVC 扩展的 Windows WebView2
           // 必然失败;Mac WKWebView 上 HEVC-in-mp4 也比 HEVC-in-mov 脆弱得多。
           if (video) {
-            const blobUrl = URL.createObjectURL(file);
-            const frame = await extractFirstFrame(blobUrl);
-            URL.revokeObjectURL(blobUrl);
+            // extractFirstFrame 收 File,内部闭环管理 blob URL(teardown 后才 revoke)
+            const frame = await extractFirstFrame(file);
             if (!frame) {
               unsupportedVideoToast(file.name);
               continue;

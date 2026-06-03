@@ -19,6 +19,7 @@ import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { hasApiKey } from "@/platform";
 import { friendlyError } from "@/lib/errors";
+import { diagInfo, diagWarn, diagError } from "@/lib/diag";
 
 export interface RunEditorGenerationOptions {
   /** 编辑器本地 error 态 setter:本包装会 setError(null) 重置、出错时 setError(友好消息)。 */
@@ -37,7 +38,9 @@ export async function runEditorGeneration(
   card: CanvasCard,
   opts: RunEditorGenerationOptions,
 ): Promise<void> {
+  diagInfo("editor-gen", "② runEditorGeneration 开始(即将 API Key 预检)", { cardId: card.id });
   if (!(await hasApiKey())) {
+    diagWarn("editor-gen", "② 无 API Key，弹 toast 并静默中止(不会有后端日志)", { cardId: card.id });
     useUIStore.getState().addToast({
       type: "warning",
       title: "请先配置 API Key",
@@ -51,6 +54,9 @@ export async function runEditorGeneration(
     return;
   }
 
+  // 这一行把 card 标记为「生成中」(generatingCards.has(card.id)=true) —— 编辑器的
+  // generating 守卫就读它。**只有下面的 finally 能解除**;若 run() 永不 settle(流式
+  // 既不 done 也不 error),finally 不执行 → generating 永真 → 之后点生成全部静默 return。
   useUIStore.getState().setCardProgress(card.id, {
     percent: 0,
     label: opts.submitLabel ?? "正在提交请求…",
@@ -63,9 +69,11 @@ export async function runEditorGeneration(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const errMsg = friendlyError(msg);
+    diagError("editor-gen", err, { cardId: card.id, friendly: errMsg, phase: "run() 抛错→红框" });
     opts.setError(errMsg);
     useUIStore.getState().setCardError(card.id, errMsg);
   } finally {
+    diagInfo("editor-gen", "⑩ finally：清除进度(generating→false，解除生成中锁)", { cardId: card.id });
     useUIStore.getState().setCardProgress(card.id, null);
   }
 }

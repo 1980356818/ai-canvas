@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: u32 = 9;
+const CURRENT_VERSION: u32 = 10;
 
 pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     let version: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -32,6 +32,9 @@ pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     }
     if version < 9 {
         migrate_v9(conn)?;
+    }
+    if version < 10 {
+        migrate_v10(conn)?;
     }
 
     Ok(())
@@ -122,7 +125,7 @@ fn migrate_v4(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
 
     conn.execute(
         "INSERT OR IGNORE INTO settings (key, value) VALUES (?1, ?2)",
-        rusqlite::params!["openai_base_url", "https://ai.comfly.chat"],
+        rusqlite::params!["openai_base_url", "https://ai.comfly.org"],
     )?;
 
     conn.execute_batch("PRAGMA user_version = 4;")?;
@@ -309,5 +312,22 @@ fn migrate_v9(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
         ",
     )?;
 
+    Ok(())
+}
+
+fn migrate_v10(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::info!("running migration v10: comfly domain move (ai.comfly.chat -> ai.comfly.org)");
+
+    // Comfly 域名搬家 (.chat → .org)。v4 早给老用户 sqlite 种过
+    // openai_base_url = "https://ai.comfly.chat"; 那条迁移已 run 过不会重跑,
+    // 所以这里把「仍是旧默认值」的行就地改成新域名, 否则老安装会一直打死域名。
+    // 只动等于旧默认的行 —— 用户在设置里自定义过的 base_url 一律不碰。
+    conn.execute(
+        "UPDATE settings SET value = ?1 \
+         WHERE key IN ('openai_base_url', 'comfly_base_url') AND value = ?2",
+        rusqlite::params!["https://ai.comfly.org", "https://ai.comfly.chat"],
+    )?;
+
+    conn.execute_batch("PRAGMA user_version = 10;")?;
     Ok(())
 }

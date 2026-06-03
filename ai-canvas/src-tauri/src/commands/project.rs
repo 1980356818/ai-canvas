@@ -12,6 +12,31 @@ pub struct ProjectInfo {
     pub updated_at: String,
 }
 
+/// 按 id 查单个项目的 `ProjectInfo`(含动态 node_count)。
+/// `create_project` 与「导入项目」共用,避免这段 SELECT 散落多份。
+pub(crate) fn query_project_info(
+    conn: &rusqlite::Connection,
+    id: &str,
+) -> Result<ProjectInfo, rusqlite::Error> {
+    conn.query_row(
+        "SELECT p.id, p.title, p.thumbnail,
+                (SELECT COUNT(*) FROM cards c WHERE c.project_id = p.id) AS node_count,
+                p.created_at, p.updated_at
+         FROM projects p WHERE p.id = ?1",
+        rusqlite::params![id],
+        |row| {
+            Ok(ProjectInfo {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                thumbnail: row.get(2)?,
+                node_count: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+            })
+        },
+    )
+}
+
 #[tauri::command]
 pub fn list_projects(state: State<AppState>) -> Result<Vec<ProjectInfo>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
@@ -87,27 +112,7 @@ pub fn create_project(state: State<AppState>, title: String) -> Result<ProjectIn
     )
     .map_err(|e| e.to_string())?;
 
-    let project = db
-        .query_row(
-            "SELECT p.id, p.title, p.thumbnail,
-                    (SELECT COUNT(*) FROM cards c WHERE c.project_id = p.id) AS node_count,
-                    p.created_at, p.updated_at
-             FROM projects p WHERE p.id = ?1",
-            rusqlite::params![id],
-            |row| {
-                Ok(ProjectInfo {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    thumbnail: row.get(2)?,
-                    node_count: row.get(3)?,
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
-                })
-            },
-        )
-        .map_err(|e| e.to_string())?;
-
-    Ok(project)
+    query_project_info(&db, &id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -241,7 +246,7 @@ pub fn set_setting(state: State<AppState>, key: String, value: String) -> Result
     Ok(())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CardRow {
     pub id: String,
     pub project_id: String,
@@ -261,7 +266,7 @@ pub struct CardRow {
     pub updated_at: String,
 }
 
-fn upsert_card(
+pub(crate) fn upsert_card(
     conn: &rusqlite::Connection,
     card: &CardRow,
 ) -> Result<(), rusqlite::Error> {
@@ -291,42 +296,44 @@ fn upsert_card(
     Ok(())
 }
 
+/// 读取某项目的全部卡片(`&Connection` 版,锁责任在调用方)。
+/// `load_cards` 命令与「导出项目」共用同一份 SELECT + 行映射。
+pub(crate) fn query_cards(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> Result<Vec<CardRow>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "SELECT id, project_id, type, x, y, width, height, z_index, locked, collapsed, color, title, data, created_at, updated_at FROM cards WHERE project_id = ?1 ORDER BY z_index, id",
+    )?;
+
+    let rows = stmt.query_map(rusqlite::params![project_id], |row| {
+        let locked_i: i64 = row.get(8)?;
+        let collapsed_i: i64 = row.get(9)?;
+        Ok(CardRow {
+            id: row.get(0)?,
+            project_id: row.get(1)?,
+            card_type: row.get(2)?,
+            x: row.get(3)?,
+            y: row.get(4)?,
+            width: row.get(5)?,
+            height: row.get(6)?,
+            z_index: row.get(7)?,
+            locked: locked_i != 0,
+            collapsed: collapsed_i != 0,
+            color: row.get(10)?,
+            title: row.get(11)?,
+            data: row.get(12)?,
+            created_at: row.get(13)?,
+            updated_at: row.get(14)?,
+        })
+    })?;
+    rows.collect()
+}
+
 #[tauri::command]
 pub fn load_cards(state: State<AppState>, project_id: String) -> Result<Vec<CardRow>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    let mut stmt = db
-        .prepare(
-            "SELECT id, project_id, type, x, y, width, height, z_index, locked, collapsed, color, title, data, created_at, updated_at FROM cards WHERE project_id = ?1 ORDER BY z_index, id",
-        )
-        .map_err(|e| e.to_string())?;
-
-    let cards = stmt
-        .query_map(rusqlite::params![project_id], |row| {
-            let locked_i: i64 = row.get(8)?;
-            let collapsed_i: i64 = row.get(9)?;
-            Ok(CardRow {
-                id: row.get(0)?,
-                project_id: row.get(1)?,
-                card_type: row.get(2)?,
-                x: row.get(3)?,
-                y: row.get(4)?,
-                width: row.get(5)?,
-                height: row.get(6)?,
-                z_index: row.get(7)?,
-                locked: locked_i != 0,
-                collapsed: collapsed_i != 0,
-                color: row.get(10)?,
-                title: row.get(11)?,
-                data: row.get(12)?,
-                created_at: row.get(13)?,
-                updated_at: row.get(14)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-
-    Ok(cards)
+    query_cards(&db, &project_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -362,7 +369,7 @@ pub fn delete_card(state: State<AppState>, id: String) -> Result<(), String> {
 
 // ── Connection Commands ──────────────────────────────────────
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionRow {
     pub id: String,
     pub project_id: String,
@@ -371,31 +378,33 @@ pub struct ConnectionRow {
     pub created_at: String,
 }
 
+/// 读取某项目的全部连线(`&Connection` 版,锁责任在调用方)。
+/// `load_connections` 命令与「导出项目」共用。
+pub(crate) fn query_connections(
+    conn: &rusqlite::Connection,
+    project_id: &str,
+) -> Result<Vec<ConnectionRow>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "SELECT id, project_id, source_card_id, target_card_id, created_at
+         FROM connections WHERE project_id = ?1 ORDER BY created_at",
+    )?;
+
+    let rows = stmt.query_map(rusqlite::params![project_id], |row| {
+        Ok(ConnectionRow {
+            id: row.get(0)?,
+            project_id: row.get(1)?,
+            source_card_id: row.get(2)?,
+            target_card_id: row.get(3)?,
+            created_at: row.get(4)?,
+        })
+    })?;
+    rows.collect()
+}
+
 #[tauri::command]
 pub fn load_connections(state: State<AppState>, project_id: String) -> Result<Vec<ConnectionRow>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    let mut stmt = db
-        .prepare(
-            "SELECT id, project_id, source_card_id, target_card_id, created_at
-             FROM connections WHERE project_id = ?1 ORDER BY created_at",
-        )
-        .map_err(|e| e.to_string())?;
-
-    let rows = stmt
-        .query_map(rusqlite::params![project_id], |row| {
-            Ok(ConnectionRow {
-                id: row.get(0)?,
-                project_id: row.get(1)?,
-                source_card_id: row.get(2)?,
-                target_card_id: row.get(3)?,
-                created_at: row.get(4)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-
-    Ok(rows)
+    query_connections(&db, &project_id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

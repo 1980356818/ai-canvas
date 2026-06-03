@@ -917,6 +917,8 @@ pub fn run() {
             commands::groups::load_groups,
             commands::groups::save_groups_batch,
             commands::groups::delete_group,
+            commands::transfer::export_project,
+            commands::transfer::import_project,
             commands::ai::ai_proxy,
             commands::ai::ai_proxy_stream,
             commands::ai::ai_proxy_stream_abort,

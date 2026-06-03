@@ -2,15 +2,22 @@
  * Comfly provider 的 base URL 真相源。结构与 `providers/jijing/baseUrl.ts` 对称,
  * 任何要拼上游 HTTP URL 的前端代码都从这里取常量, 不再各处硬编码。
  *
- * Comfly 当前只有一条线路 (`https://ai.comfly.chat`), 但保留这个独立模块给将来
+ * Comfly 当前只有一条线路 (`https://ai.comfly.org`), 但保留这个独立模块给将来
  * 扩多线路 / 自定义 base url 留接口, 也跟极境的「真相源单点化」结构保持一致。
  *
  * ## 散落点同步清单 (修改 URL 时必须一起改)
  *
  *   - 本文件 (前端 UI 层)
+ *   - `src/platform/settings.api.ts::COMFLY_BASE_URL` (web/localStorage 迁移兜底)
  *   - `src-tauri/src/commands/config.rs::default_base_url` (Rust 兜底)
- *   - `src-tauri/src/db/migrations.rs` 初始 sqlite 种子值
- *   - `src/features/overlays/SettingsDialog.tsx` 表单默认值
+ *   - `src-tauri/src/db/migrations.rs` 初始 sqlite 种子值 (migrate_v4)
+ *   - `src/features/overlays/SettingsDialog.tsx` 表单默认值 (apiBaseUrl + homepageUrl)
+ *   - `.github/workflows/build.yml::VITE_COMFLY_BASE_URL` (CI 注入)
+ *
+ * 注意「域名搬家」(旧默认整体废弃) 场景：上面只改新装/默认值，存量用户的
+ * sqlite / localStorage 里还存着旧默认值，必须再加一条迁移把旧值就地改新，
+ * 否则老安装会一直打死域名。Tauri/sqlite 端见 `db/migrations.rs::migrate_v10`，
+ * web/localStorage 端见 `settings.api.ts::migrateApiConfig`。
  *
  * 历史 (2026-05-30): vite proxy + dev proxy prefix 已删除。前端不再直连上游,
  * 所有上行请求走 httpAdapter → Rust invoke。Tauri 调用链下 ai_proxy 不读本模块,
@@ -24,7 +31,7 @@
  * 注入, 允许 fork / 自托管 build 在不改源码的前提下覆盖默认 base URL。
  */
 export const COMFLY_API_DEFAULT: string =
-  (import.meta.env.VITE_COMFLY_BASE_URL as string | undefined) ?? "https://ai.comfly.chat";
+  (import.meta.env.VITE_COMFLY_BASE_URL as string | undefined) ?? "https://ai.comfly.org";
 
 /**
  * 当前应使用的 Comfly base URL。
