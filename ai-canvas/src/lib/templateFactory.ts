@@ -4,6 +4,8 @@ import type { CanvasCard, Connection } from "@/types";
 import { saveCardsBatch, saveConnections } from "@/platform";
 import { cardToRow, connectionToRow } from "@/lib/mappers";
 import { CARD_DEFAULTS, type WorkflowTemplate } from "@/shared/constants";
+import type { ModelRef } from "@/services/models";
+import { resolveDefaultModelForCardType, cardTypeNeedsModel } from "@/services/modelDefaults";
 
 export async function instantiateWorkflowTemplate(
   template: WorkflowTemplate,
@@ -25,12 +27,34 @@ export async function instantiateWorkflowTemplate(
   // getDisplayUrl 对 `/` 开头直接放行、getBase64ForApi 对前端 asset 走 urlToDataUrl 现转。
   // 之前的 persistFrontendAsset 既会卡住 IPC，也只是把同一份图片再复制到 app_data/media，毫无收益。
   // 现在直接用 preset.data 原值，避免在创建模板时阻塞主流程。
+  // 默认模型缓存:同类型只解析一次(getDefaultImageModel 等是异步聚合,避免重复)。
+  const modelDefaultCache = new Map<string, ModelRef | null>();
+  const defaultModelFor = async (type: string): Promise<ModelRef | null> => {
+    if (!modelDefaultCache.has(type)) {
+      modelDefaultCache.set(type, await resolveDefaultModelForCardType(type));
+    }
+    return modelDefaultCache.get(type) ?? null;
+  };
+
   for (let i = 0; i < template.cards.length; i++) {
     const preset = template.cards[i]!;
     const presetData = (preset.data ?? {}) as Record<string, unknown>;
 
     const defaults = CARD_DEFAULTS[preset.type];
     zIndexCursor += 1;
+
+    // 模板预设基本不带 model;给"需要模型"的卡补默认模型,让模板生成的卡一出生就能
+    // 直接运行(组运行 / agent 等不经过编辑器的路径不再因空 model 失败)。预设已显式
+    // 指定 model 的(如分镜分析卡)保留不覆盖。单一口径见 services/modelDefaults.ts。
+    const data: Record<string, unknown> = { _showLabel: true, ...presetData };
+    if (cardTypeNeedsModel(preset.type) && !data.model) {
+      const ref = await defaultModelFor(preset.type);
+      if (ref) {
+        data.model = ref.modelId;
+        data.provider = ref.providerId;
+      }
+    }
+
     const card: CanvasCard = {
       id: crypto.randomUUID(),
       projectId,
@@ -43,7 +67,7 @@ export async function instantiateWorkflowTemplate(
       locked: false,
       collapsed: false,
       title: preset.title,
-      data: { _showLabel: true, ...presetData },
+      data,
       createdAt: now,
       updatedAt: now,
     };

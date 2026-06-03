@@ -355,6 +355,30 @@
   animation: wire-sweep 2s ease-in-out infinite;
 }
 
+/* 缩放/平移手势期间暂停画布内常驻动画 —— 这些动画每帧都让 SVG/卡片层变脏，
+   无法缓存为静态合成纹理，缩放时与「按新 scale 重栅格化」叠加导致抖动。
+   .canvas-interacting 由 useViewport 在手势中 imperative 添加，停手 ~180ms 后移除。 */
+/* 手势（缩放/平移）中暂停变换层内的一切动画 —— @keyframes（连线流光 wire-*、
+   选中描边 selected-border-flow、card-ready-glow 等）与 Tailwind 的 animate-spin /
+   animate-pulse 全部覆盖。这些动画每帧让 SVG/卡片层变脏，使内层纹理无法缓存，
+   缩放时与重栅格化叠加 → 抖动。
+   规范：画布内容层的任何常驻/状态动画都被这条规则自动纳管，**无需逐个登记**，
+   从根上杜绝「新增动画忘记暂停」导致卡顿复发。
+   toolbar / FloatingEditor / ZoomControls 在变换层之外（与 vp-pan-layer 平级），
+   其 spinner、生成态动画不受影响。 */
+.canvas-interacting .vp-pan-layer,
+.canvas-interacting .vp-pan-layer * {
+  animation-play-state: paused !important;
+}
+
+/* 缩放/平移手势中把画布两层提升为合成层：内层 vp-render-layer 被栅格化为静态纹理，
+   外层 vp-pan-layer 对该纹理做 GPU 缩放/平移，而非按新 scale 重栅格化整棵 DOM。
+   will-change 常驻会吃显存，所以只在手势期间挂，停手随 .canvas-interacting 一起撤销。 */
+.canvas-interacting .vp-pan-layer,
+.canvas-interacting .vp-render-layer {
+  will-change: transform;
+}
+
 @keyframes selected-border-flow {
   0%   { background-position: 0% 50%; }
   50%  { background-position: 100% 50%; }

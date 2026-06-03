@@ -9,7 +9,7 @@ import {
   useGroupRunStatusStore,
   selectGroupRunStatus,
 } from "@/stores/groupRunStatusStore";
-import type { CardGroup, Viewport } from "@/types";
+import type { CardGroup } from "@/types";
 import { GROUP_TITLE_HEIGHT } from "@/types/group";
 import { hexAlpha } from "@/lib/utils";
 import { useGroupTitleDrag } from "./hooks/useGroupDrag";
@@ -108,6 +108,34 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
   const isRunning = runStatus?.phase === "running";
   const isFailed = runStatus?.phase === "failed";
   const isCompleted = runStatus?.phase === "completed";
+
+  /**
+   * 标题栏右侧的"当前节点"提示文字。
+   *   - running: "正在: <第一张卡的标题> [+N]"  ←  多卡并发时显示 +N
+   *   - failed:  "失败: <失败卡的标题>"
+   *   - 其他态(completed/idle/无 runStatus): null,由调用处展示 "5/8" 或 "N 个节点"
+   * 卡名取 card.title;空标题回退到 card.type;再回退到 id 前缀。
+   */
+  const currentNodeLabel = useMemo(() => {
+    if (!runStatus) return null;
+    const cardStore = useCardStore.getState();
+    const labelOf = (cid: string) => {
+      const c = cardStore.getCard(cid);
+      return c?.title?.trim() || c?.type || cid.slice(0, 6);
+    };
+    if (isFailed && runStatus.failedCardId) {
+      return `失败: ${labelOf(runStatus.failedCardId)}`;
+    }
+    if (isRunning) {
+      const ids = Array.from(runStatus.currentCardIds);
+      if (ids.length === 0) return null;
+      const head = labelOf(ids[0]!);
+      return ids.length > 1
+        ? `正在: ${head} +${ids.length - 1}`
+        : `正在: ${head}`;
+    }
+    return null;
+  }, [runStatus, isRunning, isFailed]);
 
   const handleTitleBarPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -319,10 +347,29 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
           <span className="truncate">{group.title}</span>
         )}
 
-        <span className="ml-auto opacity-70" style={{ fontSize: 13, fontWeight: 500 }}>
-          {runStatus
-            ? `${runStatus.doneCount}/${runStatus.totalCount}${isFailed ? " · 已停止" : ""}`
-            : `${group.cardIds.length} 个节点`}
+        <span
+          className="ml-auto flex items-center gap-1.5 opacity-80 min-w-0"
+          style={{ fontSize: 13, fontWeight: 500 }}
+        >
+          {currentNodeLabel && (
+            <span
+              className="truncate max-w-[200px]"
+              style={{ opacity: 0.95 }}
+              title={currentNodeLabel}
+            >
+              {currentNodeLabel}
+            </span>
+          )}
+          {currentNodeLabel && (
+            <span aria-hidden style={{ opacity: 0.5 }}>
+              ·
+            </span>
+          )}
+          <span className="shrink-0 tabular-nums">
+            {runStatus
+              ? `${runStatus.doneCount}/${runStatus.totalCount}${isFailed && !currentNodeLabel ? " · 已停止" : ""}`
+              : `${group.cardIds.length} 个节点`}
+          </span>
         </span>
 
         {/*
@@ -419,7 +466,6 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
 
 interface GroupLayerProps {
   projectId: string | null;
-  viewport: Viewport;
 }
 
 /**

@@ -138,10 +138,13 @@ export function createAgentContext(
       }
       if (capability === "image_gen" && provider.generateImage) {
         // 强制把 agent 上下文的 projectId 注入请求，确保异步保存阶段写入正确项目目录。
+        // 调用方(generate-image 工具)若先建卡并带上 request.cardId,这里原样透传 →
+        // provider 走 TaskManager 持久化路径(P3.1:可恢复 / 可重试 / 状态统一)。
         const imageReq = request as Parameters<typeof provider.generateImage>[0];
         return provider.generateImage({ ...imageReq, projectId });
       }
       if (capability === "video_gen" && provider.generateVideo) {
+        // 同 image_gen:带 request.cardId 即走 TaskManager;未带则 legacy 直连。
         const videoReq = request as Parameters<typeof provider.generateVideo>[0];
         return provider.generateVideo({ ...videoReq, projectId });
       }

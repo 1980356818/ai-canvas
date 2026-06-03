@@ -147,3 +147,19 @@ export const useUIStore = create<UIState>((set) => ({
   setEditingGroupId: (groupId) =>
     set((s) => (s.editingGroupId === groupId ? s : { editingGroupId: groupId })),
 }));
+
+/**
+ * 单卡"是否在生成中"的**单一真相** selector。
+ *
+ * `generatingCards` 是经 `setCardProgress` 维护的唯一"生成中"集合,所有生成
+ * 路径都汇到它:
+ *   - 编辑器手点:handleGenerate 自己 set / 清;
+ *   - 组运行 / agent / 重试:cardRunner.runCard 进入即 set 占位、finally 清;
+ *   - task 轮询期:taskBridge 持续 set 进度、终态清。
+ * 所以判断"某张卡在不在生成"**只看这一个集合**即可 —— 不必再 OR
+ * groupRunStatus.currentCardIds / task.status 等来源(那是旧的状态分裂根源)。
+ *
+ * 返回 boolean primitive,Object.is 比较稳定,工厂每次新建闭包无碍。
+ */
+export const selectCardBusy = (cardId: string) => (s: UIState) =>
+  s.generatingCards.has(cardId);

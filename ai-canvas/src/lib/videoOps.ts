@@ -27,6 +27,21 @@ import type { FrameInput } from "@/lib/frameComposite";
 import { isVeoModel } from "@/providers/shared/video";
 import type { CanvasCard, Connection } from "@/types";
 
+// ── 进度槽位:抽帧 vs AI 生成 共用 generatingCards[cardId] ───────────────
+//
+// 抽帧/续拍写 `kind: "extract"`;AI 生成走默认(缺省=gen)。清理只在仍是自己时清,
+// 避免「抽帧 finally 把中途接管的 AI 生成进度误清」(报告 §G)。同一张视频卡上
+// 用户点了"重新生成"又点"抽帧"时,两个异步 op 抢同一进度槽就靠这个分轨。
+function setExtractProgress(videoCardId: string, label: string): void {
+  useUIStore.getState().setCardProgress(videoCardId, { percent: 0, label, kind: "extract" });
+}
+
+function clearExtractProgress(videoCardId: string): void {
+  if (useUIStore.getState().generatingCards.get(videoCardId)?.kind === "extract") {
+    useUIStore.getState().setCardProgress(videoCardId, null);
+  }
+}
+
 // ── 类型 ──────────────────────────────────────────────────────────────
 
 export interface ExtractTarget {
@@ -140,7 +155,7 @@ export async function extractFramesFromVideo(
   if (!videoCard) return;
 
   const label = modeLabel(mode);
-  uiStore.setCardProgress(target.videoCardId, { percent: 0, label: `准备 ${label}…` });
+  setExtractProgress(target.videoCardId, `准备 ${label}…`);
 
   try {
     // 1. 准备时间戳
@@ -204,10 +219,7 @@ export async function extractFramesFromVideo(
       shotTitles = shotTitles.slice(0, 50);
     }
 
-    uiStore.setCardProgress(target.videoCardId, {
-      percent: 0,
-      label: `正在抽 ${timestamps.length} 帧…`,
-    });
+    setExtractProgress(target.videoCardId, `正在抽 ${timestamps.length} 帧…`);
 
     // 2. 调 Rust 抽帧
     const framePaths = await callRust<string[]>("extract_frames_at_timestamps", {
@@ -245,7 +257,7 @@ export async function extractFramesFromVideo(
       duration: 5000,
     });
   } finally {
-    uiStore.setCardProgress(target.videoCardId, null);
+    clearExtractProgress(target.videoCardId);
   }
 }
 
@@ -264,10 +276,7 @@ export async function extractFrameAtTimestamp(
   const videoCard = cardStore.getCard(target.videoCardId);
   if (!videoCard) return;
 
-  uiStore.setCardProgress(target.videoCardId, {
-    percent: 0,
-    label: `抽帧 ${formatTimestamp(timestampSec)}…`,
-  });
+  setExtractProgress(target.videoCardId, `抽帧 ${formatTimestamp(timestampSec)}…`);
 
   try {
     const framePaths = await callRust<string[]>("extract_frames_at_timestamps", {
@@ -316,7 +325,7 @@ export async function extractFrameAtTimestamp(
       duration: 5000,
     });
   } finally {
-    uiStore.setCardProgress(target.videoCardId, null);
+    clearExtractProgress(target.videoCardId);
   }
 }
 
@@ -335,7 +344,7 @@ export async function continueShotFromVideo(target: ExtractTarget): Promise<void
   const videoCard = cardStore.getCard(target.videoCardId);
   if (!videoCard) return;
 
-  uiStore.setCardProgress(target.videoCardId, { percent: 0, label: "抽取尾帧…" });
+  setExtractProgress(target.videoCardId, "抽取尾帧…");
 
   try {
     // 1. 探时长 → 拿到 last-frame timestamp (-0.1s 避开黑帧)
@@ -415,7 +424,7 @@ export async function continueShotFromVideo(target: ExtractTarget): Promise<void
       duration: 5000,
     });
   } finally {
-    uiStore.setCardProgress(target.videoCardId, null);
+    clearExtractProgress(target.videoCardId);
   }
 }
 

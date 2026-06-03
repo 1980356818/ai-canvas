@@ -5,8 +5,9 @@ import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
 import { getRefSlotsForModel, getRefSlotsForChatModel, getRefSlotsForVideoModel, compactRefImages, resolveVideoImageMode, type RefImageEntry } from "@/config/model-ref-images";
 import { isSeedanceModel } from "@/providers/shared/video";
+import { createLogger } from "@/lib/debug";
 
-const DEBUG = import.meta.env.DEV;
+const log = createLogger("DataFlow");
 
 const REF_IMAGE_TARGETS = new Set(["ai_image", "ai_multiangle", "ai_chat"]);
 
@@ -395,8 +396,8 @@ function injectIntoCard(
 ): boolean {
   if (payload.kind === "none") return false;
   if (payload.kind !== "text" && !canKindFlowInto(payload.kind as PayloadKind, target.type)) {
-    if (DEBUG) console.error(
-      `[DataFlow] BUG: payload "${payload.kind}" → target "${target.type}" 不兼容,`,
+    log.error(
+      `BUG: payload "${payload.kind}" → target "${target.type}" 不兼容,`,
       `canAcceptConnection 应该已拦截此连线。源卡: ${sourceCardId}`,
     );
     return false;
@@ -492,14 +493,11 @@ function injectIntoCard(
           d.upstreamCardId = sourceCardId;
           changed = true;
         }
-        if (DEBUG) console.log("[DataFlow] ai_image 注入文本", {
+        log.log("ai_image 注入文本", {
           sourceCardId,
           targetId: target.id,
           textLength: payload.text.length,
           textPreview: payload.text.slice(0, 100),
-          allUpstreamTexts: Object.fromEntries(
-            Object.entries(upstreamTexts).map(([k, v]) => [k, (v as string).slice(0, 80)]),
-          ),
         });
       } else if (payload.kind === "image") {
         const model = (d.model as string) || "";
@@ -508,14 +506,12 @@ function injectIntoCard(
           ...((d.refImages || {}) as Record<string, RefImageEntry>),
         };
 
-        if (DEBUG) console.log("[DataFlow] ai_image 注入图片 - 开始", {
+        log.log("ai_image 注入图片 - 开始", {
           sourceCardId,
           targetId: target.id,
           model,
           slotsCount: slots.length,
-          slotKeys: slots.map((s) => s.key),
           existingRefKeys: Object.keys(refImages),
-          imageUrlPreview: payload.url.slice(0, 80),
         });
 
         let found = false;
@@ -532,7 +528,7 @@ function injectIntoCard(
               changed = true;
             }
             found = true;
-            if (DEBUG) console.log("[DataFlow] ai_image 图片更新已有槽位", { slotKey: slot.key });
+            log.log("ai_image 图片更新已有槽位", { slotKey: slot.key });
             break;
           }
         }
@@ -550,12 +546,12 @@ function injectIntoCard(
               d.upstreamCardId = sourceCardId;
               changed = true;
               assigned = true;
-              if (DEBUG) console.log("[DataFlow] ai_image 图片分配到空槽位", { slotKey: slot.key });
+              log.log("ai_image 图片分配到空槽位", { slotKey: slot.key });
               break;
             }
           }
           if (!assigned) {
-            console.warn("[DataFlow] ai_image 图片注入失败: 所有槽位已满", {
+            log.warn("ai_image 图片注入失败: 所有槽位已满", {
               occupiedSlots: Object.keys(refImages),
             });
           }
@@ -814,26 +810,22 @@ export function propagateFromCard(sourceCardId: string): number {
 export function startDataFlowWatcher(): () => void {
   // 启动时一次性同步：把已有输出注入到下游卡片的空槽位
   const conns = useConnectionStore.getState().connections;
-  if (DEBUG) console.log("[DataFlow] 初始同步开始, 连接数:", conns.size);
+  log.log("初始同步开始, 连接数:", conns.size);
   for (const conn of conns.values()) {
     const source = useCardStore.getState().getCard(conn.sourceCardId);
     const target = useCardStore.getState().getCard(conn.targetCardId);
     if (!source || !target) continue;
     const output = extractOutput(source);
-    if (DEBUG) console.log("[DataFlow] 初始同步检查连接:", {
+    log.log("初始同步检查连接:", {
       sourceId: conn.sourceCardId.slice(0, 8),
       sourceType: source.type,
-      sourceTitle: source.title,
       targetId: conn.targetCardId.slice(0, 8),
       targetType: target.type,
-      targetTitle: target.title,
       outputKind: output.kind,
-      outputUrl: output.kind === "image" ? output.url?.slice(0, 60) : undefined,
-      targetRefImages: (target.data as Record<string, unknown>).refImages,
     });
     if (output.kind !== "none") {
       const injected = injectIntoCard(target, output, conn.sourceCardId);
-      if (DEBUG) console.log("[DataFlow] 初始同步注入结果:", injected, "→", target.title);
+      log.log("初始同步注入结果:", injected, "→", target.title);
     }
   }
 

@@ -1,11 +1,15 @@
 import { useRef, useCallback, useState, memo } from "react";
-import { GripVertical } from "lucide-react";
+import { GripVertical, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
+import {
+  useGroupRunStatusStore,
+  selectCardRunPhaseInGroup,
+} from "@/stores/groupRunStatusStore";
 import { autoSave } from "@/lib/autoSave";
 import { recordUpdate } from "@/lib/history";
 import { cn, hexAlpha } from "@/lib/utils";
@@ -691,6 +695,20 @@ export default memo(
         !!s.pickMode?.active && hasImage && card.id !== s.pickMode.targetCardId,
     );
 
+    /**
+     * 分组运行 spotlight 态:
+     *   - 'running' → 卡片正在被组运行 → 蓝呼吸光环 + 右上角 spinner
+     *   - 'done'    → 组运行已完成此卡 → 不画 ring(避免一片绿太喧闹),只角标 ✓
+     *   - 'failed'  → 此卡是失败节点 → 红 ring(静止,不闪) + 右上角 ⚠
+     *   - null      → 不在任何组运行中,不渲染 spotlight
+     *
+     * 角标放在 z-30(高于 Port z-20、selected 渐变描边 z-10),且在 cardRef
+     * 直接子级里渲染,避免被内层 overflow-hidden 切掉 ring-offset。
+     */
+    const groupRunPhase = useGroupRunStatusStore(
+      selectCardRunPhaseInGroup(card.id),
+    );
+
     const onContextMenu = useCallback(
       (e: React.MouseEvent) => {
         e.preventDefault();
@@ -725,27 +743,54 @@ export default memo(
         onContextMenu={onContextMenu}
       >
         <div className="relative h-full w-full overflow-hidden rounded-xl">
-          <div
-            className={cn(
-              "pointer-events-none absolute transition-opacity duration-200",
-              selected
-                ? "card-selected-border opacity-100"
-                : "opacity-[0.35] group-hover:opacity-[0.55]",
-            )}
-            style={{
-              inset: 0,
-              padding: selected ? 3 : 2,
-              borderRadius: 'inherit',
-              zIndex: 10,
-              background: selected
-                ? "linear-gradient(135deg, #38bdf8, #818cf8, #c084fc, #f472b6, #38bdf8)"
-                : `linear-gradient(135deg, ${accentColor}, #a855f7, #ec4899)`,
-              backgroundSize: selected ? "400% 400%" : undefined,
-              WebkitMask:
-                "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
-              WebkitMaskComposite: "xor",
-            }}
-          />
+          {selected ? (
+            <div
+              className="card-selected-border pointer-events-none absolute opacity-100"
+              style={{
+                inset: 0,
+                padding: 3,
+                borderRadius: 'inherit',
+                zIndex: 10,
+                background:
+                  "linear-gradient(135deg, #38bdf8, #818cf8, #c084fc, #f472b6, #38bdf8)",
+                backgroundSize: "400% 400%",
+                WebkitMask:
+                  "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                WebkitMaskComposite: "xor",
+              }}
+            />
+          ) : (
+            <>
+              {/* 非选中静止态:廉价纯色描边(无 WebkitMask 合成)。缩放时所有可见卡
+                  都要按新 scale 重绘,mask 合成是其中最贵的一项 —— 普通 border 便宜
+                  一个量级。hover 时淡出,让下面的渐变描边接管。 */}
+              <div
+                className="pointer-events-none absolute opacity-50 transition-opacity duration-200 group-hover:opacity-0"
+                style={{
+                  inset: 0,
+                  zIndex: 10,
+                  borderRadius: 'inherit',
+                  border: `1.5px solid ${accentColor}`,
+                }}
+              />
+              {/* hover 态:渐变 mask 描边。`hidden group-hover:block` → 非 hover 时
+                  display:none,完全不绘制,所以缩放/静止时零成本(缩放时不会有卡处于
+                  hover),只有真正悬停的那一张卡才付 mask 合成代价。 */}
+              <div
+                className="pointer-events-none absolute hidden group-hover:block"
+                style={{
+                  inset: 0,
+                  padding: 2,
+                  borderRadius: 'inherit',
+                  zIndex: 10,
+                  background: `linear-gradient(135deg, ${accentColor}, #a855f7, #ec4899)`,
+                  WebkitMask:
+                    "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                  WebkitMaskComposite: "xor",
+                }}
+              />
+            </>
+          )}
 
           <div
             className={cn(
@@ -780,6 +825,46 @@ export default memo(
 
         {(card.data as { _showLabel?: boolean })?._showLabel && (
           <CardLabel card={card} />
+        )}
+
+        {/* 分组运行 spotlight ring(running=蓝呼吸 / failed=红静止) */}
+        {groupRunPhase === "running" && (
+          <div
+            className="pointer-events-none absolute inset-0 z-10 animate-pulse rounded-xl ring-2 ring-sky-400 ring-offset-2 ring-offset-transparent"
+            aria-hidden
+          />
+        )}
+        {groupRunPhase === "failed" && (
+          <div
+            className="pointer-events-none absolute inset-0 z-10 rounded-xl ring-2 ring-red-500 ring-offset-2 ring-offset-transparent"
+            aria-hidden
+          />
+        )}
+
+        {/* 右上角运行态角标(running=蓝转圈 / done=绿✓ / failed=红⚠) */}
+        {groupRunPhase && (
+          <div
+            data-card-run-badge={groupRunPhase}
+            className="pointer-events-none absolute -right-2 -top-2 z-30 flex h-6 w-6 items-center justify-center rounded-full shadow-md ring-2 ring-white dark:ring-zinc-900"
+            style={{
+              background:
+                groupRunPhase === "running"
+                  ? "#0EA5E9"
+                  : groupRunPhase === "done"
+                    ? "#22C55E"
+                    : "#EF4444",
+              color: "#fff",
+            }}
+            aria-hidden
+          >
+            {groupRunPhase === "running" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : groupRunPhase === "done" ? (
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            ) : (
+              <AlertCircle className="h-3.5 w-3.5" />
+            )}
+          </div>
         )}
 
         <Port side="input" cardId={card.id} color={accentColor} inset={selected ? 1.5 : 1} />

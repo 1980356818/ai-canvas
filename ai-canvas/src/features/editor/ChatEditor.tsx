@@ -2,23 +2,20 @@ import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { Sparkles, RefreshCw, Loader2, Lock, X, AlertCircle, Paperclip, Video } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
-import { useUIStore } from "@/stores/uiStore";
+import { useUIStore, selectCardBusy } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { autoSave } from "@/lib/autoSave";
-import { CHAT_EDITOR_DEFAULT_SYSTEM_PROMPT } from "@/lib/systemPrompts";
-import { hasApiKey } from "@/platform";
-import type { UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 import "@/providers";
 import { persistImage, getDisplayUrl, normalizeToStoragePath } from "@/lib/media";
-import { uploadMediaBatch } from "@/platform/media";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { modelService } from "@/services/models";
+import { resolveDefaultModelForCardType } from "@/services/modelDefaults";
+import { buildChatRequest } from "@/services/generation/buildChatRequest";
+import { runEditorGeneration } from "@/services/generation/runEditorGeneration";
 import { cn } from "@/lib/utils";
-import { friendlyError } from "@/lib/errors";
 import {
   getRefSlotsForChatModel,
-  modelSupportsVision,
   compactRefImages,
   buildCompactKeyMap,
   type RefImageEntry,
@@ -26,8 +23,6 @@ import {
 import { useImageRefSources } from "@/hooks/useImageRefSources";
 import {
   type InlineImageRef,
-  serializeForApi,
-  getInlineRefUrls,
   toDisplayText,
   remapInlineRefs,
   reorderInlineRefs,
@@ -75,7 +70,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
   const updateCard = useCardStore((s) => s.updateCard);
   const updateCardData = useCardStore((s) => s.updateCardData);
   const setCardProgress = useUIStore((s) => s.setCardProgress);
-  const generating = useUIStore((s) => s.generatingCards.has(card.id));
+  const generating = useUIStore(selectCardBusy(card.id));
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const promptRef = useRef<PromptTextareaHandle>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -92,16 +87,16 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       const p = modelService.tryResolveProvider(data.model);
       if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
     } else {
-      const saved = useSettingsStore.getState().getLastModel("chat");
-      if (saved) {
-        setCurrentModel(saved.modelId);
-        updateCard(card.id, { data: { ...data, model: saved.modelId, provider: saved.providerId } });
-      } else {
-        modelService.getDefaultChatModel().then(({ modelId, providerId }) => {
-          setCurrentModel(modelId);
-          updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
-        });
-      }
+      // 默认模型统一走 modelDefaults 的单一口径(见 services/modelDefaults.ts)。
+      let cancelled = false;
+      resolveDefaultModelForCardType(card.type).then((ref) => {
+        if (cancelled || !ref) return;
+        setCurrentModel(ref.modelId);
+        updateCard(card.id, { data: { ...data, model: ref.modelId, provider: ref.providerId } });
+      });
+      return () => {
+        cancelled = true;
+      };
     }
   }, [data.model]);
 
@@ -372,181 +367,71 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     const hasUpstreamText = rawUpstream && Object.keys(rawUpstream).length > 0;
     if ((!displayPrompt.trim() && !hasUpstreamText) || generating) return;
 
-    if (!(await hasApiKey())) {
-      useUIStore.getState().addToast({
-        type: "warning",
-        title: "请先配置 API Key",
-        description: "前往设置页面配置你的 API Key",
-        action: {
-          label: "打开设置",
-          onClick: () => useUIStore.getState().toggleSettings(),
-        },
-        duration: 5000,
-      });
-      return;
-    }
-
-    setCardProgress(card.id, { percent: 0, label: "正在生成…" });
-    setError(null);
-    useUIStore.getState().setCardError(card.id, null);
-
-    const model = currentModel || "gemini-3.1-pro-preview";
-
-    if (data.result) {
-      updateCard(card.id, { data: { ...data, _resultStale: true } });
-    }
-
-    const inlineRefs = data.inlineRefs ?? [];
-    const hasInlineRefs = inlineRefs.length > 0;
-
-    const imageEntries = refSlots
-      .map((slot) => data.refImages?.[slot.key])
-      .filter((e): e is RefImageEntry => !!e);
-
-    type ApiContentPart =
-      | { type: "text"; text: string }
-      | { type: "image_url"; image_url: { url: string } };
-
-    let userContent: ApiContentPart[];
-
-    const directImageItems = (data.directMedia ?? []).filter((m) => m.kind === "image");
-    const refVideoEntries = data.refVideos ?? [];
-    const totalMedia = imageEntries.length + directImageItems.length + refVideoEntries.length;
-
-    if (hasInlineRefs && modelSupportsVision(model)) {
-      userContent = await serializeForApi(
-        rawPrompt!,
-        inlineRefs,
-        data.refImages,
-        imageOptions,
-      ) as ApiContentPart[];
-
-      // 全部 ref 媒体并行上传 —— 后端 MAIN_SEMAPHORE(4) + sha256 单飞兜底, 不会
-      // 打爆服务端。N 张图首传从 N×t 降到 max(N,4)×t。
-      //
-      // 顺序契约: 原代码用 unshift 把每个 ref 塞到 userContent 头部, 等价于
-      // "保留遍历顺序的逆序排在前面"。这里先收集所有 part, 再按 unshift 历史
-      // 行为做一次 reverse + unshift, 等同于挨个 unshift 的最终结果。
-      const inlineUrls = getInlineRefUrls(inlineRefs, data.refImages, imageOptions);
-      const refsToUpload = [
-        ...imageEntries.filter((e) => !inlineUrls.has(e.url)).map((e) => e.url),
-        ...directImageItems.map((m) => m.url),
-        ...refVideoEntries.filter((v) => !inlineUrls.has(v.url)).map((v) => v.url),
-      ];
-      // 进度反馈到卡片:用户挂多张图 / 大视频 ref 时显示 "上传 N/M…"
-      const uploadedRefs = await uploadMediaBatch(refsToUpload, {
-        onProgress: ({ uploaded, total }) => {
-          setCardProgress(card.id, {
-            percent: 0,
-            label: `上传参考媒体 ${uploaded}/${total}…`,
+    // 十步骨架(API Key 预检 / 进度开关 / 错误兜底)统一走 runEditorGeneration;
+    // submitLabel 用"正在生成…"(对话语义,区别于生图/视频的"正在提交请求…")。
+    await runEditorGeneration(card, {
+      setError,
+      submitLabel: "正在生成…",
+      run: async () => {
+        if (data.result) {
+          updateCard(card.id, { data: { ...data, _resultStale: true } });
+        }
+        try {
+          // 翻译逻辑(多模态 serialize / 媒体并行上传 / vision 判定 / <upstream_context> 前缀)统一走
+          // buildChatRequest,与 cardRunner 组运行共用同一份。
+          const built = await buildChatRequest(card, {
+            onUploadProgress: (kind, { uploaded, total }) =>
+              setCardProgress(card.id, {
+                percent: 0,
+                label: `上传${kind} ${uploaded}/${total}…`,
+              }),
           });
-        },
-      });
-      // 逐个 unshift 等于:把数组反转后塞到头部 (后 unshift 的被推到更前)
-      uploadedRefs
-        .slice()
-        .reverse()
-        .forEach((dataUrl) => {
-          userContent.unshift({ type: "image_url", image_url: { url: dataUrl } });
-        });
-    } else {
-      userContent = [];
-      if (modelSupportsVision(model)) {
-        // 同样并行上传 + 保序 push (这条分支不走 unshift, 按原遍历顺序 append)
-        const allMedia = [
-          ...imageEntries.map((e) => e.url),
-          ...directImageItems.map((m) => m.url),
-          ...refVideoEntries.map((v) => v.url),
-        ];
-        const uploaded = await uploadMediaBatch(allMedia, {
-          onProgress: ({ uploaded, total }) => {
-            setCardProgress(card.id, {
-              percent: 0,
-              label: `上传媒体 ${uploaded}/${total}…`,
+          if (!built.ok) {
+            // 理论上编辑器侧 prompt 已守卫,这里兜底提示。
+            useUIStore.getState().addToast({
+              type: "warning",
+              title: "无法生成",
+              description: built.reason,
+              duration: 5000,
             });
-          },
-        });
-        uploaded.forEach((dataUrl) => {
-          userContent.push({ type: "image_url", image_url: { url: dataUrl } });
-        });
-      } else if (totalMedia > 0) {
-        useUIStore.getState().addToast({
-          type: "warning",
-          title: "当前模型不支持媒体输入",
-          description: `${model} 不支持视觉能力，已忽略参考图/视频。`,
-          duration: 5000,
-        });
-      }
-      userContent.push({ type: "text", text: displayPrompt });
-    }
+            return;
+          }
+          if (built.warning) {
+            // 模型不支持媒体已忽略等非致命提示。
+            useUIStore.getState().addToast({
+              type: "warning",
+              title: built.warning.title,
+              description: built.warning.description,
+              duration: 5000,
+            });
+          }
 
-    const rawUpstreamTexts = (data as Record<string, unknown>).upstreamTexts as
-      Record<string, string> | undefined;
-    const upstreamEntries = rawUpstreamTexts ? Object.entries(rawUpstreamTexts) : [];
+          const provider = modelService.resolveProvider(built.request.model, built.providerId);
+          const resp = await provider.chat(built.request);
 
-    let contextPrefix = "";
-    if (upstreamEntries.length > 0) {
-      const cs = useCardStore.getState();
-      const sections = upstreamEntries.map(([cid, txt]) => {
-        const label = cs.getCard(cid)?.title || "上游节点";
-        return `## ${label}\n${txt}`;
-      });
-      contextPrefix =
-        "<upstream_context>\n" +
-        sections.join("\n\n") +
-        "\n</upstream_context>\n\n";
-    }
+          let result = resp.content ?? "（无回复 — 模型未返回任何内容）";
+          if (resp.finishReason === "length" && resp.content) {
+            result += "\n\n---\n⚠️ *回复因达到输出上限被截断，可尝试拆分提问以获取完整内容。*";
+          }
 
-    const systemPrompt = contextPrefix
-      + (data._systemPrompt || CHAT_EDITOR_DEFAULT_SYSTEM_PROMPT);
-    const hasMedia = userContent.some((p) => p.type === "image_url");
-
-    const unifiedUserContent: UnifiedContentPart[] = hasMedia
-      ? userContent.map((p): UnifiedContentPart => {
-          if (p.type === "text") return { type: "text", text: p.text };
-          if (p.type === "image_url") return { type: "image", url: p.image_url.url };
-          return { type: "text", text: "" };
-        })
-      : [{ type: "text", text: displayPrompt }];
-
-    const unifiedMessages: UnifiedMessage[] = [
-      { role: "user", content: unifiedUserContent },
-    ];
-
-    try {
-      const provider = modelService.resolveProvider(model, data.provider);
-      const resp = await provider.chat({
-        model,
-        systemPrompt: systemPrompt || CHAT_EDITOR_DEFAULT_SYSTEM_PROMPT,
-        messages: unifiedMessages,
-        maxTokens: 65536,
-      });
-
-      let result = resp.content ?? "（无回复 — 模型未返回任何内容）";
-      if (resp.finishReason === "length" && resp.content) {
-        result += "\n\n---\n⚠️ *回复因达到输出上限被截断，可尝试拆分提问以获取完整内容。*";
-      }
-
-      useCardStore.getState().updateCard(card.id, {
-        data: { ...data, result, _resultStale: false },
-      });
-      autoSave.markDirty(card.id);
-      useUIStore.getState().addToast({
-        type: "success",
-        title: "生成完成",
-        description: `${model} 已完成回复`,
-        duration: 3000,
-      });
-    } catch (err) {
-      console.error("[ChatEditor] AI 请求异常:", err);
-      const msg = err instanceof Error ? err.message : String(err);
-      const errMsg = friendlyError(msg);
-      setError(errMsg);
-      useUIStore.getState().setCardError(card.id, errMsg);
-    } finally {
-      setCardProgress(card.id, null);
-    }
-  }, [data, card.id, generating, updateCard, currentModel, setCardProgress, refSlots, imageOptions]);
+          useCardStore.getState().updateCard(card.id, {
+            data: { ...data, result, _resultStale: false },
+          });
+          autoSave.markDirty(card.id);
+          useUIStore.getState().addToast({
+            type: "success",
+            title: "生成完成",
+            description: `${built.request.model} 已完成回复`,
+            duration: 3000,
+          });
+        } catch (err) {
+          // 保留对话特有诊断日志;再抛给 runEditorGeneration 统一兜错(setError + 红框)。
+          console.error("[ChatEditor] AI 请求异常:", err);
+          throw err;
+        }
+      },
+    });
+  }, [data, card, generating, updateCard, setCardProgress]);
 
   const hasUpstream = !!(
     (data as Record<string, unknown>).upstreamTexts &&

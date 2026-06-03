@@ -2,12 +2,13 @@ import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { Sparkles, Loader2, RefreshCw, AlertCircle, X } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
-import { useUIStore } from "@/stores/uiStore";
+import { useUIStore, selectCardBusy } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
-import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
+import { resolveDefaultModelForCardType } from "@/services/modelDefaults";
+import { buildTryonRequest } from "@/services/generation/buildTryonRequest";
+import { runEditorGeneration } from "@/services/generation/runEditorGeneration";
 import { cn } from "@/lib/utils";
-import { friendlyError } from "@/lib/errors";
 import { isStandardImageModel, type RefImageEntry } from "@/config/model-ref-images";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
@@ -29,7 +30,7 @@ interface TryOnEditorProps {
 export default function TryOnEditor({ card }: TryOnEditorProps) {
   const updateCard = useCardStore((s) => s.updateCard);
   const setCardProgress = useUIStore((s) => s.setCardProgress);
-  const generating = useUIStore((s) => s.generatingCards.has(card.id));
+  const generating = useUIStore(selectCardBusy(card.id));
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [currentModel, setCurrentModel] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -48,10 +49,16 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
       const p = modelService.tryResolveProvider(data.model);
       if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
     } else {
-      modelService.getDefaultImageModel().then(({ modelId, providerId }) => {
-        setCurrentModel(modelId);
-        updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+      // 默认模型统一走 modelDefaults 的单一口径(见 services/modelDefaults.ts)。
+      let cancelled = false;
+      resolveDefaultModelForCardType(card.type).then((ref) => {
+        if (cancelled || !ref) return;
+        setCurrentModel(ref.modelId);
+        updateCard(card.id, { data: { ...data, model: ref.modelId, provider: ref.providerId } });
       });
+      return () => {
+        cancelled = true;
+      };
     }
   }, [data.model]);
 
@@ -106,73 +113,49 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
 
   const handleGenerate = useCallback(async () => {
     if (generating) return;
+    // 十步骨架(API Key 预检 / 进度开关 / 错误兜底)统一走 runEditorGeneration。
+    await runEditorGeneration(card, {
+      setError,
+      run: async () => {
+        // 翻译逻辑(模特换装 prompt 前缀 / person·garment 参考图收集上传)统一走 buildTryonRequest,
+        // 与 cardRunner 组运行共用同一份 —— 修复旧手点根本不发参考图的 bug。
+        const built = await buildTryonRequest(card, {
+          onUploadProgress: (kind, { uploaded, total }) =>
+            setCardProgress(card.id, {
+              percent: 0,
+              label: `上传${kind} ${uploaded}/${total}…`,
+            }),
+        });
+        if (!built.ok) {
+          // 缺图等约束 → 置 error 态(与旧行为一致,不弹 toast)。
+          setError(built.reason);
+          useUIStore.getState().setCardError(card.id, built.reason);
+          return;
+        }
 
-    if (!(await hasApiKey())) {
-      useUIStore.getState().addToast({
-        type: "warning",
-        title: "请先配置 API Key",
-        description: "前往设置页面配置你的 API Key",
-        action: {
-          label: "打开设置",
-          onClick: () => useUIStore.getState().toggleSettings(),
-        },
-        duration: 5000,
-      });
-      return;
-    }
+        const provider = modelService.resolveProvider(built.modelId, built.providerId);
+        if (!provider.generateImage) {
+          throw new Error("当前 Provider 不支持图片生成");
+        }
 
-    const parts: string[] = [];
-    if (data.content?.trim()) parts.push(data.content.trim());
-    else parts.push("将服装穿在人物身上，保持人物姿态和背景不变");
+        const result = await provider.generateImage({
+          ...built.request,
+          onProgress: (p) => {
+            setCardProgress(card.id, { percent: p.percent, label: p.label });
+          },
+        });
 
-    if (!data.personImageUrl && !data.garmentImageUrl) {
-      const msg = "请至少上传一张图片";
-      setError(msg);
-      useUIStore.getState().setCardError(card.id, msg);
-      return;
-    }
-
-    const prompt = `模特换装: ${parts.join("。")}`;
-
-    setCardProgress(card.id, { percent: 0, label: "正在提交请求…" });
-    setError(null);
-    useUIStore.getState().setCardError(card.id, null);
-
-    try {
-      const provider = modelService.resolveProvider(currentModel, data.provider);
-      if (!provider.generateImage) {
-        throw new Error("当前 Provider 不支持图片生成");
-      }
-
-      const result = await provider.generateImage({
-        prompt,
-        size: "1024x1024",
-        model: currentModel || undefined,
-        quality: "standard",
-        cardId: card.id,
-        projectId: card.projectId,
-        onProgress: (p) => {
-          setCardProgress(card.id, { percent: p.percent, label: p.label });
-        },
-      });
-
-      updateCard(card.id, { data: { ...data, resultImageUrl: result.url } });
-      autoSave.markDirty(card.id);
-      useUIStore.getState().addToast({
-        type: "success",
-        title: "换装完成",
-        description: "模特换装已完成",
-        duration: 3000,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const errMsg = friendlyError(msg);
-      setError(errMsg);
-      useUIStore.getState().setCardError(card.id, errMsg);
-    } finally {
-      setCardProgress(card.id, null);
-    }
-  }, [data, card.id, generating, updateCard, currentModel, setCardProgress]);
+        updateCard(card.id, { data: { ...data, resultImageUrl: result.url } });
+        autoSave.markDirty(card.id);
+        useUIStore.getState().addToast({
+          type: "success",
+          title: "换装完成",
+          description: "模特换装已完成",
+          duration: 3000,
+        });
+      },
+    });
+  }, [data, card, generating, updateCard, setCardProgress]);
 
   const canGenerate = !generating && (data.personImageUrl || data.garmentImageUrl);
 

@@ -2,15 +2,15 @@ import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { Sparkles, Loader2, RefreshCw, ArrowDownLeft, Lock, X, AlertCircle, Music, Video, Volume2, VolumeX } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
-import { useUIStore } from "@/stores/uiStore";
+import { useUIStore, selectCardBusy } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
-import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
+import { resolveDefaultModelForCardType } from "@/services/modelDefaults";
+import { buildVideoRequest } from "@/services/generation/buildVideoRequest";
+import { runEditorGeneration } from "@/services/generation/runEditorGeneration";
 import { scheduleBackgroundSave, getDisplayUrl } from "@/lib/media";
-import { uploadMediaBatch } from "@/platform/media";
 import { cn } from "@/lib/utils";
-import { friendlyError } from "@/lib/errors";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
 import { type InlineImageRef, toDisplayText } from "@/lib/promptSerializer";
 import { getRefSlotsForVideoModel, compactRefImages, resolveVideoImageMode, type VideoImageMode, type RefImageEntry } from "@/config/model-ref-images";
@@ -34,28 +34,22 @@ import {
   isSeedanceVipModel,
   isSeedanceVipAliasModel,
   isSeedanceVipEconomyModel,
-  resolveVeoVariant,
   veoRefImageMaxCount,
   composeVeoTier,
   decomposeVeoTier,
   normalizeVeoModelToCanonical,
   inferVeoTierFromLegacy,
-  resolveSeedanceVipModelId,
-  resolveSeedanceVipSize,
   SEEDANCE_VIP_RESOLUTION_TIERS,
   VEO_TIERS,
   VEO_QUALITY_TIERS,
   VEO_RESOLUTION_TIERS,
   SEEDANCE_TIERS,
   GROK_DURATION_TIERS,
-  resolveSeedanceVariantForTier,
-  resolveGrokVariant,
   inferSeedanceTierFromLegacy,
   inferGrokTierFromLegacy,
   // V161 火山方舟原生 Seedance 2.0 聚合 alias `seedance-v2`
   isSeedanceV2AliasModel,
   SEEDANCE_V2_VERSION_TIERS,
-  resolveSeedanceV2ModelId,
   type VeoQualityTier,
   type VeoQuality,
   type VeoResolution,
@@ -178,7 +172,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const updateCard = useCardStore((s) => s.updateCard);
   const updateCardData = useCardStore((s) => s.updateCardData);
   const setCardProgress = useUIStore((s) => s.setCardProgress);
-  const generating = useUIStore((s) => s.generatingCards.has(card.id));
+  const generating = useUIStore(selectCardBusy(card.id));
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const promptRef = useRef<PromptTextareaHandle>(null);
   const [currentModel, setCurrentModel] = useState("");
@@ -349,14 +343,15 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       const p = modelService.tryResolveProvider(data.model);
       applyAndSet(data.model, p?.descriptor.id);
     } else {
-      const saved = useSettingsStore.getState().getLastModel("video");
-      if (saved) {
-        applyAndSet(saved.modelId, saved.providerId);
-      } else {
-        modelService.getDefaultVideoModel().then(({ modelId, providerId }) => {
-          applyAndSet(modelId, providerId);
-        });
-      }
+      // 默认模型统一走 modelDefaults 的单一口径(见 services/modelDefaults.ts)。
+      let cancelled = false;
+      resolveDefaultModelForCardType(card.type).then((ref) => {
+        if (cancelled || !ref) return;
+        applyAndSet(ref.modelId, ref.providerId);
+      });
+      return () => {
+        cancelled = true;
+      };
     }
   }, [data.model]);
 
@@ -700,222 +695,73 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const handleGenerate = useCallback(async () => {
     const prompt = buildFinalPrompt(data);
     if (!prompt || generating) return;
-
-    if (!(await hasApiKey())) {
-      useUIStore.getState().addToast({
-        type: "warning",
-        title: "请先配置 API Key",
-        description: "前往设置页面配置你的 API Key",
-        action: {
-          label: "打开设置",
-          onClick: () => useUIStore.getState().toggleSettings(),
-        },
-        duration: 5000,
-      });
-      return;
-    }
-
-    setCardProgress(card.id, { percent: 0, label: "正在提交请求…" });
-    setError(null);
-    useUIStore.getState().setCardError(card.id, null);
-
-    try {
-      const provider = modelService.resolveProvider(currentModel, data.provider);
-      if (!provider.generateVideo) {
-        throw new Error("当前 Provider 不支持视频生成");
-      }
-
-      const referenceImages: Array<{ url: string; role: string }> = [];
-      const referenceAudios: Array<{ url: string; role: string }> = [];
-      const referenceVideos: Array<{ url: string; role: string }> = [];
-
-      // 上传统一用 Promise.all 并行 —— 后端 MAIN_SEMAPHORE(4) + sha256 单飞兜底,
-      // 前端无需串行 await。N 张 ref 图首传从 N×t 降到 max(N,4)×t (sqlite 缓存
-      // 命中时本来就是常数毫秒, 也无所谓并行不并行)。
-      //
-      // 首尾帧模式: 1 张 = 首帧, 2 张 = 首+尾帧。frame pipeline 自动适配。
-      // 上传进度反馈到卡片 — 用户拖入大视频/多张图时立刻能看到 "上传 N/M",
-      // 不再"看似阻塞"。executeAsyncMediaTask 提交后会把 label 覆盖为
-      // submittingLabel("正在提交视频请求…")。
-      const reportUploadProgress = (kind: string) =>
-        ({ uploaded, total }: { uploaded: number; total: number }) => {
-          setCardProgress(card.id, {
-            percent: 0,
-            label: `上传${kind} ${uploaded}/${total}…`,
-          });
-        };
-
-      if (imageMode === "firstLastFrame") {
-        const uploaded = await uploadMediaBatch(frames.map((f) => f.url), {
-          onProgress: reportUploadProgress("首尾帧"),
+    // 十步骨架(API Key 预检 / 进度开关 / 错误兜底)统一走 runEditorGeneration;
+    // 编辑器侧只剩 prompt 守卫、build、provider 解析、几何/toast 善后。
+    await runEditorGeneration(card, {
+      setError,
+      run: async () => {
+        // 翻译逻辑(五族 tier→真实 SKU / 首尾帧·参考素材上传 / 约束校验)统一走
+        // buildVideoRequest,与 cardRunner 组运行共用同一份 —— 手点和组跑发出的
+        // model/body 完全一致。上传进度透传到卡片进度条;几何/善后仍留在编辑器(下方)。
+        const built = await buildVideoRequest(card, {
+          onUploadProgress: (kind, { uploaded, total }) =>
+            setCardProgress(card.id, {
+              percent: 0,
+              label: `上传${kind} ${uploaded}/${total}…`,
+            }),
         });
-        uploaded.forEach((url, i) => {
-          referenceImages.push({ url, role: i === 0 ? "firstFrame" : "lastFrame" });
-        });
-      } else if (imageMode === "reference") {
-        const refEntries = refSlots
-          .map((slot) => data.refImages?.[slot.key])
-          .filter((e): e is NonNullable<typeof e> => Boolean(e));
-        const uploadedRefImages = await uploadMediaBatch(
-          refEntries.map((entry) => entry.url),
-          { onProgress: reportUploadProgress("参考图") },
-        );
-        uploadedRefImages.forEach((url) => {
-          referenceImages.push({ url, role: "referenceImage" });
-        });
-
-        if (data.refAudios?.length) {
-          const uploadedAudios = await uploadMediaBatch(
-            data.refAudios.map((entry) => entry.url),
-            { onProgress: reportUploadProgress("参考音频") },
-          );
-          uploadedAudios.forEach((url) => {
-            referenceAudios.push({ url, role: "referenceAudio" });
-          });
-        }
-        // Seedance/Grok 上游硬约束: 拒绝 video reference.
-        if ((isSeedanceModel(currentModel) || isGrokVideoModel(currentModel)) && data.refVideos?.length) {
+        if (!built.ok) {
+          // 约束违例(参考视频/参考音频组合不合法)→ 提示并中止本次生成,不置 error 态。
           useUIStore.getState().addToast({
             type: "warning",
-            title: "该模型不支持参考视频",
-            description: "请改用参考图，或切换到其他模型",
+            title: built.toast?.title ?? "无法生成",
+            description: built.toast?.description ?? built.reason,
             duration: 5000,
           });
-          setCardProgress(card.id, null);
           return;
         }
-        if (data.refVideos?.length) {
-          const uploadedVideos = await uploadMediaBatch(
-            data.refVideos.map((entry) => entry.url),
-            { onProgress: reportUploadProgress("参考视频") },
-          );
-          uploadedVideos.forEach((url) => {
-            referenceVideos.push({ url, role: "referenceVideo" });
-          });
+
+        const provider = modelService.resolveProvider(built.modelId, built.providerId);
+        if (!provider.generateVideo) {
+          throw new Error("当前 Provider 不支持视频生成");
         }
-        if (
-          isSeedanceModel(currentModel) &&
-          referenceAudios.length > 0 &&
-          referenceImages.length === 0
-        ) {
+
+        // 几何善后(scheduleBackgroundSave)用的项目归属快照,整个异步链都用这个
+        // (防生成期间用户切项目把结果存错目录)。请求体里的 projectId 已由 buildVideoRequest 快照。
+        const ownerProjectId = card.projectId;
+
+        const result = await provider.generateVideo({
+          ...built.request,
+          onProgress: (p) => {
+            setCardProgress(card.id, { percent: p.percent, label: p.label });
+          },
+        });
+
+        const sizeOpt = IMAGE_SIZE_OPTIONS.find((o) => o.value === currentSize);
+        const cardSize = sizeOpt ? sizeFromRatio(sizeOpt.ratio) : {};
+        updateCard(card.id, { data: { ...data, videoUrl: result.url }, ...cardSize });
+        autoSave.markDirty(card.id);
+
+        const isRemote = result.url.startsWith("http://") || result.url.startsWith("https://");
+        if (isRemote) {
+          scheduleBackgroundSave(card.id, result.url, "videoUrl", ownerProjectId);
           useUIStore.getState().addToast({
             type: "warning",
-            title: "参考音频不能单独使用",
-            description: "Seedance 要求参考音频必须搭配参考图一起使用，请先添加图片素材",
+            title: "视频已生成，保存到本地失败",
+            description: "已使用远程地址播放，后台将自动重试保存",
             duration: 5000,
           });
-          setCardProgress(card.id, null);
-          return;
+        } else {
+          useUIStore.getState().addToast({
+            type: "success",
+            title: "视频生成完成",
+            description: `${currentModel || "默认模型"} 已完成生成`,
+            duration: 3000,
+          });
         }
-        // Grok 不支持参考音频,如果有的话直接清空(不打断生成流程)
-        if (isGrokVideoModel(currentModel)) {
-          referenceAudios.length = 0;
-        }
-      }
-
-      // 把卡片本身的 projectId 作为本次任务的归属，整个异步链都用这个快照。
-      const ownerProjectId = card.projectId;
-
-      // Veo: canvas 存 canonical "veo3.1", 按 tier (6 档画质×分辨率) 解析真实 SKU
-      //   到 Cat 6 个 model_name. 三模式 (text/i2v/ref) 由后端 CatVideoAdapter 看 body 字段
-      //   (images / referenceImages) 自动分发, 不编码在 model 里.
-      // Seedance: canvas 也只存 canonical "seedance",按 tier 解析成 "seedance" / "seedance-fast"。
-      // Grok: canvas 只存 "grok-video",按时长档解析成 "grok-video-12s" / -16s / -20s。
-      // VIP alias (V138/V145): canvas 存 "seedance-2-0", 按 (分辨率, 是否传视频) resolve 到
-      //   seedance-2-0-720p / -720p-video / -1080p / -1080p-video 之一.
-      // VIP economy: 单独 model_name `seedance-2-0-720p-no-person`, 原样透传.
-      const hasReferenceVideos = referenceVideos.length > 0;
-      const effectiveModel = isVeo
-        ? resolveVeoVariant(effectiveTier)
-        : isSeedance
-          ? resolveSeedanceVariantForTier(currentSeedanceTier)
-          : isGrok
-            ? resolveGrokVariant(currentGrokTier)
-            : isVipAlias
-              ? resolveSeedanceVipModelId(currentSeedanceVipResolution, hasReferenceVideos)
-              : isSeedanceV2
-                // V161 火山方舟原生 alias `seedance-v2` → 按 (version × hasVideos) 4 路分发到具体 model.
-                // 见 resolveSeedanceV2ModelId: standard/fast × no_video/with_video = 4 个 model_name.
-                ? resolveSeedanceV2ModelId(currentSeedanceV2Version, hasReferenceVideos)
-                : currentModel;
-      // V138 VIP: size 必须是具体像素 (720P→1280x720/720x1280, 1080P→1920x1080/1080x1920).
-      // alias 项按 currentSeedanceVipResolution + currentSize (ratio) resolve;
-      // economy 固定 720P. 其他模型保持原 ratio 字符串.
-      const effectiveSize = isVipAlias
-        ? resolveSeedanceVipSize(currentSeedanceVipResolution, currentSize)
-        : isVipEconomy
-          ? resolveSeedanceVipSize("720p", currentSize)
-          : currentSize;
-      // Veo: 用户选 4/6/8, 后端 CatVideoAdapter 在 i2v/ref 模式 (body.images 或 referenceImages
-      // 非空) 会自动强制 duration=8 (L223 durationOverride), 前端不替它做决策.
-      // Grok 时长编码在 model SKU 里,不传 duration。
-      // VIP (V145): UI 只放 15s 选项, currentDuration 经 handleModelChange/applyAndSet 强制 15.
-      const effectiveDuration = isVeo
-        ? currentDuration
-        : isSeedance
-          ? currentDuration
-          : isSeedanceVip
-            ? currentDuration
-            : isSeedanceV2
-              ? currentDuration
-              : undefined;
-
-      const result = await provider.generateVideo({
-        prompt,
-        model: effectiveModel || undefined,
-        size: effectiveSize,
-        referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
-        referenceAudios: referenceAudios.length > 0 ? referenceAudios : undefined,
-        referenceVideos: referenceVideos.length > 0 ? referenceVideos : undefined,
-        duration: effectiveDuration,
-        // Veo/Grok: resolution 已编码在 model id 中,不再单独发送。
-        // Seedance: UI 改造后画质走 tier,实际分辨率统一 720p (2.0 系列上限)。
-        // Seedance V2 (V161 火山原生): 同样固定 720p (1080p 暂不通过 canvas 暴露,V162 服务端已支持但默认仅 GATEWAY 用).
-        // VIP (V138): 不传 resolution, 后端只读 size 字段.
-        resolution: (isSeedance || isSeedanceV2) ? "720p" : undefined,
-        // Veo 不传: Cat /v1/videos 协议没有 generate_audio 字段 (CatVideoAdapter.baseRequestBody
-        // 只接受 model/prompt/aspect_ratio/duration/fps/negative_prompt/seed). Cat 生成的视频
-        // 是否有声由上游模型决定, 前端控制不了.
-        generateAudio: (isSeedance || isGrok || isSeedanceV2) ? currentAudio : undefined,
-        // V138 VIP: quality 字段废弃, 不传 (model_name 已细到具体上游).
-        cardId: card.id,
-        projectId: ownerProjectId,
-        onProgress: (p) => {
-          setCardProgress(card.id, { percent: p.percent, label: p.label });
-        },
-      });
-
-      const sizeOpt = IMAGE_SIZE_OPTIONS.find((o) => o.value === currentSize);
-      const cardSize = sizeOpt ? sizeFromRatio(sizeOpt.ratio) : {};
-      updateCard(card.id, { data: { ...data, videoUrl: result.url }, ...cardSize });
-      autoSave.markDirty(card.id);
-
-      const isRemote = result.url.startsWith("http://") || result.url.startsWith("https://");
-      if (isRemote) {
-        scheduleBackgroundSave(card.id, result.url, "videoUrl", ownerProjectId);
-        useUIStore.getState().addToast({
-          type: "warning",
-          title: "视频已生成，保存到本地失败",
-          description: "已使用远程地址播放，后台将自动重试保存",
-          duration: 5000,
-        });
-      } else {
-        useUIStore.getState().addToast({
-          type: "success",
-          title: "视频生成完成",
-          description: `${currentModel || "默认模型"} 已完成生成`,
-          duration: 3000,
-        });
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const errMsg = friendlyError(msg);
-      setError(errMsg);
-      useUIStore.getState().setCardError(card.id, errMsg);
-    } finally {
-      setCardProgress(card.id, null);
-    }
-  }, [data, card.id, card.projectId, generating, updateCard, currentModel, currentSize, effectiveTier, currentSeedanceTier, currentSeedanceVipResolution, currentSeedanceV2Version, currentGrokTier, currentDuration, currentAudio, setCardProgress, frames, imageMode, refSlots, isVeo, isSeedance, isGrok, isSeedanceVip, isVipAlias, isVipEconomy, isSeedanceV2]);
+      },
+    });
+  }, [card, data, generating, updateCard, currentModel, currentSize, setCardProgress]);
 
   const isLocked = !!data._locked;
 

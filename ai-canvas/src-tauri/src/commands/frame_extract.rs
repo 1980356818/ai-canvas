@@ -105,21 +105,61 @@ const FFMPEG_DOWNLOAD_BASE_URL: &str = "https://ai.snoworangekeji.cn/aicanvas-st
 /// 单纯 `is_file()` 不够 —— Defender 隔离 / 拷贝中断 / 反病毒标记 +
 /// 写入失败时,文件可能在但跑不了。
 fn ffmpeg_runs(path: &Path) -> bool {
+    try_spawn_with_detail(path).is_ok()
+}
+
+/// 跟 `ffmpeg_runs` 一样真 spawn `-version`,但失败时把 OS error / errno 详细
+/// 字符串带回来。下载完那条路径必须用这个 —— `ffmpeg_runs() == false` 太笼统,
+/// 把 "EACCES 缺 +x" 和 "ENOENT 文件没了" 全归到"杀软隔离",诊断没法做。
+fn try_spawn_with_detail(path: &Path) -> Result<(), String> {
     use std::process::{Command, Stdio};
     #[cfg(windows)]
     use std::os::windows::process::CommandExt;
 
     if !path.is_file() {
-        return false;
+        return Err(format!("文件不存在: {:?}", path));
     }
     let mut cmd = Command::new(path);
-    cmd.arg("-version").stdout(Stdio::null()).stderr(Stdio::null());
+    cmd.arg("-version").stdout(Stdio::null()).stderr(Stdio::piped());
     #[cfg(windows)]
     {
         // CREATE_NO_WINDOW = 0x08000000,避免 GUI 进程弹一个黑控制台一闪而过
         cmd.creation_flags(0x0800_0000);
     }
-    cmd.status().map(|s| s.success()).unwrap_or(false)
+    let output = cmd
+        .output()
+        .map_err(|e| format!("spawn 失败: {} (kind={:?}, raw_os_error={:?})", e, e.kind(), e.raw_os_error()))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "exit code {:?}, stderr: {}",
+            output.status.code(),
+            stderr.trim()
+        ));
+    }
+    Ok(())
+}
+
+/// Unix/macOS 自愈:把一个已下载但跑不通的 ffmpeg 救活。
+/// 失败全部静默 —— 这是兜底,不能因为某一步错就放弃整个文件。
+/// 用途:升级到带 chmod 的版本前已经下过的 Mac 用户,文件在但 0o644,
+/// 这里主动补 chmod / 去 quarantine / ad-hoc sign,省 50MB 重下流量。
+#[cfg(unix)]
+fn try_heal_binary(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755));
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        let _ = Command::new("xattr")
+            .args(["-d", "com.apple.quarantine"])
+            .arg(path)
+            .status();
+        let _ = Command::new("codesign")
+            .args(["--force", "--sign", "-"])
+            .arg(path)
+            .status();
+    }
 }
 
 /// 不联网的 ffmpeg 路径解析。按 exe-dir 同级 / 老版本下载缓存 / 系统 PATH
@@ -143,6 +183,19 @@ fn try_resolve_no_download(
     let cached_exe = data_dir.join(".ffmpeg").join(FFMPEG_EXE_NAME);
     if run_check(&cached_exe) {
         return Some((cached_exe, "data-dir-cache"));
+    }
+
+    // 2b. cache 文件存在但跑不通:Unix 上主动自愈一次再试,
+    // 解决"老用户已下过、mode 0o644、新版来了不想再下 50MB"的场景。
+    // Windows 没这问题(.exe 看后缀);non-existent file 跳过(不会浪费 syscall)。
+    #[cfg(unix)]
+    {
+        if cached_exe.is_file() {
+            try_heal_binary(&cached_exe);
+            if run_check(&cached_exe) {
+                return Some((cached_exe, "data-dir-cache-healed"));
+            }
+        }
     }
 
     // 3. 系统 PATH (winget / brew / apt)
@@ -285,17 +338,36 @@ async fn download_from_server(
         ));
     }
 
+    // Unix 必须 chmod +x,不然 spawn 直接 EACCES。tokio::fs::File::create 默认
+    // mode 0o644(受 umask),没有执行位 — 这是 Mac 用户"SHA 对但 spawn 失败"的真因。
+    // 在 rename 之前对 .partial 操作 chmod;rename 不改 mode,改名后再做 macOS
+    // 防御(xattr/codesign 都是路径接口,跟 mode 解耦)。
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o755);
+        tokio::fs::set_permissions(&tmp_path, perms)
+            .await
+            .map_err(|e| format!("chmod +x {:?} 失败: {}", tmp_path, e))?;
+    }
+
     // 原子改名:Windows 上目标已存在时 rename 会 Err,所以先删
     let _ = tokio::fs::remove_file(&final_path).await;
     tokio::fs::rename(&tmp_path, &final_path)
         .await
         .map_err(|e| format!("rename {:?} → {:?} 失败: {}", tmp_path, final_path, e))?;
 
-    // 最后兜底:真 spawn 一次,挡杀软隔离这种场景
-    if !ffmpeg_runs(&final_path) {
+    // macOS 防御:去 quarantine xattr + ad-hoc codesign。两步都允许失败。
+    // 跟 try_resolve_no_download 的自愈路径共用同一个函数,避免重复实现漂移。
+    #[cfg(unix)]
+    try_heal_binary(&final_path);
+
+    // 最后兜底:真 spawn 一次。spawn 失败时把详细 errno 暴露出来,别把所有
+    // 锅推给"杀软" —— 之前的诊断方向害了人,Mac 用户根本没杀软在管这里。
+    if let Err(e) = try_spawn_with_detail(&final_path) {
         return Err(format!(
-            "下载完成、SHA 对、但 {:?} spawn `-version` 失败 — 杀软隔离?",
-            final_path
+            "下载完成、SHA 对、但 {:?} spawn `-version` 失败:{}",
+            final_path, e
         ));
     }
     tracing::info!(path = %final_path.display(), size = received, "ffmpeg: 下载完成");

@@ -31,7 +31,7 @@ dependencies = [
 
 [[package]]
 name = "ai-canvas"
-version = "1.2.5"
+version = "1.2.7"
 dependencies = [
  "base64 0.22.1",
  "chrono",

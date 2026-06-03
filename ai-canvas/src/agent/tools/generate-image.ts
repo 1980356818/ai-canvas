@@ -49,23 +49,27 @@ export const generateImageTool: ToolDefinition = {
     // 这里显式 normalize 是为了让所有 generateImage 入口的语义对称、好搜索。
     const normalizedResolution = normalizeResolution(resolution);
 
+    const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === size);
+    const { width, height } = sizeFromRatio(opt?.ratio ?? 1);
+
+    // P3.1: 先建卡拿 cardId,再带 cardId 生成 —— 走 TaskManager 持久化路径(可恢复 /
+    // 可重试 / 状态统一),结果由 taskBridge 自动落到 card.data.imageUrl。旧实现是
+    // 「先 legacy 直连生成 → 再建卡把 url 烤进 data」,生成失败则一张卡都没有、断网即丢。
+    const cardId = ctx.createCard({
+      type: "ai_image",
+      title: cardTitle ?? "AI 生成图片",
+      width,
+      height,
+      data: { content: prompt, size, resolution: normalizedResolution },
+    });
+
     const result = (await ctx.callProvider("image_gen", {
       prompt,
       size,
       resolution: normalizedResolution,
       quality: "standard",
+      cardId,
     })) as { url: string; revisedPrompt?: string };
-
-    const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === size);
-    const { width, height } = sizeFromRatio(opt?.ratio ?? 1);
-
-    ctx.createCard({
-      type: "ai_image",
-      title: cardTitle ?? "AI 生成图片",
-      width,
-      height,
-      data: { content: prompt, imageUrl: result.url, size, resolution: normalizedResolution },
-    });
 
     return {
       success: true,

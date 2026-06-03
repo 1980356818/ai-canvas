@@ -231,33 +231,44 @@ export default function CanvasContainer() {
       {showDom && (
         <div
           data-canvas-background
-          className="absolute inset-0 origin-top-left"
+          className="vp-pan-layer absolute inset-0 origin-top-left"
           style={{
-            // 始终引用 CSS 变量，渲染字符串永不变化，避免 React commit 与
-            // useViewport 的 imperative DOM 写入冲突而打破 GPU 合成层。
+            // 外层：平移 + GPU 视觉缩放(--vp-gpu)。缩放手势中只动这层 scale，
+            // 浏览器用 GPU 直接缩放下面已栅格化的内层纹理 → 不重栅格化、丝滑。
+            // 始终引用 CSS 变量，渲染字符串永不变化，避免 React commit 打破 GPU 合成层。
             transform:
-              "translate3d(var(--vp-x, 0px), var(--vp-y, 0px), 0) scale(var(--vp-zoom, 1))",
+              "translate3d(var(--vp-x, 0px), var(--vp-y, 0px), 0) scale(var(--vp-gpu, 1))",
             opacity: isBirdView ? 0 : 1,
             transition: transitioning ? "opacity 200ms ease" : "none",
             pointerEvents: isBirdView ? "none" : "auto",
           }}
         >
-          {/*
-           * GroupLayer 渲染在 CardLayer 之前(DOM 顺序 = 绘制顺序),
-           * 组矩形在卡片下方;组矩形 body 设 pointer-events:none,只在标题栏
-           * 接事件,保证点中组区域内的卡片仍能被命中。
-           */}
-          <GroupLayer projectId={currentProjectId} viewport={viewport} />
+          <div
+            data-canvas-background
+            className="vp-render-layer absolute inset-0 origin-top-left"
+            style={{
+              // 内层：内容栅格化基准 scale(--vp-render)。手势中冻结 → 纹理复用；
+              // 停手后提交 render=zoom、gpu=1，重栅格化一次恢复清晰。
+              transform: "scale(var(--vp-render, 1))",
+            }}
+          >
+            {/*
+             * GroupLayer 渲染在 CardLayer 之前(DOM 顺序 = 绘制顺序),
+             * 组矩形在卡片下方;组矩形 body 设 pointer-events:none,只在标题栏
+             * 接事件,保证点中组区域内的卡片仍能被命中。
+             */}
+            <GroupLayer projectId={currentProjectId} />
 
-          <CardLayer projectId={currentProjectId} viewport={viewport} />
+            <CardLayer projectId={currentProjectId} viewport={viewport} />
 
-          {currentProjectId && (
-            <ConnectionLayer
-              projectId={currentProjectId}
-              viewport={viewport}
-              onConnectionContextMenu={handleConnectionContextMenu}
-            />
-          )}
+            {currentProjectId && (
+              <ConnectionLayer
+                projectId={currentProjectId}
+                viewport={viewport}
+                onConnectionContextMenu={handleConnectionContextMenu}
+              />
+            )}
+          </div>
         </div>
       )}
 

@@ -1,6 +1,6 @@
 {
   "name": "ai-canvas",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "signing:generate": "node scripts/gen-signing-key.mjs",
     "fetch:ffmpeg": "node scripts/fetch-ffmpeg.mjs",
     "release": "python scripts/release.py",
+    "test": "vitest run",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
     "prebuild": "npm run check:ipc-guards",
     "dev": "vite",
@@ -48,11 +49,13 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.0",
     "globals": "^15.0.0",
+    "jsdom": "^29.1.1",
     "prettier": "^3.0.0",
     "prettier-plugin-tailwindcss": "^0.6.0",
     "tailwindcss": "^4.0.0",
     "typescript": "~5.7.0",
     "typescript-eslint": "^8.0.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vitest": "^4.1.8"
   }
 }

@@ -2,15 +2,14 @@ import { useCallback, useRef, useState } from "react";
 import { Sparkles, Loader2, RefreshCw, ImageIcon, X, AlertCircle } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
-import { useUIStore } from "@/stores/uiStore";
+import { useUIStore, selectCardBusy } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
-import { hasApiKey } from "@/platform";
 import { getDisplayUrl } from "@/lib/media";
-import { mediaToApiRef } from "@/platform/media";
+import { buildImageRequest } from "@/services/generation/buildImageRequest";
+import { runEditorGeneration } from "@/services/generation/runEditorGeneration";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
-import { friendlyError } from "@/lib/errors";
 import {
   compactRefImages,
   type RefImageEntry,
@@ -53,7 +52,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
   const updateCard = useCardStore((s) => s.updateCard);
   const updateCardData = useCardStore((s) => s.updateCardData);
   const setCardProgress = useUIStore((s) => s.setCardProgress);
-  const generating = useUIStore((s) => s.generatingCards.has(card.id));
+  const generating = useUIStore(selectCardBusy(card.id));
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -158,65 +157,48 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
 
   const handleGenerate = useCallback(async () => {
     if (!canGenerate || generating) return;
-
     const prompt = buildPrompt(h, v, z);
+    // 十步骨架(API Key 预检 / 进度开关 / 错误兜底)统一走 runEditorGeneration。
+    await runEditorGeneration(card, {
+      setError,
+      run: async () => {
+        // 翻译逻辑(角度 prompt 编码 / 参考图上传)统一走 buildImageRequest,与 cardRunner 组运行共用同一份。
+        const built = await buildImageRequest(card, {
+          onUploadProgress: (kind, { uploaded, total }) =>
+            setCardProgress(card.id, {
+              percent: 0,
+              label: `上传${kind} ${uploaded}/${total}…`,
+            }),
+        });
+        if (!built.ok) {
+          useUIStore.getState().addToast({
+            type: "warning",
+            title: built.toast?.title ?? "无法生成",
+            description: built.toast?.description ?? built.reason,
+            duration: 5000,
+          });
+          return;
+        }
 
-    if (!(await hasApiKey())) {
-      useUIStore.getState().addToast({
-        type: "warning",
-        title: "请先配置 API Key",
-        description: "前往设置页面配置你的 API Key",
-        action: {
-          label: "打开设置",
-          onClick: () => useUIStore.getState().toggleSettings(),
-        },
-        duration: 5000,
-      });
-      return;
-    }
+        const provider = modelService.resolveProvider(built.modelId, built.providerId);
+        if (!provider.generateImage) {
+          throw new Error("当前 Provider 不支持图片生成");
+        }
 
-    setCardProgress(card.id, { percent: 0, label: "正在提交请求…" });
-    setError(null);
-    useUIStore.getState().setCardError(card.id, null);
+        const result = await provider.generateImage({
+          ...built.request,
+          onProgress: (p) => {
+            setCardProgress(card.id, { percent: p.percent, label: p.label });
+          },
+        });
 
-    try {
-      const provider = modelService.resolveProvider(MULTIANGLE_MODEL_ID, (data as MultiangleData).provider);
-      if (!provider.generateImage) {
-        throw new Error("当前 Provider 不支持图片生成");
-      }
-
-      const rawRef = data.refImages?.refImage0;
-      if (!rawRef) throw new Error("请先添加参考图");
-
-      const dataUrl = await mediaToApiRef(rawRef.url);
-      const referenceImages = [{ url: dataUrl, role: "refImage0" }];
-
-      const result = await provider.generateImage({
-        prompt,
-        size: currentSize,
-        model: MULTIANGLE_MODEL_ID,
-        quality: "standard",
-        referenceImages,
-        cardId: card.id,
-        projectId: card.projectId,
-        onProgress: (p) => {
-          setCardProgress(card.id, { percent: p.percent, label: p.label });
-        },
-      });
-
-      updateCard(card.id, {
-        data: { ...data, imageUrl: result.url, content: prompt, model: MULTIANGLE_MODEL_ID },
-      });
-      autoSave.markDirty(card.id);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const errMsg = friendlyError(msg);
-      setError(errMsg);
-      useUIStore.getState().setCardError(card.id, errMsg);
-    } finally {
-      setCardProgress(card.id, null);
-    }
-  }, [data, card.id, h, v, z, generating, canGenerate, updateCard, setCardProgress, currentSize]);
+        updateCard(card.id, {
+          data: { ...data, imageUrl: result.url, content: prompt, model: MULTIANGLE_MODEL_ID },
+        });
+        autoSave.markDirty(card.id);
+      },
+    });
+  }, [data, card, h, v, z, generating, canGenerate, updateCard, setCardProgress]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const handleFile = useCallback(

@@ -2,16 +2,17 @@ import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { Sparkles, Loader2, RefreshCw, X, ArrowDownLeft, Lock, AlertCircle, ZoomIn } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard, Connection } from "@/types";
-import { useUIStore } from "@/stores/uiStore";
+import { useUIStore, selectCardBusy } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import type { ModelCategory } from "@/stores/settingsStore";
 import { autoSave } from "@/lib/autoSave";
-import { hasApiKey } from "@/platform";
 import { modelService } from "@/services/models";
+import { resolveDefaultModelForCardType } from "@/services/modelDefaults";
+import { buildImageRequest } from "@/services/generation/buildImageRequest";
+import { runEditorGeneration } from "@/services/generation/runEditorGeneration";
 import { scheduleBackgroundSave } from "@/lib/media";
-import { uploadMediaBatch } from "@/platform/media";
 import { cn } from "@/lib/utils";
-import { friendlyError } from "@/lib/errors";
+import { createLogger } from "@/lib/debug";
 import {
   getRefSlotsForModel,
   isEnhancerModel,
@@ -38,6 +39,8 @@ import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
 import SizeCombo from "./SizeCombo";
 import PromptTextarea, { type PromptTextareaHandle } from "./PromptTextarea";
+
+const log = createLogger("MediaEditor");
 
 interface ImageResult {
   url: string;
@@ -99,7 +102,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   const updateCard = useCardStore((s) => s.updateCard);
   const updateCardData = useCardStore((s) => s.updateCardData);
   const setCardProgress = useUIStore((s) => s.setCardProgress);
-  const generating = useUIStore((s) => s.generatingCards.has(card.id));
+  const generating = useUIStore(selectCardBusy(card.id));
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const promptRef = useRef<PromptTextareaHandle>(null);
   const [currentModel, setCurrentModel] = useState("");
@@ -131,17 +134,16 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       const p = modelService.tryResolveProvider(data.model);
       if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
     } else {
-      const category: ModelCategory = enhancer ? "enhancer" : "image";
-      const saved = useSettingsStore.getState().getLastModel(category);
-      if (saved) {
-        setCurrentModel(saved.modelId);
-        updateCard(card.id, { data: { ...data, model: saved.modelId, provider: saved.providerId } });
-      } else {
-        modelService.getDefaultImageModel().then(({ modelId, providerId }) => {
-          setCurrentModel(modelId);
-          updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
-        });
-      }
+      // 默认模型统一走 modelDefaults 的单一口径(见 services/modelDefaults.ts)。
+      let cancelled = false;
+      resolveDefaultModelForCardType(card.type).then((ref) => {
+        if (cancelled || !ref) return;
+        setCurrentModel(ref.modelId);
+        updateCard(card.id, { data: { ...data, model: ref.modelId, provider: ref.providerId } });
+      });
+      return () => {
+        cancelled = true;
+      };
     }
   }, [data.model]);
 
@@ -353,292 +355,189 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     const isEnhancer = isEnhancerModel(currentModel);
     if (!prompt && !isEnhancer) return;
 
-    console.group("[MediaEditor] handleGenerate 开始");
-    console.log("[MediaEditor] 卡片数据:", {
-      cardId: card.id,
-      model: data.model,
-      contentLength: data.content?.length ?? 0,
-      contentPreview: data.content?.slice(0, 100),
-      upstreamTexts: data.upstreamTexts
-        ? Object.fromEntries(
-            Object.entries(data.upstreamTexts).map(([k, v]) => [k, v.slice(0, 80)]),
-          )
-        : null,
-      refImagesKeys: data.refImages ? Object.keys(data.refImages) : [],
-      refImagesSummary: data.refImages
-        ? Object.fromEntries(
-            Object.entries(data.refImages).map(([k, v]) => [
-              k,
-              { urlPrefix: v.url.slice(0, 60), sourceCardId: v.sourceCardId, sourceType: v.sourceType },
-            ]),
-          )
-        : null,
-    });
-    console.log("[MediaEditor] 最终 prompt:", prompt);
-
-    if (!(await hasApiKey())) {
-      useUIStore.getState().addToast({
-        type: "warning",
-        title: "请先配置 API Key",
-        description: "前往设置页面配置你的 API Key",
-        action: {
-          label: "打开设置",
-          onClick: () => useUIStore.getState().toggleSettings(),
-        },
-        duration: 5000,
-      });
-      console.groupEnd();
-      return;
-    }
-
-    setCardProgress(card.id, { percent: 0, label: "正在提交请求…" });
-    const totalStart = performance.now();
-    const logElapsed = (label: string, extra?: Record<string, unknown>) => {
-      console.log(`[MediaEditor] ${label}`, {
-        elapsedMs: Math.round(performance.now() - totalStart),
-        ...extra,
-      });
-    };
-    setError(null);
-    useUIStore.getState().setCardError(card.id, null);
-
-    if (!isEnhancer) {
-      const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === currentSize);
-      if (opt) {
-        const dims = sizeFromRatio(opt.ratio);
-        if (dims.width !== card.width || dims.height !== card.height) {
-          const cx = card.x + card.width / 2;
-          const cy = card.y + card.height / 2;
-          updateCard(card.id, {
-            x: cx - dims.width / 2,
-            y: cy - dims.height / 2,
-            ...dims,
+    // 十步骨架(API Key 预检 / 进度开关 / 错误兜底)统一走 runEditorGeneration;
+    // MediaEditor 特有的几何 pendingGeometry / 批量循环 / 诊断日志留在 run 内。
+    await runEditorGeneration(card, {
+      setError,
+      run: async () => {
+        // ─── 点击瞬间的同步阶段必须保持纤细 ───
+        // 历史教训:这里曾塞 console.group + 10+ 处 console.log + 同步几何 resize,
+        // DevTools 一开就冻 100~300ms。现在 dev 日志走 createLogger(prod tree-shake);
+        // 几何 resize 推到 result 回写时一并 updateCard,layoutVersion 只 bump 一次。
+        log.group("handleGenerate");
+        try {
+          log.log("submit", {
+            cardId: card.id,
+            model: data.model,
+            promptLen: prompt.length,
+            refCount: data.refImages ? Object.keys(data.refImages).length : 0,
+            upstreamCount: data.upstreamTexts ? Object.keys(data.upstreamTexts).length : 0,
           });
-        }
-      }
-    }
 
-    try {
-      const provider = modelService.resolveProvider(currentModel, (data as MediaData).provider);
-      if (!provider.generateImage) {
-        throw new Error("当前 Provider 不支持图片生成");
-      }
-
-      const rawRefImages = refSlots
-        .map((slot) => {
-          const entry = data.refImages?.[slot.key];
-          return entry ? { url: entry.url, role: slot.key } : null;
-        })
-        .filter(Boolean) as Array<{ url: string; role: string }>;
-
-      console.log("[MediaEditor] refSlots:", refSlots.map((s) => s.key));
-      console.log("[MediaEditor] rawRefImages 数量:", rawRefImages.length);
-
-      if (currentModel === "Real-ESRGAN") {
-        const MAX_DIM = 1024;
-        for (const slot of refSlots) {
-          const entry = data.refImages?.[slot.key];
-          if (entry?.width && entry?.height) {
-            if (entry.width > MAX_DIM || entry.height > MAX_DIM) {
-              useUIStore.getState().addToast({
-                type: "warning",
-                title: "图片分辨率过大",
-                description: `Real-ESRGAN 要求输入图片不超过 ${MAX_DIM}×${MAX_DIM}，当前图片为 ${entry.width}×${entry.height}，请缩小后重试`,
-                duration: 6000,
-              });
-              console.groupEnd();
-              return;
+          // 几何 resize 的目标尺寸 —— **不在点击瞬间 updateCard**,留到结果回写时
+          // 跟 data 一起 bump 一次 layoutVersion(见下方 newData)。
+          let pendingGeometry: { x: number; y: number; width: number; height: number } | null = null;
+          if (!isEnhancer) {
+            const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === currentSize);
+            if (opt) {
+              const dims = sizeFromRatio(opt.ratio);
+              if (dims.width !== card.width || dims.height !== card.height) {
+                const cx = card.x + card.width / 2;
+                const cy = card.y + card.height / 2;
+                pendingGeometry = {
+                  x: cx - dims.width / 2,
+                  y: cy - dims.height / 2,
+                  width: dims.width,
+                  height: dims.height,
+                };
+              }
             }
           }
-        }
-      }
 
-      // 并行批量上传 — onProgress 同时驱动两路:
-      // (a) 卡片 UI 显示 "上传参考图 N/M…",避免"看似阻塞"
-      // (b) console 日志便于排查 "为什么用户点生成时还要等"
-      const refPrepareStart = performance.now();
-      const uploaded = await uploadMediaBatch(
-        rawRefImages.map((r) => r.url),
-        {
-          onProgress: ({ uploaded, total, current }) => {
-            setCardProgress(card.id, {
-              percent: 0,
-              label: `上传参考图 ${uploaded}/${total}…`,
-            });
-            console.log("[MediaEditor] 参考图进度", {
-              uploaded,
-              total,
-              currentPrefix: current?.slice(0, 40),
-              elapsedMs: Math.round(performance.now() - refPrepareStart),
-            });
-          },
-        },
-      );
-      const referenceImages: Array<{ url: string; role: string }> = rawRefImages.map(
-        (ref, i) => ({ ...ref, url: uploaded[i]! }),
-      );
-      logElapsed("全部参考图准备完成", {
-        refImageCount: referenceImages.length,
-        refPrepareElapsedMs: Math.round(performance.now() - refPrepareStart),
-      });
-
-      console.log("[MediaEditor] 最终 referenceImages:", referenceImages.map((r) => ({
-        role: r.role,
-        urlType: r.url.startsWith("data:") ? "base64" : r.url.startsWith("http") ? "http" : "local",
-        urlLength: r.url.length,
-        urlPrefix: r.url.slice(0, 50),
-      })));
-
-      console.log("[MediaEditor] 调用 generateImage:", {
-        promptLength: prompt.length,
-        promptPreview: prompt.slice(0, 200),
-        size: currentSize,
-        model: currentModel || "(default)",
-        refImageCount: referenceImages.length,
-      });
-
-      const resolvedModel = currentModel
-        ? modelService.resolveImageModelId(currentModel, currentResolution, qualitySupported ? currentQuality : undefined, (data as MediaData).provider)
-        : undefined;
-
-      // batchSize 防御性 clamp 到 [1, 4]：
-      // - UI 只暴露 1/2/4，但 data.batchSize 是持久化的，老项目/手动编辑可能塞进来更大的值
-      // - 4 张并行的 RGBA 解码已经接近 WebView2 GPU 进程容量上限，再多就是白屏崩溃风险
-      const requestedCount = Math.max(1, Math.floor(data.batchSize ?? 1));
-      const count = Math.min(requestedCount, 4);
-      if (count !== requestedCount) {
-        console.warn(`[MediaEditor] batchSize ${requestedCount} clamped to ${count} (max 4 to avoid GPU pressure)`);
-      }
-      // 把卡片自身的 projectId 作为本次任务的归属，整个异步链都用这个快照。
-      const ownerProjectId = card.projectId;
-      let results: ImageResult[];
-
-      if (count === 1) {
-        const generateStart = performance.now();
-        const r = await provider.generateImage!({
-          prompt: prompt || undefined,
-          size: isEnhancer ? undefined : currentSize,
-          resolution: supportsResolution ? currentResolution : undefined,
-          model: resolvedModel,
-          quality: isEnhancer ? undefined : (qualitySupported ? currentQuality : "standard"),
-          referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
-          cardId: card.id,
-          projectId: ownerProjectId,
-          onProgress: (p) => {
-            logElapsed("generateImage progress", { percent: p.percent, phase: p.phase, label: p.label });
-            setCardProgress(card.id, { percent: p.percent, label: p.label });
-          },
-        });
-        logElapsed("generateImage 返回", {
-          generateElapsedMs: Math.round(performance.now() - generateStart),
-          resultUrlType: r.url.startsWith("http") ? "remote" : r.url.startsWith("data:") ? "data-url" : "local",
-        });
-        console.groupEnd();
-        results = [{ url: r.url, revisedPrompt: r.revisedPrompt }];
-      } else {
-        type SubStatus = "pending" | "running" | "done" | "error";
-        const perProgress = new Array<number>(count).fill(0);
-        const perStatus = new Array<SubStatus>(count).fill("pending");
-
-        const syncProgress = () => {
-          const avg = perProgress.reduce((a, b) => a + b, 0) / count;
-          const doneCount = perStatus.filter((s) => s === "done").length;
-          setCardProgress(card.id, {
-            percent: Math.round(avg),
-            label: `批量生成中 (${doneCount}/${count} 完成)`,
-            subs: perProgress.map((p, i) => ({ percent: p, status: perStatus[i]! })),
+          // 翻译逻辑(SKU 解析 / enhancer / Real-ESRGAN 预检 / 参考图上传 / 条件传参)统一走
+          // buildImageRequest,与 cardRunner 组运行共用同一份。batchSize 不进 build,批量在这里循环。
+          const built = await buildImageRequest(card, {
+            onUploadProgress: (kind, { uploaded, total }) =>
+              setCardProgress(card.id, {
+                percent: 0,
+                label: `上传${kind} ${uploaded}/${total}…`,
+              }),
           });
-        };
+          if (!built.ok) {
+            // Real-ESRGAN 输入过大等约束 → 提示并中止本次生成(不置 error 态)。
+            useUIStore.getState().addToast({
+              type: "warning",
+              title: built.toast?.title ?? "无法生成",
+              description: built.toast?.description ?? built.reason,
+              duration: 6000,
+            });
+            return;
+          }
 
-        console.log(`[MediaEditor] 并行启动 ${count} 张生成`);
-        perStatus.fill("running");
-        syncProgress();
+          const provider = modelService.resolveProvider(built.modelId, built.providerId);
+          if (!provider.generateImage) {
+            throw new Error("当前 Provider 不支持图片生成");
+          }
 
-        const settled = await Promise.allSettled(
-          Array.from({ length: count }, (_, i) =>
-            provider.generateImage!({
-              prompt: prompt || undefined,
-              size: isEnhancer ? undefined : currentSize,
-              resolution: supportsResolution ? currentResolution : undefined,
-              model: resolvedModel,
-              quality: isEnhancer ? undefined : (qualitySupported ? currentQuality : "standard"),
-              referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
-              projectId: ownerProjectId,
+          // batchSize 防御性 clamp 到 [1, 4]：
+          // - UI 只暴露 1/2/4，但 data.batchSize 是持久化的，老项目/手动编辑可能塞进来更大的值
+          // - 4 张并行的 RGBA 解码已经接近 WebView2 GPU 进程容量上限，再多就是白屏崩溃风险
+          const requestedCount = Math.max(1, Math.floor(data.batchSize ?? 1));
+          const count = Math.min(requestedCount, 4);
+          if (count !== requestedCount) {
+            log.warn(`batchSize ${requestedCount} clamped to ${count} (max 4 to avoid GPU pressure)`);
+          }
+          // 把卡片自身的 projectId 作为本次任务的归属,整个异步链都用这个快照(请求体里已由 build 快照)。
+          const ownerProjectId = card.projectId;
+          let results: ImageResult[];
+
+          if (count === 1) {
+            const r = await provider.generateImage!({
+              ...built.request,
               onProgress: (p) => {
-                logElapsed("generateImage progress", { index: i, percent: p.percent, phase: p.phase, label: p.label });
-                perProgress[i] = p.percent;
-                syncProgress();
+                setCardProgress(card.id, { percent: p.percent, label: p.label });
               },
-            }),
-          ),
-        );
-
-        results = [];
-        for (let i = 0; i < settled.length; i++) {
-          const r = settled[i]!;
-          if (r.status === "fulfilled") {
-            perStatus[i] = "done";
-            perProgress[i] = 100;
-            results.push({ url: r.value.url, revisedPrompt: r.value.revisedPrompt });
+            });
+            results = [{ url: r.url, revisedPrompt: r.revisedPrompt }];
           } else {
-            perStatus[i] = "error";
-            console.warn(`[MediaEditor] 第 ${i + 1}/${count} 张生成失败:`, r.reason);
+            type SubStatus = "pending" | "running" | "done" | "error";
+            const perProgress = new Array<number>(count).fill(0);
+            const perStatus = new Array<SubStatus>(count).fill("pending");
+
+            const syncProgress = () => {
+              const avg = perProgress.reduce((a, b) => a + b, 0) / count;
+              const doneCount = perStatus.filter((s) => s === "done").length;
+              setCardProgress(card.id, {
+                percent: Math.round(avg),
+                label: `批量生成中 (${doneCount}/${count} 完成)`,
+                subs: perProgress.map((p, i) => ({ percent: p, status: perStatus[i]! })),
+              });
+            };
+
+            perStatus.fill("running");
+            syncProgress();
+
+            // 批量:TaskManager 是 per-card 的,去 cardId 走 legacy 直连逐张并发。
+            const settled = await Promise.allSettled(
+              Array.from({ length: count }, (_, i) =>
+                provider.generateImage!({
+                  ...built.request,
+                  cardId: undefined,
+                  onProgress: (p) => {
+                    perProgress[i] = p.percent;
+                    syncProgress();
+                  },
+                }),
+              ),
+            );
+
+            results = [];
+            for (let i = 0; i < settled.length; i++) {
+              const r = settled[i]!;
+              if (r.status === "fulfilled") {
+                perStatus[i] = "done";
+                perProgress[i] = 100;
+                results.push({ url: r.value.url, revisedPrompt: r.value.revisedPrompt });
+              } else {
+                perStatus[i] = "error";
+                log.warn(`subtask ${i + 1}/${count} failed:`, r.reason);
+              }
+            }
+            syncProgress();
           }
-        }
-        syncProgress();
-        console.log(`[MediaEditor] 并行生成完成: ${results.length}/${count} 成功`);
-        console.groupEnd();
-      }
+          log.log("done", { ok: results.length, requested: count });
 
-      if (results.length === 0) {
-        throw new Error("所有图片生成均失败");
-      }
-
-      const newData: Record<string, unknown> = {
-        ...data,
-        imageUrl: results[0]!.url,
-        results,
-        selectedIndex: 0,
-      };
-      updateCard(card.id, { data: newData });
-      autoSave.markDirty(card.id);
-
-      const hasRemote = results.some(
-        (r) => r.url.startsWith("http://") || r.url.startsWith("https://"),
-      );
-      if (hasRemote) {
-        for (let i = 0; i < results.length; i++) {
-          if (results[i]!.url.startsWith("http")) {
-            scheduleBackgroundSave(card.id, results[i]!.url, i === 0 ? "imageUrl" : undefined, ownerProjectId);
+          if (results.length === 0) {
+            throw new Error("所有图片生成均失败");
           }
+
+          const newData: Record<string, unknown> = {
+            ...data,
+            imageUrl: results[0]!.url,
+            results,
+            selectedIndex: 0,
+          };
+          // 同一次 updateCard 一次性写完 data + 几何,layoutVersion 只 bump 一次,
+          // CardLayer 不会因为"先 resize 再写 data"被触发两次重算。
+          updateCard(card.id, pendingGeometry ? { data: newData, ...pendingGeometry } : { data: newData });
+          autoSave.markDirty(card.id);
+
+          const hasRemote = results.some(
+            (r) => r.url.startsWith("http://") || r.url.startsWith("https://"),
+          );
+          if (hasRemote) {
+            for (let i = 0; i < results.length; i++) {
+              if (results[i]!.url.startsWith("http")) {
+                scheduleBackgroundSave(card.id, results[i]!.url, i === 0 ? "imageUrl" : undefined, ownerProjectId);
+              }
+            }
+            useUIStore.getState().addToast({
+              type: "warning",
+              title: `${results.length} 张图片已生成，部分保存到本地失败`,
+              description: "后台将自动重试保存",
+              duration: 5000,
+            });
+          } else {
+            useUIStore.getState().addToast({
+              type: "success",
+              title: results.length > 1
+                ? `${results.length} 张图片生成完成`
+                : "图片生成完成",
+              description: `${currentModel || "默认模型"} 已完成生成`,
+              duration: 3000,
+            });
+          }
+        } catch (err) {
+          // 保留生图特有诊断日志;再抛给 runEditorGeneration 统一兜错(setError + 红框)。
+          const msg = err instanceof Error ? err.message : String(err);
+          log.error("生成失败:", msg);
+          throw err;
+        } finally {
+          log.groupEnd();
         }
-        useUIStore.getState().addToast({
-          type: "warning",
-          title: `${results.length} 张图片已生成，部分保存到本地失败`,
-          description: "后台将自动重试保存",
-          duration: 5000,
-        });
-      } else {
-        useUIStore.getState().addToast({
-          type: "success",
-          title: results.length > 1
-            ? `${results.length} 张图片生成完成`
-            : "图片生成完成",
-          description: `${currentModel || "默认模型"} 已完成生成`,
-          duration: 3000,
-        });
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[MediaEditor] 生成失败:", msg);
-      console.groupEnd();
-      const errMsg = friendlyError(msg);
-      setError(errMsg);
-      useUIStore.getState().setCardError(card.id, errMsg);
-    } finally {
-      setCardProgress(card.id, null);
-    }
-  }, [data, card.id, generating, updateCard, currentModel, currentSize, currentResolution, currentQuality, qualitySupported, supportsResolution, setCardProgress, refSlots]);
+      },
+    });
+  }, [card, data, generating, updateCard, currentModel, currentSize, setCardProgress]);
 
   const isLocked = !!data._locked;
   const currentBatchSize = data.batchSize ?? 1;

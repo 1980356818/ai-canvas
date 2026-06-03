@@ -270,7 +270,9 @@ export default memo(function ConnectionLayer({
     return { left, top, right, bottom };
   }, [viewport.x, viewport.y, viewport.zoom, viewport.width, viewport.height]);
 
-  const projectConns = useMemo(() => {
+  // 所有连线几何（世界坐标，与缩放无关）。**不依赖 vpBounds**：缩放/平移时
+  // bezier path / 折叠索引 / 分组索引都不需要重算，只有内容/布局/拖拽变化才重算。
+  const allConns = useMemo(() => {
     const cards = useCardStore.getState().cards;
     const connections = useConnectionStore.getState().connections;
     // F7: collapsed 索引 = cardId → 它所属的折叠组(用于端点 reroute / 整条隐藏)
@@ -325,23 +327,6 @@ export default memo(function ConnectionLayer({
         if (c) tgtPort = c;
       }
 
-      // 视口剔除：连线的 bbox 与视口 bbox 不相交 → 跳过。
-      // 用 source/target 端点构造 bbox（贝塞尔控制点不会超出 |x1-x2| × max(|y1-y2|, CURVE_OFFSET)）
-      if (vpBounds) {
-        const minX = Math.min(srcPort.x, tgtPort.x);
-        const maxX = Math.max(srcPort.x, tgtPort.x);
-        const minY = Math.min(srcPort.y, tgtPort.y);
-        const maxY = Math.max(srcPort.y, tgtPort.y);
-        if (
-          maxX < vpBounds.left ||
-          minX > vpBounds.right ||
-          maxY < vpBounds.top ||
-          minY > vpBounds.bottom
-        ) {
-          continue;
-        }
-      }
-
       const d = bezierPath(srcPort.x, srcPort.y, tgtPort.x, tgtPort.y);
       const srcColor = TYPE_COLORS[src.type] || "#6B7280";
       const tgtColor = TYPE_COLORS[tgt.type] || END_COLOR;
@@ -366,7 +351,25 @@ export default memo(function ConnectionLayer({
     }
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionsVersion, layoutVersion, groupVersion, projectId, dragOffsets, vpBounds]);
+  }, [connectionsVersion, layoutVersion, groupVersion, projectId, dragOffsets]);
+
+  // 视口剔除：仅做 bbox 比较（廉价）。viewport 变化（缩放/平移）时只跑这层 filter，
+  // 不再触发 allConns 的全量 path / 索引重算 —— 这是缩放卡顿的主因之一。
+  const projectConns = useMemo(() => {
+    if (!vpBounds) return allConns;
+    return allConns.filter(({ x1, y1, x2, y2 }) => {
+      const minX = Math.min(x1, x2);
+      const maxX = Math.max(x1, x2);
+      const minY = Math.min(y1, y2);
+      const maxY = Math.max(y1, y2);
+      return !(
+        maxX < vpBounds.left ||
+        minX > vpBounds.right ||
+        maxY < vpBounds.top ||
+        minY > vpBounds.bottom
+      );
+    });
+  }, [allConns, vpBounds]);
 
   const handleDelete = useCallback((id: string) => {
     disconnectConnectionAndCleanup(id);
