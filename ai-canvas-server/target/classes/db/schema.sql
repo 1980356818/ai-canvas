@@ -133,3 +133,30 @@ CREATE TABLE IF NOT EXISTS `admin_operation_log` (
     KEY `idx_admin_id` (`admin_id`),
     KEY `idx_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='管理员操作日志';
+
+-- 10. 客户端发布版本（自动更新 / 版本切换）
+-- target ∈ windows/darwin/linux，arch ∈ x86_64/aarch64
+-- is_active=0 表示停用，客户端列表里不会出现也不可切换
+-- min_version 用作强制升级阈值（客户端版本 < min_version 时不允许 skip）
+CREATE TABLE IF NOT EXISTS `app_release` (
+    `id`            BIGINT       NOT NULL AUTO_INCREMENT,
+    `version`       VARCHAR(32)  NOT NULL COMMENT '语义版本号',
+    `version_code`  BIGINT       NOT NULL COMMENT 'major*1e6+minor*1e3+patch 用于排序',
+    `target`        VARCHAR(16)  NOT NULL,
+    `arch`          VARCHAR(16)  NOT NULL,
+    `file_name`     VARCHAR(256) NOT NULL,
+    `file_path`     VARCHAR(512) NOT NULL COMMENT '服务器磁盘相对路径',
+    `file_size`     BIGINT       NOT NULL,
+    `signature`     TEXT         NOT NULL COMMENT 'Tauri minisign 签名',
+    `sha256`        VARCHAR(64)  NOT NULL,
+    `release_notes` TEXT         DEFAULT NULL,
+    `min_version`   VARCHAR(32)  DEFAULT NULL COMMENT '强制升级阈值',
+    `is_active`     TINYINT      NOT NULL DEFAULT 1 COMMENT '1=启用 0=停用',
+    `pub_date`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `deleted`       TINYINT      NOT NULL DEFAULT 0,
+    `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_ver_target_arch` (`version`, `target`, `arch`, `deleted`),
+    KEY `idx_active_target_arch` (`is_active`, `target`, `arch`, `version_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用发布版本';

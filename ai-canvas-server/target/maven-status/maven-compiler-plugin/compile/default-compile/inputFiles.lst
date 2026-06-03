@@ -8,10 +8,13 @@ D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\config
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\config\SecurityConfig.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\config\WebMvcConfig.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\controller\AdminController.java
+D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\controller\AppReleaseAdminController.java
+D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\controller\AppReleaseController.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\controller\AuthController.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\controller\UserController.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\Admin.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\AdminOperationLog.java
+D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\AppRelease.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\LoginLog.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\RedeemCode.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\RedeemLog.java
@@ -21,6 +24,7 @@ D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\UserDevice.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper\AdminMapper.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper\AdminOperationLogMapper.java
+D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper\AppReleaseMapper.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper\LoginLogMapper.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper\RedeemCodeMapper.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper\RedeemLogMapper.java
@@ -31,6 +35,7 @@ D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\security\JwtAuthInterceptor.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\security\RateLimitInterceptor.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\service\AdminService.java
+D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\service\AppReleaseService.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\service\AuthService.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\service\DeviceBindService.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\service\RedeemService.java
