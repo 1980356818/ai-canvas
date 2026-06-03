@@ -13,10 +13,15 @@ import { getDisplayUrl } from "@/lib/media";
 import { buildCollapsedCardIndex } from "@/lib/groupBounds";
 
 const LOD_SCREEN_THRESHOLD = 80;
-const VIEWPORT_MARGIN = 200;
+// overscan(世界像素)：视口外多渲染一圈，作为平移手势的缓冲。手势中冻结可视集、纯 GPU
+// 平移，移动消耗此余量；位移超过 useViewport 的 PAN_REFILL_WORLD 前提交补帧，故须 > 之。
+const VIEWPORT_MARGIN = 300;
 const PRELOAD_SCREEN_PX = 400;
-// viewport 屏幕坐标位移阈值：小于此值不重算可视卡片列表（margin 留出缓冲）
-const VP_REBUILD_PX = 80;
+// committed viewport 屏幕坐标位移阈值：小于此值不重算可视卡片列表（margin 留出缓冲）。
+// 须 ≤ PAN_REFILL_WORLD × BIRDVIEW_EXIT_ZOOM（≈180×0.28≈50）：保证平移补帧提交（每
+// PAN_REFILL_WORLD 世界像素一次）在 DOM 平移的最低 zoom（鸟瞰接管前）也必触发重建、
+// 刷新 overscan 缓冲，否则缩小拖动时边缘会短暂空白。
+const VP_REBUILD_PX = 45;
 // zoom 相对变化阈值：小于此值不重算（影响 LOD 切换可忽略）
 const VP_REBUILD_ZOOM_RATIO = 0.05;
 

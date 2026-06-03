@@ -371,11 +371,14 @@
   animation-play-state: paused !important;
 }
 
-/* 缩放/平移手势中把画布两层提升为合成层：内层 vp-render-layer 被栅格化为静态纹理，
-   外层 vp-pan-layer 对该纹理做 GPU 缩放/平移，而非按新 scale 重栅格化整棵 DOM。
-   will-change 常驻会吃显存，所以只在手势期间挂，停手随 .canvas-interacting 一起撤销。 */
-.canvas-interacting .vp-pan-layer,
-.canvas-interacting .vp-render-layer {
+/* will-change 只在**缩放**手势挂（.canvas-zooming，由 useViewport 的 markInteracting("zoom")
+   添加）。缩放需把内层 vp-render-layer 栅格化为静态纹理、交给外层 GPU 缩放，故两层都提升；
+   will-change 常驻吃显存，只在缩放期间挂、停手撤销。
+   **平移不挂**：外层 vp-pan-layer 的 translate3d 本就是合成层，平移它即 GPU 合成、无需
+   will-change；而给指针正悬停的层加 will-change 会在 WebView2 触发「合成层上方不绘制鼠标
+   光标」的缺陷——表现为拖动画布时光标消失。平移的平滑由 translate3d 保证，不依赖此规则。 */
+.canvas-zooming .vp-pan-layer,
+.canvas-zooming .vp-render-layer {
   will-change: transform;
 }
 

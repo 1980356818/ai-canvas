@@ -17,6 +17,14 @@ export interface CardGenProgress {
    * 避免把中途接管的 AI 生成进度误清掉(报告 §G 的潜在 bug)。
    */
   kind?: "gen" | "extract";
+  /**
+   * 对话流式专用:模型思考过程(reasoning_content)的实时累积。推理模型(gpt-5.5 等)
+   * 吐答案前会先思考很久 —— 有思考就在卡片里实时显示「思考过程」,**没有就不显示**
+   * (非推理模型 / 非 chat 路径不设此字段)。终态(done)后不再保留,答案落 data.result。
+   */
+  reasoning?: string;
+  /** 对话流式专用:答案正文(content)的实时累积,done 前的流式预览。 */
+  streamText?: string;
 }
 
 export interface ToastItem {

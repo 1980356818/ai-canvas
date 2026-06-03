@@ -12,8 +12,9 @@ import {
 } from "@/lib/groupBounds";
 
 const CURVE_OFFSET = 80;
-/** 视口外多少世界像素仍渲染——给曲线弧线和滚动惯性留缓冲 */
-const CONN_VIEWPORT_MARGIN = 300;
+/** 视口外多少世界像素仍渲染——给曲线弧线 + 平移 overscan 缓冲留余量
+ *  （须 > useViewport 的 PAN_REFILL_WORLD，使平移补帧赶在边缘空白前） */
+const CONN_VIEWPORT_MARGIN = 400;
 
 function bezierPath(x1: number, y1: number, x2: number, y2: number): string {
   const dx = Math.abs(x2 - x1);

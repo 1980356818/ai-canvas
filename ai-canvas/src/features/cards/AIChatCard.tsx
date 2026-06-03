@@ -1,11 +1,73 @@
 import { memo, useCallback, useRef, useEffect } from "react";
-import { Loader2, AlertTriangle, MessageSquareText } from "lucide-react";
+import { Loader2, AlertTriangle, MessageSquareText, Brain } from "lucide-react";
 import { ElapsedTimer } from "./CardContent";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
 import { autoSave } from "@/lib/autoSave";
+
+/**
+ * 对话流式生成中的实时视图:推理模型(gpt-5.5 等)先吐思考、再吐答案。
+ *   - reasoning 有值 → 顶部「思考过程」面板实时显示思考;**没有思考就不渲染该面板**。
+ *   - streamText 有值 → 下方实时显示答案流。
+ * 两者都来自 uiStore.generatingCards[cardId](transient,done 后清),不落卡片数据。
+ */
+function StreamingThinkingView({
+  label,
+  reasoning,
+  streamText,
+}: {
+  label: string;
+  reasoning?: string;
+  streamText?: string;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // 「贴底跟随」:默认跟到最新;用户上翻看历史思考时(离底 >40px)暂停跟随,翻回底部再恢复。
+  const stickRef = useRef(true);
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (el) stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  }, []);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
+  }, [reasoning, streamText]);
+
+  return (
+    <div className="flex h-full w-full flex-col gap-2 p-3">
+      <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin text-primary/60" />
+        <span className="font-medium">{label}</span>
+        <span className="text-muted-foreground/40">·</span>
+        <ElapsedTimer />
+      </div>
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        onWheel={(e) => e.stopPropagation()}
+        className="min-h-0 flex-1 space-y-2 overflow-y-auto"
+      >
+        {reasoning && (
+          <div className="rounded-md border-l-2 border-primary/30 bg-muted/30 px-2.5 py-1.5">
+            <div className="mb-1 flex items-center gap-1 text-[10px] font-medium text-muted-foreground/70">
+              <Brain className="h-3 w-3" />
+              思考过程
+            </div>
+            <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground/70">
+              {reasoning}
+            </p>
+          </div>
+        )}
+        {streamText && (
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-card-foreground">
+            {streamText}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
   const data = card.data as { content?: string; result?: string; _resultStale?: boolean };
@@ -81,6 +143,16 @@ export default memo(function AIChatCard({ card }: { card: CanvasCard }) {
   }, []);
 
   if (genProgress) {
+    // 流式对话:有思考过程 / 答案流就实时显示(推理模型);否则退回居中转圈。
+    if (genProgress.reasoning || genProgress.streamText) {
+      return (
+        <StreamingThinkingView
+          label={genProgress.label}
+          reasoning={genProgress.reasoning}
+          streamText={genProgress.streamText}
+        />
+      );
+    }
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
         <Loader2 className="h-8 w-8 animate-spin text-primary/60" />

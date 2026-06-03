@@ -111,6 +111,14 @@ export default function CanvasContainer() {
         bgMode.current = "panning";
         bgPending.current = false;
         startPan(e.clientX, e.clientY);
+        // 捕获指针：拖动平移期间所有 pointer 事件都回到画布容器，即使光标移出窗口/
+        // 越过子元素也不丢事件（修复“松手在窗口外平移卡住”），且捕获期间光标锁定为
+        // 容器的 grabbing，避免拖动中光标丢失。pointerup 时浏览器自动释放。
+        try {
+          containerRef.current?.setPointerCapture(e.pointerId);
+        } catch {
+          /* pointerId 已失效时忽略 */
+        }
       }
     }
   };
@@ -143,9 +151,12 @@ export default function CanvasContainer() {
     const wasPending = bgPending.current;
     bgPending.current = false;
 
-    if (bgMode.current === "panning") {
-      vpPointerUp();
-    } else if (bgMode.current === "selecting") {
+    // 平移收尾：左键平移走 bgMode==="panning"，中键平移不设 bgMode（见 vpPointerDown），
+    // 统一无条件调用 vpPointerUp（内部按 panning.current 自判，未平移则 no-op），
+    // 避免中键平移结束后 panning/光标状态卡住。
+    vpPointerUp();
+
+    if (bgMode.current === "selecting") {
       finishSelection(e.clientX, e.clientY, e.ctrlKey || e.metaKey);
       justBoxSelected.current = true;
     } else if (wasPending) {

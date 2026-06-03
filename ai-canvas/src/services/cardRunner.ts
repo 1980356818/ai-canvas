@@ -15,7 +15,7 @@
  *   ✅ ai_image / ai_multiangle   → buildImageRequest → generateImage
  *   ✅ ai_tryon                   → buildTryonRequest → generateImage
  *   ✅ ai_video                   → buildVideoRequest → generateVideo
- *   ✅ ai_chat                    → buildChatRequest  → provider.chat
+ *   ✅ ai_chat                    → buildChatRequest  → streamChatToResult(流式,根治反代 524)
  *   ✅ frame_extractor            → runFrameExtraction(cardId)
  *   ⏭️ text / sticky_note / audio → 永远跳过(无运行语义)
  *
@@ -36,6 +36,7 @@ import { buildVideoRequest } from "@/services/generation/buildVideoRequest";
 import { buildImageRequest } from "@/services/generation/buildImageRequest";
 import { buildTryonRequest } from "@/services/generation/buildTryonRequest";
 import { buildChatRequest } from "@/services/generation/buildChatRequest";
+import { streamChatToCard } from "@/services/generation/streamChatToResult";
 import { runFrameExtraction } from "@/lib/frameExtraction";
 import { hasApiKey } from "@/platform";
 import { scheduleBackgroundSave } from "@/lib/media";
@@ -164,17 +165,22 @@ async function runChatCard(card: CanvasCard, signal?: AbortSignal): Promise<RunC
     data: { ...data, _resultStale: true },
   });
 
-  // chat 走同步 provider.chat(非 TaskManager),取消靠 request.signal 中断出网。
-  const resp = await provider.chat({ ...built.request, signal });
+  // chat 走流式(streamChatToResult)而非 provider.chat:gpt-5.5 等推理模型单次响应
+  // 90–140s,非流式长连接会被 Cloudflare/反代切成 524(源站已完成并计费,客户端却拿不到)。
+  // 流式持续吐字节,反代不空闲超时,根治该问题。取消靠 signal 中断出网。
+  // 详见 services/generation/streamChatToResult.ts 顶部注释。
+  const { content, finishReason } = await streamChatToCard(provider, built.request, card.id, { signal });
 
-  let result = resp.content ?? "(无回复 — 模型未返回任何内容)";
-  if (resp.finishReason === "length" && resp.content) {
+  let result = content || "(无回复 — 模型未返回任何内容)";
+  if (finishReason === "length" && content) {
     result +=
       "\n\n---\n⚠️ *回复因达到输出上限被截断,可尝试拆分提问以获取完整内容。*";
   }
 
+  // 读最新卡片数据再写,避免长生成期间的并发改动被旧 data 覆盖(见 ChatEditor 同款处理)。
+  const latest = (useCardStore.getState().getCard(card.id)?.data ?? data) as ChatLikeData;
   useCardStore.getState().updateCard(card.id, {
-    data: { ...data, result, _resultStale: false },
+    data: { ...latest, result, _resultStale: false },
   });
   autoSave.markDirty(card.id);
   return { outcome: "ok" };

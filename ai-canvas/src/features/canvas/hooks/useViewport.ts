@@ -58,6 +58,12 @@ function applyViewportZoomGesture(
 // 避免 60fps 触发整个画布树重渲染。
 const VIEWPORT_COMMIT_DELAY = 80;
 
+// 平移手势中累计未提交位移（世界像素）超过此阈值时提交一次 store：重建 CardLayer/
+// ConnectionLayer 的可视集，在视口外的 overscan 余量里补满新卡/连线，赶在缓冲耗尽
+// 出现边缘空白之前。其余时间平移零提交（冻结内层、纯 GPU 平移）。须 < 两层的
+// VIEWPORT_MARGIN / CONN_VIEWPORT_MARGIN（世界像素），否则补帧晚于空白。
+const PAN_REFILL_WORLD = 180;
+
 export function useViewport(
   containerRef: React.RefObject<HTMLDivElement | null>,
 ) {
@@ -67,10 +73,14 @@ export function useViewport(
   const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0, vx: 0, vy: 0 });
   const panLast = useRef({ x: 0, y: 0 });
-  const panCommitTimer = useRef(0);
   const wheelCommitTimer = useRef(0);
   const interactingTimer = useRef(0);
   const pendingWheel = useRef<{ x: number; y: number; zoom: number } | null>(null);
+  // 平移手势起点缓存的容器 rect：手势中复用，避免每帧 getBoundingClientRect 触发
+  // 强制同步 layout（与样式写入交错 → layout thrash）。
+  const rectRef = useRef<DOMRect | null>(null);
+  // 上次向 store 提交的平移位置（screen 坐标），用于按位移阈值补帧。
+  const lastCommit = useRef({ x: 0, y: 0 });
   // >0 表示「缩放手势进行中」，值为内层栅格化基准 scale（手势起点 zoom）。
   // 0 = 不在缩放手势中（zoom 恒 >0，用 0 当哨兵安全）。
   const gestureRenderZoom = useRef(0);
@@ -79,35 +89,63 @@ export function useViewport(
   // container 一直存在，子层用 var() 引用自动恢复正确位置。
   const getRoot = useCallback(() => containerRef.current, [containerRef]);
 
+  // 刷新容器 rect 缓存（手势起点 / resize 时调用）。
+  const refreshRect = useCallback(() => {
+    rectRef.current = containerRef.current?.getBoundingClientRect() ?? null;
+  }, [containerRef]);
+
+  // 平移补帧/收尾的统一提交：把当前实时位置提交进 store（触发一次可视集重建），
+  // 并记录提交点用于下次位移阈值判断。
+  const commitPan = useCallback(() => {
+    setViewport({ x: panLast.current.x, y: panLast.current.y });
+    lastCommit.current = { x: panLast.current.x, y: panLast.current.y };
+  }, [setViewport]);
+
   // 手势期间（滚轮缩放 / 拖拽平移）给容器加 .canvas-interacting，CSS 借此暂停
-  // 画布内常驻动画（连线流光、选中描边流动等）。这些动画每帧都让 SVG/卡片层变脏，
-  // 缩放时与「按新 scale 重栅格化」叠加 → 抖动。纯 classList 操作，不触发 React
-  // 重渲染；停手 ~180ms 后自动移除恢复动画。
-  const markInteracting = useCallback(() => {
-    const root = getRoot();
-    if (root) root.classList.add("canvas-interacting");
-    if (interactingTimer.current) clearTimeout(interactingTimer.current);
-    interactingTimer.current = window.setTimeout(() => {
-      interactingTimer.current = 0;
-      getRoot()?.classList.remove("canvas-interacting");
-      // 结束缩放手势：把冻结的 render 提交为真实 zoom（gpu 归 1），
-      // 触发一次重栅格化恢复清晰。flush 掉未提交的滚轮中间态。
-      if (gestureRenderZoom.current > 0) {
-        gestureRenderZoom.current = 0;
-        if (wheelCommitTimer.current) {
-          clearTimeout(wheelCommitTimer.current);
-          wheelCommitTimer.current = 0;
-        }
-        const p = pendingWheel.current;
-        if (p) {
-          pendingWheel.current = null;
-          setViewport(p); // → layoutEffect(g=0) → applyViewportToDOM 清晰
-        } else {
-          applyViewportToDOM(getRoot(), liveViewport.x, liveViewport.y, liveViewport.zoom);
-        }
+  // 画布内常驻动画（连线流光、选中描边流动等），让内层纹理可缓存。纯 classList 操作，
+  // 不触发 React 重渲染；停手 ~180ms 后自动移除恢复动画。
+  // mode === "zoom" 额外加 .canvas-zooming（CSS 据此挂 will-change）：缩放需把内层
+  // 栅格化为静态纹理交给外层 GPU 缩放，故两层都要提升；平移靠外层 translate3d 本就是
+  // 合成层、无需 will-change，且给指针悬停层挂 will-change 会在 WebView2 触发
+  // “合成层上方不绘制光标”缺陷（拖动时鼠标消失），故平移**不**加。
+  const markInteracting = useCallback(
+    (mode: "pan" | "zoom") => {
+      const root = getRoot();
+      if (root) {
+        root.classList.add("canvas-interacting");
+        root.classList.toggle("canvas-zooming", mode === "zoom");
       }
-    }, 180);
-  }, [getRoot, setViewport]);
+      if (interactingTimer.current) clearTimeout(interactingTimer.current);
+      interactingTimer.current = window.setTimeout(() => {
+        interactingTimer.current = 0;
+        const r = getRoot();
+        if (r) {
+          r.classList.remove("canvas-interacting");
+          r.classList.remove("canvas-zooming");
+        }
+        // 结束缩放手势：把冻结的 render 提交为真实 zoom（gpu 归 1），
+        // 触发一次重栅格化恢复清晰。flush 掉未提交的滚轮中间态。
+        if (gestureRenderZoom.current > 0) {
+          gestureRenderZoom.current = 0;
+          if (wheelCommitTimer.current) {
+            clearTimeout(wheelCommitTimer.current);
+            wheelCommitTimer.current = 0;
+          }
+          const p = pendingWheel.current;
+          if (p) {
+            pendingWheel.current = null;
+            setViewport(p); // → layoutEffect(g=0) → applyViewportToDOM 清晰
+          } else {
+            applyViewportToDOM(getRoot(), liveViewport.x, liveViewport.y, liveViewport.zoom);
+          }
+        } else if (panning.current) {
+          // 平移中途停顿 ≥180ms：提交一次当前位置，重建可视集补满 overscan 缓冲。
+          commitPan();
+        }
+      }, 180);
+    },
+    [getRoot, setViewport, commitPan],
+  );
 
   // store viewport 变化时同步写一次 CSS 变量。覆盖以下场景：
   //   - 挂载 / 项目切换的初始 viewport
@@ -124,6 +162,9 @@ export function useViewport(
         viewport.zoom,
         gestureRenderZoom.current,
       );
+    } else if (panning.current) {
+      // 平移补帧提交会让 store 落后于实时 panLast；DOM 跟实时值，避免回拨抖动。
+      applyViewportToDOM(getRoot(), panLast.current.x, panLast.current.y, viewport.zoom);
     } else {
       applyViewportToDOM(getRoot(), viewport.x, viewport.y, viewport.zoom);
     }
@@ -136,6 +177,7 @@ export function useViewport(
       const entry = entries[0];
       if (!entry) return;
       const { width, height } = entry.contentRect;
+      rectRef.current = el.getBoundingClientRect();
       setViewport({ width, height });
     });
     ro.observe(el);
@@ -144,7 +186,6 @@ export function useViewport(
 
   useEffect(() => {
     return () => {
-      if (panCommitTimer.current) clearTimeout(panCommitTimer.current);
       if (wheelCommitTimer.current) clearTimeout(wheelCommitTimer.current);
       if (interactingTimer.current) clearTimeout(interactingTimer.current);
     };
@@ -168,7 +209,10 @@ export function useViewport(
       e.preventDefault();
       // 用 pendingWheel 当前值优先（连续滚轮事件的中间状态），其次用 store 当前值
       const base = pendingWheel.current ?? useCanvasStore.getState().viewport;
-      const rect = containerRef.current?.getBoundingClientRect();
+      // 滚轮连发期间复用手势起点 rect（interactingTimer 在跑即手势进行中），
+      // 避免每个 wheel 事件都 getBoundingClientRect。
+      if (!interactingTimer.current) refreshRect();
+      const rect = rectRef.current;
       if (!rect) return;
 
       const cursorX = e.clientX - rect.left;
@@ -221,7 +265,7 @@ export function useViewport(
       } else {
         applyViewportZoomGesture(getRoot(), newX, newY, newZoom, gestureRenderZoom.current);
       }
-      markInteracting();
+      markInteracting(isZoom ? "zoom" : "pan");
       // 彻底根治缩放卡顿（硬规则，见 CLAUDE.md 视口契约 #8）：
       // 缩放手势中绝不提交 store viewport。每次提交都会让 CardLayer/ConnectionLayer
       // 重算可视集，在冻结的内层(vp-render-layer)里增删 DOM → 合成纹理作废、整屏重栅
@@ -238,7 +282,7 @@ export function useViewport(
         scheduleWheelCommit();
       }
     },
-    [containerRef, getRoot, scheduleWheelCommit, markInteracting],
+    [getRoot, scheduleWheelCommit, markInteracting, refreshRect],
   );
 
   const onPointerDown = useCallback(
@@ -249,11 +293,13 @@ export function useViewport(
         const vp = useCanvasStore.getState().viewport;
         panStart.current = { x: e.clientX, y: e.clientY, vx: vp.x, vy: vp.y };
         panLast.current = { x: vp.x, y: vp.y };
+        lastCommit.current = { x: vp.x, y: vp.y };
+        refreshRect();
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         e.preventDefault();
       }
     },
-    [],
+    [refreshRect],
   );
 
   const startPan = useCallback(
@@ -263,8 +309,10 @@ export function useViewport(
       const vp = useCanvasStore.getState().viewport;
       panStart.current = { x: clientX, y: clientY, vx: vp.x, vy: vp.y };
       panLast.current = { x: vp.x, y: vp.y };
+      lastCommit.current = { x: vp.x, y: vp.y };
+      refreshRect();
     },
-    [],
+    [refreshRect],
   );
 
   const onPointerMove = useCallback(
@@ -281,35 +329,37 @@ export function useViewport(
       // 平移本就走 GPU、不重栅格化，无需 render 冻结；显式复位缩放手势态。
       gestureRenderZoom.current = 0;
       applyViewportToDOM(getRoot(), newX, newY, zoom);
-      markInteracting();
+      markInteracting("pan");
 
-      if (!panCommitTimer.current) {
-        panCommitTimer.current = window.setTimeout(() => {
-          panCommitTimer.current = 0;
-          if (panning.current) {
-            setViewport({ x: panLast.current.x, y: panLast.current.y });
-          }
-        }, 150);
+      // 根治平移卡顿（与缩放对称，见 CLAUDE.md 视口契约 #8）：手势进行中**不**按时间
+      // 持续提交 store。每次提交都让 CardLayer/ConnectionLayer 在被合成的内层增删 DOM
+      // → 作废纹理整屏重栅 → 周期性卡顿。改为仅当未提交位移（世界像素）超过 overscan
+      // 余量阈值时提交一次补帧（新卡都落在视口外 margin 里，用户看不到“弹出”、也不空白），
+      // 其余时间零提交、纯 GPU 平移。停顿 / 抬指各再提交一次（见 markInteracting / onPointerUp）。
+      const movedWorld =
+        Math.hypot(newX - lastCommit.current.x, newY - lastCommit.current.y) / zoom;
+      if (movedWorld >= PAN_REFILL_WORLD) {
+        commitPan();
       }
     },
-    [getRoot, setViewport, markInteracting],
+    [getRoot, markInteracting, commitPan],
   );
 
   const onPointerUp = useCallback(() => {
     if (panning.current) {
-      if (panCommitTimer.current) {
-        clearTimeout(panCommitTimer.current);
-        panCommitTimer.current = 0;
-      }
-      setViewport({ x: panLast.current.x, y: panLast.current.y });
+      commitPan();
     }
     panning.current = false;
     setIsPanning(false);
-  }, [setViewport]);
+  }, [commitPan]);
 
   const screenToCanvas = useCallback(
     (clientX: number, clientY: number) => {
-      const rect = containerRef.current?.getBoundingClientRect();
+      // 平移中复用手势起点缓存的 rect，避免 pointermove 每帧 getBoundingClientRect
+      // 与样式写入交错触发强制同步 layout；空闲（悬停）时实时取，保证精确。
+      const rect = panning.current
+        ? (rectRef.current ?? containerRef.current?.getBoundingClientRect())
+        : containerRef.current?.getBoundingClientRect();
       if (!rect) return { x: 0, y: 0 };
       const vp = useCanvasStore.getState().viewport;
       const vpX = panning.current ? panLast.current.x : vp.x;

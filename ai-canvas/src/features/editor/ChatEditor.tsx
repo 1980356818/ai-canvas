@@ -12,6 +12,7 @@ import { ensureDisplayableImage } from "@/lib/heicConverter";
 import { modelService } from "@/services/models";
 import { resolveDefaultModelForCardType } from "@/services/modelDefaults";
 import { buildChatRequest } from "@/services/generation/buildChatRequest";
+import { streamChatToCard } from "@/services/generation/streamChatToResult";
 import { runEditorGeneration } from "@/services/generation/runEditorGeneration";
 import { cn } from "@/lib/utils";
 import {
@@ -407,15 +408,24 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
           }
 
           const provider = modelService.resolveProvider(built.request.model, built.providerId);
-          const resp = await provider.chat(built.request);
 
-          let result = resp.content ?? "（无回复 — 模型未返回任何内容）";
-          if (resp.finishReason === "length" && resp.content) {
+          // 对话走流式(streamChatToCard)而非 provider.chat:gpt-5.5 等推理模型单次响应
+          // 90–140s,非流式长连接会被 Cloudflare/反代切成 524(源站已完成并计费,前端却拿不到
+          // = 用户报的「后台完成、前端不显示」)。流式持续吐 SSE 字节,反代不空闲超时,根治该问题;
+          // streamChatToCard 顺带把思考过程 / 答案流实时写进卡片进度(见该文件注释)。
+          const { content, finishReason } = await streamChatToCard(provider, built.request, card.id);
+
+          // content 为空串也兜底(实测 gpt-5.5 偶发返 200 但空 content);用 || 而非 ??。
+          let result = content || "（无回复 — 模型未返回任何内容）";
+          if (finishReason === "length" && content) {
             result += "\n\n---\n⚠️ *回复因达到输出上限被截断，可尝试拆分提问以获取完整内容。*";
           }
 
+          // 读最新卡片数据再写:gpt-5.5 生成期长达 90–140s,期间用户可能改了提示词,
+          // 或上游节点注入了新 upstreamTexts;用渲染时捕获的旧闭包 data 会把这些覆盖掉。
+          const latest = (useCardStore.getState().getCard(card.id)?.data ?? data) as ChatData;
           useCardStore.getState().updateCard(card.id, {
-            data: { ...data, result, _resultStale: false },
+            data: { ...latest, result, _resultStale: false },
           });
           autoSave.markDirty(card.id);
           useUIStore.getState().addToast({

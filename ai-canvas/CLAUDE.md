@@ -27,11 +27,16 @@ AI 无限画布,Tauri (Rust) + React/TS 前端。卡片是富交互 DOM,画布�
 
 7. **单卡渲染走订阅,不 prop-drill。** 展开卡经 `CardSlot` 内部 `useCardStore(s => s.cards.get(id))` 订阅(data 改只刷该卡);`CardLayer` 只负责「哪些 id 当前可见」的几何过滤(订 `layoutVersion` + spatial index)。`updateCardData` 只 bump `dataVersion`、不动 `layoutVersion`。
 
-8. **缩放手势中绝不提交 store viewport(实测根治缩放卡顿的关键)。** `useViewport.onWheel` 的缩放分支(`isZoom`)**不调用** `scheduleWheelCommit`;缩放全程只走 imperative DOM(`--vp-gpu`),React 零重渲染。最终态由 `markInteracting` 停手 ~180ms 后 flush **一次** `setViewport`(重栅一次恢复清晰)。**原因**:手势中每次 `setViewport` 都会让 `CardLayer`/`ConnectionLayer` 重算可视集,在冻结的 `vp-render-layer` 里增删 DOM → 合成纹理作废、整屏重栅 → 周期性卡顿尖峰(真机对照实测:保留提交 p99≈50ms 有尖峰,去掉后 p99≈33ms 零尖峰)。平移(trackpad / 中键拖拽)需边移边露出新卡,**保留**节流提交,不适用本条。改 `onWheel` / 提交节流时务必维持「缩放路径不提交」这条不变量。
+8. **缩放和拖拽平移手势中都绝不按帧/按时间持续提交 store viewport(实测根治卡顿的关键)。** 手势中每次 `setViewport` 都会让 `CardLayer`/`ConnectionLayer` 重算可视集,在冻结的 `vp-render-layer` 里增删 DOM → 合成纹理作废、整屏重栅 → 周期性卡顿尖峰(真机对照实测:保留提交 p99≈50ms 有尖峰,去掉后 p99≈33ms 零尖峰)。两种手势都只走 imperative DOM,React 零重渲染:
+   - **缩放**(`onWheel` 的 `isZoom` 分支):**不调用** `scheduleWheelCommit`,全程只动 `--vp-gpu`;停手由 `markInteracting` ~180ms 后 flush **一次** `setViewport`(重栅恢复清晰)。
+   - **鼠标/中键拖拽平移**(`onPointerMove`):手势中靠外层 `translate3d` 做 GPU 平移 + overscan 缓冲(`CardLayer.VIEWPORT_MARGIN` / `ConnectionLayer.CONN_VIEWPORT_MARGIN`,世界像素)露出邻近卡;**不**按时间提交,仅在「未提交位移 > `PAN_REFILL_WORLD` / 中途停顿 ≥180ms / 抬指」时各 `commitPan()` 一次补帧。新卡落在视口外 margin 里,用户看不到「弹出」、也不空白。`PAN_REFILL_WORLD` 必须 < 两个 MARGIN,否则补帧晚于空白。
+   - **触控板平移**(`onWheel` 的 `isPrecise` 分支)仍保留 80ms `scheduleWheelCommit`(delta 小且平滑,非卡顿热点)。
+   改 `onWheel`/`onPointerMove`/提交节流时务必维持「手势中不持续提交」这条不变量。
+   附:`will-change: transform` 只在缩放手势挂(CSS `.canvas-zooming`,见 `main.css`)——平移靠 `translate3d` 已是合成层,无需 will-change,且给指针悬停层挂 will-change 会触发 WebView2「合成层上不绘制光标」缺陷(拖动时鼠标消失)。`setPointerCapture` 在左键平移起点挂(`CanvasContainer`),防越界丢事件 + 锁定光标。
 
 ### 自查清单(改完画布渲染后)
 - [ ] 缩放/平移时有没有新增的 React 重渲染或 60fps store 写入?(应为零)
 - [ ] 新增的画布内动画是否在 `.vp-pan-layer` 子树内?(是 → 自动被暂停,OK)
 - [ ] 有没有读 DOM transform / `--vp-*` 反推 zoom?(禁止,用 `liveViewport`/`screenToCanvas`)
 - [ ] 有没有 `useMemo` 把几何计算和 viewport 剔除耦合在一起?
-- [ ] 缩放手势中有没有提交 store viewport?(必须为零,只在停手 flush 一次。见契约 #8)
+- [ ] 缩放/拖拽平移手势中有没有按帧/按时间提交 store viewport?(必须为零;缩放停手 flush 一次,平移只在越过 overscan 余量/停顿/抬指时补帧。见契约 #8)
