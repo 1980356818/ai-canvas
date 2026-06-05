@@ -29,6 +29,7 @@ import LoginWindow from "@/features/auth/LoginWindow";
 import RedeemWindow from "@/features/auth/RedeemWindow";
 import UpdateDialog from "@/features/overlays/UpdateDialog";
 import FfmpegSetupDialog from "@/features/overlays/FfmpegSetupDialog";
+import UpgradeDialog from "@/features/auth/UpgradeDialog";
 
 function AuthenticatedApp() {
   const appView = useUIStore((s) => s.appView);
@@ -117,6 +118,10 @@ function AuthenticatedApp() {
         {/* 启动后台查 ffmpeg; 本地缺则弹安装提示,否则 render null。 */}
         <ErrorBoundary fallback={null}>
           <FfmpegSetupDialog />
+        </ErrorBoundary>
+        {/* App 内升级弹窗; 试用用户点到被锁功能时打开,输正式版激活码热解锁。 */}
+        <ErrorBoundary fallback={null}>
+          <UpgradeDialog />
         </ErrorBoundary>
       </div>
     </ErrorBoundary>

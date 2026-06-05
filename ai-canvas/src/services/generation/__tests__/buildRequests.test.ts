@@ -221,6 +221,28 @@ describe("buildImageRequest", () => {
     expect(r.request.projectId).toBe("proj-1");
   });
 
+  it("gpt-image-2-official: id 原样透传(不拆分档 SKU) + 质量/分辨率随选下发", async () => {
+    const r = assertOk(
+      await buildImageRequest(
+        makeCard("ai_image", {
+          model: "gpt-image-2-official",
+          provider: "jijing",
+          content: "a cat",
+          size: "1:1",
+          resolution: "4K",
+          quality: "high",
+        }),
+      ),
+    );
+    // 官方聚合版必须发原始 id (国和 route 2247), 不能被 resolveJiJingImageModelId 拆成 gpt-image-2-high-4k。
+    expect(r.request.model).toBe("gpt-image-2-official");
+    // supportsImageQuality 放开后才不会被压成 "standard"(否则上游恒定 medium)。
+    expect(r.request.quality).toBe("high");
+    expect(r.request.resolution).toBe("4K");
+    // size 为比例;像素换算 (toGptImage2Size → 2880x2880) 在 provider.generateImage 完成。
+    expect(r.request.size).toBe("1:1");
+  });
+
   it("Real-ESRGAN enhancer: 无 prompt 也能跑(size 不发)", async () => {
     const r = assertOk(
       await buildImageRequest(

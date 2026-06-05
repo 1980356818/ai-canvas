@@ -4,12 +4,28 @@ import { httpJson } from "./httpAdapter";
 const TOKEN_KEY = "auth_token";
 const USER_KEY = "auth_user";
 
+/** 服务端 tier_def.features 下发的能力清单（核心维度=允许的项目模板）。 */
+export interface TierFeatures {
+  /** 允许的模板 id 列表；字符串 "*" = 全部 */
+  templates?: string[] | "*";
+  allowBlank?: boolean;
+  allowImport?: boolean;
+  maxProjects?: number;
+  [k: string]: unknown;
+}
+
 export interface AuthUser {
   id: number;
   username: string;
   email: string | null;
   memberExpireAt: string | null;
   status: "active" | "inactive" | "expired";
+  /** 会员等级 tier_key（无会员/过期为 null） */
+  tier?: string | null;
+  tierName?: string | null;
+  tierRank?: number | null;
+  isOfficial?: boolean;
+  features?: TierFeatures | null;
 }
 
 export interface LoginResult {
@@ -122,12 +138,28 @@ export async function apiRegister(
   return data;
 }
 
-export async function apiRedeem(code: string): Promise<{ memberExpireAt: string }> {
-  const data = await request<{ memberExpireAt: string }>("POST", "/api/user/redeem", { code });
+export interface RedeemResult {
+  memberExpireAt: string;
+  tier?: string | null;
+  tierName?: string | null;
+  tierRank?: number | null;
+  isOfficial?: boolean;
+  features?: TierFeatures | null;
+  action?: "upgrade" | "renew";
+  days?: number;
+}
+
+export async function apiRedeem(code: string): Promise<RedeemResult> {
+  const data = await request<RedeemResult>("POST", "/api/user/redeem", { code });
   const user = getStoredUser();
   if (user) {
     user.memberExpireAt = data.memberExpireAt;
     user.status = "active";
+    user.tier = data.tier ?? user.tier;
+    user.tierName = data.tierName ?? user.tierName;
+    user.tierRank = data.tierRank ?? user.tierRank;
+    user.isOfficial = data.isOfficial ?? user.isOfficial;
+    user.features = data.features ?? user.features;
     setStoredUser(user);
   }
   return data;

@@ -11,6 +11,8 @@ public enum ErrorCode {
     REDEEM_USED(40002, "兑换码已被使用"),
     REDEEM_DISABLED(40003, "兑换码已被禁用"),
     REDEEM_EXPIRED(40004, "兑换码已过期"),
+    REDEEM_TIER_TOO_LOW(40006, "您当前已是更高等级会员，无法使用低等级激活码"),
+    TIER_NOT_FOUND(40411, "会员等级不存在"),
     LOGIN_FAILED(40101, "用户名或密码错误"),
     TOKEN_INVALID(40102, "Token 无效或已过期"),
     TOKEN_REVOKED(40103, "账号已在其他设备登录，请重新登录"),

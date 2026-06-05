@@ -23,9 +23,12 @@ pub mod transfer;
 pub mod tasks;
 // upload_local: 前端 → Rust 本地分块写盘 (规避 WebView2 IPC 3MB 上限)
 // upload_remote: Rust → JiJing /v1/files/upload (规避上游 API body 上限)
-// 两个模块语义完全不同, 绝不要互相替代。详见各自顶部注释。
+// upload_presign: upload_remote 的 leader 优先调它走 presign→PUT COS→confirm
+//   三步直传 (字节不过服务器); 后端 type=local 不支持时 fallback 回 multipart。
+// 三个模块语义不同, 绝不要互相替代。详见各自顶部注释。
 pub mod upload_local;
 pub mod upload_remote;
+pub mod upload_presign;
 // frame_extract: ffmpeg-sidecar 抽关键帧。前端解析分镜 JSON 后批量请求时间点的图像。
 pub mod frame_extract;
 // update: 自动更新 + 版本切换。详见 update.rs 顶部注释。

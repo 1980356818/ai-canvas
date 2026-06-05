@@ -54,13 +54,13 @@ function StreamingThinkingView({
               <Brain className="h-3 w-3" />
               思考过程
             </div>
-            <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground/70">
+            <p className="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-muted-foreground/70">
               {reasoning}
             </p>
           </div>
         )}
         {streamText && (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-card-foreground">
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-card-foreground">
             {streamText}
           </p>
         )}

@@ -109,7 +109,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (user) {
         set({
           restricted: false,
-          user: { ...user, memberExpireAt: data.memberExpireAt, status: "active" },
+          user: {
+            ...user,
+            memberExpireAt: data.memberExpireAt,
+            status: "active",
+            tier: data.tier ?? null,
+            tierName: data.tierName ?? null,
+            tierRank: data.tierRank ?? null,
+            isOfficial: data.isOfficial ?? false,
+            features: data.features ?? null,
+          },
           loading: false,
         });
       }

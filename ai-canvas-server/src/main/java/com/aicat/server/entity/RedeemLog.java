@@ -13,6 +13,12 @@ public class RedeemLog {
     private Long redeemCodeId;
     private String code;
     private Integer days;
+    /** 兑换前等级 */
+    private String beforeTier;
+    /** 兑换后等级 */
+    private String afterTier;
+    /** upgrade=升级覆盖 / renew=同级续费 */
+    private String action;
     private LocalDateTime beforeExpireAt;
     private LocalDateTime afterExpireAt;
     @TableField(fill = FieldFill.INSERT)

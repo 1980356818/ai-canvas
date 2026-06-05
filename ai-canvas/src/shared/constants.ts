@@ -54,7 +54,9 @@ export type ImageQuality = (typeof IMAGE_QUALITY_OPTIONS)[number]["value"];
 export const DEFAULT_IMAGE_QUALITY: ImageQuality = "medium";
 
 export function supportsImageQuality(modelId: string, providerId?: string): boolean {
-  return modelId === "gpt-image-2" && providerId !== "comfly";
+  // Comfly 的 gemini 系不支持质量档;极境 gpt-image-2 (分档版) 与 gpt-image-2-official (官方聚合版) 都支持。
+  if (providerId === "comfly") return false;
+  return modelId === "gpt-image-2" || modelId === "gpt-image-2-official";
 }
 
 // ── Image resolution (画质档) ────────────────────────────────

@@ -14,11 +14,19 @@ const loading = ref(false)
 
 const genVisible = ref(false)
 const genResultVisible = ref(false)
-const genResult = ref<{ count: number; batchNo: string; codes: string[] }>({
+const genResult = ref<{ count: number; batchNo: string; codes: string[]; tierName?: string }>({
   count: 0,
   batchNo: '',
   codes: [],
 })
+
+const tierMap = ref<Record<string, string>>({})
+async function loadTiers() {
+  try {
+    const ts = await adminApi.getTiers()
+    tierMap.value = Object.fromEntries(ts.map((t) => [t.tierKey, t.name]))
+  } catch {}
+}
 
 const editVisible = ref(false)
 const editCode = ref<any>(null)
@@ -46,14 +54,17 @@ async function disableCode(row: any) {
   } catch {}
 }
 
-function onGenerated(result: { count: number; batchNo: string; codes: string[] }) {
+function onGenerated(result: { count: number; batchNo: string; codes: string[]; tierName?: string }) {
   genResult.value = result
   genVisible.value = false
   genResultVisible.value = true
   loadCodes()
 }
 
-onMounted(loadCodes)
+onMounted(() => {
+  loadCodes()
+  loadTiers()
+})
 </script>
 
 <template>
@@ -79,6 +90,13 @@ onMounted(loadCodes)
 
     <el-table :data="codes.records" stripe v-loading="loading">
       <el-table-column prop="code" label="兑换码" min-width="200" show-overflow-tooltip />
+      <el-table-column label="等级" width="90" align="center">
+        <template #default="{ row }">
+          <el-tag size="small" :type="row.tier && row.tier !== 'trial' ? 'warning' : 'info'">
+            {{ tierMap[row.tier] || row.tier || '-' }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="days" label="天数" width="60" align="center" />
       <el-table-column label="状态" width="80" align="center">
         <template #default="{ row }">

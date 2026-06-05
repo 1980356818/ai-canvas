@@ -141,7 +141,7 @@ export default function ChatMessageList() {
             )}
             {streamingText && (
               <>
-                <p className="whitespace-pre-wrap">{streamingText}</p>
+                <p className="whitespace-pre-wrap break-words">{streamingText}</p>
                 <span className="inline-block h-4 w-1 animate-pulse bg-foreground/60" />
               </>
             )}

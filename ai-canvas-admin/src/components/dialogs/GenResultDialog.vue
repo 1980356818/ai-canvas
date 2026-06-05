@@ -3,7 +3,7 @@ import { ElMessage } from 'element-plus'
 
 const props = defineProps<{
   modelValue: boolean
-  result: { count: number; batchNo: string; codes: string[] }
+  result: { count: number; batchNo: string; codes: string[]; tierName?: string }
 }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
 
@@ -21,7 +21,7 @@ function copyAll() {
     @update:model-value="emit('update:modelValue', $event)"
   >
     <el-alert
-      :title="`成功生成 ${result.count} 个兑换码，批次号: ${result.batchNo}`"
+      :title="`成功生成 ${result.count} 个${result.tierName ? '【' + result.tierName + '】' : ''}兑换码，批次号: ${result.batchNo}`"
       type="success"
       :closable="false"
       style="margin-bottom: 12px"

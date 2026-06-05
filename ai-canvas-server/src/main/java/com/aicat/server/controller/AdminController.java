@@ -15,6 +15,8 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -26,6 +28,7 @@ public class AdminController {
     private final RedeemService redeemService;
     private final DeviceBindService deviceBindService;
     private final SysConfigService sysConfigService;
+    private final TierService tierService;
 
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@Valid @RequestBody AdminLoginReq req) {
@@ -65,6 +68,15 @@ public class AdminController {
         String ip = IpUtil.getClientIp(request);
         adminService.setUserStatus(req.getUserId(), req.getStatus(), adminId, adminName, ip);
         return Result.ok(null, "操作成功");
+    }
+
+    @PostMapping("/user/set-tier")
+    public Result<?> setTier(@Valid @RequestBody SetTierReq req, HttpServletRequest request) {
+        Long adminId = (Long) request.getAttribute("userId");
+        String adminName = (String) request.getAttribute("username");
+        String ip = IpUtil.getClientIp(request);
+        adminService.setUserTier(req.getUserId(), req.getTier(), req.getDays(), adminId, adminName, ip);
+        return Result.ok(null, "已设置用户等级");
     }
 
     @PostMapping("/user/reset-password")
@@ -111,10 +123,11 @@ public class AdminController {
         Long adminId = (Long) request.getAttribute("userId");
         String adminName = (String) request.getAttribute("username");
         String ip = IpUtil.getClientIp(request);
+        String tier = req.getTier() != null && !req.getTier().isBlank() ? req.getTier() : "vip1";
         Map<String, Object> data = redeemService.generateBatch(req.getCount(), req.getDays(),
-                req.getValidDays() != null ? req.getValidDays() : 180, req.getRemark());
+                req.getValidDays() != null ? req.getValidDays() : 180, req.getRemark(), tier);
         adminService.logOp(adminId, adminName, "generate_codes", "redeem_code", null,
-                "count=" + req.getCount() + ", days=" + req.getDays(), ip);
+                "count=" + req.getCount() + ", days=" + req.getDays() + ", tier=" + tier, ip);
         return Result.ok(data);
     }
 
@@ -142,6 +155,44 @@ public class AdminController {
     @GetMapping("/redeem-codes/stats")
     public Result<Map<String, Object>> codeStats() {
         return Result.ok(redeemService.codeStats());
+    }
+
+    // ========= 等级管理（数据驱动 tier_def） =========
+
+    @GetMapping("/tiers")
+    public Result<List<TierDef>> tiers() {
+        return Result.ok(tierService.listAll());
+    }
+
+    @PostMapping("/tiers")
+    public Result<?> createTier(@RequestBody TierReq req, HttpServletRequest request) {
+        Long adminId = (Long) request.getAttribute("userId");
+        String adminName = (String) request.getAttribute("username");
+        String ip = IpUtil.getClientIp(request);
+        TierDef created = tierService.create(req.toEntity());
+        adminService.logOp(adminId, adminName, "create_tier", "tier_def", created.getId(),
+                "tierKey=" + created.getTierKey(), ip);
+        return Result.ok(null, "等级已创建");
+    }
+
+    @PutMapping("/tiers/{id}")
+    public Result<?> updateTier(@PathVariable Long id, @RequestBody TierReq req, HttpServletRequest request) {
+        Long adminId = (Long) request.getAttribute("userId");
+        String adminName = (String) request.getAttribute("username");
+        String ip = IpUtil.getClientIp(request);
+        tierService.update(id, req.toEntity());
+        adminService.logOp(adminId, adminName, "update_tier", "tier_def", id, null, ip);
+        return Result.ok(null, "等级已更新");
+    }
+
+    @PostMapping("/tiers/{id}/toggle")
+    public Result<?> toggleTier(@PathVariable Long id, @RequestBody ToggleReq req, HttpServletRequest request) {
+        Long adminId = (Long) request.getAttribute("userId");
+        String adminName = (String) request.getAttribute("username");
+        String ip = IpUtil.getClientIp(request);
+        tierService.setActive(id, req.getActive() != null && req.getActive() ? 1 : 0);
+        adminService.logOp(adminId, adminName, "toggle_tier", "tier_def", id, "active=" + req.getActive(), ip);
+        return Result.ok(null, "操作成功");
     }
 
     // ========= 系统配置 =========
@@ -214,6 +265,41 @@ public class AdminController {
         @NotNull @Min(1) private Integer days;
         private Integer validDays;
         private String remark;
+        private String tier;   // 该批码激活成的等级，空则默认 vip1
+    }
+
+    @Data static class SetTierReq {
+        @NotNull private Long userId;
+        @NotBlank private String tier;
+        private Integer days;  // 可选：同时给/续会员天数
+    }
+
+    @Data static class ToggleReq {
+        @NotNull private Boolean active;
+    }
+
+    @Data static class TierReq {
+        private String tierKey;
+        private String name;
+        private Integer tierRank;
+        private Integer isOfficial;
+        private JsonNode features;   // 前端传 JSON 对象，存库前转字符串
+        private Integer isActive;
+        private Integer sort;
+
+        TierDef toEntity() {
+            TierDef t = new TierDef();
+            t.setTierKey(tierKey);
+            t.setName(name);
+            t.setTierRank(tierRank);
+            t.setIsOfficial(isOfficial);
+            if (features != null) {
+                t.setFeatures(features.isTextual() ? features.asText() : features.toString());
+            }
+            t.setIsActive(isActive);
+            t.setSort(sort);
+            return t;
+        }
     }
 
     @Data static class UpdateCodeReq {

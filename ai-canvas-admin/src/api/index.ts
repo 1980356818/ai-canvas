@@ -29,6 +29,25 @@ export async function api<T = any>(path: string, opts: RequestInit = {}): Promis
   return json.data as T
 }
 
+export interface TierFeatures {
+  templates?: string[] | '*'
+  allowBlank?: boolean
+  allowImport?: boolean
+  maxProjects?: number
+  [k: string]: unknown
+}
+
+export interface TierDef {
+  id: number
+  tierKey: string
+  name: string
+  tierRank: number
+  isOfficial: number
+  features: string // 后端 JSON 列映射为字符串，前端 JSON.parse
+  isActive: number
+  sort: number
+}
+
 export const adminApi = {
   login(data: { username: string; password: string }) {
     return api<{ token: string; username: string; forcePwdChange: boolean }>('/admin/login', {
@@ -89,17 +108,27 @@ export const adminApi = {
     })
   },
 
+  setUserTier(userId: number, tier: string, days?: number) {
+    return api('/admin/user/set-tier', {
+      method: 'POST',
+      body: JSON.stringify({ userId, tier, days }),
+    })
+  },
+
   getRedeemCodes(page: number, size: number, status?: string) {
     let q = `?page=${page}&size=${size}`
     if (status) q += `&status=${status}`
     return api<{ records: any[]; total: number }>(`/admin/redeem-codes${q}`)
   },
 
-  generateCodes(data: { count: number; days: number; validDays: number; remark: string }) {
-    return api<{ count: number; batchNo: string; codes: string[] }>('/admin/redeem-codes/generate', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
+  generateCodes(data: { count: number; days: number; validDays: number; remark: string; tier: string }) {
+    return api<{ count: number; batchNo: string; codes: string[]; tier: string; tierName: string }>(
+      '/admin/redeem-codes/generate',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+    )
   },
 
   updateCode(id: number, data: { days: number; remark: string }) {
@@ -111,6 +140,41 @@ export const adminApi = {
 
   disableCode(id: number) {
     return api(`/admin/redeem-codes/disable/${id}`, { method: 'POST' })
+  },
+
+  // ── 会员等级管理（数据驱动 tier_def）────────────────────────────
+  getTiers() {
+    return api<TierDef[]>('/admin/tiers')
+  },
+
+  createTier(data: {
+    tierKey: string
+    name: string
+    tierRank: number
+    isOfficial: number
+    features: TierFeatures
+    isActive: number
+    sort: number
+  }) {
+    return api('/admin/tiers', { method: 'POST', body: JSON.stringify(data) })
+  },
+
+  updateTier(
+    id: number,
+    data: {
+      name?: string
+      tierRank?: number
+      isOfficial?: number
+      features?: TierFeatures
+      isActive?: number
+      sort?: number
+    },
+  ) {
+    return api(`/admin/tiers/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+  },
+
+  toggleTier(id: number, active: boolean) {
+    return api(`/admin/tiers/${id}/toggle`, { method: 'POST', body: JSON.stringify({ active }) })
   },
 
   editUser(data: { userId: number; username: string; email: string }) {

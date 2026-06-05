@@ -27,6 +27,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final DeviceBindService deviceBindService;
+    private final TierService tierService;
 
     @Transactional
     public Map<String, Object> register(String username, String password, String email) {
@@ -51,10 +52,13 @@ public class AuthService {
         int tv = user.getTokenVersion() != null ? user.getTokenVersion() : 1;
         String token = jwtUtil.generate(user.getId(), user.getUsername(), restricted, tv);
 
+        Map<String, Object> uv = userVO(user);
+        uv.put("status", "inactive");
+        enrichTier(uv, null);
         Map<String, Object> data = new HashMap<>();
         data.put("token", token);
         data.put("restricted", restricted);
-        data.put("user", userVO(user));
+        data.put("user", uv);
         return data;
     }
 
@@ -96,6 +100,12 @@ public class AuthService {
                 && user.getMemberExpireAt().isAfter(LocalDateTime.now());
         boolean restricted = !memberActive;
 
+        // 过期 → 等级清空
+        if (!memberActive && user.getTier() != null) {
+            user.setTier(null);
+        }
+        String effectiveTier = memberActive ? user.getTier() : null;
+
         String status;
         if (memberActive) {
             status = "active";
@@ -109,7 +119,7 @@ public class AuthService {
         user.setTokenVersion(newVersion);
         userMapper.updateById(user);
 
-        String token = jwtUtil.generate(user.getId(), user.getUsername(), restricted, newVersion);
+        String token = jwtUtil.generate(user.getId(), user.getUsername(), restricted, newVersion, effectiveTier);
         logLogin(user, ip, deviceInfo, memberActive ? "success" : status);
 
         Map<String, Object> data = new HashMap<>();
@@ -117,6 +127,7 @@ public class AuthService {
         data.put("restricted", restricted);
         Map<String, Object> uv = userVO(user);
         uv.put("status", status);
+        enrichTier(uv, effectiveTier);
         data.put("user", uv);
         return data;
     }
@@ -124,10 +135,17 @@ public class AuthService {
     public Map<String, Object> getUserStatus(Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) throw new BizException(ErrorCode.TOKEN_INVALID);
-        Map<String, Object> uv = userVO(user);
         boolean active = user.getMemberExpireAt() != null
                 && user.getMemberExpireAt().isAfter(LocalDateTime.now());
+        // 过期 → 等级清空（落库）
+        if (!active && user.getTier() != null) {
+            user.setTier(null);
+            userMapper.updateById(user);
+        }
+        String effectiveTier = active ? user.getTier() : null;
+        Map<String, Object> uv = userVO(user);
         uv.put("status", active ? "active" : (user.getMemberExpireAt() == null ? "inactive" : "expired"));
+        enrichTier(uv, effectiveTier);
         return uv;
     }
 
@@ -168,6 +186,15 @@ public class AuthService {
         m.put("email", user.getEmail());
         m.put("memberExpireAt", user.getMemberExpireAt());
         return m;
+    }
+
+    /** 给 userVO 补充等级 + 功能清单。effectiveTier 为 null（无会员/过期）时下发空等级。 */
+    private void enrichTier(Map<String, Object> uv, String effectiveTier) {
+        uv.put("tier", effectiveTier);
+        uv.put("tierName", effectiveTier != null ? tierService.nameOf(effectiveTier) : null);
+        uv.put("tierRank", effectiveTier != null ? tierService.rankOf(effectiveTier) : null);
+        uv.put("isOfficial", effectiveTier != null && tierService.isOfficial(effectiveTier));
+        uv.put("features", effectiveTier != null ? tierService.featuresObject(effectiveTier) : java.util.Collections.emptyMap());
     }
 
     private void logLogin(User user, String ip, String device, String result) {

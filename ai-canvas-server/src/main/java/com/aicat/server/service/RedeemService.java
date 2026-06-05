@@ -27,58 +27,100 @@ public class RedeemService {
     private final RedeemCodeMapper redeemCodeMapper;
     private final RedeemLogMapper redeemLogMapper;
     private final UserMapper userMapper;
+    private final TierService tierService;
 
+    /**
+     * 兑换：只升不降。
+     *   码 rank > 用户有效 rank → 升级覆盖（重置时钟）
+     *   码 rank == 用户有效 rank → 同级续费（叠加天数）
+     *   码 rank <  用户有效 rank → 拒绝，不消耗码
+     * 过期/无会员的用户有效 rank = -1，任何码都走升级分支重新激活。
+     */
     @Transactional
     public Map<String, Object> redeem(Long userId, String code) {
         RedeemCode rc = redeemCodeMapper.selectForUpdate(code);
         if (rc == null) throw new BizException(ErrorCode.REDEEM_INVALID);
 
-        return switch (rc.getStatus()) {
+        switch (rc.getStatus()) {
             case "used" -> throw new BizException(ErrorCode.REDEEM_USED);
             case "disabled" -> throw new BizException(ErrorCode.REDEEM_DISABLED);
             case "expired" -> throw new BizException(ErrorCode.REDEEM_EXPIRED);
-            default -> {
-                if (rc.getExpireAt() != null && rc.getExpireAt().isBefore(LocalDateTime.now())) {
-                    rc.setStatus("expired");
-                    redeemCodeMapper.updateById(rc);
-                    throw new BizException(ErrorCode.REDEEM_EXPIRED);
-                }
+            default -> { /* unused，继续 */ }
+        }
 
-                User user = userMapper.selectById(userId);
-                LocalDateTime now = LocalDateTime.now();
-                LocalDateTime base = (user.getMemberExpireAt() != null && user.getMemberExpireAt().isAfter(now))
-                        ? user.getMemberExpireAt() : now;
-                LocalDateTime newExpire = base.plusDays(rc.getDays());
+        LocalDateTime now = LocalDateTime.now();
+        if (rc.getExpireAt() != null && rc.getExpireAt().isBefore(now)) {
+            rc.setStatus("expired");
+            redeemCodeMapper.updateById(rc);
+            throw new BizException(ErrorCode.REDEEM_EXPIRED);
+        }
 
-                LocalDateTime beforeExpire = user.getMemberExpireAt();
-                user.setMemberExpireAt(newExpire);
-                userMapper.updateById(user);
+        String codeTier = rc.getTier();
+        tierService.requireTier(codeTier);             // 码等级必须存在
+        int codeRank = tierService.rankOf(codeTier);
 
-                rc.setStatus("used");
-                rc.setUsedBy(userId);
-                rc.setUsedAt(now);
-                redeemCodeMapper.updateById(rc);
+        User user = userMapper.selectById(userId);
+        boolean memberActive = user.getMemberExpireAt() != null && user.getMemberExpireAt().isAfter(now);
+        // 过期 → 有效等级清空（rank=-1）
+        String effectiveTier = memberActive ? user.getTier() : null;
+        int userRank = tierService.rankOf(effectiveTier);
 
-                RedeemLog log = new RedeemLog();
-                log.setUserId(userId);
-                log.setRedeemCodeId(rc.getId());
-                log.setCode(rc.getCode());
-                log.setDays(rc.getDays());
-                log.setBeforeExpireAt(beforeExpire);
-                log.setAfterExpireAt(newExpire);
-                redeemLogMapper.insert(log);
+        LocalDateTime beforeExpire = user.getMemberExpireAt();
+        String beforeTier = effectiveTier;
+        LocalDateTime newExpire;
+        String action;
 
-                Map<String, Object> data = new HashMap<>();
-                data.put("days", rc.getDays());
-                data.put("memberExpireAt", newExpire);
-                yield data;
-            }
-        };
+        if (codeRank > userRank) {
+            // 升级覆盖（试用→VIP / VIP1→VIP2 / 过期或新户首次激活）：重置时钟
+            user.setTier(codeTier);
+            newExpire = now.plusDays(rc.getDays());
+            action = "upgrade";
+        } else if (codeRank == userRank) {
+            // 同级续费：天数叠加到现有到期（此分支必然 memberActive）
+            user.setTier(codeTier);
+            newExpire = user.getMemberExpireAt().plusDays(rc.getDays());
+            action = "renew";
+        } else {
+            // 低等级码砸高等级用户：拒绝，事务回滚 → 码不消耗
+            throw new BizException(ErrorCode.REDEEM_TIER_TOO_LOW);
+        }
+
+        user.setMemberExpireAt(newExpire);
+        userMapper.updateById(user);
+
+        rc.setStatus("used");
+        rc.setUsedBy(userId);
+        rc.setUsedAt(now);
+        redeemCodeMapper.updateById(rc);
+
+        RedeemLog log = new RedeemLog();
+        log.setUserId(userId);
+        log.setRedeemCodeId(rc.getId());
+        log.setCode(rc.getCode());
+        log.setDays(rc.getDays());
+        log.setBeforeTier(beforeTier);
+        log.setAfterTier(user.getTier());
+        log.setAction(action);
+        log.setBeforeExpireAt(beforeExpire);
+        log.setAfterExpireAt(newExpire);
+        redeemLogMapper.insert(log);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("days", rc.getDays());
+        data.put("memberExpireAt", newExpire);
+        data.put("tier", user.getTier());
+        data.put("tierName", tierService.nameOf(user.getTier()));
+        data.put("tierRank", tierService.rankOf(user.getTier()));
+        data.put("isOfficial", tierService.isOfficial(user.getTier()));
+        data.put("features", tierService.featuresObject(user.getTier()));
+        data.put("action", action);
+        return data;
     }
 
-    public Map<String, Object> generateBatch(int count, int days, int validDays, String remark) {
+    public Map<String, Object> generateBatch(int count, int days, int validDays, String remark, String tier) {
         if (count < 1 || count > 1000) throw new BizException(ErrorCode.INVALID_PARAM, "数量须在1-1000之间");
         if (days < 1) throw new BizException(ErrorCode.INVALID_PARAM, "天数须大于0");
+        tierService.requireTier(tier);                 // 等级必须存在
 
         String batchNo = "B" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
         LocalDateTime expireAt = validDays > 0 ? LocalDateTime.now().plusDays(validDays) : null;
@@ -92,6 +134,7 @@ public class RedeemService {
             RedeemCode rc = new RedeemCode();
             rc.setCode(code);
             rc.setDays(days);
+            rc.setTier(tier);
             rc.setStatus("unused");
             rc.setBatchNo(batchNo);
             rc.setExpireAt(expireAt);
@@ -104,6 +147,8 @@ public class RedeemService {
         data.put("batchNo", batchNo);
         data.put("count", count);
         data.put("days", days);
+        data.put("tier", tier);
+        data.put("tierName", tierService.nameOf(tier));
         data.put("codes", codes);
         return data;
     }

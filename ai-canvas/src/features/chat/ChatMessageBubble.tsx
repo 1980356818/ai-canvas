@@ -81,7 +81,7 @@ function ContentPartRenderer({
   switch (part.type) {
     case "text":
       return isUser ? (
-        <p className="text-sm whitespace-pre-wrap">{part.text}</p>
+        <p className="text-sm whitespace-pre-wrap break-words">{part.text}</p>
       ) : (
         <MarkdownContent content={part.text} compact />
       );

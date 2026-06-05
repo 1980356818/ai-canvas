@@ -30,12 +30,19 @@ public class JwtUtil {
     }
 
     public String generate(Long userId, String username, boolean restricted, int tokenVersion) {
+        return generate(userId, username, restricted, tokenVersion, null);
+    }
+
+    /** tier 签进 JWT，客户端无法本地篡改 localStorage 用户对象来伪造等级。restricted 时 tier 一般为 null。 */
+    public String generate(Long userId, String username, boolean restricted, int tokenVersion, String tier) {
         long expire = restricted ? restrictedExpireMs : fullExpireMs;
-        return Jwts.builder()
+        JwtBuilder builder = Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim("username", username)
                 .claim("restricted", restricted)
-                .claim("tv", tokenVersion)
+                .claim("tv", tokenVersion);
+        if (tier != null) builder.claim("tier", tier);
+        return builder
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expire))
                 .signWith(key)

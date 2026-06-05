@@ -17,6 +17,10 @@ export const JIJING_CHAT_MODELS: ModelInfo[] = [
 
 export const JIJING_IMAGE_MODELS: ModelInfo[] = [
   { id: "gpt-image-2", display_name: "GPT Image 2", capability: "IMAGE" },
+  // 官方聚合版: 原始 id 直透后端 route 2247 → 国和 (GUOHE) 单渠道, 按 token 计费, 比例×2K/4K + 质量自由选。
+  //   与上面分档版 (resolveJiJingImageModelId 拆成 gpt-image-2-{q}-{res}, 走多上游) 并存;
+  //   resolveJiJingImageModelId 对本 id 落 `return baseId` 不改写, 故 id 原样发出。
+  { id: "gpt-image-2-official", display_name: "GPT Image 2 官方", capability: "IMAGE" },
   { id: "nano-banana-2", display_name: "Nanobanana 2", capability: "IMAGE" },
   { id: "nano-banana-pro", display_name: "Nanobanana Pro", capability: "IMAGE" },
   { id: "qwen-image-edit-2511-multipie", display_name: "Qwen 多角度", capability: "IMAGE" },

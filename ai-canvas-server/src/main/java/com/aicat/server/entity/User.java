@@ -14,6 +14,8 @@ public class User {
     private String plainPassword;
     private String email;
     private LocalDateTime memberExpireAt;
+    /** 当前会员等级 tier_key；过期时惰性清空为 null */
+    private String tier;
     private Integer status;
     private Integer tokenVersion;
     @TableField(fill = FieldFill.INSERT)

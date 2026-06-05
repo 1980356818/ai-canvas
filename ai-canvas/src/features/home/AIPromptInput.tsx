@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import { SendHorizonal, X, ImagePlus, Video } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
+import { SendHorizonal, X, ImagePlus, Video, Lock } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useChatStore } from "@/stores/chatStore";
@@ -7,10 +7,11 @@ import { useProviderStore, parseModelRef } from "@/stores/providerStore";
 import { createProject, hasApiKey, isTauri } from "@/platform";
 import { persistImage, getDisplayUrl } from "@/lib/media";
 import { ensureDisplayableImage } from "@/lib/heicConverter";
-import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
 import ModelSelector from "@/features/editor/ModelSelector";
 import { VIDEO_EXTENSIONS_REGEX, IMAGE_EXTENSIONS_REGEX } from "@/shared/mediaFormats";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { ensureProjectQuota } from "@/lib/projectQuota";
 
 interface UploadedMedia {
   url: string;
@@ -38,7 +39,6 @@ const UNIFIED_PLACEHOLDER = "描述你的需求，AI 将自动处理文字与图
 export default function AIPromptInput() {
   const [prompt, setPrompt] = useState("");
   const [sending, setSending] = useState(false);
-  const [selectedModel, setSelectedModel] = useState("");
   const [media, setMedia] = useState<UploadedMedia[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -46,19 +46,9 @@ export default function AIPromptInput() {
   const dragCounterRef = useRef(0);
 
   const activeChatRef = useProviderStore((s) => s.activeChatRef);
-  const providerReady = useProviderStore((s) => s.initialized);
-
-  useEffect(() => {
-    const parsed = parseModelRef(activeChatRef);
-    if (parsed.modelId) {
-      setSelectedModel(parsed.modelId);
-      return;
-    }
-    modelService.getDefaultChatModel().then((ref) => {
-      setSelectedModel(ref.modelId);
-      useProviderStore.getState().setActiveRef("chat", `${ref.providerId}:${ref.modelId}`);
-    });
-  }, [activeChatRef, providerReady]);
+  const chatModelId = parseModelRef(activeChatRef).modelId;
+  const chatProviderId = parseModelRef(activeChatRef).providerId;
+  const ent = useEntitlements();
 
   const addMedia = useCallback(async (files: File[]) => {
     const remaining = MAX_MEDIA - media.length;
@@ -193,8 +183,14 @@ export default function AIPromptInput() {
   }, []);
 
   const handleSend = useCallback(async () => {
+    if (sending) return;
+    if (!ent.allowBlank) {
+      useUIStore.getState().openUpgrade("AI 自由创作为正式版功能，升级会员后解锁");
+      return;
+    }
+    if (!ensureProjectQuota()) return;
     const trimmed = prompt.trim();
-    if (!trimmed || sending) return;
+    if (!trimmed) return;
 
     setSending(true);
     try {
@@ -246,7 +242,7 @@ export default function AIPromptInput() {
     } finally {
       setSending(false);
     }
-  }, [prompt, sending, media, clearInput]);
+  }, [prompt, sending, media, clearInput, ent.allowBlank]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -360,9 +356,9 @@ export default function AIPromptInput() {
         <div className="flex items-center gap-1 border-t border-border/40 px-4 py-2.5">
           <ModelSelector
             capability="CHAT"
-            value={selectedModel}
+            value={chatModelId}
+            providerId={chatProviderId}
             onChange={(modelId, providerId) => {
-              setSelectedModel(modelId);
               useProviderStore.getState().setActiveRef("chat", `${providerId}:${modelId}`);
             }}
           />
@@ -409,16 +405,18 @@ export default function AIPromptInput() {
 
           <button
             onClick={handleSend}
-            disabled={!prompt.trim() || sending}
+            disabled={sending || (ent.allowBlank && !prompt.trim())}
             className={cn(
               "flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200",
-              prompt.trim() && !sending
-                ? "bg-foreground text-background shadow-sm hover:opacity-80"
-                : "cursor-not-allowed bg-muted text-muted-foreground",
+              !ent.allowBlank
+                ? "bg-foreground/80 text-background shadow-sm hover:opacity-80"
+                : prompt.trim() && !sending
+                  ? "bg-foreground text-background shadow-sm hover:opacity-80"
+                  : "cursor-not-allowed bg-muted text-muted-foreground",
             )}
-            title="发送"
+            title={!ent.allowBlank ? "升级解锁 AI 自由创作" : "发送"}
           >
-            <SendHorizonal className="h-4 w-4" />
+            {!ent.allowBlank ? <Lock className="h-4 w-4" /> : <SendHorizonal className="h-4 w-4" />}
           </button>
         </div>
       </div>

@@ -11,6 +11,7 @@ import {
   Combine,
   Camera,
   Smartphone,
+  Lock,
   type LucideIcon,
 } from "lucide-react";
 import { createProject, updateProjectMeta, loadCards } from "@/platform";
@@ -25,6 +26,9 @@ import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { scheduleFitCardsToViewport } from "@/lib/viewport";
 import { cn } from "@/lib/utils";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { canUseTemplate } from "@/lib/entitlements";
+import { ensureProjectQuota } from "@/lib/projectQuota";
 
 function formatRelativeTime(iso: string): string {
   const d = new Date(iso);
@@ -216,6 +220,8 @@ export function NewProjectDialog({
   const openProject = useProjectStore((s) => s.openProject);
   const setAppView = useUIStore((s) => s.setAppView);
   const addToast = useUIStore((s) => s.addToast);
+  const openUpgrade = useUIStore((s) => s.openUpgrade);
+  const ent = useEntitlements();
   const [loading, setLoading] = useState(false);
   const [showNameDialog, setShowNameDialog] = useState(false);
   const [projectImages, setProjectImages] = useState<Record<string, string[]>>({});
@@ -341,6 +347,10 @@ export function NewProjectDialog({
 
   const handleImport = useCallback(async () => {
     if (loading) return;
+    if (!ent.allowImport) {
+      openUpgrade("导入项目为正式版功能，升级会员后解锁");
+      return;
+    }
     setLoading(true);
     const project = await importProjectFromFile();
     if (!project) {
@@ -350,7 +360,7 @@ export function NewProjectDialog({
     useProjectStore.getState().openProject(project.id);
     setAppView("canvas");
     onClose();
-  }, [loading, setAppView, onClose]);
+  }, [loading, setAppView, onClose, ent.allowImport, openUpgrade]);
 
   if (!open) return null;
 
@@ -415,6 +425,7 @@ export function NewProjectDialog({
               const isBlank = tpl.id === "blank";
               const workflow = WORKFLOW_TEMPLATES.find((w) => w.id === tpl.id);
               const cover = workflow?.coverImage;
+              const locked = isBlank ? !ent.allowBlank : !canUseTemplate(ent, tpl.id);
 
               return (
                 <button
@@ -422,6 +433,11 @@ export function NewProjectDialog({
                   type="button"
                   disabled={loading}
                   onClick={() => {
+                    if (locked) {
+                      openUpgrade(isBlank ? "空白创作为正式版功能，升级会员后解锁" : `「${tpl.name}」是正式版模板，升级会员后解锁`);
+                      return;
+                    }
+                    if (!ensureProjectQuota()) return;
                     if (isBlank) {
                       setShowNameDialog(true);
                     } else {
@@ -435,7 +451,7 @@ export function NewProjectDialog({
                       : "border border-border/60 bg-card",
                   )}
                 >
-                  <div className="w-full overflow-hidden">
+                  <div className="relative w-full overflow-hidden">
                     {isBlank ? (
                       <div className="flex aspect-[3/2] items-center justify-center bg-gradient-to-br from-muted/60 to-muted/30">
                         <Plus className="h-6 w-6 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
@@ -444,13 +460,20 @@ export function NewProjectDialog({
                       <img
                         src={cover}
                         alt={tpl.name}
-                        className="block w-full transition-transform duration-300 group-hover:scale-105"
+                        className={cn("block w-full transition-transform duration-300 group-hover:scale-105", locked && "blur-[1px] grayscale")}
                         loading="lazy"
                         decoding="async"
                       />
                     ) : (
                       <div className={cn("flex aspect-[3/2] items-center justify-center bg-gradient-to-br", tpl.gradient)}>
                         <span className="text-xs text-muted-foreground/40">{tpl.name}</span>
+                      </div>
+                    )}
+                    {locked && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <div className="flex items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[9px] font-medium text-white/90">
+                          <Lock className="h-2.5 w-2.5" /> 正式版
+                        </div>
                       </div>
                     )}
                   </div>

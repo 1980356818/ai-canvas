@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Trash2, Layers, ChevronRight, Plus } from "lucide-react";
+import { Trash2, Layers, ChevronRight, Plus, Lock } from "lucide-react";
 import AIPromptInput from "@/features/home/AIPromptInput";
 import WorkflowGrid from "@/features/home/WorkflowGrid";
 import { ConfirmDialog } from "@/features/overlays/ConfirmDialog";
@@ -11,6 +11,8 @@ import { useChatStore } from "@/stores/chatStore";
 import { listProjects, deleteProject, loadCards, createProject } from "@/platform";
 import { getDisplayUrl } from "@/lib/media";
 import { importProjectFromFile } from "@/lib/projectTransfer";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { ensureProjectQuota } from "@/lib/projectQuota";
 import catPawImg from "@/assets/cat-paw.jpg";
 
 
@@ -142,6 +144,8 @@ function RecentProjects() {
   const setProjects = useProjectStore((s) => s.setProjects);
   const setAppView = useUIStore((s) => s.setAppView);
   const addToast = useUIStore((s) => s.addToast);
+  const openUpgrade = useUIStore((s) => s.openUpgrade);
+  const ent = useEntitlements();
   const [projectImages, setProjectImages] = useState<Record<string, string[]>>(
     {},
   );
@@ -233,11 +237,15 @@ function RecentProjects() {
   );
 
   const handleImport = useCallback(async () => {
+    if (!ent.allowImport) {
+      openUpgrade("导入项目为正式版功能，升级会员后解锁");
+      return;
+    }
     const project = await importProjectFromFile();
     if (!project) return; // 用户取消或导入失败(失败已在 helper 内 toast)
     useProjectStore.getState().openProject(project.id);
     setAppView("canvas");
-  }, [setAppView]);
+  }, [setAppView, ent.allowImport, openUpgrade]);
 
   const top5 = projects.slice(0, 5);
 
@@ -258,11 +266,23 @@ function RecentProjects() {
       <div className="grid grid-cols-6 gap-2">
         {/* 空白项目入口 */}
         <button
-          onClick={() => setShowNameDialog(true)}
+          onClick={() => {
+            if (!ent.allowBlank) {
+              openUpgrade("空白创作为正式版功能，升级会员后解锁");
+              return;
+            }
+            if (!ensureProjectQuota()) return;
+            setShowNameDialog(true);
+          }}
           className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-md border border-dashed border-border/80 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
         >
-          <div className="image-collage flex aspect-[3/2] w-full items-center justify-center bg-gradient-to-br from-muted/60 to-muted/30">
+          <div className="image-collage relative flex aspect-[3/2] w-full items-center justify-center bg-gradient-to-br from-muted/60 to-muted/30">
             <Plus className="h-6 w-6 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
+            {!ent.allowBlank && (
+              <div className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-full bg-black/65 px-1.5 py-0.5 text-[9px] font-medium text-white/90">
+                <Lock className="h-2.5 w-2.5" /> 正式版
+              </div>
+            )}
           </div>
           <div className="flex items-start gap-1 px-2 py-1.5">
             <div className="min-w-0 flex-1">

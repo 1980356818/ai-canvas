@@ -7,6 +7,7 @@ import AdjustMemberDialog from '@/components/dialogs/AdjustMemberDialog.vue'
 import ForceUnbindDialog from '@/components/dialogs/ForceUnbindDialog.vue'
 import ResetUserPwdDialog from '@/components/dialogs/ResetUserPwdDialog.vue'
 import EditUserDialog from '@/components/dialogs/EditUserDialog.vue'
+import SetTierDialog from '@/components/dialogs/SetTierDialog.vue'
 
 const users = ref<{ records: any[]; total: number }>({ records: [], total: 0 })
 const page = ref(1)
@@ -24,6 +25,22 @@ const resetPwdUser = ref<any>(null)
 
 const editVisible = ref(false)
 const editUser = ref<any>(null)
+
+const setTierVisible = ref(false)
+const setTierUser = ref<any>(null)
+
+const tierMap = ref<Record<string, string>>({})
+async function loadTiers() {
+  try {
+    const ts = await adminApi.getTiers()
+    tierMap.value = Object.fromEntries(ts.map((t) => [t.tierKey, t.name]))
+  } catch {}
+}
+
+function openSetTier(row: any) {
+  setTierUser.value = row
+  setTierVisible.value = true
+}
 
 async function loadUsers() {
   loading.value = true
@@ -62,7 +79,10 @@ async function toggleStatus(row: any) {
   } catch {}
 }
 
-onMounted(loadUsers)
+onMounted(() => {
+  loadUsers()
+  loadTiers()
+})
 </script>
 
 <template>
@@ -102,6 +122,14 @@ onMounted(loadUsers)
           </span>
         </template>
       </el-table-column>
+      <el-table-column label="等级" width="90" align="center">
+        <template #default="{ row }">
+          <el-tag v-if="row.tier" size="small" :type="row.tier !== 'trial' ? 'warning' : 'info'">
+            {{ tierMap[row.tier] || row.tier }}
+          </el-tag>
+          <span v-else style="color: #909399; font-size: 12px">-</span>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="72" align="center">
         <template #default="{ row }">
           <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
@@ -112,10 +140,11 @@ onMounted(loadUsers)
       <el-table-column label="注册时间" width="140">
         <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="360" align="center">
+      <el-table-column label="操作" width="450" align="center">
         <template #default="{ row }">
           <el-button size="small" @click="openEdit(row)">编辑</el-button>
           <el-button size="small" @click="openAdjust(row)">调整会员</el-button>
+          <el-button size="small" type="warning" plain @click="openSetTier(row)">设等级</el-button>
           <el-button size="small" type="primary" @click="openResetPwd(row)">改密码</el-button>
           <el-button
             size="small"
@@ -142,4 +171,5 @@ onMounted(loadUsers)
   <AdjustMemberDialog v-model="adjustVisible" :user="adjustUser" @adjusted="loadUsers" />
   <ForceUnbindDialog v-model="unbindVisible" :user="unbindUser" />
   <ResetUserPwdDialog v-model="resetPwdVisible" :user="resetPwdUser" @reset="loadUsers" />
+  <SetTierDialog v-model="setTierVisible" :user="setTierUser" @updated="loadUsers" />
 </template>

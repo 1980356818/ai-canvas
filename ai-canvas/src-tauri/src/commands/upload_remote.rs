@@ -36,6 +36,7 @@ use crate::AppState;
 use super::config::{apply_auth_headers, read_full_api_config};
 use super::http_util::root_cause_chain;
 use super::jijing_serde::{deserialize_u64_str_or_num, ServerEnvelope};
+use super::upload_presign::try_direct_upload;
 use super::util::run_blocking;
 
 // ─── 单文件上限按 MIME 分桶 ─────────────────────────────────────────────
@@ -142,15 +143,15 @@ pub struct UploadResult {
 /// `size` 是 Java `Long`, 必须套 `deserialize_u64_str_or_num` —— 服务端
 /// Jackson 把所有 `Long` 序列化成字符串。详见 [`super::jijing_serde`]。
 #[derive(Debug, Deserialize)]
-struct ServerFileUploadResponse {
-    url: String,
-    sha256: String,
+pub(crate) struct ServerFileUploadResponse {
+    pub(crate) url: String,
+    pub(crate) sha256: String,
     #[serde(rename = "contentType")]
-    content_type: String,
+    pub(crate) content_type: String,
     #[serde(deserialize_with = "deserialize_u64_str_or_num")]
-    size: u64,
+    pub(crate) size: u64,
     #[serde(default)]
-    cached: bool,
+    pub(crate) cached: bool,
 }
 
 /// 把任意"本地媒体路径"上传到 JiJing server 并返 HTTP URL。
@@ -306,7 +307,7 @@ fn enforce_upload_size_limit(size: u64, content_type: &str) -> Result<(), String
 
 /// 上传源 —— path 走文件系统流式读, bytes 走内存直传。
 /// 用 Arc<Vec<u8>> 而不是 Vec<u8>, 让 follower → leader 接力时不复制大块内存。
-enum UploadSource {
+pub(crate) enum UploadSource {
     Path(PathBuf),
     Bytes(std::sync::Arc<Vec<u8>>),
 }
@@ -316,6 +317,18 @@ impl UploadSource {
         match self {
             UploadSource::Path(p) => UploadSource::Path(p.clone()),
             UploadSource::Bytes(b) => UploadSource::Bytes(b.clone()),
+        }
+    }
+
+    /// 读出待上传字节。multipart 与 presign 直传两条路径共用此入口,保证
+    /// "读什么"完全一致。Path 走 `tokio::fs::read`(内部 spawn_blocking,大文件
+    /// 不卡 runtime);Bytes 已在内存,clone 一份给调用方拥有。
+    pub(crate) async fn read_bytes(&self) -> Result<Vec<u8>, String> {
+        match self {
+            UploadSource::Path(p) => tokio::fs::read(p)
+                .await
+                .map_err(|e| format!("读取本地文件失败: {}", e)),
+            UploadSource::Bytes(arc) => Ok((**arc).clone()),
         }
     }
 }
@@ -516,10 +529,26 @@ async fn perform_leader_upload(
         UploadSource::Path(p) => p.to_string_lossy().into_owned(),
         UploadSource::Bytes(_) => format!("bytes:{}", sha256),
     };
-    let resp = do_multipart_upload(
-        state, provider, base_url, api_key, source, sha256, content_type, filename,
+
+    // 优先走 presign 直传 COS(字节不过服务器,解决高并发上传慢);服务端
+    // type=local 不支持直传时返 Ok(None),无缝 fallback 回 multipart 中转。
+    // PUT/confirm 真失败返 Err,交给上层 retry loop / 用户重试,不静默降级。
+    let http = state.http_client();
+    let resp = match try_direct_upload(
+        http, provider, base_url, api_key, &source, sha256, content_type, filename, size,
     )
-    .await?;
+    .await
+    {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            tracing::info!("[upload_remote] presign 不可用, fallback multipart sha256={}", sha256);
+            do_multipart_upload(
+                state, provider, base_url, api_key, &source, sha256, content_type, filename,
+            )
+            .await?
+        }
+        Err(e) => return Err(e),
+    };
 
     insert_cache(
         state, sha256, server_origin, &resp.url, &resp.content_type, size,
@@ -736,7 +765,7 @@ async fn do_multipart_upload(
     provider: &str,
     base_url: &str,
     api_key: &str,
-    source: UploadSource,
+    source: &UploadSource,
     sha256: &str,
     content_type: &str,
     filename: &str,
@@ -744,15 +773,8 @@ async fn do_multipart_upload(
     let url = format!("{}/v1/files/upload", base_url.trim_end_matches('/'));
     let filename_owned = filename.to_string();
 
-    // path 形态走 tokio::fs::read (内部 spawn_blocking 大文件不卡 runtime);
-    // bytes 形态直接拆 Arc — 这里假设没有第二个 owner,正常 leader 路径下 Arc
-    // strong_count 仅有当前线程持有,unwrap_or_else 兜底克隆一次保正确性。
-    let bytes: Vec<u8> = match source {
-        UploadSource::Path(abs_path) => tokio::fs::read(&abs_path)
-            .await
-            .map_err(|e| format!("读取本地文件失败: {}", e))?,
-        UploadSource::Bytes(arc) => std::sync::Arc::try_unwrap(arc).unwrap_or_else(|a| (*a).clone()),
-    };
+    // 跟 presign 直传共用 UploadSource::read_bytes —— 两条路径"读什么"完全一致。
+    let bytes = source.read_bytes().await?;
 
     let part = reqwest::multipart::Part::bytes(bytes)
         .file_name(filename_owned)
@@ -813,12 +835,17 @@ async fn do_multipart_upload(
     Ok(resp)
 }
 
-fn truncate(s: &str, max: usize) -> String {
+/// 截断到 `max` 字节内,且落在 UTF-8 字符边界上(避免切断多字节字符 panic),
+/// 末尾补省略号。日志/错误体里常含中文,必须按边界截。
+pub(crate) fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
-        s.to_string()
-    } else {
-        format!("{}…", &s[..max])
+        return s.to_string();
     }
+    let mut end = max;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &s[..end])
 }
 
 #[cfg(test)]

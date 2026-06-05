@@ -52,7 +52,7 @@ export default function ReasoningBlock({
         )}
       </button>
       {open && (
-        <div className="border-t border-border/40 px-3 py-2 text-[12px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap">
+        <div className="border-t border-border/40 px-3 py-2 text-[12px] leading-relaxed text-muted-foreground/80 whitespace-pre-wrap break-words">
           {text}
         </div>
       )}

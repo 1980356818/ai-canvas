@@ -32,6 +32,7 @@ public class AdminService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final TierService tierService;
 
     private static final String DEFAULT_ADMIN_PASSWORD = "admin123";
 
@@ -143,6 +144,22 @@ public class AdminService {
 
         logOp(adminId, adminName, status == 1 ? "unban_user" : "ban_user",
                 "user", userId, null, ip);
+    }
+
+    /** 管理员直接设置用户等级（可同时给会员天数）。days 为空只改等级、不动到期。 */
+    public void setUserTier(Long userId, String tier, Integer days, Long adminId, String adminName, String ip) {
+        User user = userMapper.selectById(userId);
+        if (user == null) throw new BizException(ErrorCode.INVALID_PARAM, "用户不存在");
+        tierService.requireTier(tier);
+        user.setTier(tier);
+        if (days != null && days > 0) {
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime base = (user.getMemberExpireAt() != null && user.getMemberExpireAt().isAfter(now))
+                    ? user.getMemberExpireAt() : now;
+            user.setMemberExpireAt(base.plusDays(days));
+        }
+        userMapper.updateById(user);
+        logOp(adminId, adminName, "set_user_tier", "user", userId, "tier=" + tier + ", days=" + days, ip);
     }
 
     public Map<String, Object> dashboard() {

@@ -5,11 +5,21 @@ import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { scheduleFitCardsToViewport } from "@/lib/viewport";
 import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import type { WorkflowTemplate } from "@/shared/constants";
+import { Lock } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { canUseTemplate } from "@/lib/entitlements";
+import { ensureProjectQuota } from "@/lib/projectQuota";
 
 const FEATURED_IDS = ["wf-video-storyboard", "wf-white-bg", "wf-tryon", "wf-pose-fission", "wf-scene-replace", "wf-face-merge", "wf-look-fission", "wf-multimodal-fusion", "wf-multimodal-fusion-6", "wf-multimodal-fusion-2", "wf-studio-look", "wf-mirror-selfie-1", "wf-mirror-selfie"];
 
-function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
+function FeatureCard({ workflow, locked }: { workflow: WorkflowTemplate; locked: boolean }) {
   const handleClick = async () => {
+    if (locked) {
+      useUIStore.getState().openUpgrade(`「${workflow.name}」是正式版模板，升级会员后即可使用`);
+      return;
+    }
+    if (!ensureProjectQuota()) return;
     try {
       console.log("[诊断] 1.开始创建", { id: workflow.id, name: workflow.name, cardCount: workflow.cards.length });
       const project = await createProject(workflow.name);
@@ -43,18 +53,28 @@ function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
       onClick={handleClick}
       className="group flex flex-col overflow-hidden rounded-md border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
     >
-      <div className="w-full overflow-hidden">
+      <div className="relative w-full overflow-hidden">
         {workflow.coverImage ? (
           <img
             src={workflow.coverImage}
             alt={workflow.name}
-            className="block w-full transition-transform duration-300 group-hover:scale-105"
+            className={cn(
+              "block w-full transition-transform duration-300 group-hover:scale-105",
+              locked && "blur-[1px] grayscale",
+            )}
             loading="lazy"
             decoding="async"
           />
         ) : (
           <div className="flex aspect-[3/2] items-center justify-center bg-gradient-to-br from-muted to-muted/60">
             <span className="text-xs text-muted-foreground/40">{workflow.name}</span>
+          </div>
+        )}
+        {locked && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+            <div className="flex items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[9px] font-medium text-white/90">
+              <Lock className="h-2.5 w-2.5" /> 正式版
+            </div>
           </div>
         )}
       </div>
@@ -72,6 +92,7 @@ function FeatureCard({ workflow }: { workflow: WorkflowTemplate }) {
 }
 
 export default function WorkflowGrid() {
+  const ent = useEntitlements();
   const featured = WORKFLOW_TEMPLATES.filter((wf) =>
     FEATURED_IDS.includes(wf.id),
   );
@@ -84,7 +105,7 @@ export default function WorkflowGrid() {
 
       <div className="grid grid-cols-6 gap-2">
         {featured.map((wf) => (
-          <FeatureCard key={wf.id} workflow={wf} />
+          <FeatureCard key={wf.id} workflow={wf} locked={!canUseTemplate(ent, wf.id)} />
         ))}
       </div>
     </div>

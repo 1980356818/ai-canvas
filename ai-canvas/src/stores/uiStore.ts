@@ -36,6 +36,8 @@ interface UIState {
    * 双击标题、右键菜单"重命名"、键盘 F2(M+) 都走这条统一通道。
    */
   editingGroupId: string | null;
+  /** 升级弹窗：非 null 时打开；"" = 默认文案，字符串 = 上下文原因（如"该模板需要正式版"） */
+  upgradeReason: string | null;
 
   toggleSidebar: () => void;
   toggleAgentPanel: () => void;
@@ -64,6 +66,8 @@ interface UIState {
   setCardProgress: (cardId: string, progress: CardGenProgress | null) => void;
   setCardError: (cardId: string, error: string | null) => void;
   setEditingGroupId: (groupId: string | null) => void;
+  openUpgrade: (reason?: string) => void;
+  closeUpgrade: () => void;
 }
 
 let toastCounter = 0;
@@ -82,6 +86,7 @@ export const useUIStore = create<UIState>((set) => ({
   generatingCards: new Map(),
   cardErrors: new Map(),
   editingGroupId: null,
+  upgradeReason: null,
 
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
   toggleAgentPanel: () =>
@@ -146,6 +151,9 @@ export const useUIStore = create<UIState>((set) => ({
 
   setEditingGroupId: (groupId) =>
     set((s) => (s.editingGroupId === groupId ? s : { editingGroupId: groupId })),
+
+  openUpgrade: (reason) => set({ upgradeReason: reason ?? "" }),
+  closeUpgrade: () => set({ upgradeReason: null }),
 }));
 
 /**

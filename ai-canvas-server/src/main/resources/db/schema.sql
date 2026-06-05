@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     `plain_password`   VARCHAR(64)  DEFAULT NULL COMMENT '明文密码(管理员可见)',
     `email`            VARCHAR(128) DEFAULT NULL COMMENT '邮箱（可选）',
     `member_expire_at` DATETIME     DEFAULT NULL COMMENT '会员到期时间',
+    `tier`             VARCHAR(32)  DEFAULT NULL COMMENT '当前会员等级 tier_key，过期惰性清空',
     `status`           TINYINT      NOT NULL DEFAULT 1 COMMENT '1=正常 0=禁用',
     `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `token_version`    INT          NOT NULL DEFAULT 1 COMMENT '登录版本号，每次登录递增，用于踢掉旧设备',
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS `redeem_code` (
     `id`            BIGINT       NOT NULL AUTO_INCREMENT,
     `code`          VARCHAR(32)  NOT NULL COMMENT '兑换码',
     `days`          INT          NOT NULL COMMENT '会员天数',
+    `tier`          VARCHAR(32)  NOT NULL DEFAULT 'vip1' COMMENT '该码激活成的等级 tier_key',
     `status`        VARCHAR(16)  NOT NULL DEFAULT 'unused' COMMENT 'unused/used/disabled/expired',
     `used_by`       BIGINT       DEFAULT NULL COMMENT '使用者用户ID',
     `used_at`       DATETIME     DEFAULT NULL COMMENT '使用时间',
@@ -44,12 +46,38 @@ CREATE TABLE IF NOT EXISTS `redeem_log` (
     `redeem_code_id`   BIGINT      NOT NULL,
     `code`             VARCHAR(32) NOT NULL,
     `days`             INT         NOT NULL,
+    `before_tier`      VARCHAR(32) DEFAULT NULL COMMENT '兑换前等级',
+    `after_tier`       VARCHAR(32) DEFAULT NULL COMMENT '兑换后等级',
+    `action`           VARCHAR(16) DEFAULT NULL COMMENT 'upgrade/renew',
     `before_expire_at` DATETIME    DEFAULT NULL,
     `after_expire_at`  DATETIME    NOT NULL,
     `created_at`       DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='兑换日志';
+
+-- 3.5 会员等级定义表（数据驱动：等级、rank、每级功能 features 都在这）
+CREATE TABLE IF NOT EXISTS `tier_def` (
+    `id`          BIGINT       NOT NULL AUTO_INCREMENT,
+    `tier_key`    VARCHAR(32)  NOT NULL COMMENT '稳定标识 trial/vip1/vip2…，激活码与用户都引用它',
+    `name`        VARCHAR(32)  NOT NULL COMMENT '展示名 试用版/VIP1',
+    `tier_rank`   INT          NOT NULL COMMENT '有序等级，越大越高（避开 MySQL 保留字 rank）',
+    `is_official` TINYINT      NOT NULL DEFAULT 0 COMMENT '1=正式版 0=试用',
+    `features`    JSON         NOT NULL COMMENT '该级能力清单 JSON，见客户端 entitlements',
+    `is_active`   TINYINT      NOT NULL DEFAULT 1 COMMENT '0=停用，后台不可选/不下发',
+    `sort`        INT          NOT NULL DEFAULT 0,
+    `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_tier_key` (`tier_key`),
+    KEY `idx_tier_rank` (`tier_rank`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会员等级定义';
+
+INSERT IGNORE INTO `tier_def` (tier_key,name,tier_rank,is_official,features,sort) VALUES
+('trial','试用版', 0, 0, '{"templates":["wf-white-bg","wf-tryon"],"allowBlank":false,"allowImport":false,"maxProjects":2}', 0),
+('vip1', 'VIP1',   10,1, '{"templates":"*","allowBlank":true,"allowImport":true}', 1),
+('vip2', 'VIP2',   20,1, '{"templates":"*","allowBlank":true,"allowImport":true}', 2),
+('vip3', 'VIP3',   30,1, '{"templates":"*","allowBlank":true,"allowImport":true}', 3);
 
 -- 4. 管理员表
 CREATE TABLE IF NOT EXISTS `admin` (

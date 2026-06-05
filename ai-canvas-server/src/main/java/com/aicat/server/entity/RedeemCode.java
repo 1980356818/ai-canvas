@@ -11,6 +11,8 @@ public class RedeemCode {
     private Long id;
     private String code;
     private Integer days;
+    /** 该码激活成的等级 tier_key */
+    private String tier;
     private String status;
     private Long usedBy;
     private LocalDateTime usedAt;
