@@ -221,11 +221,13 @@ const Port = memo(function Port({
 interface CardShellProps {
   card: CanvasCard;
   selected: boolean;
+  /** 待移动(已剪切,尚未粘贴)→ 半透明 + 虚线描边,提示「粘贴后将移到别处」。 */
+  cut?: boolean;
   children: React.ReactNode;
 }
 
 export default memo(
-  function CardShell({ card, selected, children }: CardShellProps) {
+  function CardShell({ card, selected, cut = false, children }: CardShellProps) {
     const updateCard = useCardStore((s) => s.updateCard);
     const bringToFront = useCardStore((s) => s.bringToFront);
     const showContextMenu = useUIStore((s) => s.showContextMenu);
@@ -737,6 +739,7 @@ export default memo(
           zIndex: card.zIndex,
           touchAction: "none",
           contain: "layout style",
+          opacity: cut ? 0.5 : undefined,
           boxShadow: selected ? "0 0 14px 3px rgba(129,140,248,0.35), 0 0 4px 1px rgba(56,189,248,0.25)" : "none",
         }}
         onPointerDown={onPointerDown}
@@ -790,6 +793,20 @@ export default memo(
                 }}
               />
             </>
+          )}
+
+          {/* 剪切待移动:静态虚线描边(z-11 压住选中渐变描边),配合外层半透明提示状态 */}
+          {cut && (
+            <div
+              className="pointer-events-none absolute"
+              style={{
+                inset: 0,
+                zIndex: 11,
+                borderRadius: "inherit",
+                border: "2px dashed #94a3b8",
+              }}
+              aria-hidden
+            />
           )}
 
           <div
@@ -910,5 +927,6 @@ export default memo(
     prev.card.title === next.card.title &&
     (prev.card.data as { _showLabel?: boolean })?._showLabel ===
       (next.card.data as { _showLabel?: boolean })?._showLabel &&
-    prev.selected === next.selected,
+    prev.selected === next.selected &&
+    prev.cut === next.cut,
 );

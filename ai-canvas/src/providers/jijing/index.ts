@@ -7,8 +7,10 @@ import {
   isJiJingGrokVideoModel,
   isJiJingSeedanceVipModel,
   isJiJingSeedanceV2Model,
+  isJiJingOmniModel,
+  isJiJingOmniEditModel,
 } from "./models";
-import { toSeedanceRatio, toVeoAspectRatio } from "../shared/video";
+import { toSeedanceRatio, toVeoAspectRatio, toOmniAspectRatio } from "../shared/video";
 import { executeAsyncMediaTask } from "../shared/asyncMediaTask";
 import { PROGRESS_EXPECTED_SEC } from "../shared/progress";
 import type { VideoGenRequest, VideoGenResponse } from "../types";
@@ -68,6 +70,11 @@ export class JiJingProvider extends OpenAICompatProvider {
         );
       }
       return this.generateGatewayVideo(req);
+    }
+    // Omni (Veo Omni Flash): req.model 已由 buildVideoRequest 经 resolveOmniModelId
+    // resolve 成 omni / omni-edit, 这里按编辑态决定 body 形态.
+    if (isJiJingOmniModel(model)) {
+      return this.generateOmniVideo(req);
     }
     return super.generateVideo(req);
   }
@@ -170,6 +177,60 @@ export class JiJingProvider extends OpenAICompatProvider {
       body.videos = req.referenceVideos.map((ref) => ({ url: ref.url, role: ref.role }));
     }
     // 不发 reference_mode — 火山按 content[] type 字段识别, 不需要这个旧 Dale 协议字段.
+    return body;
+  }
+
+  /**
+   * Omni (Veo Omni Flash) 生成路径 — 极境 DSF/甜甜圈 网关 (jijing-server V188).
+   *
+   * 协议跟 jijing-server DsfOmniVideoAdapter 对齐:
+   *   POST /v1/videos/generations
+   *     omni:      {model:"omni", prompt, aspect_ratio, video_type, images?}
+   *     omni-edit: {model:"omni-edit", prompt, aspect_ratio, videos:[源], images?}
+   *
+   * 调用方 (buildVideoRequest) 已按 hasVideos 经 resolveOmniModelId resolve 完
+   * req.model (omni / omni-edit), 这里只负责扁平化 body, 不再做 model 选择.
+   * 固定 10s (后端强制), 故不发 duration / generate_audio / resolution.
+   */
+  private async generateOmniVideo(req: VideoGenRequest): Promise<VideoGenResponse> {
+    return await executeAsyncMediaTask({
+      providerId: this.descriptor.id,
+      submitEndpoint: JIJING_VIDEO_ENDPOINT,
+      body: this.buildOmniBody(req),
+      emit: req.onProgress,
+      expectedSec: PROGRESS_EXPECTED_SEC.videoOmni,
+      generatingLabel: "视频生成中…",
+      submittingLabel: "正在提交视频请求…",
+      savingLabel: "正在保存视频…",
+      failedFallbackMessage: "视频生成失败",
+      projectId: req.projectId,
+      title: req.prompt,
+      cardId: req.cardId,
+      kind: "video_gen",
+    });
+  }
+
+  private buildOmniBody(req: VideoGenRequest): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+      prompt: req.prompt,
+      model: req.model,
+    };
+    // omni 仅 16:9 / 9:16; ratio 优先, 否则由 size 换算 (非法值兜底 16:9).
+    body.aspect_ratio = req.ratio ?? toOmniAspectRatio(req.size);
+
+    if (isJiJingOmniEditModel(req.model ?? "")) {
+      // 视频编辑: 源视频走 videos (后端取首个塞顶层 video_url), 参考图可选.
+      if (req.referenceVideos?.length) {
+        body.videos = req.referenceVideos.map((ref) => ({ url: ref.url, role: ref.role }));
+      }
+    } else if (req.videoType) {
+      // 生成: video_type 区分 t2v/i2v/r2v; i2v 与 r2v 共用 images 字段 (后端按 video_type 解释).
+      body.video_type = req.videoType;
+    }
+    if (req.referenceImages?.length) {
+      // i2v 时 images 顺序即首/尾帧 (referenceImages 已按 firstFrame→lastFrame 入序).
+      body.images = req.referenceImages.map((ref) => ({ url: ref.url, role: ref.role }));
+    }
     return body;
   }
 

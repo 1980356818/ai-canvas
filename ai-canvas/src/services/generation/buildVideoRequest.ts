@@ -43,17 +43,22 @@ import {
   isSeedanceVipAliasModel,
   isSeedanceVipEconomyModel,
   isSeedanceV2AliasModel,
+  isOmniModel,
   resolveVeoVariant,
   resolveSeedanceVariantForTier,
   resolveGrokVariant,
   resolveSeedanceVipModelId,
   resolveSeedanceVipSize,
   resolveSeedanceV2ModelId,
+  resolveOmniModelId,
+  deriveOmniVideoType,
+  clampSeedanceV2Resolution,
   VEO_TIERS,
   type VeoQualityTier,
   type SeedanceQualityTier,
   type SeedanceVipResolution,
   type SeedanceV2Version,
+  type SeedanceV2Resolution,
   type GrokDurationTier,
 } from "@/providers/shared/video";
 
@@ -86,6 +91,7 @@ interface VideoCardData {
   seedanceTier?: SeedanceQualityTier;
   seedanceVipResolution?: SeedanceVipResolution;
   seedanceV2Version?: SeedanceV2Version;
+  seedanceV2Resolution?: SeedanceV2Resolution;
   grokTier?: GrokDurationTier;
   duration?: number;
   generateAudio?: boolean;
@@ -186,6 +192,7 @@ export async function buildVideoRequest(
   const isVipAlias = isSeedanceVipAliasModel(modelId);
   const isVipEconomy = isSeedanceVipEconomyModel(modelId);
   const isSeedanceV2 = isSeedanceV2AliasModel(modelId);
+  const isOmni = isOmniModel(modelId);
 
   // ── tier 取值(全在 data,缺省值与 VideoEditor 初始化一致)──
   const effectiveTier: VeoQualityTier =
@@ -195,6 +202,11 @@ export async function buildVideoRequest(
   const seedanceTier: SeedanceQualityTier = data.seedanceTier ?? "standard";
   const seedanceVipResolution: SeedanceVipResolution = data.seedanceVipResolution ?? "720p";
   const seedanceV2Version: SeedanceV2Version = data.seedanceV2Version ?? "standard";
+  // fast 不支持 1080p — 钳一道防御(陈旧卡片/agent 可能直接塞 1080p 配 fast)。
+  const seedanceV2Resolution: SeedanceV2Resolution = clampSeedanceV2Resolution(
+    seedanceV2Version,
+    data.seedanceV2Resolution ?? "720p",
+  );
   const grokTier: GrokDurationTier = data.grokTier ?? "12s";
   const duration = data.duration ?? 5;
   const generateAudio = data.generateAudio ?? true;
@@ -299,7 +311,9 @@ export async function buildVideoRequest(
           ? resolveSeedanceVipModelId(seedanceVipResolution, hasReferenceVideos)
           : isSeedanceV2
             ? resolveSeedanceV2ModelId(seedanceV2Version, hasReferenceVideos)
-            : modelId;
+            : isOmni
+              ? resolveOmniModelId(hasReferenceVideos)
+              : modelId;
   // VIP: size 必须是具体像素(720P→1280x720/720x1280, 1080P→1920x1080/1080x1920)。
   const effectiveSize = isVipAlias
     ? resolveSeedanceVipSize(seedanceVipResolution, size)
@@ -318,10 +332,15 @@ export async function buildVideoRequest(
     referenceAudios: referenceAudios.length > 0 ? referenceAudios : undefined,
     referenceVideos: referenceVideos.length > 0 ? referenceVideos : undefined,
     duration: effectiveDuration,
-    // Seedance / V2: 实际分辨率统一 720p(2.0 系列上限);其余编码在 SKU 或只读 size。
-    resolution: isSeedance || isSeedanceV2 ? "720p" : undefined,
+    // Seedance(Dale): 固定 720p。V2(火山官方): 用户选 480/720/1080(fast 已钳除 1080)。
+    // 其余族编码在 SKU 或只读 size,不发 resolution。
+    resolution: isSeedance ? "720p" : isSeedanceV2 ? seedanceV2Resolution : undefined,
     // Veo 协议无 generate_audio 字段;Seedance/Grok/V2 才透传有声/无声。
     generateAudio: isSeedance || isGrok || isSeedanceV2 ? generateAudio : undefined,
+    // omni 生成态: 由 imageMode + 参考图数量派生 t2v/i2v/r2v。omni-edit (有源视频) 与其它族不发。
+    videoType: isOmni && !hasReferenceVideos
+      ? deriveOmniVideoType(imageMode, referenceImages.length)
+      : undefined,
     cardId: card.id,
     projectId: card.projectId,
   };

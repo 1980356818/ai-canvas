@@ -30,6 +30,17 @@ interface CanvasState {
    */
   hoverGroupId: string | null;
 
+  /**
+   * 「剪切待移动」的卡片 id 集合(延迟删除语义,仿 Windows 资源管理器剪文件)。
+   *   - Ctrl+X / 右键剪切时写入:卡片**不删除**,只打虚化标记 + 写剪贴板快照。
+   *   - 下次粘贴时:在落点重建这些卡 + 删除原卡(= 移动),然后清空本集合。
+   *   - 复制别的内容 / 再剪别的 / Esc / 删除 → 清空本集合(取消剪切),原卡始终在画布上。
+   * 这样「剪切后又复制别的东西」绝不会丢卡 —— 原卡从未离开画布,直到一次成功粘贴。
+   */
+  cutCardIds: Set<string>;
+  /** 剪切发生时所在项目 id —— 跨项目粘贴(移动)后用来同步源项目 nodeCount。 */
+  cutSourceProjectId: string | null;
+
   setViewport: (viewport: Partial<Viewport>) => void;
   setTool: (tool: CanvasState["tool"]) => void;
   setSelectedCardIds: (ids: string[]) => void;
@@ -43,6 +54,8 @@ interface CanvasState {
   setDragOffsets: (offsets: Map<string, DragOffset>) => void;
   clearDragOffsets: (cardIds: string[]) => void;
   setHoverGroupId: (groupId: string | null) => void;
+  setCutCards: (ids: string[], projectId: string) => void;
+  clearCutCards: () => void;
   enterPickMode: (state: Omit<PickModeState, "active">) => void;
   exitPickMode: () => void;
 }
@@ -76,6 +89,8 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   dragOffsets: new Map(),
   scrubberActiveCardId: null,
   hoverGroupId: null,
+  cutCardIds: new Set(),
+  cutSourceProjectId: null,
 
   setViewport: (partial) =>
     set((s) => {
@@ -144,6 +159,16 @@ export const useCanvasStore = create<CanvasState>((set) => ({
 
   setHoverGroupId: (groupId) =>
     set((s) => (s.hoverGroupId === groupId ? s : { hoverGroupId: groupId })),
+
+  setCutCards: (ids, projectId) =>
+    set({ cutCardIds: new Set(ids), cutSourceProjectId: projectId }),
+
+  clearCutCards: () =>
+    set((s) =>
+      s.cutCardIds.size === 0 && s.cutSourceProjectId === null
+        ? s
+        : { cutCardIds: new Set(), cutSourceProjectId: null },
+    ),
 
   enterPickMode: (state) =>
     set({ pickMode: { ...state, active: true } }),

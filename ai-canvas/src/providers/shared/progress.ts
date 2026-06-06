@@ -87,5 +87,6 @@ export const PROGRESS_EXPECTED_SEC = {
   imageHD: 40,    // 2K/4K 大一点
   videoVeo: 120,  // Veo 3.1 fast ~90s, pro 更久
   videoSeedance: 90,
+  videoOmni: 240, // omni 文生 1-5min, omni-edit 3-8min (取偏长档外推)
   videoGeneric: 90,
 } as const;

@@ -6,6 +6,8 @@ export {
   isGrokVideoModel as isJiJingGrokVideoModel,
   isSeedanceVipModel as isJiJingSeedanceVipModel,
   isSeedanceV2Model as isJiJingSeedanceV2Model,
+  isOmniModel as isJiJingOmniModel,
+  isOmniEditModel as isJiJingOmniEditModel,
 } from "../shared/video";
 
 export const JIJING_CHAT_MODELS: ModelInfo[] = [
@@ -45,15 +47,23 @@ export const JIJING_IMAGE_MODELS: ModelInfo[] = [
 //
 // Nexus 上游 (V145): duration 5-15 秒, 缺省 15 (canvas 暂不暴露控件); quality 字段废弃.
 export const JIJING_VIDEO_MODELS: ModelInfo[] = [
-  // V145: Nexus VIP alias, UI 上分辨率胶囊切 720P/1080P, 自动按是否有参考视频 resolve 到 4 个上游.
-  { id: "seedance-2-0", display_name: "Seedance 2.0 VIP", capability: "VIDEO" },
-  // V145: Nexus VIP 经济版独立项 (sd-2-vip 上游), 不支持真人形象, 故跟 alias 拆开避免误导.
-  { id: "seedance-2-0-720p-no-person", display_name: "Seedance 2.0 经济版（不支持真人）", capability: "VIDEO" },
+  // V145: Nexus VIP alias / 经济版 —— 2026-06-06 起从 dropdown 隐藏 (用户决策).
+  //   后端路由 (Nexus 1095, route 2222-2226) + resolveSeedanceVipModelId + isSeedanceVip* 识别全部保留,
+  //   老卡片可继续 resolve / 重生成; 需要恢复时取消下面两行注释即可.
+  // { id: "seedance-2-0", display_name: "Seedance 2.0 VIP", capability: "VIDEO" },
+  // { id: "seedance-2-0-720p-no-person", display_name: "Seedance 2.0 经济版（不支持真人）", capability: "VIDEO" },
   // V161: 火山方舟原生 Seedance 2.0 聚合 alias, UI 切 standard/fast,
   //   按 referenceVideos 是否非空 resolve 到 4 个具体 model (seedance-2-0 / -fast / -video-ref / -fast-video-ref).
   //   计费走 PER_TOKEN_PREPAID, 提交 hasVideos 决定预扣 20/40, 实结算按 token 多退少补.
   //   见 resolveSeedanceV2ModelId + VideoEditor.handleGenerate.
   { id: "seedance-v2", display_name: "Seedance 2.0 官方", capability: "VIDEO" },
+  // V188: 极境 DSF/甜甜圈 Veo Omni Flash. 单项 alias `omni`, VideoEditor 按"是否连源视频"
+  //   经 resolveOmniModelId 分流到 omni (生成) / omni-edit (视频编辑). 固定 10s, 16:9/9:16;
+  //   imageMode 决定 video_type (firstLastFrame=i2v / reference=r2v / 无图=t2v). 见 shared/video.ts.
+  // 2026-06-06 暂从 dropdown 隐藏: omni-edit 换人/换物效果待验证 (首条真活任务 prompt 是
+  //   "@图1 ... @视频1" 占位符未展开, 需用正常自然语言 prompt 复测)。后端路由 +
+  //   isOmniModel/resolveOmniModelId/适配器 全保留, 老卡片可重生成; 验证 OK 后取消下一行注释即恢复。
+  // { id: "omni", display_name: "Veo Omni Flash", capability: "VIDEO" },
   // 以下两项 2026-05-29 起从 dropdown 隐藏 (用户决策); 后端路由 + normalize 逻辑保留,
   // 老卡片可继续 resolve/重生成。需要恢复时取消注释即可。
   // V156 Cat 平台 alias: tier 胶囊切 6 档 (fast/std/pro × 720p/1080p), 三模式 (text/i2v/ref)

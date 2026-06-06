@@ -49,13 +49,19 @@ import {
   inferGrokTierFromLegacy,
   // V161 火山方舟原生 Seedance 2.0 聚合 alias `seedance-v2`
   isSeedanceV2AliasModel,
+  // V188 极境 DSF/甜甜圈 Omni (Veo Omni Flash) 生成 + 视频编辑
+  isOmniModel,
   SEEDANCE_V2_VERSION_TIERS,
+  SEEDANCE_V2_RESOLUTION_TIERS,
+  isSeedanceV2ResolutionAllowed,
+  clampSeedanceV2Resolution,
   type VeoQualityTier,
   type VeoQuality,
   type VeoResolution,
   type SeedanceQualityTier,
   type SeedanceVipResolution,
   type SeedanceV2Version,
+  type SeedanceV2Resolution,
   type GrokDurationTier,
 } from "@/providers/shared/video";
 
@@ -124,6 +130,8 @@ interface VideoData {
   /** Seedance 2.0 火山原生 (V161) 画质档: standard / fast. 仅 alias 项 `seedance-v2` 用,
    *  跟 seedanceTier (老 Dale 路) 区分; resolveSeedanceV2ModelId 按 (version × hasVideos) 4 路分发. */
   seedanceV2Version?: SeedanceV2Version;
+  /** Seedance 2.0 火山原生 (V161) 分辨率档: 480p/720p/1080p. 仅 alias `seedance-v2` 用; fast 不支持 1080p。 */
+  seedanceV2Resolution?: SeedanceV2Resolution;
   /** Grok Video 时长档:12s / 16s / 20s。 */
   grokTier?: GrokDurationTier;
   generateAudio?: boolean;
@@ -187,6 +195,9 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const [currentSeedanceV2Version, setCurrentSeedanceV2Version] = useState<SeedanceV2Version>(
     () => (card.data as VideoData).seedanceV2Version ?? "standard",
   );
+  const [currentSeedanceV2Resolution, setCurrentSeedanceV2Resolution] = useState<SeedanceV2Resolution>(
+    () => (card.data as VideoData).seedanceV2Resolution ?? "720p",
+  );
   const [currentGrokTier, setCurrentGrokTier] = useState<GrokDurationTier>(
     () => (card.data as VideoData).grokTier ?? "12s",
   );
@@ -201,8 +212,9 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const isVipAlias = isSeedanceVipAliasModel(currentModel);
   const isVipEconomy = isSeedanceVipEconomyModel(currentModel);
   const isSeedanceV2 = isSeedanceV2AliasModel(currentModel);
+  const isOmni = isOmniModel(currentModel);
   const allowedVideoSizes = useMemo(() => getAllowedVideoSizesForModel(currentModel), [currentModel]);
-  const availableModes: VideoImageMode[] = (isSeedance || isVeo || isGrok || isSeedanceVip || isSeedanceV2)
+  const availableModes: VideoImageMode[] = (isSeedance || isVeo || isGrok || isSeedanceVip || isSeedanceV2 || isOmni)
     ? ["firstLastFrame", "reference"]
     : ["firstLastFrame"];
   const imageMode: VideoImageMode = resolveVideoImageMode(data.imageMode);
@@ -300,6 +312,13 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       return patch;
     };
 
+    // omni: 默认参考模式 (r2v)。"连源视频自动转编辑" 依赖 reference 态 —— firstLastFrame
+    // 模式下 dataFlow 会拒视频连线。仅在 imageMode 未设时兜底,尊重用户已选的首尾帧。
+    const migrateOmniFields = (modelId: string): { imageMode?: VideoImageMode } => {
+      if (!isOmniModel(modelId) || data.imageMode) return {};
+      return { imageMode: "reference" };
+    };
+
     // 卡片里残留的 size 不在新模型 allow 列表里就 fallback (handleModelChange 已处理
     // 主动切换路径, 这里专治 mount 时 model+size 不自洽的存档 — 如 21:9 卡切到 VIP)。
     const migrateSize = (modelId: string): { size?: string } => {
@@ -316,6 +335,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         ...migrateSeedanceFields(modelId),
         ...migrateSeedanceVipFields(modelId),
         ...migrateGrokFields(modelId),
+        ...migrateOmniFields(modelId),
         ...migrateSize(modelId),
       };
       const nextModel = (patch.model as string) ?? modelId;
@@ -548,6 +568,10 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         newData.seedanceV2Version = "standard";
         setCurrentSeedanceV2Version("standard");
       }
+      if (isSeedanceV2AliasModel(modelId) && !data.seedanceV2Resolution) {
+        newData.seedanceV2Resolution = "720p";
+        setCurrentSeedanceV2Resolution("720p");
+      }
       if (isSeedanceV2AliasModel(modelId) && (currentDuration < 4 || currentDuration > 15)) {
         setCurrentDuration(5);
         newData.duration = 5;
@@ -618,10 +642,28 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const handleSeedanceV2VersionChange = useCallback(
     (version: SeedanceV2Version) => {
       setCurrentSeedanceV2Version(version);
-      updateCard(card.id, { data: { ...data, seedanceV2Version: version } });
+      // fast 不支持 1080p — 切到 fast 时若当前是 1080p 自动回落 720p。
+      const clampedRes = clampSeedanceV2Resolution(version, currentSeedanceV2Resolution);
+      const patch: Partial<VideoData> = { seedanceV2Version: version };
+      if (clampedRes !== currentSeedanceV2Resolution) {
+        patch.seedanceV2Resolution = clampedRes;
+        setCurrentSeedanceV2Resolution(clampedRes);
+      }
+      updateCard(card.id, { data: { ...data, ...patch } });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, data, updateCard, currentSeedanceV2Resolution],
+  );
+
+  const handleSeedanceV2ResolutionChange = useCallback(
+    (resolution: SeedanceV2Resolution) => {
+      // 防御: fast + 1080p 非法,钳回 720p(UI 已置灰,正常点不到)。
+      const safe = clampSeedanceV2Resolution(currentSeedanceV2Version, resolution);
+      setCurrentSeedanceV2Resolution(safe);
+      updateCard(card.id, { data: { ...data, seedanceV2Resolution: safe } });
+      autoSave.markDirty(card.id);
+    },
+    [card.id, data, updateCard, currentSeedanceV2Version],
   );
 
   const handleGrokTierChange = useCallback(
@@ -900,7 +942,9 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
             <div className="shrink-0 rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-2">
               <div className="mb-1.5 flex items-center gap-1 text-[10px] text-muted-foreground">
                 <Video className="h-3 w-3" />
-                参考视频 · 连线的视频素材 ({data.refVideos.length}/3)
+                {isOmni
+                  ? `源视频 · 连线的视频 (${data.refVideos.length}/1) · 视频编辑模式`
+                  : `参考视频 · 连线的视频素材 (${data.refVideos.length}/3)`}
               </div>
               <div className="flex flex-wrap gap-2">
                 {data.refVideos.map((entry, idx) => (
@@ -1012,16 +1056,34 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
             onChange={handleSizeChange}
             sizeOptions={VIDEO_SIZE_OPTIONS}
             allowedSizes={effectiveAllowedSizes}
-            quality={isVeo ? veoQuality : undefined}
-            onQualityChange={isVeo ? (q: string) => handleVeoQualityChange(q as VeoQuality) : undefined}
-            qualityOptions={isVeo ? VEO_QUALITY_TIERS.map((t) => ({ value: t.value, label: t.label })) : undefined}
+            quality={
+              isVeo
+                ? veoQuality
+                : isSeedanceV2
+                  ? currentSeedanceV2Version
+                  : undefined
+            }
+            onQualityChange={
+              isVeo
+                ? (q: string) => handleVeoQualityChange(q as VeoQuality)
+                : isSeedanceV2
+                  ? (v: string) => handleSeedanceV2VersionChange(v as SeedanceV2Version)
+                  : undefined
+            }
+            qualityOptions={
+              isVeo
+                ? VEO_QUALITY_TIERS.map((t) => ({ value: t.value, label: t.label }))
+                : isSeedanceV2
+                  ? SEEDANCE_V2_VERSION_TIERS.map((t) => ({ value: t.value, label: t.label }))
+                  : undefined
+            }
             resolution={
               isVeo
                 ? veoResolution
                 : isVipAlias
                   ? currentSeedanceVipResolution
                   : isSeedanceV2
-                    ? currentSeedanceV2Version
+                    ? currentSeedanceV2Resolution
                     : isSeedance
                       ? currentSeedanceTier
                       : isGrok
@@ -1034,7 +1096,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
                 : isVipAlias
                   ? (r: string) => handleSeedanceVipResolutionChange(r as SeedanceVipResolution)
                   : isSeedanceV2
-                    ? (v: string) => handleSeedanceV2VersionChange(v as SeedanceV2Version)
+                    ? (r: string) => handleSeedanceV2ResolutionChange(r as SeedanceV2Resolution)
                     : isSeedance
                       ? (tier: string) => handleSeedanceTierChange(tier as SeedanceQualityTier)
                       : isGrok
@@ -1047,7 +1109,14 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
                 : isVipAlias
                   ? SEEDANCE_VIP_RESOLUTION_TIERS.map((t) => ({ value: t.value, label: t.label }))
                   : isSeedanceV2
-                    ? SEEDANCE_V2_VERSION_TIERS.map((t) => ({ value: t.value, label: t.label }))
+                    ? SEEDANCE_V2_RESOLUTION_TIERS.map((t) => ({
+                        value: t.value,
+                        label: t.label,
+                        disabled: !isSeedanceV2ResolutionAllowed(currentSeedanceV2Version, t.value),
+                        title: isSeedanceV2ResolutionAllowed(currentSeedanceV2Version, t.value)
+                          ? undefined
+                          : "快速模式不支持 1080P",
+                      }))
                     : isSeedance
                       ? SEEDANCE_TIERS.map((t) => ({ value: t.value, label: t.label }))
                       : isGrok

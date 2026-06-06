@@ -19,7 +19,7 @@ export function sizeFromRatio(ratio: number): { width: number; height: number } 
 
 export type { ImageSizeOption, QuickCreateItem, WorkflowCardPreset, WorkflowConnectionPreset, WorkflowTemplate } from "@/types";
 import type { ImageSizeOption } from "@/types";
-import { isSeedanceModel, isVeoModel, isGrokVideoModel, isSeedanceVipModel, isSeedanceV2AliasModel } from "@/providers/shared/video";
+import { isSeedanceModel, isVeoModel, isGrokVideoModel, isSeedanceVipModel, isSeedanceV2AliasModel, isOmniModel } from "@/providers/shared/video";
 
 export const IMAGE_SIZE_OPTIONS: ImageSizeOption[] = [
   { value: "1:1",   label: "1:1",   ratio: 1 },
@@ -124,6 +124,8 @@ const SEEDANCE_V2_RATIOS = ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"] as cons
 const SEEDANCE_VIP_RATIOS = ["16:9", "9:16"] as const;
 const VEO_RATIOS = ["16:9", "9:16", "1:1"] as const;
 const GROK_VIDEO_RATIOS = ["16:9", "9:16", "3:2", "2:3", "1:1"] as const;
+//   Omni (Veo Omni Flash): 上游仅 16:9 / 9:16 (含 omni 生成 + omni-edit 编辑)
+const OMNI_RATIOS = ["16:9", "9:16"] as const;
 
 export function getAllowedVideoSizesForModel(modelId: string): string[] | null {
   if (isSeedanceVipModel(modelId)) return [...SEEDANCE_VIP_RATIOS];
@@ -131,6 +133,7 @@ export function getAllowedVideoSizesForModel(modelId: string): string[] | null {
   if (isSeedanceModel(modelId)) return [...SEEDANCE_RATIOS];
   if (isVeoModel(modelId)) return [...VEO_RATIOS];
   if (isGrokVideoModel(modelId)) return [...GROK_VIDEO_RATIOS];
+  if (isOmniModel(modelId)) return [...OMNI_RATIOS];
   return null;
 }
 

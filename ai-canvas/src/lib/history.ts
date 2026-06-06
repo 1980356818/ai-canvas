@@ -190,3 +190,25 @@ export function recordBatchCreate(cardIds: string[]) {
     });
   }
 }
+
+/**
+ * 记录一次「移动」(剪切 → 粘贴):新建了 newCardIds、删除了 deletedCards。
+ * 合成单条 batch undo —— 一次 Ctrl+Z 即整体还原(移除新卡 + 复原原卡及其连线)。
+ * **必须在原卡连线仍存在时调用**(内部要把它们收集进 delete 动作)。
+ */
+export function recordMove(newCardIds: string[], deletedCards: CanvasCard[]) {
+  const actions: UndoAction[] = [];
+  for (const id of newCardIds) {
+    actions.push({ type: "create", cardId: id });
+  }
+  for (const c of deletedCards) {
+    actions.push({
+      type: "delete",
+      card: { ...c },
+      connections: collectConnectionsForCard(c.id),
+    });
+  }
+  if (actions.length > 0) {
+    history.push({ type: "batch", actions });
+  }
+}

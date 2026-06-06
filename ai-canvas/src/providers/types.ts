@@ -191,6 +191,11 @@ export interface VideoGenRequest {
    */
   quality?: string;
   /**
+   * omni 模式: t2v / i2v / r2v, 由 imageMode + 参考图数量派生 (deriveOmniVideoType).
+   * 仅 omni 生成态下发; omni-edit (视频编辑) 与其它视频族不读此字段.
+   */
+  videoType?: string;
+  /**
    * 任务所属项目 ID。**调用方必须在发起请求前快照**，禁止在异步回调里从全局
    * store 读取，否则用户在生成期间切换项目会导致结果保存到错误的项目目录。
    */

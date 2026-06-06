@@ -4,7 +4,7 @@ import { useConnectionStore } from "@/stores/connectionStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
 import { getRefSlotsForModel, getRefSlotsForChatModel, getRefSlotsForVideoModel, compactRefImages, resolveVideoImageMode, type RefImageEntry } from "@/config/model-ref-images";
-import { isSeedanceModel } from "@/providers/shared/video";
+import { isSeedanceModel, isOmniModel } from "@/providers/shared/video";
 import { createLogger } from "@/lib/debug";
 
 const log = createLogger("DataFlow");
@@ -89,6 +89,8 @@ export function canAcceptConnection(
 
   // audio → ai_video
   if (kind === "audio") {
+    if (isOmniModel((td.model as string) || ""))
+      return { title: "该模型不支持参考音频" };
     if (resolveVideoImageMode(td.imageMode as string) !== "reference")
       return { title: "当前模式不支持音频输入", description: "请将视频卡片切换到「参考图」模式" };
     type AudioRef = { sourceCardId: string };
@@ -111,8 +113,11 @@ export function canAcceptConnection(
       type VideoRef = { sourceCardId: string };
       const videos = (td.refVideos as VideoRef[]) || [];
       if (videos.some((v) => v.sourceCardId === sourceCardId)) return true;
-      return videos.length < 3
-        ? true
+      // omni-edit 只接受 1 段源视频; 其余 (seedance-v2 参考) 上限 3。
+      const maxVideos = isOmniModel((td.model as string) || "") ? 1 : 3;
+      if (videos.length < maxVideos) return true;
+      return maxVideos === 1
+        ? { title: "源视频已连接", description: "omni 视频编辑只能连 1 段源视频，请先断开已有连线" }
         : { title: "参考视频已满", description: "最多 3 段，请先断开已有连线" };
     }
 
@@ -132,9 +137,10 @@ export function canAcceptConnection(
     type FrameRef = { url: string; sourceCardId: string };
     const frames = (td.refFrames as FrameRef[]) || [];
     if (frames.some((f) => f.sourceCardId === sourceCardId)) return true;
-    return frames.length < 2
-      ? true
-      : { title: "参考帧已满", description: "最多 2 帧，请先断开已有连线" };
+    if (frames.length < 2) return true;
+    // omni: 首尾帧满 2 帧后再连图 → 允许, 注入时自动切到参考模式 (P4-A, 见 injectIntoCard)。
+    if (isOmniModel((td.model as string) || "")) return true;
+    return { title: "参考帧已满", description: "最多 2 帧，请先断开已有连线" };
   }
 
   // video → ai_chat
@@ -620,10 +626,26 @@ function injectIntoCard(
             d.refFrames = frames;
             d.upstreamCardId = sourceCardId;
             changed = true;
+          } else if (isOmniModel((d.model as string) || "")) {
+            // omni P4-A: 首尾帧已满 2 帧 (i2v 上游仅吃首+尾), 第 3 张图 → 自动切参考模式 (r2v),
+            // 把已有 2 帧 + 新图都迁到 refImages, 清空 refFrames。reference 槽位足够 (OMNI 7 张)。
+            const slots = getRefSlotsForVideoModel((d.model as string) || "", "reference");
+            const migrated: Record<string, RefImageEntry> = {};
+            [...frames, { url: payload.url, sourceCardId }].forEach((f, i) => {
+              const key = slots[i]?.key;
+              if (key) migrated[key] = { url: f.url, sourceCardId: f.sourceCardId, sourceType: "card" };
+            });
+            d.imageMode = "reference";
+            d.refImages = migrated;
+            d.refFrames = undefined;
+            changed = true;
           }
         }
       } else if (payload.kind === "audio") {
-        if (resolveVideoImageMode(d.imageMode as string) === "reference") {
+        if (
+          resolveVideoImageMode(d.imageMode as string) === "reference"
+          && !isOmniModel((d.model as string) || "")
+        ) {
           const MAX_AUDIOS = 3;
           type AudioRef = { url: string; filename: string; sourceCardId: string };
           const audios = [...((d.refAudios as AudioRef[]) || [])];
@@ -648,7 +670,8 @@ function injectIntoCard(
           resolveVideoImageMode(d.imageMode as string) === "reference"
           && !isSeedanceModel((d.model as string) || "")
         ) {
-          const MAX_VIDEOS = 3;
+          // omni-edit 单源视频; 其余上限 3 (与 canAcceptConnection 同步)。
+          const MAX_VIDEOS = isOmniModel((d.model as string) || "") ? 1 : 3;
           type VideoRef = { url: string; sourceCardId: string };
           const videos = [...((d.refVideos as VideoRef[]) || [])];
 

@@ -99,6 +99,29 @@ describe("buildVideoRequest — 五族 tier→真实 SKU", () => {
     expect(r.request.generateAudio).toBe(true);
   });
 
+  it("V2 alias(火山): standard + 1080p → resolution 1080p", async () => {
+    const r = assertOk(
+      await video({ model: "seedance-v2", seedanceV2Version: "standard", seedanceV2Resolution: "1080p" }),
+    );
+    expect(r.request.model).toBe("seedance-2-0");
+    expect(r.request.resolution).toBe("1080p");
+  });
+
+  it("V2 alias(火山): standard + 480p → resolution 480p", async () => {
+    const r = assertOk(
+      await video({ model: "seedance-v2", seedanceV2Version: "standard", seedanceV2Resolution: "480p" }),
+    );
+    expect(r.request.resolution).toBe("480p");
+  });
+
+  it("V2 alias(火山): fast + 1080p(非法)→ buildVideoRequest 钳回 720p", async () => {
+    const r = assertOk(
+      await video({ model: "seedance-v2", seedanceV2Version: "fast", seedanceV2Resolution: "1080p" }),
+    );
+    expect(r.request.model).toBe("seedance-2-0-fast");
+    expect(r.request.resolution).toBe("720p");
+  });
+
   it("V2 alias: standard + 含视频参考 → seedance-2-0-video-ref", async () => {
     const r = assertOk(
       await video({
@@ -110,6 +133,57 @@ describe("buildVideoRequest — 五族 tier→真实 SKU", () => {
       }),
     );
     expect(r.request.model).toBe("seedance-2-0-video-ref");
+  });
+
+  it("omni: 无图 → model omni + videoType t2v, 不发 duration/generateAudio", async () => {
+    const r = assertOk(await video({ model: "omni" }));
+    expect(r.request.model).toBe("omni");
+    expect(r.request.videoType).toBe("t2v");
+    expect(r.request.duration).toBeUndefined();
+    expect(r.request.generateAudio).toBeUndefined();
+  });
+
+  it("omni: 首尾帧 2 张 → model omni + videoType i2v + firstFrame/lastFrame", async () => {
+    const r = assertOk(
+      await video({
+        model: "omni",
+        refFrames: [
+          { url: "http://a", sourceCardId: "" },
+          { url: "http://b", sourceCardId: "" },
+        ],
+      }),
+    );
+    expect(r.request.model).toBe("omni");
+    expect(r.request.videoType).toBe("i2v");
+    expect(r.request.referenceImages).toEqual([
+      { url: "http://a", role: "firstFrame" },
+      { url: "http://b", role: "lastFrame" },
+    ]);
+  });
+
+  it("omni: 参考模式 + 参考图 → model omni + videoType r2v", async () => {
+    const r = assertOk(
+      await video({
+        model: "omni",
+        imageMode: "reference",
+        refImages: { refImage0: { url: "http://r0", sourceType: "card" } },
+      }),
+    );
+    expect(r.request.model).toBe("omni");
+    expect(r.request.videoType).toBe("r2v");
+  });
+
+  it("omni: 连源视频 → 自动分流 model omni-edit + referenceVideos, 不发 videoType", async () => {
+    const r = assertOk(
+      await video({
+        model: "omni",
+        imageMode: "reference",
+        refVideos: [{ url: "http://src.mp4" }],
+      }),
+    );
+    expect(r.request.model).toBe("omni-edit");
+    expect(r.request.referenceVideos).toEqual([{ url: "http://src.mp4", role: "referenceVideo" }]);
+    expect(r.request.videoType).toBeUndefined();
   });
 
   it("缺提示词 → skipped", async () => {

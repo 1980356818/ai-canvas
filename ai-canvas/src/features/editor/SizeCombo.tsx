@@ -18,7 +18,7 @@ interface SizeComboProps {
   onResolutionChange?: (res: string) => void;
   disabled?: boolean;
   allowedSizes?: string[] | null;
-  resolutionOptions?: readonly { value: string; label: string }[];
+  resolutionOptions?: readonly { value: string; label: string; disabled?: boolean; title?: string }[];
   /** Override the full option list. Defaults to IMAGE_SIZE_OPTIONS. */
   sizeOptions?: readonly ImageSizeOption[];
   /** 视频卡专用:把时长(秒)也内嵌到这个下拉里。 */
@@ -227,21 +227,24 @@ export default function SizeCombo({
                 </div>
                 <div className="flex gap-1.5">
                   {(resolutionOptions ?? RESOLUTION_OPTIONS).map((res) => {
-                    const active = resolution === res.value;
+                    const r = res as { value: string; label: string; disabled?: boolean; title?: string };
+                    const active = resolution === r.value;
+                    const resDisabled = disabled || !!r.disabled;
                     return (
                       <button
-                        key={res.value}
-                        disabled={disabled}
-                        onClick={() => onResolutionChange(res.value)}
+                        key={r.value}
+                        disabled={resDisabled}
+                        title={r.title}
+                        onClick={() => onResolutionChange(r.value)}
                         className={cn(
                           "flex-1 rounded-lg py-1.5 text-center text-xs font-medium transition-colors",
                           active
                             ? "bg-primary text-primary-foreground shadow-sm"
                             : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
-                          disabled && "cursor-not-allowed opacity-40",
+                          resDisabled && "cursor-not-allowed opacity-40",
                         )}
                       >
-                        {res.label}
+                        {r.label}
                       </button>
                     );
                   })}

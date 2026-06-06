@@ -599,3 +599,101 @@ export function resolveSeedanceV2ModelId(
   }
   return version === "fast" ? "seedance-2-0-fast" : "seedance-2-0";
 }
+
+/**
+ * V161 火山原生 Seedance 2.0 分辨率档。火山官方 doubao-seedance-2-0 支持 480p/720p/1080p;
+ * fast 上游不支持 1080p,故 fast 档只放 480p/720p(见 {@link isSeedanceV2ResolutionAllowed})。
+ *
+ * 注意: resolution 是独立的 body 字段,不编码在 model 名里 —— 还是那 4 个 model
+ * (standard/fast × 有无视频参考),resolution 单独透传给火山, 后端 VolcanoArkVideoAdapter
+ * 原样转发。计费按 token 实结(per-token 单价与分辨率无关),不需要为 1080p 单独配价。
+ */
+export type SeedanceV2Resolution = "480p" | "720p" | "1080p";
+
+export const SEEDANCE_V2_RESOLUTION_TIERS: readonly { value: SeedanceV2Resolution; label: string }[] = [
+  { value: "480p",  label: "480P" },
+  { value: "720p",  label: "720P" },
+  { value: "1080p", label: "1080P" },
+];
+
+/** fast 不支持 1080p — 判某分辨率在当前 version 下是否可选(UI 置灰 + 提交前钳制都用它)。 */
+export function isSeedanceV2ResolutionAllowed(
+  version: SeedanceV2Version,
+  resolution: SeedanceV2Resolution,
+): boolean {
+  return !(version === "fast" && resolution === "1080p");
+}
+
+/** 把(version, 期望分辨率)钳到合法值: fast + 1080p → 720p,其余原样。 */
+export function clampSeedanceV2Resolution(
+  version: SeedanceV2Version,
+  resolution: SeedanceV2Resolution,
+): SeedanceV2Resolution {
+  return isSeedanceV2ResolutionAllowed(version, resolution) ? resolution : "720p";
+}
+
+
+// ═════════════════════════════════════════════════════════════════════
+// Omni (Veo Omni Flash) — 极境网关 (JiJing V188, channel 1099 / DSF 甜甜圈)
+// ─────────────────────────────────────────────────────────────────────
+// canvas 下拉里只有一个 `omni` 项,提交时按"是否连了源视频"分流到两个后端 model:
+//   omni        文生 / 首尾帧 (i2v) / 参考图 (r2v)  —— 固定 10s
+//   omni-edit   1 段源视频 + 可选参考图 → 重绘      —— 固定 10s
+// 跟 seedance-v2 的 (version × hasVideos) 四路分发同构,这里只有 hasVideos 一维。
+//
+// 协议要点 (后端 DsfOmniVideoAdapter 兜底,canvas 只发网关参数):
+//   - aspect_ratio 仅 16:9 / 9:16
+//   - 不发 duration (后端强制 10s) / generate_audio / resolution
+//   - i2v 与 r2v 都走单一 images 字段,靠 video_type 区分 (不像 Veo 拆 images/referenceImages)
+//   - omni i2v 上游只吃首 + 尾 2 帧;r2v 参考图 ≤7 张
+// ═════════════════════════════════════════════════════════════════════
+
+/** canvas 下拉里唯一的 omni 项 id (生成态)。 */
+export const OMNI_ALIAS_ID = "omni";
+
+/** 连了源视频后提交时分流到的视频编辑 model id。 */
+export const OMNI_EDIT_ID = "omni-edit";
+
+/** 整个 omni 体系 (生成 + 编辑) 判定。 */
+export function isOmniModel(modelId: string | undefined | null): boolean {
+  return modelId === OMNI_ALIAS_ID || modelId === OMNI_EDIT_ID;
+}
+
+/** 仅编辑态判定 (provider 据此决定走 videos 还是 video_type 分支)。 */
+export function isOmniEditModel(modelId: string | undefined | null): boolean {
+  return modelId === OMNI_EDIT_ID;
+}
+
+/**
+ * omni 提交分流:连了源视频 → omni-edit (视频编辑),否则 → omni (生成)。
+ * 与 {@link resolveSeedanceV2ModelId} 同构,只有 hasVideos 一维。
+ */
+export function resolveOmniModelId(hasVideos: boolean): string {
+  return hasVideos ? OMNI_EDIT_ID : OMNI_ALIAS_ID;
+}
+
+/**
+ * 由 imageMode + 参考图数量派生 omni 的 video_type (仅生成态用,编辑态不发)。
+ *   0 图           → t2v (纯文生)
+ *   firstLastFrame → i2v (首尾帧,上游吃首 + 尾 2 帧)
+ *   reference      → r2v (参考图,≤7 张)
+ *
+ * imageMode 用内联字面量联合而非 import VideoImageMode —— config/model-ref-images
+ * 反过来 import 本模块,避免循环依赖。
+ */
+export function deriveOmniVideoType(
+  imageMode: "firstLastFrame" | "reference",
+  imageCount: number,
+): "t2v" | "i2v" | "r2v" {
+  if (imageCount === 0) return "t2v";
+  return imageMode === "firstLastFrame" ? "i2v" : "r2v";
+}
+
+/**
+ * omni 仅支持 16:9 / 9:16。复用 {@link toVeoAspectRatio} 的比例换算,非这两档兜底 16:9。
+ * (UI 层 getAllowedVideoSizesForModel 已把可选项锁到这两档,这里是出站再防一道。)
+ */
+export function toOmniAspectRatio(size: string | undefined): string {
+  const aspect = toVeoAspectRatio(size);
+  return aspect === "16:9" || aspect === "9:16" ? aspect : "16:9";
+}

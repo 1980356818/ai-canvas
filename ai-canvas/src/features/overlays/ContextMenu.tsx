@@ -26,7 +26,7 @@ import { CARD_DEFAULTS } from "@/shared/constants";
 import { WORKFLOW_TEMPLATES } from "@/config/workflows";
 import { extractCardMedia } from "@/config/model-ref-images";
 import { exportFile, revealInExplorer, batchExportFiles } from "@/lib/media";
-import { copyCards, pasteCards } from "@/lib/clipboard";
+import { copyCards, cutCards, pasteCards } from "@/lib/clipboard";
 import { HIDDEN_FEATURES } from "@/config/platforms";
 import {
   disconnectConnectionAndCleanup,
@@ -283,6 +283,11 @@ function ContextMenuPanel({
     hide();
   };
 
+  const runCutCards = async (ids: Set<string>) => {
+    await cutCards(ids);
+    hide();
+  };
+
   const fitAll = () => {
     if (!projectId) return;
     const cards = useCardStore.getState().getCardsByProject(projectId);
@@ -369,6 +374,11 @@ function ContextMenuPanel({
     }
     // 同步把这些卡片从所有组里移除(空组自动删,持久化由 groupConsistency 内部处理)
     pruneGroupsForRemovedCards(ids);
+    // 删掉的卡里若含「待剪切」的,取消这次剪切(剩余原卡保留,不再隐式移动)
+    const cut = useCanvasStore.getState().cutCardIds;
+    if (cut.size > 0 && ids.some((id) => cut.has(id))) {
+      useCanvasStore.getState().clearCutCards();
+    }
     useCanvasStore.getState().clearSelection();
     autoSave.markDirty();
     if (projectId) syncNodeCount(projectId);
@@ -469,6 +479,13 @@ function ContextMenuPanel({
         shortcut: `${mod}+C`,
         disabled: !id || !card,
         onSelect: () => void runCopyCards(new Set(id ? [id] : [])),
+      },
+      {
+        type: "item",
+        label: "剪切",
+        shortcut: `${mod}+X`,
+        disabled: !id || !card,
+        onSelect: () => void runCutCards(new Set(id ? [id] : [])),
       },
       ...(cardOwnerGroup
         ? [
@@ -571,6 +588,13 @@ function ContextMenuPanel({
         shortcut: `${mod}+C`,
         disabled: selectedCardIds.size === 0,
         onSelect: () => void runCopyCards(selectedCardIds),
+      },
+      {
+        type: "item",
+        label: "剪切",
+        shortcut: `${mod}+X`,
+        disabled: selectedCardIds.size === 0,
+        onSelect: () => void runCutCards(selectedCardIds),
       },
       { type: "sep" },
       {

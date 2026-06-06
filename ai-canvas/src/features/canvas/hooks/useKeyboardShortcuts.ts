@@ -8,7 +8,7 @@ import { useConnectionStore } from "@/stores/connectionStore";
 import { deleteCard, updateProjectMeta } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
 import { history, recordBatchDelete } from "@/lib/history";
-import { copyCards, pasteCards } from "@/lib/clipboard";
+import { copyCards, cutCards, pasteCards } from "@/lib/clipboard";
 import {
   disconnectConnectionAndCleanup,
   removeConnectionsForCardIdsAndCleanup,
@@ -70,6 +70,16 @@ async function deleteSelected() {
   }
   // 同步把删除的卡片从所有组里移除(空组自动删,落盘由 groupConsistency 处理)
   pruneGroupsForRemovedCards(ids);
+  // 删掉的卡里若含「待剪切」的,取消这次剪切(剩余原卡保留,不再隐式移动)
+  const cut = useCanvasStore.getState().cutCardIds;
+  if (cut.size > 0) {
+    for (const id of ids) {
+      if (cut.has(id)) {
+        useCanvasStore.getState().clearCutCards();
+        break;
+      }
+    }
+  }
   useCanvasStore.getState().clearSelection();
   autoSave.markDirty();
   const pid = useProjectStore.getState().currentProjectId;
@@ -105,15 +115,20 @@ export function useKeyboardShortcuts() {
       const mod = e.ctrlKey || e.metaKey;
       const { editingCardId, selectedCardIds } = useCanvasStore.getState();
 
-      // ── Escape: exit editing → clear selection → close agent panel ──
+      // ── Escape: exit editing → cancel cut / clear selection → close agent panel ──
       if (e.key === "Escape") {
         if (editingCardId) {
           useCanvasStore.getState().setEditingCardId(null);
           if (isFocusOnInput()) {
             (document.activeElement as HTMLElement)?.blur();
           }
-        } else if (selectedCardIds.size > 0) {
-          useCanvasStore.getState().clearSelection();
+        } else if (
+          selectedCardIds.size > 0 ||
+          useCanvasStore.getState().cutCardIds.size > 0
+        ) {
+          // 取消待移动的剪切 + 清空选中(剪切的卡也是选中态,一次 Esc 全清)
+          useCanvasStore.getState().clearCutCards();
+          if (selectedCardIds.size > 0) useCanvasStore.getState().clearSelection();
         } else if (useUIStore.getState().agentPanelVisible) {
           useUIStore.getState().toggleAgentPanel();
         }
@@ -149,6 +164,16 @@ export function useKeyboardShortcuts() {
         if (selectedCardIds.size === 0) return;
         e.preventDefault();
         void copyCards(selectedCardIds);
+        return;
+      }
+
+      // ── Ctrl+X: cut selected cards(延迟删除:只标记待移动,粘贴时才删原卡) ──
+      // 与复制同理:焦点在输入元素但没选中文本时,剪切卡片而非走默认剪切。
+      if (mod && e.key.toLowerCase() === "x") {
+        if (hasTextSelectionInInput()) return; // 有选中文本,让默认剪切走
+        if (selectedCardIds.size === 0) return;
+        e.preventDefault();
+        void cutCards(selectedCardIds);
         return;
       }
 

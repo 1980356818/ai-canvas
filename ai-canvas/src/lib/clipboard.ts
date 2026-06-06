@@ -7,16 +7,18 @@ import {
 import { useProjectStore } from "@/stores/projectStore";
 import { useGroupStore } from "@/stores/groupStore";
 import { useUIStore } from "@/stores/uiStore";
-import { clipboardWriteText, clipboardReadText, updateProjectMeta, saveGroupsBatch } from "@/platform";
+import { clipboardWriteText, clipboardReadText, updateProjectMeta, saveGroupsBatch, deleteCard } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
-import { recordBatchCreate } from "@/lib/history";
+import { recordBatchCreate, recordMove } from "@/lib/history";
 import { groupToRow } from "@/lib/mappers";
 import { DEFAULT_GROUP_COLOR } from "@/types/group";
 import type { CardGroup } from "@/types";
 import {
   cleanupDanglingReferencesInCards,
   cleanupDanglingReferencesInStore,
+  removeConnectionsForCardIdsAndCleanup,
 } from "@/lib/referenceConsistency";
+import { pruneGroupsForRemovedCards } from "@/lib/groupConsistency";
 
 // v3 增加 groups 字段;v2/v1 仍可读(无 groups)
 const CLIPBOARD_KIND = "ai-canvas-card/v3";
@@ -149,11 +151,17 @@ export function parseClipboard(text: string): ClipboardPayload | null {
 // High-level: copy
 // ---------------------------------------------------------------------------
 
-export async function copyCards(cardIds: Set<string>): Promise<number> {
-  if (cardIds.size === 0) return 0;
-
+/**
+ * 把选中卡片序列化写进剪贴板(系统剪贴板 + 内存兜底),copy / cut 共用。
+ * 返回写入的卡片数与「N 条连线 / M 个组」描述串;系统写失败时仅留内存兜底(不抛)。
+ */
+async function writeSelectionToClipboard(cardIds: Set<string>): Promise<{
+  count: number;
+  extras: string;
+  systemOk: boolean;
+}> {
   const { cards, connections, groups } = collectSelected(cardIds);
-  if (cards.length === 0) return 0;
+  if (cards.length === 0) return { count: 0, extras: "", systemOk: false };
 
   const payload: ClipboardPayload = {
     kind: CLIPBOARD_KIND,
@@ -163,26 +171,63 @@ export async function copyCards(cardIds: Set<string>): Promise<number> {
   };
   const text = JSON.stringify(payload);
   inMemoryClipboard = text;
+
   const parts: string[] = [];
   if (connections.length > 0) parts.push(`${connections.length} 条连线`);
   if (groups.length > 0) parts.push(`${groups.length} 个组`);
   const extras = parts.length > 0 ? `和 ${parts.join(" / ")}` : "";
+
+  let systemOk = true;
   try {
     await clipboardWriteText(text);
-    useUIStore.getState().addToast({
-      type: "info",
-      title: `已复制 ${cards.length} 张卡片${extras}`,
-      duration: 1500,
-    });
   } catch (e) {
-    console.error("[clipboard.copyCards] write failed, in-memory fallback only", e);
-    useUIStore.getState().addToast({
-      type: "info",
-      title: `已复制 ${cards.length} 张卡片${extras}（应用内）`,
-      duration: 1500,
-    });
+    systemOk = false;
+    console.error("[clipboard] system write failed, in-memory fallback only", e);
   }
-  return cards.length;
+  return { count: cards.length, extras, systemOk };
+}
+
+export async function copyCards(cardIds: Set<string>): Promise<number> {
+  if (cardIds.size === 0) return 0;
+
+  // 复制别的内容 → 取消任何「待移动」的剪切(原卡保留在画布上,不再隐式移动)。
+  useCanvasStore.getState().clearCutCards();
+
+  const { count, extras, systemOk } = await writeSelectionToClipboard(cardIds);
+  if (count === 0) return 0;
+
+  useUIStore.getState().addToast({
+    type: "info",
+    title: `已复制 ${count} 张卡片${extras}${systemOk ? "" : "（应用内）"}`,
+    duration: 1500,
+  });
+  return count;
+}
+
+/**
+ * 剪切 = 写剪贴板快照 + 标记「待移动」,但**不删除**卡片(延迟删除,仿资源管理器)。
+ * 真正删除发生在下次粘贴时(见 pasteCards 的移动分支)。在此之前任何复制 / 再剪切 /
+ * Esc / 删除都会取消这次剪切,原卡始终安全留在画布上 —— 绝不会因为「剪切后又复制别的
+ * 图片」而丢卡。
+ */
+export async function cutCards(cardIds: Set<string>): Promise<number> {
+  if (cardIds.size === 0) return 0;
+  const projectId = useProjectStore.getState().currentProjectId;
+  if (!projectId) return 0;
+
+  // 先取消上一次未完成的剪切,再登记这次
+  useCanvasStore.getState().clearCutCards();
+
+  const { count, extras, systemOk } = await writeSelectionToClipboard(cardIds);
+  if (count === 0) return 0;
+
+  useCanvasStore.getState().setCutCards([...cardIds], projectId);
+  useUIStore.getState().addToast({
+    type: "info",
+    title: `已剪切 ${count} 张卡片${extras}，粘贴后移动${systemOk ? "" : "（应用内）"}`,
+    duration: 1500,
+  });
+  return count;
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +243,41 @@ export async function pasteCards(
   projectId: string,
   position?: PastePosition,
 ): Promise<string[]> {
+  const canvas = useCanvasStore.getState();
+  const cutIds = canvas.cutCardIds;
+
+  // ── 剪切 → 粘贴 = 移动 ──
+  // 重新采集「当前」的剪切卡(保留剪切后的任何编辑),在落点重建,然后才删除原卡。
+  // 原卡此刻才离开画布 —— 在这之前它一直安全;若中途已被删/清空则退回普通粘贴。
+  if (cutIds.size > 0) {
+    const live = collectSelected(cutIds);
+    if (live.cards.length > 0) {
+      const payload: ClipboardPayload = {
+        kind: CLIPBOARD_KIND,
+        cards: live.cards,
+        connections: live.connections,
+        groups: live.groups.length > 0 ? live.groups : undefined,
+      };
+      // 原卡快照(此刻连线仍在),用于把「新建 + 删除」合成单步撤销
+      const srcCards: CanvasCard[] = [];
+      for (const id of cutIds) {
+        const c = useCardStore.getState().getCard(id);
+        if (c) srcCards.push({ ...c });
+      }
+      const newCardIds = materialize(payload, projectId, position, false);
+      recordMove(newCardIds, srcCards);
+      deleteOriginalsAfterMove([...cutIds]);
+      const srcPid = canvas.cutSourceProjectId;
+      useCanvasStore.getState().clearCutCards();
+      // materialize 内部已 sync 过 target,但删原卡后计数又变,需再 sync 一次。
+      syncNodeCount(projectId);
+      if (srcPid && srcPid !== projectId) syncNodeCount(srcPid);
+      return newCardIds;
+    }
+    // 剪切卡已不在(被删 / 项目切换清空)→ 取消剪切,退回普通粘贴(剪贴板快照仍可用)
+    useCanvasStore.getState().clearCutCards();
+  }
+
   let text = "";
   try {
     text = await clipboardReadText();
@@ -222,6 +302,23 @@ export async function pasteCards(
   return materialize(payload, projectId, position);
 }
 
+/**
+ * 移动语义下删除原卡:清连线 + 删卡(store + DB) + 整理组。
+ * 撤销已由调用方的 recordMove 负责,这里不再 record —— 故须在 recordMove **之后**调用。
+ */
+function deleteOriginalsAfterMove(ids: string[]) {
+  if (ids.length === 0) return;
+  removeConnectionsForCardIdsAndCleanup(ids);
+  for (const id of ids) {
+    useCardStore.getState().removeCard(id);
+    void deleteCard(id).catch(() => {
+      /* backend may be unavailable; autoSave will reconcile */
+    });
+  }
+  pruneGroupsForRemovedCards(ids);
+  autoSave.markDirty();
+}
+
 // ---------------------------------------------------------------------------
 // Materialize: turn a payload into real cards + connections
 // ---------------------------------------------------------------------------
@@ -230,6 +327,7 @@ function materialize(
   payload: ClipboardPayload,
   projectId: string,
   position?: PastePosition,
+  recordHistory = true,
 ): string[] {
   const { cards: srcCards, connections: srcConns } = payload;
   if (srcCards.length === 0) return [];
@@ -323,7 +421,8 @@ function materialize(
 
   syncNodeCount(projectId);
   useCanvasStore.getState().setSelectedCardIds(newCardIds);
-  recordBatchCreate(newCardIds);
+  // 移动路径(recordHistory=false)由调用方用 recordMove 合成「新建+删除」单步撤销。
+  if (recordHistory) recordBatchCreate(newCardIds);
 
   // Defense-in-depth: refs are already stripped at copy time by collectSelected(),
   // but external clipboard payloads or older formats may still carry stale refs.

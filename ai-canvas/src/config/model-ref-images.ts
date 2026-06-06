@@ -1,5 +1,5 @@
 import type { CanvasCard } from "@/types";
-import { isSeedanceModel, isVeoModel, isGrokVideoModel, type VeoQualityTier } from "@/providers/shared/video";
+import { isSeedanceModel, isVeoModel, isGrokVideoModel, isOmniModel, type VeoQualityTier } from "@/providers/shared/video";
 
 export interface RefImageSlot {
   key: string;
@@ -93,6 +93,14 @@ const GROK_VIDEO_REF_SLOTS: RefImageSlot[] = Array.from({ length: 7 }, (_, i) =>
   required: false,
 }));
 
+// Omni (Veo Omni Flash) r2v 参考图: 上游最多 7 张 (i2v 走 refFrames 通道, 不用 slot)
+const OMNI_R2V_SLOTS: RefImageSlot[] = Array.from({ length: 7 }, (_, i) => ({
+  key: `refImage${i}`,
+  label: `参考图${i + 1}`,
+  description: "Omni 参考图 (风格 / 对象参考)",
+  required: false,
+}));
+
 // 兜底: 通用视频参考图槽位
 const VIDEO_REF_SLOTS: RefImageSlot[] = Array.from({ length: 9 }, (_, i) => ({
   key: `refImage${i}`,
@@ -149,6 +157,7 @@ export function getRefSlotsForVideoModel(
     return VEO_REF_VIDEO_REF_SLOTS;
   }
   if (isGrokVideoModel(modelId)) return GROK_VIDEO_REF_SLOTS;
+  if (isOmniModel(modelId)) return OMNI_R2V_SLOTS;
   return VIDEO_REF_SLOTS;
 }
 

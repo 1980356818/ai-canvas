@@ -64,14 +64,16 @@ const TYPE_LABELS: Record<string, string> = {
 const CardSlot = memo(function CardSlot({
   cardId,
   selected,
+  cut,
 }: {
   cardId: string;
   selected: boolean;
+  cut: boolean;
 }) {
   const card = useCardStore((s) => s.cards.get(cardId));
   if (!card) return null;
   return (
-    <CardShell card={card} selected={selected}>
+    <CardShell card={card} selected={selected} cut={cut}>
       <CardContent card={card} />
     </CardShell>
   );
@@ -116,6 +118,8 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
   const layoutVersion = useCardStore((s) => s.layoutVersion);
   const groupVersion = useGroupStore((s) => s.version);
   const selectedCardIds = useCanvasStore((s) => s.selectedCardIds);
+  // 低频(仅剪切/取消时变),与 selectedCardIds 同量级,用来给待移动的卡打虚化标记。
+  const cutCardIds = useCanvasStore((s) => s.cutCardIds);
 
   // fullCards 只存 id —— 真正渲染走 CardSlot 内部订阅，数据更新（dataVersion）
   // 由每个 slot 自己感知，CardLayer 只负责"哪些 id 当前可见"这层几何过滤。
@@ -273,6 +277,7 @@ export default memo(function CardLayer({ projectId, viewport }: CardLayerProps) 
           key={id}
           cardId={id}
           selected={selectedCardIds.has(id)}
+          cut={cutCardIds.has(id)}
         />
       ))}
     </>
