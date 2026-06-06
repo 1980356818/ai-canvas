@@ -19,6 +19,7 @@ D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\RedeemCode.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\RedeemLog.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\SysConfig.java
+D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\TierDef.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\UnbindLog.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\User.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\entity\UserDevice.java
@@ -29,6 +30,7 @@ D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper\RedeemCodeMapper.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper\RedeemLogMapper.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper\SysConfigMapper.java
+D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper\TierDefMapper.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper\UnbindLogMapper.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper\UserDeviceMapper.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\mapper\UserMapper.java
@@ -40,6 +42,7 @@ D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\servic
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\service\DeviceBindService.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\service\RedeemService.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\service\SysConfigService.java
+D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\service\TierService.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\util\IpUtil.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\util\JwtUtil.java
 D:\Project\AI无限画布\ai-canvas-server\src\main\java\com\aicat\server\util\RedeemCodeGenerator.java
