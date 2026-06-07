@@ -12,8 +12,7 @@ import { listProjects, deleteProject, loadCards, createProject } from "@/platfor
 import { getDisplayUrl } from "@/lib/media";
 import { importProjectFromFile } from "@/lib/projectTransfer";
 import { useEntitlements } from "@/hooks/useEntitlements";
-import { ensureProjectQuota } from "@/lib/projectQuota";
-import catPawImg from "@/assets/cat-paw.jpg";
+import catPawImg from "@/assets/cat-paw.png";
 
 
 function formatRelativeTime(iso: string): string {
@@ -271,7 +270,6 @@ function RecentProjects() {
               openUpgrade("空白创作为正式版功能，升级会员后解锁");
               return;
             }
-            if (!ensureProjectQuota()) return;
             setShowNameDialog(true);
           }}
           className="animate-fade-in-up group relative flex flex-col overflow-hidden rounded-md border border-dashed border-border/80 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"

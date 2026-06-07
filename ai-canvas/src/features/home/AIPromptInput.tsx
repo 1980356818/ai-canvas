@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils";
 import ModelSelector from "@/features/editor/ModelSelector";
 import { VIDEO_EXTENSIONS_REGEX, IMAGE_EXTENSIONS_REGEX } from "@/shared/mediaFormats";
 import { useEntitlements } from "@/hooks/useEntitlements";
-import { ensureProjectQuota } from "@/lib/projectQuota";
 
 interface UploadedMedia {
   url: string;
@@ -188,7 +187,6 @@ export default function AIPromptInput() {
       useUIStore.getState().openUpgrade("AI 自由创作为正式版功能，升级会员后解锁");
       return;
     }
-    if (!ensureProjectQuota()) return;
     const trimmed = prompt.trim();
     if (!trimmed) return;
 

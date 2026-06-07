@@ -966,6 +966,8 @@ pub fn run() {
             // 启动时 ffmpeg 探测 + 主动下载 (前端 FfmpegSetupDialog 用)
             commands::frame_extract::check_ffmpeg_status,
             commands::frame_extract::download_ffmpeg,
+            // 模板图本地缓存(内容哈希命名,下到 data_dir/template-assets/)
+            commands::template_assets::sync_template_assets,
             // update: 自动更新 + 版本切换 + 当前运行时信息
             commands::update::check_for_update,
             commands::update::install_latest_update,

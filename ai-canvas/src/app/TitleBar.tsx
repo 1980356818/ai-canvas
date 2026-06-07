@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Minus, Square, X, PanelLeft, Plus, Pencil, MessageSquare, Download } from "lucide-react";
+import { Minus, Square, X, PanelLeft, Plus, Pencil, MessageSquare, Download, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { NewProjectDialog } from "@/features/overlays/NewProjectDialog";
 import { useUIStore } from "@/stores/uiStore";
@@ -118,6 +118,91 @@ function TabContextMenu({ x, y, onRename, onExport, onClose, onCloseTab }: TabCo
   );
 }
 
+interface OverflowMenuProps {
+  anchor: DOMRect;
+  items: { id: string; title: string }[];
+  activeId: string | null;
+  onPick: (id: string) => void;
+  onCloseTab: (id: string) => void;
+  onClose: () => void;
+}
+
+function OverflowMenu({ anchor, items, activeId, onPick, onCloseTab, onClose }: OverflowMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ x: anchor.right, y: anchor.bottom + 4 });
+
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const pad = 8;
+    let nx = anchor.right - rect.width; // 右对齐到按钮
+    let ny = anchor.bottom + 4;
+    if (nx < pad) nx = pad;
+    if (nx + rect.width > window.innerWidth - pad) nx = Math.max(pad, window.innerWidth - rect.width - pad);
+    if (ny + rect.height > window.innerHeight - pad) ny = Math.max(pad, window.innerHeight - rect.height - pad);
+    setPos({ x: nx, y: ny });
+  }, [anchor]);
+
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      onClose();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    const t = window.setTimeout(() => {
+      document.addEventListener("pointerdown", onPointerDown, true);
+      document.addEventListener("keydown", onKeyDown, true);
+    }, 0);
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={menuRef}
+      className="scrollbar-none fixed z-50 max-h-[60vh] w-60 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+      style={{ left: pos.x, top: pos.y }}
+      role="menu"
+    >
+      {items.map((it) => {
+        const active = it.id === activeId;
+        return (
+          <div
+            key={it.id}
+            role="menuitem"
+            tabIndex={0}
+            onClick={() => { onPick(it.id); onClose(); }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { onPick(it.id); onClose(); } }}
+            className={cn(
+              "group/ov flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+              active
+                ? "bg-accent text-accent-foreground"
+                : "text-foreground hover:bg-accent hover:text-accent-foreground",
+            )}
+          >
+            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", active ? "bg-primary" : "bg-transparent")} />
+            <span className="flex-1 truncate">{it.title}</span>
+            <button
+              type="button"
+              title="关闭标签"
+              onClick={(e) => { e.stopPropagation(); onCloseTab(it.id); }}
+              className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground/0 transition-colors hover:bg-background hover:text-foreground group-hover/ov:text-muted-foreground"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function TitleBar() {
   const appView = useUIStore((s) => s.appView);
   const setAppView = useUIStore((s) => s.setAppView);
@@ -141,6 +226,87 @@ export default function TitleBar() {
   const renameInputRef = useRef<HTMLInputElement>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; projectId: string } | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+
+  // ── 标签栏溢出处理(滚动/箭头/下拉) ──
+  const tabStripRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const setTabRef = useCallback(
+    (id: string) => (el: HTMLDivElement | null) => {
+      if (el) tabRefs.current.set(id, el);
+      else tabRefs.current.delete(id);
+    },
+    [],
+  );
+  const [overflowing, setOverflowing] = useState(false);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [overflowMenu, setOverflowMenu] = useState<DOMRect | null>(null);
+  const overflowBtnRef = useRef<HTMLButtonElement>(null);
+
+  const recomputeScroll = useCallback(() => {
+    const c = tabStripRef.current;
+    if (!c) return;
+    const max = c.scrollWidth - c.clientWidth;
+    setOverflowing(max > 1);
+    setCanScrollLeft(c.scrollLeft > 1);
+    setCanScrollRight(c.scrollLeft < max - 1);
+  }, []);
+
+  const scrollTabs = useCallback((dir: -1 | 1) => {
+    tabStripRef.current?.scrollBy({ left: dir * 240, behavior: "smooth" });
+  }, []);
+
+  const handleTabWheel = useCallback((e: React.WheelEvent) => {
+    const c = tabStripRef.current;
+    if (!c || e.deltaY === 0) return;
+    if (c.scrollWidth <= c.clientWidth) return;
+    c.scrollLeft += e.deltaY; // 竖向滚轮转成横向滚动(passive 安全,不 preventDefault)
+  }, []);
+
+  // 进入画布 / 标签集合变化后重算溢出状态,并监听滚动与尺寸变化
+  useEffect(() => {
+    const c = tabStripRef.current;
+    if (!c || !isCanvas) return;
+    const onScroll = () => recomputeScroll();
+    c.addEventListener("scroll", onScroll, { passive: true });
+    const ro = new ResizeObserver(() => recomputeScroll());
+    ro.observe(c);
+    recomputeScroll();
+    return () => {
+      c.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+    };
+  }, [isCanvas, recomputeScroll]);
+
+  useLayoutEffect(() => {
+    recomputeScroll();
+  }, [openProjectIds, isCanvas, recomputeScroll]);
+
+  // 不再溢出时收起下拉菜单(避免悬空的 portal)
+  useEffect(() => {
+    if (!overflowing) setOverflowMenu(null);
+  }, [overflowing]);
+
+  // 切换/打开项目时把激活标签滚入可视区(只滚动标签条本身)
+  useLayoutEffect(() => {
+    if (!currentProjectId) return;
+    const c = tabStripRef.current;
+    const el = tabRefs.current.get(currentProjectId);
+    if (!c || !el) return;
+    const cRect = c.getBoundingClientRect();
+    const eRect = el.getBoundingClientRect();
+    if (eRect.left < cRect.left) c.scrollBy({ left: eRect.left - cRect.left - 12, behavior: "smooth" });
+    else if (eRect.right > cRect.right) c.scrollBy({ left: eRect.right - cRect.right + 12, behavior: "smooth" });
+  }, [currentProjectId, openProjectIds]);
+
+  const closeTabById = useCallback(
+    (id: string) => {
+      const remaining = openProjectIds.filter((pid) => pid !== id);
+      closeProject(id);
+      if (remaining.length === 0) setAppView("projects");
+    },
+    [openProjectIds, closeProject, setAppView],
+  );
 
   useEffect(() => {
     if (!editingTabId) return;
@@ -171,11 +337,7 @@ export default function TitleBar() {
 
   const handleCloseTab = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    const remaining = openProjectIds.filter((pid) => pid !== id);
-    closeProject(id);
-    if (remaining.length === 0) {
-      setAppView("projects");
-    }
+    closeTabById(id);
   };
 
   const handleSwitchTab = (id: string) => {
@@ -215,9 +377,28 @@ export default function TitleBar() {
             <div className="ml-1.5 h-4 w-px bg-border" />
           </div>
 
+          <div data-tauri-drag-region className="flex min-w-0 flex-1 items-center">
+            {overflowing && (
+              <button
+                type="button"
+                data-tauri-drag-region="false"
+                onClick={() => scrollTabs(-1)}
+                disabled={!canScrollLeft}
+                title="向左滚动"
+                className={cn(
+                  "mb-0.5 flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                  !canScrollLeft && "pointer-events-none opacity-30",
+                )}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            )}
+
           <div
+            ref={tabStripRef}
             data-tauri-drag-region
-            className="scrollbar-none flex min-w-0 flex-1 items-end gap-px overflow-x-auto px-1.5 pt-1"
+            onWheel={handleTabWheel}
+            className="scrollbar-none flex min-w-0 flex-1 items-end gap-px overflow-x-auto px-1 pt-1"
           >
             {openProjectIds.map((id) => {
               const proj = projects.find((p) => p.id === id);
@@ -227,6 +408,7 @@ export default function TitleBar() {
               return (
                 <div
                   key={id}
+                  ref={setTabRef(id)}
                   data-tauri-drag-region="false"
                   role="button"
                   tabIndex={0}
@@ -304,12 +486,50 @@ export default function TitleBar() {
 
             <button
               type="button"
+              data-tauri-drag-region="false"
               onClick={() => setNewProjectOpen(true)}
               title="新建项目"
               className="mb-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               <Plus className="h-3 w-3" />
             </button>
+          </div>
+
+            {overflowing && (
+              <button
+                type="button"
+                data-tauri-drag-region="false"
+                onClick={() => scrollTabs(1)}
+                disabled={!canScrollRight}
+                title="向右滚动"
+                className={cn(
+                  "mb-0.5 flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                  !canScrollRight && "pointer-events-none opacity-30",
+                )}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            )}
+
+            {overflowing && (
+              <button
+                ref={overflowBtnRef}
+                type="button"
+                data-tauri-drag-region="false"
+                onClick={() =>
+                  setOverflowMenu((prev) =>
+                    prev ? null : (overflowBtnRef.current?.getBoundingClientRect() ?? null),
+                  )
+                }
+                title="所有打开的项目"
+                className={cn(
+                  "mb-0.5 ml-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                  overflowMenu && "bg-accent text-foreground",
+                )}
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           <div className="flex shrink-0 items-center pr-0.5">
@@ -367,6 +587,22 @@ export default function TitleBar() {
           addToast({ type: "success", title: "项目创建成功", duration: 3000 });
         }}
       />
+      {overflowMenu && createPortal(
+        <OverflowMenu
+          anchor={overflowMenu}
+          items={openProjectIds
+            .map((id) => {
+              const p = projects.find((x) => x.id === id);
+              return p ? { id, title: p.title } : null;
+            })
+            .filter((x): x is { id: string; title: string } => x !== null)}
+          activeId={currentProjectId}
+          onPick={(id) => openProject(id)}
+          onCloseTab={(id) => closeTabById(id)}
+          onClose={() => setOverflowMenu(null)}
+        />,
+        document.body,
+      )}
       {ctxMenu && createPortal(
         <TabContextMenu
           x={ctxMenu.x}
@@ -382,11 +618,7 @@ export default function TitleBar() {
             const proj = projects.find((p) => p.id === ctxMenu.projectId);
             if (proj) void exportProjectToFile({ id: proj.id, title: proj.title });
           }}
-          onCloseTab={() => {
-            const remaining = openProjectIds.filter((pid) => pid !== ctxMenu.projectId);
-            closeProject(ctxMenu.projectId);
-            if (remaining.length === 0) setAppView("projects");
-          }}
+          onCloseTab={() => closeTabById(ctxMenu.projectId)}
           onClose={() => setCtxMenu(null)}
         />,
         document.body,

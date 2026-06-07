@@ -23,7 +23,10 @@ import { pruneGroupsForRemovedCards } from "@/lib/groupConsistency";
 import { runGroup, cancelGroup } from "@/services/groupRunner";
 import { useGroupRunStatusStore } from "@/stores/groupRunStatusStore";
 import { CARD_DEFAULTS } from "@/shared/constants";
-import { WORKFLOW_TEMPLATES } from "@/config/workflows";
+import { useTemplateStore } from "@/stores/templateStore";
+import { useAuthStore } from "@/stores/authStore";
+import { canSeeTemplate, entitlementsFromUser } from "@/lib/entitlements";
+import { TEMPLATE_CATEGORY_LABEL, TEMPLATE_CATEGORY_ORDER } from "@/config/templateCategories";
 import { extractCardMedia } from "@/config/model-ref-images";
 import { exportFile, revealInExplorer, batchExportFiles } from "@/lib/media";
 import { copyCards, cutCards, pasteCards } from "@/lib/clipboard";
@@ -428,24 +431,37 @@ function ContextMenuPanel({
         type: "submenu",
         label: "添加模板",
         disabled: noProject,
-        children: [
-          ...WORKFLOW_TEMPLATES
+        // 模板按分类分二级子菜单(27 个平铺太长);分类顺序同首页
+        children: (() => {
+          const ent = entitlementsFromUser(useAuthStore.getState().user);
+          const tpls = useTemplateStore.getState().templates
             .filter((wf) => wf.connections && wf.connections.length > 0)
-            .map((wf) => ({
-              type: "item" as const,
-              label: wf.name,
-              disabled: noProject,
-              onSelect: () => {
-                if (!projectId) return;
-                const world = clientToWorld(contextMenu.x, contextMenu.y);
-                void instantiateWorkflowTemplate(wf, projectId, world.x, world.y).then((cardIds) => {
-                  useCanvasStore.getState().setSelectedCardIds(cardIds);
-                  syncNodeCount(projectId);
-                });
-                hide();
-              },
-            })),
-        ],
+            .filter((wf) => canSeeTemplate(ent, wf)); // trial 模板对正式版用户隐藏
+          const cats = [...new Set(tpls.map((t) => t.category))].sort(
+            (a, b) => (TEMPLATE_CATEGORY_ORDER[a] ?? 99) - (TEMPLATE_CATEGORY_ORDER[b] ?? 99),
+          );
+          return cats.map((cat) => ({
+            type: "submenu" as const,
+            label: TEMPLATE_CATEGORY_LABEL[cat] ?? cat,
+            disabled: noProject,
+            children: tpls
+              .filter((wf) => wf.category === cat)
+              .map((wf) => ({
+                type: "item" as const,
+                label: wf.name,
+                disabled: noProject,
+                onSelect: () => {
+                  if (!projectId) return;
+                  const world = clientToWorld(contextMenu.x, contextMenu.y);
+                  void instantiateWorkflowTemplate(wf, projectId, world.x, world.y).then((cardIds) => {
+                    useCanvasStore.getState().setSelectedCardIds(cardIds);
+                    syncNodeCount(projectId);
+                  });
+                  hide();
+                },
+              })),
+          }));
+        })(),
       },
       { type: "sep" },
       {

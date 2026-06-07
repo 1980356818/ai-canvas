@@ -243,7 +243,7 @@ export default function LoginWindow() {
                       <span>当前设备与已绑定设备不同</span>
                     </div>
                     <p className="text-xs text-red-400/70">
-                      你的帐号已绑定在另一台设备上，你可以解绑旧设备并绑定当前设备（每月限 1 次）。
+                      你的帐号已绑定在另一台设备上，你可以解绑旧设备并绑定当前设备（每年限 1 次）。
                     </p>
                     <button
                       type="button"

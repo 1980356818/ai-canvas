@@ -3,23 +3,22 @@ import { useProjectStore } from "@/stores/projectStore";
 import { createProject, updateProjectMeta } from "@/platform";
 import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { scheduleFitCardsToViewport } from "@/lib/viewport";
-import { WORKFLOW_TEMPLATES } from "@/config/workflows";
+import { useTemplateStore } from "@/stores/templateStore";
+import { useEffect, useMemo, useState } from "react";
 import type { WorkflowTemplate } from "@/shared/constants";
-import { Lock } from "lucide-react";
+import { Lock, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEntitlements } from "@/hooks/useEntitlements";
-import { canUseTemplate } from "@/lib/entitlements";
-import { ensureProjectQuota } from "@/lib/projectQuota";
-
-const FEATURED_IDS = ["wf-video-storyboard", "wf-white-bg", "wf-tryon", "wf-pose-fission", "wf-scene-replace", "wf-face-merge", "wf-look-fission", "wf-multimodal-fusion", "wf-multimodal-fusion-6", "wf-multimodal-fusion-2", "wf-studio-look", "wf-mirror-selfie-1", "wf-mirror-selfie"];
+import { canUseTemplate, canSeeTemplate } from "@/lib/entitlements";
+import { TEMPLATE_CATEGORIES, TEMPLATE_CATEGORY_ORDER } from "@/config/templateCategories";
 
 function FeatureCard({ workflow, locked }: { workflow: WorkflowTemplate; locked: boolean }) {
+  const isVideo = workflow.category === "video";
   const handleClick = async () => {
     if (locked) {
       useUIStore.getState().openUpgrade(`「${workflow.name}」是正式版模板，升级会员后即可使用`);
       return;
     }
-    if (!ensureProjectQuota()) return;
     try {
       console.log("[诊断] 1.开始创建", { id: workflow.id, name: workflow.name, cardCount: workflow.cards.length });
       const project = await createProject(workflow.name);
@@ -59,15 +58,20 @@ function FeatureCard({ workflow, locked }: { workflow: WorkflowTemplate; locked:
             src={workflow.coverImage}
             alt={workflow.name}
             className={cn(
-              "block w-full transition-transform duration-300 group-hover:scale-105",
+              "block aspect-video w-full object-cover transition-transform duration-300 group-hover:scale-105",
               locked && "blur-[1px] grayscale",
             )}
             loading="lazy"
             decoding="async"
           />
         ) : (
-          <div className="flex aspect-[3/2] items-center justify-center bg-gradient-to-br from-muted to-muted/60">
-            <span className="text-xs text-muted-foreground/40">{workflow.name}</span>
+          <div className="flex aspect-video items-center justify-center bg-gradient-to-br from-muted to-muted/60">
+            <span className="px-2 text-center text-xs text-muted-foreground/40">{workflow.name}</span>
+          </div>
+        )}
+        {isVideo && !locked && (
+          <div className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/55">
+            <Play className="h-2.5 w-2.5 fill-white text-white" />
           </div>
         )}
         {locked && (
@@ -80,10 +84,10 @@ function FeatureCard({ workflow, locked }: { workflow: WorkflowTemplate; locked:
       </div>
 
       <div className="flex flex-1 flex-col gap-0.5 px-2 py-1.5">
-        <p className="text-[10px] font-semibold text-foreground">
+        <p className="truncate text-[13px] font-semibold text-foreground">
           {workflow.name}
         </p>
-        <p className="line-clamp-2 text-[9px] leading-relaxed text-muted-foreground">
+        <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
           {workflow.description}
         </p>
       </div>
@@ -93,18 +97,64 @@ function FeatureCard({ workflow, locked }: { workflow: WorkflowTemplate; locked:
 
 export default function WorkflowGrid() {
   const ent = useEntitlements();
-  const featured = WORKFLOW_TEMPLATES.filter((wf) =>
-    FEATURED_IDS.includes(wf.id),
-  );
+  const templates = useTemplateStore((s) => s.templates);
+  useEffect(() => {
+    // 进首页拉服务端模板刷新(初始值已是缓存/内置兜底,首屏不空)
+    void useTemplateStore.getState().load();
+  }, []);
+
+  // 按分类分组(只保留有模板的分类,顺序按 TEMPLATE_CATEGORIES)
+  const groups = useMemo(() => {
+    const byCat = new Map<string, WorkflowTemplate[]>();
+    for (const wf of templates) {
+      if (!canSeeTemplate(ent, wf)) continue; // trial 模板只对非正式版展示:正式版有完整模板,藏掉重复的试用副本
+      const list = byCat.get(wf.category) ?? [];
+      list.push(wf);
+      byCat.set(wf.category, list);
+    }
+    return [...byCat.entries()]
+      .map(([key, list]) => ({
+        key,
+        label: TEMPLATE_CATEGORIES.find((c) => c.key === key)?.label ?? key,
+        list,
+      }))
+      .sort((a, b) => (TEMPLATE_CATEGORY_ORDER[a.key] ?? 99) - (TEMPLATE_CATEGORY_ORDER[b.key] ?? 99));
+  }, [templates, ent]);
+
+  const [active, setActive] = useState<string>("");
+  // 默认选中第一个有模板的分类;模板加载完成后纠正一次
+  const activeKey = groups.some((g) => g.key === active) ? active : (groups[0]?.key ?? "");
+  const activeGroup = groups.find((g) => g.key === activeKey);
+
+  if (groups.length === 0) return null;
 
   return (
     <div className="mx-auto w-full max-w-5xl">
-      <h2 className="mb-3 text-sm font-semibold text-foreground">
-        快速开始
-      </h2>
+      <h2 className="mb-3 text-sm font-semibold text-foreground">模板库</h2>
 
-      <div className="grid grid-cols-6 gap-2">
-        {featured.map((wf) => (
+      {/* 分类 Tab */}
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {groups.map((g) => (
+          <button
+            key={g.key}
+            type="button"
+            onClick={() => setActive(g.key)}
+            className={cn(
+              "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+              g.key === activeKey
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+            )}
+          >
+            {g.label}
+            <span className="ml-1 opacity-60">{g.list.length}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* 当前分类网格 */}
+      <div className="grid grid-cols-5 gap-2">
+        {activeGroup?.list.map((wf) => (
           <FeatureCard key={wf.id} workflow={wf} locked={!canUseTemplate(ent, wf.id)} />
         ))}
       </div>

@@ -17,8 +17,6 @@ export interface Entitlements {
   allowBlank: boolean;
   /** 允许导入 .aicat */
   allowImport: boolean;
-  /** 项目数上限，0 = 不限 */
-  maxProjects: number;
 }
 
 /** 无会员/过期/未知一律按"什么都不能创建"的最保守值兜底。 */
@@ -33,7 +31,6 @@ export function entitlementsFromUser(user: AuthUser | null): Entitlements {
     templates,
     allowBlank: !!f.allowBlank,
     allowImport: !!f.allowImport,
-    maxProjects: typeof f.maxProjects === "number" ? f.maxProjects : 0,
   };
 }
 
@@ -44,9 +41,11 @@ export function canUseTemplate(ent: Entitlements, templateId: string): boolean {
 }
 
 /**
- * 项目数配额：是否还能再创建一个项目。
- * `maxProjects <= 0` 表示不限（正式版）；`currentCount` 为当前活跃（未删除）项目数。
+ * 该模板是否对当前用户「可见」(展示与否,独立于能否使用 canUseTemplate)。
+ * trial 分类是正式模板的试用副本(同封面),正式版用户已有完整模板,不该再看到重复的试用版
+ * → 仅对非正式版用户展示 trial;其余分类对所有人可见。
  */
-export function canCreateProject(ent: Entitlements, currentCount: number): boolean {
-  return ent.maxProjects <= 0 || currentCount < ent.maxProjects;
+export function canSeeTemplate(ent: Entitlements, tpl: { category: string }): boolean {
+  if (tpl.category === "trial") return !ent.isOfficial;
+  return true;
 }

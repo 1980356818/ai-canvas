@@ -31,6 +31,8 @@ pub mod upload_remote;
 pub mod upload_presign;
 // frame_extract: ffmpeg-sidecar 抽关键帧。前端解析分镜 JSON 后批量请求时间点的图像。
 pub mod frame_extract;
+// template_assets: 模板图下载到 data_dir/template-assets/(内容哈希命名,本地持久化,非浏览器缓存)。
+pub mod template_assets;
 // update: 自动更新 + 版本切换。详见 update.rs 顶部注释。
 pub mod update;
 pub mod util;

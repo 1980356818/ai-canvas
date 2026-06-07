@@ -10,7 +10,6 @@ export interface TierFeatures {
   templates?: string[] | "*";
   allowBlank?: boolean;
   allowImport?: boolean;
-  maxProjects?: number;
   [k: string]: unknown;
 }
 

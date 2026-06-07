@@ -619,7 +619,7 @@ CREATE TABLE unbind_log (
 );
 
 -- sys_config 相关键
--- unbind_limit_per_month = 1     每月用户自助解绑次数
+-- unbind_limit_per_year = 1      每年用户自助解绑次数
 -- unbind_cooldown_days = 0       两次解绑最短间隔天数
 ```
 
@@ -637,7 +637,7 @@ CREATE TABLE unbind_log (
 | 错误码 | 枚举名 | 含义 |
 |--------|--------|------|
 | 40303 | `DEVICE_MISMATCH` | 当前设备与绑定设备不同 |
-| 40304 | `UNBIND_LIMIT` | 本月解绑次数已用完 |
+| 40304 | `UNBIND_LIMIT` | 本年解绑次数已用完 |
 | 40305 | `UNBIND_COOLDOWN` | 解绑操作过于频繁 |
 
 #### 核心逻辑（DeviceBindService）
@@ -645,7 +645,7 @@ CREATE TABLE unbind_log (
 | 方法 | 行为 |
 |------|------|
 | `checkOrBind(userId, machineCode, ...)` | 无绑定 → 自动绑定首台设备；已绑定且匹配 → 通过；不匹配 → 抛异常 |
-| `unbindAndRebind(userId, newCode, ..., operator)` | operator="user" 时检查月度限额，删旧绑定+写新绑定+写解绑日志 |
+| `unbindAndRebind(userId, newCode, ..., operator)` | operator="user" 时检查年度限额，删旧绑定+写新绑定+写解绑日志 |
 | `getDeviceInfo(userId)` | 返回绑定状态、脱敏机器码、解绑余额（已用/剩余） |
 
 ### 10.3 客户端现状（未实现）
@@ -710,7 +710,7 @@ CREATE TABLE unbind_log (
 | 服务端错误码 | 前端行为 |
 |-------------|---------|
 | `40303` DEVICE_MISMATCH | 显示"当前设备与绑定设备不同"，提供"解绑并绑定此设备"按钮 |
-| `40304` UNBIND_LIMIT | 显示"本月解绑次数已用完，请联系管理员" |
+| `40304` UNBIND_LIMIT | 显示"本年解绑次数已用完，请联系管理员" |
 | `40305` UNBIND_COOLDOWN | 显示"操作过于频繁，请稍后再试" |
 
 **设备管理（可选，SettingsDialog 或独立页面）**：
@@ -728,7 +728,7 @@ CREATE TABLE unbind_log (
 | 便携安装拷贝到新机器 | 硬件 ID 不同 → DEVICE_MISMATCH | 需要解绑 |
 | machineCode 为空（旧版客户端） | 服务端跳过校验 | 向后兼容，不会阻止登录 |
 | 虚拟机/容器 | 可能共享宿主机 UUID | 可接受 |
-| 管理员强制解绑 | 不受月度限额 | 通过后台管理面板操作 |
+| 管理员强制解绑 | 不受年度限额 | 通过后台管理面板操作 |
 
 ---
 

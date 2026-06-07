@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/* ── 自带高级字体(打包/离线/跨平台一致):英文 Inter + 中文思源黑体 ──
+   思源仅含 Medium/Bold 两档,按语义映射:正文(≤500)→Medium、强调(≥600)→Bold。
+   字符集保留全部基本汉字 U+4E00–9FFF,任意常用中文不缺字。子集脚本见 git 记录。 */
+@font-face { font-family:"Inter"; font-style:normal; font-weight:400; font-display:swap; src:url("./assets/fonts/Inter-Regular.woff2") format("woff2"); }
+@font-face { font-family:"Inter"; font-style:normal; font-weight:500; font-display:swap; src:url("./assets/fonts/Inter-Medium.woff2") format("woff2"); }
+@font-face { font-family:"Inter"; font-style:normal; font-weight:600; font-display:swap; src:url("./assets/fonts/Inter-SemiBold.woff2") format("woff2"); }
+@font-face { font-family:"Inter"; font-style:normal; font-weight:700; font-display:swap; src:url("./assets/fonts/Inter-SemiBold.woff2") format("woff2"); }
+@font-face { font-family:"Source Han Sans SC"; font-style:normal; font-weight:400; font-display:swap; src:url("./assets/fonts/SourceHanSansSC-Medium.woff2") format("woff2"); }
+@font-face { font-family:"Source Han Sans SC"; font-style:normal; font-weight:500; font-display:swap; src:url("./assets/fonts/SourceHanSansSC-Medium.woff2") format("woff2"); }
+@font-face { font-family:"Source Han Sans SC"; font-style:normal; font-weight:600; font-display:swap; src:url("./assets/fonts/SourceHanSansSC-Bold.woff2") format("woff2"); }
+@font-face { font-family:"Source Han Sans SC"; font-style:normal; font-weight:700; font-display:swap; src:url("./assets/fonts/SourceHanSansSC-Bold.woff2") format("woff2"); }
+
 @custom-variant dark (&:is(.dark *));
 
 @theme {
@@ -26,6 +38,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: "Inter", "Source Han Sans SC", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei", system-ui, sans-serif;
 }
 
 @layer base {
@@ -81,6 +94,7 @@
   }
   body {
     @apply overflow-hidden;
+    font-family: var(--font-sans);
   }
   button, [role="button"] {
     -webkit-tap-highlight-color: transparent;

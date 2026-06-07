@@ -5,7 +5,6 @@
  * 区分的地基。这里只测纯函数（不碰 store / React），node 环境可确定执行：
  *  - entitlementsFromUser：缺省/试用/正式版三种下发的归一化
  *  - canUseTemplate：模板白名单 vs "*"
- *  - canCreateProject：maxProjects 配额闸（试用限 2、正式版不限）
  */
 
 import { describe, it, expect } from "vitest";
@@ -13,7 +12,7 @@ import type { AuthUser, TierFeatures } from "@/platform/auth.api";
 import {
   entitlementsFromUser,
   canUseTemplate,
-  canCreateProject,
+  canSeeTemplate,
 } from "@/lib/entitlements";
 
 function makeUser(tier: string | null, features: TierFeatures | null): AuthUser {
@@ -35,7 +34,6 @@ const TRIAL_FEATURES: TierFeatures = {
   templates: ["wf-white-bg", "wf-tryon"],
   allowBlank: false,
   allowImport: false,
-  maxProjects: 2,
 };
 const VIP_FEATURES: TierFeatures = {
   templates: "*",
@@ -49,7 +47,6 @@ describe("entitlementsFromUser", () => {
     expect(ent.templates).toEqual([]);
     expect(ent.allowBlank).toBe(false);
     expect(ent.allowImport).toBe(false);
-    expect(ent.maxProjects).toBe(0);
     expect(ent.isOfficial).toBe(false);
   });
 
@@ -57,25 +54,22 @@ describe("entitlementsFromUser", () => {
     const ent = entitlementsFromUser(null);
     expect(ent.templates).toEqual([]);
     expect(ent.allowBlank).toBe(false);
-    expect(ent.maxProjects).toBe(0);
   });
 
-  it("试用版 → 模板白名单 + 禁空白/导入 + 限 2 项目", () => {
+  it("试用版 → 模板白名单 + 禁空白/导入", () => {
     const ent = entitlementsFromUser(makeUser("trial", TRIAL_FEATURES));
     expect(ent.templates).toEqual(["wf-white-bg", "wf-tryon"]);
     expect(ent.allowBlank).toBe(false);
     expect(ent.allowImport).toBe(false);
-    expect(ent.maxProjects).toBe(2);
     expect(ent.isOfficial).toBe(false);
     expect(ent.tierName).toBe("试用版");
   });
 
-  it("正式版 → 全模板 + 空白/导入 + 不限项目(maxProjects 缺省=0)", () => {
+  it("正式版 → 全模板 + 空白/导入", () => {
     const ent = entitlementsFromUser(makeUser("vip1", VIP_FEATURES));
     expect(ent.templates).toBe("*");
     expect(ent.allowBlank).toBe(true);
     expect(ent.allowImport).toBe(true);
-    expect(ent.maxProjects).toBe(0);
     expect(ent.isOfficial).toBe(true);
   });
 });
@@ -94,18 +88,25 @@ describe("canUseTemplate", () => {
   });
 });
 
-describe("canCreateProject", () => {
-  it("maxProjects=0(不限) → 任何数量都可建", () => {
+describe("canSeeTemplate (展示可见性,独立于能否使用)", () => {
+  const trialTpl = { category: "trial" };
+  const flatTpl = { category: "flat" };
+
+  it("正式版 → 隐藏 trial 模板(已有完整模板,不看重复试用副本),其它分类可见", () => {
     const ent = entitlementsFromUser(makeUser("vip1", VIP_FEATURES));
-    expect(canCreateProject(ent, 0)).toBe(true);
-    expect(canCreateProject(ent, 999)).toBe(true);
+    expect(canSeeTemplate(ent, trialTpl)).toBe(false);
+    expect(canSeeTemplate(ent, flatTpl)).toBe(true);
   });
 
-  it("试用版限 2：count<2 放行，>=2 拦截", () => {
+  it("试用版 → trial 模板可见", () => {
     const ent = entitlementsFromUser(makeUser("trial", TRIAL_FEATURES));
-    expect(canCreateProject(ent, 0)).toBe(true);
-    expect(canCreateProject(ent, 1)).toBe(true);
-    expect(canCreateProject(ent, 2)).toBe(false);
-    expect(canCreateProject(ent, 3)).toBe(false);
+    expect(canSeeTemplate(ent, trialTpl)).toBe(true);
+    expect(canSeeTemplate(ent, flatTpl)).toBe(true);
+  });
+
+  it("过期/无会员(非正式版) → 仍能看到 trial(引导体验),边界=只对正式版隐藏", () => {
+    const ent = entitlementsFromUser(makeUser(null, null));
+    expect(canSeeTemplate(ent, trialTpl)).toBe(true);
+    expect(canSeeTemplate(ent, flatTpl)).toBe(true);
   });
 });

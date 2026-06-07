@@ -1,34 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  FileText,
-  ImageIcon,
-  ScanFace,
-  Plus,
-  Layers,
-  User,
-  PersonStanding,
-  Mountain,
-  Combine,
-  Camera,
-  Smartphone,
-  Lock,
-  type LucideIcon,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Layers, Lock, Play } from "lucide-react";
 import { createProject, updateProjectMeta, loadCards } from "@/platform";
 import { importProjectFromFile } from "@/lib/projectTransfer";
 import { NameProjectDialog } from "@/features/overlays/NameProjectDialog";
 import { getDisplayUrl } from "@/lib/media";
 import { useProjectStore } from "@/stores/projectStore";
-import type { ProjectInfo } from "@/types";
+import type { ProjectInfo, WorkflowTemplate } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { useChatStore } from "@/stores/chatStore";
-import { WORKFLOW_TEMPLATES } from "@/config/workflows";
+import { useTemplateStore } from "@/stores/templateStore";
 import { instantiateWorkflowTemplate } from "@/lib/templateFactory";
 import { scheduleFitCardsToViewport } from "@/lib/viewport";
 import { cn } from "@/lib/utils";
 import { useEntitlements } from "@/hooks/useEntitlements";
-import { canUseTemplate } from "@/lib/entitlements";
-import { ensureProjectQuota } from "@/lib/projectQuota";
+import { canUseTemplate, canSeeTemplate } from "@/lib/entitlements";
+import { TEMPLATE_CATEGORIES, TEMPLATE_CATEGORY_ORDER } from "@/config/templateCategories";
 
 function formatRelativeTime(iso: string): string {
   const d = new Date(iso);
@@ -98,113 +84,6 @@ function ImageCollage({ images }: { images: string[] }) {
   );
 }
 
-const TEMPLATE_OPTIONS: {
-  id: string;
-  name: string;
-  desc: string;
-  icon: LucideIcon;
-  accent: string;
-  gradient: string;
-}[] = [
-  {
-    id: "blank",
-    name: "空白项目",
-    desc: "从空白画布开始创作",
-    icon: FileText,
-    accent: "text-emerald-500",
-    gradient: "from-emerald-500/10 via-emerald-500/5 to-teal-500/10",
-  },
-  {
-    id: "wf-white-bg",
-    name: "一键白底图",
-    desc: "上传商品图，AI 生成白底精修图",
-    icon: ImageIcon,
-    accent: "text-violet-500",
-    gradient: "from-violet-500/10 via-purple-500/5 to-fuchsia-500/10",
-  },
-  {
-    id: "wf-tryon",
-    name: "模特换装",
-    desc: "上传模特图与服装图，一键换装",
-    icon: User,
-    accent: "text-pink-500",
-    gradient: "from-pink-500/10 via-rose-500/5 to-fuchsia-500/10",
-  },
-  {
-    id: "wf-pose-fission",
-    name: "姿态裂变",
-    desc: "上传人物图，AI 裂变生成多种姿态",
-    icon: PersonStanding,
-    accent: "text-amber-500",
-    gradient: "from-amber-500/10 via-orange-500/5 to-yellow-500/10",
-  },
-  {
-    id: "wf-scene-replace",
-    name: "场景替换",
-    desc: "上传人物图与场景图，AI 融合替换场景",
-    icon: Mountain,
-    accent: "text-teal-500",
-    gradient: "from-teal-500/10 via-cyan-500/5 to-emerald-500/10",
-  },
-  {
-    id: "wf-face-merge",
-    name: "人脸合成",
-    desc: "上传两张人物照片，AI 融合生成新人像",
-    icon: ScanFace,
-    accent: "text-indigo-500",
-    gradient: "from-indigo-500/10 via-violet-500/5 to-purple-500/10",
-  },
-  {
-    id: "wf-look-fission",
-    name: "Look全身裂变",
-    desc: "锁定机位构图，仅变姿势生成变体",
-    icon: PersonStanding,
-    accent: "text-rose-500",
-    gradient: "from-rose-500/10 via-pink-500/5 to-red-500/10",
-  },
-  {
-    id: "wf-multimodal-fusion",
-    name: "多模态融合1",
-    desc: "模特+服装+场景+角度，AI 综合融合生成",
-    icon: Combine,
-    accent: "text-sky-500",
-    gradient: "from-sky-500/10 via-blue-500/5 to-cyan-500/10",
-  },
-  {
-    id: "wf-multimodal-fusion-6",
-    name: "服装多模态融合6",
-    desc: "模特+服装+影调+环境，AI 解构生成多组商业写真",
-    icon: Combine,
-    accent: "text-emerald-500",
-    gradient: "from-emerald-500/10 via-green-500/5 to-teal-500/10",
-  },
-  {
-    id: "wf-studio-look",
-    name: "一键棚拍Look图",
-    desc: "模特+服装+场景，AI 生成专业棚拍 Lookbook",
-    icon: Camera,
-    accent: "text-fuchsia-500",
-    gradient: "from-fuchsia-500/10 via-purple-500/5 to-pink-500/10",
-  },
-  {
-    id: "wf-mirror-selfie-1",
-    name: "对镜自拍一键换装1.0",
-    desc: "模特+服装+场景，AI 生成一张电商对镜自拍图",
-    icon: Smartphone,
-    accent: "text-orange-500",
-    gradient: "from-orange-500/10 via-amber-500/5 to-yellow-500/10",
-  },
-  {
-    id: "wf-mirror-selfie",
-    name: "对镜自拍一键换装2.0",
-    desc: "模特+服装+场景，AI 生成电商对镜自拍图",
-    icon: Smartphone,
-    accent: "text-orange-500",
-    gradient: "from-orange-500/10 via-red-500/5 to-amber-500/10",
-  },
-];
-
-
 export interface NewProjectDialogProps {
   open: boolean;
   onClose: () => void;
@@ -229,6 +108,12 @@ export function NewProjectDialog({
 
   useEffect(() => {
     if (open) setLoading(false);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    // 进弹窗也拉一次服务端模板(首页可能还没拉过)
+    void useTemplateStore.getState().load();
   }, [open]);
 
   useEffect(() => {
@@ -316,14 +201,37 @@ export function NewProjectDialog({
     [loading, setAppView, addToast, onCreated, onClose],
   );
 
+  const templates = useTemplateStore((s) => s.templates);
+
+  // 按分类分组(顺序按 TEMPLATE_CATEGORIES,只留有模板的分类)
+  const groups = useMemo(() => {
+    const byCat = new Map<string, WorkflowTemplate[]>();
+    for (const wf of templates) {
+      if (!canSeeTemplate(ent, wf)) continue; // trial 模板只对非正式版展示:正式版有完整模板,藏掉重复的试用副本
+      const list = byCat.get(wf.category) ?? [];
+      list.push(wf);
+      byCat.set(wf.category, list);
+    }
+    return [...byCat.entries()]
+      .map(([key, list]) => ({
+        key,
+        label: TEMPLATE_CATEGORIES.find((c) => c.key === key)?.label ?? key,
+        list,
+      }))
+      .sort((a, b) => (TEMPLATE_CATEGORY_ORDER[a.key] ?? 99) - (TEMPLATE_CATEGORY_ORDER[b.key] ?? 99));
+  }, [templates, ent]);
+
+  const [activeCat, setActiveCat] = useState<string>("");
+  const activeKey = groups.some((g) => g.key === activeCat) ? activeCat : (groups[0]?.key ?? "");
+  const activeGroup = groups.find((g) => g.key === activeKey);
+
   const handleCreateFromTemplate = async (templateId: string) => {
     if (loading) return;
     setLoading(true);
-    const tpl = TEMPLATE_OPTIONS.find((t) => t.id === templateId);
-    const title = tpl?.name ?? "未命名画布";
+    const workflow = templates.find((w) => w.id === templateId);
+    const title = workflow?.name ?? "未命名画布";
     try {
       const project = await createProject(title);
-      const workflow = WORKFLOW_TEMPLATES.find((w) => w.id === templateId);
       if (workflow) {
         useProjectStore.getState().addProject(project);
         await instantiateWorkflowTemplate(workflow, project.id, 320, 80);
@@ -415,58 +323,98 @@ export function NewProjectDialog({
           </div>
         )}
 
-        {/* Quick start — matching homepage WorkflowGrid style */}
-        <div className="shrink-0 px-5 pt-4 pb-5">
-          <h3 className="mb-3 text-sm font-semibold text-foreground">
+        {/* Quick start — 空白项目 + 模板按分类浏览 */}
+        <div className="flex min-h-0 flex-1 flex-col px-5 pt-4 pb-5">
+          <h3 className="mb-3 shrink-0 text-sm font-semibold text-foreground">
             快速开始
           </h3>
-          <div className="grid grid-cols-5 gap-2">
-            {TEMPLATE_OPTIONS.map((tpl) => {
-              const isBlank = tpl.id === "blank";
-              const workflow = WORKFLOW_TEMPLATES.find((w) => w.id === tpl.id);
-              const cover = workflow?.coverImage;
-              const locked = isBlank ? !ent.allowBlank : !canUseTemplate(ent, tpl.id);
 
+          {/* 空白项目 */}
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => {
+              if (!ent.allowBlank) {
+                openUpgrade("空白创作为正式版功能，升级会员后解锁");
+                return;
+              }
+              setShowNameDialog(true);
+            }}
+            className="group mb-3 flex shrink-0 items-center gap-3 rounded-md border border-dashed border-border/80 bg-card px-3 py-2.5 text-left transition-all hover:border-primary/40 hover:shadow-sm disabled:opacity-50"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted/50">
+              <Plus className="h-5 w-5 text-muted-foreground/50 transition-colors group-hover:text-primary/60" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-foreground">新建空白项目</p>
+              <p className="truncate text-[10px] text-muted-foreground">从空白画布开始创作</p>
+            </div>
+            {!ent.allowBlank && (
+              <span className="ml-auto flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[9px] text-muted-foreground">
+                <Lock className="h-2.5 w-2.5" /> 正式版
+              </span>
+            )}
+          </button>
+
+          {/* 分类 Tab */}
+          {groups.length > 0 && (
+            <div className="mb-3 flex shrink-0 flex-wrap gap-1.5">
+              {groups.map((g) => (
+                <button
+                  key={g.key}
+                  type="button"
+                  onClick={() => setActiveCat(g.key)}
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                    g.key === activeKey
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                  )}
+                >
+                  {g.label}
+                  <span className="ml-1 opacity-60">{g.list.length}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 当前分类网格(可滚动) */}
+          <div className="grid grid-cols-5 gap-2 overflow-y-auto">
+            {activeGroup?.list.map((wf) => {
+              const locked = !canUseTemplate(ent, wf.id);
+              const cover = wf.coverImage;
+              const isVideo = wf.category === "video";
               return (
                 <button
-                  key={tpl.id}
+                  key={wf.id}
                   type="button"
                   disabled={loading}
                   onClick={() => {
                     if (locked) {
-                      openUpgrade(isBlank ? "空白创作为正式版功能，升级会员后解锁" : `「${tpl.name}」是正式版模板，升级会员后解锁`);
+                      openUpgrade(`「${wf.name}」是正式版模板，升级会员后解锁`);
                       return;
                     }
-                    if (!ensureProjectQuota()) return;
-                    if (isBlank) {
-                      setShowNameDialog(true);
-                    } else {
-                      void handleCreateFromTemplate(tpl.id);
-                    }
+                    void handleCreateFromTemplate(wf.id);
                   }}
-                  className={cn(
-                    "group flex flex-col overflow-hidden rounded-md text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50",
-                    isBlank
-                      ? "border border-dashed border-border/80 bg-card hover:border-primary/40"
-                      : "border border-border/60 bg-card",
-                  )}
+                  className="group flex flex-col overflow-hidden rounded-md border border-border/60 bg-card text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md disabled:opacity-50"
                 >
                   <div className="relative w-full overflow-hidden">
-                    {isBlank ? (
-                      <div className="flex aspect-[3/2] items-center justify-center bg-gradient-to-br from-muted/60 to-muted/30">
-                        <Plus className="h-6 w-6 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
-                      </div>
-                    ) : cover ? (
+                    {cover ? (
                       <img
                         src={cover}
-                        alt={tpl.name}
-                        className={cn("block w-full transition-transform duration-300 group-hover:scale-105", locked && "blur-[1px] grayscale")}
+                        alt={wf.name}
+                        className={cn("block aspect-video w-full object-cover transition-transform duration-300 group-hover:scale-105", locked && "blur-[1px] grayscale")}
                         loading="lazy"
                         decoding="async"
                       />
                     ) : (
-                      <div className={cn("flex aspect-[3/2] items-center justify-center bg-gradient-to-br", tpl.gradient)}>
-                        <span className="text-xs text-muted-foreground/40">{tpl.name}</span>
+                      <div className="flex aspect-video items-center justify-center bg-gradient-to-br from-muted to-muted/60">
+                        <span className="px-2 text-center text-[10px] text-muted-foreground/40">{wf.name}</span>
+                      </div>
+                    )}
+                    {isVideo && !locked && (
+                      <div className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/55">
+                        <Play className="h-2.5 w-2.5 fill-white text-white" />
                       </div>
                     )}
                     {locked && (
@@ -478,11 +426,11 @@ export function NewProjectDialog({
                     )}
                   </div>
                   <div className="flex flex-1 flex-col gap-0.5 px-2 py-1.5">
-                    <p className="text-[10px] font-semibold text-foreground">
-                      {isBlank ? "新建空白项目" : tpl.name}
+                    <p className="truncate text-[13px] font-semibold text-foreground">
+                      {wf.name}
                     </p>
-                    <p className="line-clamp-2 text-[9px] leading-relaxed text-muted-foreground">
-                      {tpl.desc}
+                    <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                      {wf.description}
                     </p>
                   </div>
                 </button>

@@ -1434,7 +1434,7 @@ function AccountTab({ onClose }: { onClose: () => void }) {
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">本月解绑余额</span>
+                    <span className="text-muted-foreground">本年解绑余额</span>
                     <span className={cn(
                       "font-medium",
                       deviceInfo.unbindRemaining > 0 ? "text-foreground" : "text-amber-600",
