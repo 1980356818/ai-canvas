@@ -129,8 +129,13 @@ CREATE TABLE IF NOT EXISTS `sys_config` (
     UNIQUE KEY `uk_key` (`config_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统配置';
 
+-- 旧库迁移：解绑限额由「每月」改为「每年」，重命名已有配置键并保留管理员可能改过的值。
+-- UPDATE IGNORE 在新键已存在时安全跳过，重复执行无副作用。
+UPDATE IGNORE `sys_config` SET `config_key` = 'unbind_limit_per_year', `remark` = '每年允许解绑次数'
+    WHERE `config_key` = 'unbind_limit_per_month';
+
 INSERT IGNORE INTO `sys_config` (`config_key`, `config_val`, `remark`) VALUES
-('unbind_limit_per_month', '1', '每月允许解绑次数'),
+('unbind_limit_per_year', '1', '每年允许解绑次数'),
 ('unbind_cooldown_days', '0', '两次解绑最短间隔天数');
 
 -- 8. 登录日志
@@ -188,3 +193,49 @@ CREATE TABLE IF NOT EXISTS `app_release` (
     UNIQUE KEY `uk_ver_target_arch` (`version`, `target`, `arch`, `deleted`),
     KEY `idx_active_target_arch` (`is_active`, `target`, `arch`, `version_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应用发布版本';
+
+-- 11. 模板定义（服务端驱动:图在极境,定义在这）
+-- id 用业务键（与 tier_def.features.templates 里的 ID 对齐,如 wf-white-bg）,非自增
+-- definition 存整个 WorkflowTemplate JSON（卡片/连线/prompt,图均为极境 https URL）
+-- min_app_version：客户端版本 < 它则不下发该模板（防新 card type 打挂老客户端）
+-- is_active=0 = 下架（客户端列表里不出现）;模板由种子脚本/admin 接口写入,不在此 seed
+CREATE TABLE IF NOT EXISTS `template` (
+    `id`              VARCHAR(64)  NOT NULL COMMENT '业务ID,对齐 features.templates,如 wf-white-bg',
+    `name`            VARCHAR(64)  NOT NULL,
+    `description`     VARCHAR(255) DEFAULT NULL,
+    `icon`            VARCHAR(32)  DEFAULT NULL COMMENT 'lucide 图标名',
+    `category`        VARCHAR(16)  DEFAULT NULL COMMENT 'chat/image/composite',
+    `cover_url`       VARCHAR(512) DEFAULT NULL COMMENT '封面图极境 URL',
+    `definition`      JSON         NOT NULL COMMENT '整个 WorkflowTemplate JSON(图为极境 URL)',
+    `min_app_version` VARCHAR(32)  DEFAULT NULL COMMENT '低于此版本的客户端不下发',
+    `sort`            INT          NOT NULL DEFAULT 0 COMMENT '越小越靠前',
+    `is_active`       TINYINT      NOT NULL DEFAULT 1 COMMENT '1=上架 0=下架',
+    `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_active_sort` (`is_active`, `sort`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='模板定义';
+
+-- 12. 模板分组（注册表：组名 / 顺序 / 上下架 云端可配）
+-- cat_key = 稳定 slug（对齐 template.category 列 与 前端 TemplateCategory.key）；
+--   列名用 cat_key 是为避开 MySQL 保留字 key，Java/JSON 字段仍是 key，前端契约不变。
+-- 客户端 GET /api/template-categories 拉 is_active=1 按 sort；新增/改名/排序/上下架走 admin。
+CREATE TABLE IF NOT EXISTS `template_category` (
+    `cat_key`         VARCHAR(32)  NOT NULL COMMENT '稳定 slug，对齐 template.category',
+    `label`           VARCHAR(32)  NOT NULL COMMENT '展示名',
+    `sort`            INT          NOT NULL DEFAULT 0 COMMENT '越小越靠前',
+    `min_app_version` VARCHAR(32)  DEFAULT NULL COMMENT '低于此版本的客户端不下发（预留）',
+    `is_active`       TINYINT      NOT NULL DEFAULT 1 COMMENT '1=启用 0=停用',
+    `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`cat_key`),
+    KEY `idx_active_sort` (`is_active`, `sort`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='模板分组';
+
+-- 初始 5 个分组（对齐原硬编码 4 个 + 新增「数字人融合模板」排最后）。INSERT IGNORE 幂等。
+INSERT IGNORE INTO `template_category` (cat_key,label,sort) VALUES
+('flat',          '平面模板',     0),
+('video',         '视频模板',     1),
+('detail',        '详情页模板',   2),
+('trial',         '试用版模板',   3),
+('digital-human', '数字人融合模板', 4);

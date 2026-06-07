@@ -2,7 +2,6 @@
 import { reactive, ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { adminApi, type TierDef, type TierFeatures } from '@/api'
-import { TEMPLATE_CATALOG } from '@/constants/templates'
 
 // tier 为 null = 新建；否则编辑
 const props = defineProps<{ modelValue: boolean; tier: TierDef | null }>()
@@ -13,6 +12,17 @@ const emit = defineEmits<{
 
 const isEdit = computed(() => !!props.tier)
 const loading = ref(false)
+
+// 模板清单从服务端拉(取代旧硬编码 constants/templates.ts),加模板零手动同步
+const catalog = ref<{ id: string; name: string }[]>([])
+async function loadCatalog() {
+  try {
+    const list = await adminApi.getTemplates()
+    catalog.value = list.map((t) => ({ id: t.id, name: t.name }))
+  } catch {
+    catalog.value = []
+  }
+}
 
 const form = reactive({
   tierKey: '',
@@ -41,6 +51,7 @@ watch(
   () => props.modelValue,
   (open) => {
     if (!open) return
+    if (catalog.value.length === 0) loadCatalog()
     if (props.tier) {
       const f = parseFeatures(props.tier.features)
       form.tierKey = props.tier.tierKey
@@ -162,7 +173,7 @@ async function submit() {
       <el-form-item v-if="form.templateMode === 'pick'" label=" ">
         <el-checkbox-group v-model="form.templates">
           <el-checkbox
-            v-for="t in TEMPLATE_CATALOG"
+            v-for="t in catalog"
             :key="t.id"
             :value="t.id"
             border

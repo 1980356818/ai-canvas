@@ -7,6 +7,6 @@ import org.apache.ibatis.annotations.Select;
 
 @Mapper
 public interface UnbindLogMapper extends BaseMapper<UnbindLog> {
-    @Select("SELECT COUNT(*) FROM unbind_log WHERE user_id = #{userId} AND YEAR(created_at) = YEAR(NOW()) AND MONTH(created_at) = MONTH(NOW()) AND operator = 'user'")
-    int countThisMonth(Long userId);
+    @Select("SELECT COUNT(*) FROM unbind_log WHERE user_id = #{userId} AND YEAR(created_at) = YEAR(NOW()) AND operator = 'user'")
+    int countThisYear(Long userId);
 }

@@ -9,7 +9,8 @@ export function isExpired(d: string | null | undefined): boolean {
 
 export function configDesc(key: string): string {
   const map: Record<string, string> = {
-    unbind_limit_per_month: '每月允许解绑次数',
+    unbind_limit_per_year: '每年允许解绑次数',
+    unbind_limit_per_month: '每月允许解绑次数', // 历史键，迁移前的旧库可能仍有该行
     unbind_cooldown_days: '两次解绑最短间隔天数',
   }
   return map[key] || ''

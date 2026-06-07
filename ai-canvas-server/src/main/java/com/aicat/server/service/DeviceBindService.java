@@ -67,12 +67,12 @@ public class DeviceBindService {
 
     @Transactional
     public void unbindAndRebind(Long userId, String newMachineCode, String deviceInfo, String ip, String operator) {
-        // 悲观锁：防止并发请求绕过月度限制
+        // 悲观锁：防止并发请求绕过年度限制
         UserDevice existing = userDeviceMapper.selectForUpdate(userId);
 
         if ("user".equals(operator)) {
-            int limit = sysConfigService.getInt("unbind_limit_per_month", 1);
-            int used = unbindLogMapper.countThisMonth(userId);
+            int limit = sysConfigService.getInt("unbind_limit_per_year", 1);
+            int used = unbindLogMapper.countThisYear(userId);
             if (used >= limit) {
                 throw new BizException(ErrorCode.UNBIND_LIMIT);
             }
@@ -103,8 +103,8 @@ public class DeviceBindService {
 
     public Map<String, Object> getDeviceInfo(Long userId) {
         UserDevice dev = getBound(userId);
-        int limit = sysConfigService.getInt("unbind_limit_per_month", 1);
-        int used = unbindLogMapper.countThisMonth(userId);
+        int limit = sysConfigService.getInt("unbind_limit_per_year", 1);
+        int used = unbindLogMapper.countThisYear(userId);
 
         Map<String, Object> info = new HashMap<>();
         info.put("bound", dev != null);

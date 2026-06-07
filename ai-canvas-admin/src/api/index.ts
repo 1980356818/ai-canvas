@@ -48,6 +48,27 @@ export interface TierDef {
   sort: number
 }
 
+export interface AdminTemplate {
+  id: string
+  name: string
+  description: string | null
+  icon: string | null
+  category: string | null
+  coverUrl: string | null
+  definition: string // WorkflowTemplate JSON 文本
+  minAppVersion: string | null
+  sort: number
+  isActive: number
+}
+
+export interface AdminCategory {
+  key: string
+  label: string
+  sort: number
+  isActive: number
+  minAppVersion: string | null
+}
+
 export const adminApi = {
   login(data: { username: string; password: string }) {
     return api<{ token: string; username: string; forcePwdChange: boolean }>('/admin/login', {
@@ -246,5 +267,67 @@ export const adminApi = {
 
   deleteRelease(id: number) {
     return api(`/admin/release/${id}`, { method: 'DELETE' })
+  },
+
+  // ── 模板管理（定义在 aicat.template；图在极境 NAS，新建走本机脚本）──────────
+  getTemplates() {
+    return api<AdminTemplate[]>('/admin/template/list')
+  },
+
+  updateTemplateMeta(
+    id: string,
+    data: { name?: string; description?: string; category?: string; minAppVersion?: string; sort?: number },
+  ) {
+    return api(`/admin/template/${id}/meta`, { method: 'PUT', body: JSON.stringify(data) })
+  },
+
+  activateTemplate(id: string) {
+    return api(`/admin/template/${id}/activate`, { method: 'POST' })
+  },
+
+  deactivateTemplate(id: string) {
+    return api(`/admin/template/${id}/deactivate`, { method: 'POST' })
+  },
+
+  deleteTemplate(id: string) {
+    return api(`/admin/template/${id}`, { method: 'DELETE' })
+  },
+
+  /** 拖拽重排：ids = 拖完后的完整有序模板 id 列表，服务端赋 sort=0..N。 */
+  reorderTemplates(ids: string[]) {
+    return api('/admin/template/reorder', { method: 'POST', body: JSON.stringify({ ids }) })
+  },
+
+  // ── 模板分组管理（aicat.template_category，组名/顺序/上下架云端可配）──────────
+  getCategories() {
+    return api<AdminCategory[]>('/admin/template-category/list')
+  },
+
+  saveCategory(data: { key: string; label: string; sort?: number; isActive?: number; minAppVersion?: string }) {
+    return api('/admin/template-category/upsert', { method: 'POST', body: JSON.stringify(data) })
+  },
+
+  updateCategoryMeta(key: string, data: { label?: string; sort?: number; minAppVersion?: string }) {
+    return api(`/admin/template-category/${encodeURIComponent(key)}/meta`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  },
+
+  activateCategory(key: string) {
+    return api(`/admin/template-category/${encodeURIComponent(key)}/activate`, { method: 'POST' })
+  },
+
+  deactivateCategory(key: string) {
+    return api(`/admin/template-category/${encodeURIComponent(key)}/deactivate`, { method: 'POST' })
+  },
+
+  deleteCategory(key: string) {
+    return api(`/admin/template-category/${encodeURIComponent(key)}`, { method: 'DELETE' })
+  },
+
+  /** 拖拽重排：keys = 拖完后的完整有序分组 key 列表，服务端赋 sort=0..N。 */
+  reorderCategories(keys: string[]) {
+    return api('/admin/template-category/reorder', { method: 'POST', body: JSON.stringify({ keys }) })
   },
 }
