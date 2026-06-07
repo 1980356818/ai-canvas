@@ -45,7 +45,9 @@ public class AppReleaseController {
         if (latest == null) {
             return ResponseEntity.noContent().build();
         }
-        return ResponseEntity.ok(toManifest(latest, resolveBaseUrl(req), currentVersion));
+        boolean currentBlocked = service.isVersionBlocked(target, arch, currentVersion);
+        return ResponseEntity.ok(
+                toManifest(latest, resolveBaseUrl(req), currentVersion, currentBlocked));
     }
 
     // ── 2. 列出该平台所有"启用中"版本 ────────────────────────────────
@@ -70,7 +72,7 @@ public class AppReleaseController {
             @PathVariable Long id,
             HttpServletRequest req) {
         AppRelease rel = service.getActiveById(id);
-        return ResponseEntity.ok(toManifest(rel, resolveBaseUrl(req), null));
+        return ResponseEntity.ok(toManifest(rel, resolveBaseUrl(req), null, false));
     }
 
     // ── 4. 二进制下载 ────────────────────────────────────────────────
@@ -90,7 +92,8 @@ public class AppReleaseController {
 
     // ─────────────────────────────────────────────────────────────────
 
-    private TauriManifest toManifest(AppRelease rel, String baseUrl, String currentVersion) {
+    private TauriManifest toManifest(AppRelease rel, String baseUrl, String currentVersion,
+                                     boolean currentBlocked) {
         TauriManifest m = new TauriManifest();
         m.version = rel.getVersion();
         m.pubDate = AppReleaseService.formatPubDate(rel.getPubDate());
@@ -99,11 +102,12 @@ public class AppReleaseController {
         m.format = AppReleaseService.inferFormat(rel.getFileName());
         // 强更标记:client 当前版本低于 min_version 时,前端不能让用户 skip。
         // 沿用 JiJing 的做法,在 notes 尾巴塞一段 HTML 注释作为 meta。
-        boolean forceUpdate = currentVersion != null
+        // 强更触发: ① 当前版本已被召回(blocked) ② 当前版本低于目标版本的 min_version
+        boolean forceUpdate = currentBlocked || (currentVersion != null
                 && rel.getMinVersion() != null
                 && !rel.getMinVersion().isBlank()
                 && AppReleaseService.encodeVersion(currentVersion)
-                        < AppReleaseService.encodeVersion(rel.getMinVersion());
+                        < AppReleaseService.encodeVersion(rel.getMinVersion()));
         StringBuilder notes = new StringBuilder();
         if (rel.getReleaseNotes() != null) notes.append(rel.getReleaseNotes());
         notes.append("\n<!--UPDATE_META:{\"forceUpdate\":")

@@ -126,7 +126,7 @@ public class AppReleaseService {
                 new LambdaQueryWrapper<AppRelease>()
                         .eq(AppRelease::getTarget, target)
                         .eq(AppRelease::getArch, arch)
-                        .eq(AppRelease::getIsActive, 1)
+                        .eq(AppRelease::getStatus, "stable")
                         .gt(AppRelease::getVersionCode, currentCode)
                         .orderByDesc(AppRelease::getVersionCode)
                         .last("LIMIT 1"));
@@ -137,14 +137,14 @@ public class AppReleaseService {
                 new LambdaQueryWrapper<AppRelease>()
                         .eq(AppRelease::getTarget, target)
                         .eq(AppRelease::getArch, arch)
-                        .eq(AppRelease::getIsActive, 1)
+                        .eq(AppRelease::getStatus, "stable")
                         .orderByDesc(AppRelease::getVersionCode));
     }
 
     public AppRelease getActiveById(Long id) {
         AppRelease rel = mapper.selectById(id);
         if (rel == null) throw new BizException(ErrorCode.RELEASE_NOT_FOUND);
-        if (rel.getIsActive() == null || rel.getIsActive() != 1) {
+        if (!"stable".equals(rel.getStatus())) {
             throw new BizException(ErrorCode.RELEASE_DISABLED);
         }
         return rel;
@@ -247,7 +247,9 @@ public class AppReleaseService {
         rel.setSha256(sha256);
         rel.setReleaseNotes(releaseNotes);
         rel.setMinVersion(minVersion);
-        rel.setIsActive(1);
+        // 发布闸: 上传只落 draft,不直接下发;需 promote 才变 stable 全量。
+        rel.setStatus("draft");
+        rel.setIsActive(0);
         rel.setPubDate(LocalDateTime.now());
         mapper.insert(rel);
 
@@ -273,11 +275,32 @@ public class AppReleaseService {
         mapper.updateById(rel);
     }
 
+    /** promote/撤回: active=true -> stable(全量); false -> draft(撤回,不下发)。is_active 同步。 */
     public void setActive(Long id, boolean active) {
         AppRelease rel = mapper.selectById(id);
         if (rel == null) throw new BizException(ErrorCode.RELEASE_NOT_FOUND);
+        rel.setStatus(active ? "stable" : "draft");
         rel.setIsActive(active ? 1 : 0);
         mapper.updateById(rel);
+    }
+
+    /** 召回一个版本: 标 blocked。客户端 check 时该版本用户会被强制升级到最新 stable。 */
+    public void blockVersion(Long id) {
+        AppRelease rel = mapper.selectById(id);
+        if (rel == null) throw new BizException(ErrorCode.RELEASE_NOT_FOUND);
+        rel.setStatus("blocked");
+        rel.setIsActive(0);
+        mapper.updateById(rel);
+    }
+
+    /** 给定客户端当前版本是否已被召回(status=blocked)。 */
+    public boolean isVersionBlocked(String target, String arch, String version) {
+        Long n = mapper.selectCount(new LambdaQueryWrapper<AppRelease>()
+                .eq(AppRelease::getTarget, target)
+                .eq(AppRelease::getArch, arch)
+                .eq(AppRelease::getVersion, version)
+                .eq(AppRelease::getStatus, "blocked"));
+        return n != null && n > 0;
     }
 
     /** 软删:logic-delete 标记 + 删除磁盘文件。 */

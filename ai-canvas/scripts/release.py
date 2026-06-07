@@ -31,7 +31,9 @@ ai-canvas 发版脚本（Win/Mac 通用）。
 from __future__ import annotations
 
 import argparse
+import base64
 import getpass
+import hashlib
 import json
 import os
 import platform
@@ -242,6 +244,111 @@ def upload_release(
     return payload["data"]
 
 
+# ── 发布前签名校验(完整性闸) ────────────────────────────────────────────
+
+
+def _embedded_pubkey_b64() -> str:
+    """从 src-tauri/tauri.conf.json 读 updater.pubkey —— 单一真相源。"""
+    conf = json.loads((ROOT / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8"))
+    return conf["plugins"]["updater"]["pubkey"]
+
+
+def verify_signature(artifact: Path, sig: Path) -> None:
+    """用 app 内嵌 pubkey 密码学校验 artifact 的 .sig。
+    不匹配直接 fail —— 防止把签错/损坏的包传上线(客户端会拒装,表现为静默更新失败)。"""
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    except ImportError:
+        log("WARN: 缺 cryptography 库,跳过签名校验 (pip install cryptography 可启用)")
+        return
+    pubfile = base64.b64decode(_embedded_pubkey_b64()).decode()
+    pub_raw = base64.b64decode(pubfile.strip().splitlines()[1])
+    pub_keyid, pub_key = pub_raw[2:10], pub_raw[10:42]
+    # .sig 文件内容本身是 base64,解一层得到 minisign 签名文件
+    sigfile = base64.b64decode(sig.read_bytes().strip()).decode()
+    sraw = base64.b64decode(sigfile.strip().splitlines()[1])
+    alg, sig_keyid, sig_bytes = sraw[0:2], sraw[2:10], sraw[10:74]
+    if sig_keyid != pub_keyid:
+        fail(f"{sig.name}: 签名 keyid {sig_keyid.hex()} != pubkey {pub_keyid.hex()} (用错密钥?)")
+    data = artifact.read_bytes()
+    msg = hashlib.blake2b(data, digest_size=64).digest() if alg == b"ED" else data
+    try:
+        Ed25519PublicKey.from_public_bytes(pub_key).verify(sig_bytes, msg)
+    except Exception as e:
+        fail(f"{artifact.name}: 签名校验失败(包被改 / 密钥不符): {e}")
+    log(f"  ✓ 签名校验通过: {artifact.name}")
+
+
+# ── 管理端动作: promote / block / rollback ────────────────────────────────
+
+
+def admin_list_releases(server: str, token: str) -> list[dict]:
+    url = f"{server.rstrip('/')}/api/admin/release/list?page=1&size=500"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        fail(f"list releases HTTP {e.code}: {e.read().decode('utf-8', 'ignore')}")
+    if payload.get("code") != 0:
+        fail(f"list releases failed: {payload}")
+    return payload["data"]["records"]
+
+
+def admin_action(server: str, token: str, rid: int, action: str) -> None:
+    """action ∈ promote / block / activate / deactivate"""
+    url = f"{server.rstrip('/')}/api/admin/release/{rid}/{action}"
+    req = urllib.request.Request(url, data=b"",
+                                 headers={"Authorization": f"Bearer {token}"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        fail(f"{action} id={rid} HTTP {e.code}: {e.read().decode('utf-8', 'ignore')}")
+    if payload.get("code") != 0:
+        fail(f"{action} id={rid} failed: {payload}")
+    log(f"  → id={rid} {action} ok")
+
+
+def do_admin_action(args, action: str, version: str) -> None:
+    """对已存在版本(全平台)做 promote/block/rollback,不构建。"""
+    user = args.user or input("管理员账号: ").strip()
+    password = args.password or getpass.getpass("管理员密码: ")
+    token = admin_login(args.server, user, password)
+    rows = admin_list_releases(args.server, token)
+    targets = [r for r in rows if r.get("version") == version]
+    if not targets:
+        fail(f"服务端找不到版本 {version} 的任何记录")
+
+    if action == "promote":
+        log(f"promote {version} ({len(targets)} 个平台)→ stable 全量:")
+        for r in targets:
+            admin_action(args.server, token, r["id"], "promote")
+    elif action == "block":
+        log(f"block(召回) {version} ({len(targets)} 个平台):")
+        for r in targets:
+            admin_action(args.server, token, r["id"], "block")
+    elif action == "rollback":
+        log(f"rollback: 召回 {version} + 把每个平台的次高版本提为 stable")
+        for r in targets:
+            admin_action(args.server, token, r["id"], "block")
+        bad_code = encode_version(version)
+        by_platform: dict[tuple[str, str], dict] = {}
+        for r in rows:
+            if encode_version(r["version"]) >= bad_code:
+                continue
+            key = (r["target"], r["arch"])
+            cur = by_platform.get(key)
+            if cur is None or r["versionCode"] > cur["versionCode"]:
+                by_platform[key] = r
+        if not by_platform:
+            fail("找不到可回滚到的更早版本(没有比它低的版本)")
+        for (t, a), r in by_platform.items():
+            log(f"  回滚 {t}/{a} → {r['version']}")
+            admin_action(args.server, token, r["id"], "promote")
+    log("=== 动作完成 ===")
+
+
 # ── 主流程 ──────────────────────────────────────────────────────────────
 
 
@@ -272,6 +379,23 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="跳过 version:sync (用于排错;一般不用)",
     )
+    ap.add_argument(
+        "--action",
+        choices=["release", "promote", "block", "rollback"],
+        default="release",
+        help="release=构建并上传(默认,落 draft); "
+             "promote/block/rollback=对已存在版本操作,不构建",
+    )
+    ap.add_argument(
+        "--promote",
+        action="store_true",
+        help="构建上传后立即 promote 到 stable(全量)。不加=只落 draft,需手动再 promote",
+    )
+    ap.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="跳过上传前的签名校验(强烈不建议)",
+    )
     return ap.parse_args()
 
 
@@ -281,6 +405,11 @@ def main() -> None:
     new_ver = args.version.strip()
     if not SEMVER_RE.match(new_ver):
         fail(f"非法版本号: {new_ver} (需形如 1.2.0)")
+
+    # 非 release 动作:对已存在版本 promote/block/rollback,不构建不上传。
+    if args.action != "release":
+        do_admin_action(args, args.action, new_ver)
+        return
 
     cur = read_current_version()
     if not args.skip_build and encode_version(new_ver) < encode_version(cur):
@@ -322,6 +451,12 @@ def main() -> None:
     for art, sig in pairs:
         log(f"  · {art.relative_to(ROOT)}  +  {sig.name}")
 
+    # 发布前完整性闸:校验每个包的签名匹配 app 内嵌 pubkey。
+    if not args.no_verify:
+        log("校验签名(发布前完整性闸)...")
+        for art, sig in pairs:
+            verify_signature(art, sig)
+
     if args.no_upload:
         log("--no-upload set, skipping upload. 完成。")
         return
@@ -337,7 +472,8 @@ def main() -> None:
     token = admin_login(args.server, user, password)
     log("admin login ok")
 
-    # 6. 逐个上传
+    # 6. 逐个上传(落 draft,不直接下发)
+    uploaded_ids: list = []
     for art, sig in pairs:
         log(f"uploading {art.name} ...")
         data = upload_release(
@@ -351,10 +487,20 @@ def main() -> None:
             artifact=art,
             sig=sig,
         )
-        log(f"  → release id={data.get('id')} size={data.get('fileSize')}")
+        uploaded_ids.append(data.get("id"))
+        log(f"  → release id={data.get('id')} size={data.get('fileSize')} [draft]")
 
-    log("=== 发版完成 ===")
-    log(f"v{new_ver} 已上传 ({target}/{arch})。客户端最长 ~3 秒后台轮询会发现新版本。")
+    if args.promote:
+        log("promote 到 stable(--promote)...")
+        for rid in uploaded_ids:
+            if rid is not None:
+                admin_action(args.server, token, rid, "promote")
+        log("=== 发版完成(已全量 stable) ===")
+        log(f"v{new_ver} 已全量 ({target}/{arch})。客户端最长 ~3 秒后台轮询会发现。")
+    else:
+        log("=== 上传完成(draft,未下发) ===")
+        log(f"v{new_ver} 已作为 draft 上传 ({target}/{arch})。确认无误后全量发布:")
+        log(f"    python scripts/release.py {new_ver} --action promote")
 
 
 if __name__ == "__main__":

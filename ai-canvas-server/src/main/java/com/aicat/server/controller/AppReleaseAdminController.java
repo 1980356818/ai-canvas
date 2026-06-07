@@ -75,6 +75,22 @@ public class AppReleaseAdminController {
         return Result.ok(null, "已停用");
     }
 
+    /** promote: 把 draft 提升为 stable(全量发布)。语义同 activate,名字更清晰。 */
+    @PostMapping("/{id}/promote")
+    public Result<?> promote(@PathVariable Long id, HttpServletRequest req) {
+        service.setActive(id, true);
+        log(req, "release_promote", id, null);
+        return Result.ok(null, "已全量发布(stable)");
+    }
+
+    /** block: 召回一个版本。该版本用户在 check 时会被强制升级到最新 stable。 */
+    @PostMapping("/{id}/block")
+    public Result<?> block(@PathVariable Long id, HttpServletRequest req) {
+        service.blockVersion(id);
+        log(req, "release_block", id, null);
+        return Result.ok(null, "已召回(blocked)");
+    }
+
     @DeleteMapping("/{id}")
     public Result<?> delete(@PathVariable Long id, HttpServletRequest req) {
         service.delete(id);
