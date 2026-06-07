@@ -78,9 +78,9 @@ export interface WorkflowTemplate {
   description: string;
   icon: string;
   /**
-   * 面向用户的浏览分类 slug,见 `config/templateCategories.ts` 的 TEMPLATE_CATEGORIES
-   * (flat 平面 / video 视频 / detail 详情页 / trial 试用版)。放宽为 string:既容历史值
-   * (chat/image/composite),又让新分类无需改类型即可扩展(服务端驱动)。
+   * 面向用户的浏览分类 slug。分组注册表服务端驱动(`aicat.template_category`,客户端经
+   * `useCategoryStore` 拉取,见 `config/templateCategories.ts`)。string 类型:既容历史值
+   * (chat/image/composite),又让新分类无需改类型即可扩展。
    */
   category: string;
   coverImage?: string;

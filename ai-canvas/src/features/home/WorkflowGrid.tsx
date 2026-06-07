@@ -10,7 +10,8 @@ import { Lock, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { canUseTemplate, canSeeTemplate } from "@/lib/entitlements";
-import { TEMPLATE_CATEGORIES, TEMPLATE_CATEGORY_ORDER } from "@/config/templateCategories";
+import { useCategoryStore } from "@/stores/categoryStore";
+import { categoryLabelMap, categoryOrderMap } from "@/config/templateCategories";
 
 function FeatureCard({ workflow, locked }: { workflow: WorkflowTemplate; locked: boolean }) {
   const isVideo = workflow.category === "video";
@@ -98,13 +99,17 @@ function FeatureCard({ workflow, locked }: { workflow: WorkflowTemplate; locked:
 export default function WorkflowGrid() {
   const ent = useEntitlements();
   const templates = useTemplateStore((s) => s.templates);
+  const categories = useCategoryStore((s) => s.categories);
   useEffect(() => {
-    // 进首页拉服务端模板刷新(初始值已是缓存/内置兜底,首屏不空)
+    // 进首页拉服务端模板 + 分类刷新(初始值已是缓存/内置兜底,首屏不空)
     void useTemplateStore.getState().load();
+    void useCategoryStore.getState().load();
   }, []);
 
-  // 按分类分组(只保留有模板的分类,顺序按 TEMPLATE_CATEGORIES)
+  // 按分类分组(只保留有模板的分类,顺序按服务端分组 sort)
   const groups = useMemo(() => {
+    const labelMap = categoryLabelMap(categories);
+    const orderMap = categoryOrderMap(categories);
     const byCat = new Map<string, WorkflowTemplate[]>();
     for (const wf of templates) {
       if (!canSeeTemplate(ent, wf)) continue; // trial 模板只对非正式版展示:正式版有完整模板,藏掉重复的试用副本
@@ -115,11 +120,11 @@ export default function WorkflowGrid() {
     return [...byCat.entries()]
       .map(([key, list]) => ({
         key,
-        label: TEMPLATE_CATEGORIES.find((c) => c.key === key)?.label ?? key,
+        label: labelMap[key] ?? key,
         list,
       }))
-      .sort((a, b) => (TEMPLATE_CATEGORY_ORDER[a.key] ?? 99) - (TEMPLATE_CATEGORY_ORDER[b.key] ?? 99));
-  }, [templates, ent]);
+      .sort((a, b) => (orderMap[a.key] ?? 99) - (orderMap[b.key] ?? 99));
+  }, [templates, ent, categories]);
 
   const [active, setActive] = useState<string>("");
   // 默认选中第一个有模板的分类;模板加载完成后纠正一次

@@ -1,0 +1,6980 @@
+[
+  {
+    "id": "wf-white-bg-2",
+    "folder": "平面模板/一键白底图模板2",
+    "found": true,
+    "nCards": 7,
+    "nConns": 7,
+    "nGroups": 0,
+    "titled": 1,
+    "genCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "93f78444-63dd-498e-bba6-ccecb3591a47"
+        ],
+        "order_conn": [
+          "93f78444-63dd-498e-bba6-ccecb3591a47"
+        ],
+        "order_spatial": [
+          "93f78444-63dd-498e-bba6-ccecb3591a47"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "template",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "93f78444-63dd-498e-bba6-ccecb3591a47"
+        ],
+        "order_conn": [
+          "93f78444-63dd-498e-bba6-ccecb3591a47"
+        ],
+        "order_spatial": [
+          "93f78444-63dd-498e-bba6-ccecb3591a47"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 1,
+        "title": "",
+        "y": -123.85892492724724,
+        "x": 55.015769236832
+      },
+      {
+        "idx": 4,
+        "title": "",
+        "y": -676.8129741378527,
+        "x": 1499.3490524215465
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "y": -550.2583829258541,
+        "x": 151.19873637279306
+      }
+    ]
+  },
+  {
+    "id": "wf-three-view",
+    "folder": "平面模板/人物三视图模板",
+    "found": true,
+    "nCards": 3,
+    "nConns": 2,
+    "nGroups": 0,
+    "titled": 0,
+    "genCards": [
+      {
+        "idx": 2,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "tokens",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage2"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "a22ab080-358d-4770-87a8-d85b65db05bc",
+          "f624432b-b499-45ef-b35e-85bb75f3f9e0"
+        ],
+        "order_conn": [
+          "f624432b-b499-45ef-b35e-85bb75f3f9e0",
+          "a22ab080-358d-4770-87a8-d85b65db05bc"
+        ],
+        "order_spatial": [
+          "f624432b-b499-45ef-b35e-85bb75f3f9e0",
+          "a22ab080-358d-4770-87a8-d85b65db05bc"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [
+          {
+            "kind": "refSlot",
+            "slotKey": "refImage2",
+            "stored": "图2",
+            "panel": "图2",
+            "mismatch": false
+          },
+          {
+            "kind": "refSlot",
+            "slotKey": "refImage0",
+            "stored": "图1",
+            "panel": "图1",
+            "mismatch": false
+          }
+        ],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "y": 311.6722134182455,
+        "x": 122.95410924980024
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "y": -75.67221341824529,
+        "x": 118.26492295039498
+      }
+    ]
+  },
+  {
+    "id": "wf-face-swap",
+    "folder": "平面模板/人物换脸模板",
+    "found": true,
+    "nCards": 3,
+    "nConns": 2,
+    "nGroups": 0,
+    "titled": 0,
+    "genCards": [
+      {
+        "idx": 2,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "tokens",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "9b406abe-e549-41a9-b9f4-39a944f54fc2",
+          "7e4418b2-eec2-4409-8f56-1759442e3b5e"
+        ],
+        "order_conn": [
+          "7e4418b2-eec2-4409-8f56-1759442e3b5e",
+          "9b406abe-e549-41a9-b9f4-39a944f54fc2"
+        ],
+        "order_spatial": [
+          "7e4418b2-eec2-4409-8f56-1759442e3b5e",
+          "9b406abe-e549-41a9-b9f4-39a944f54fc2"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [
+          {
+            "kind": "refSlot",
+            "slotKey": "refImage1",
+            "stored": "图2",
+            "panel": "图2",
+            "mismatch": false
+          },
+          {
+            "kind": "refSlot",
+            "slotKey": "refImage0",
+            "stored": "图1",
+            "panel": "图1",
+            "mismatch": false
+          }
+        ],
+        "literalNums": [
+          "1"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "y": -206.7818356613559,
+        "x": -30.07155805997286
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "y": 176.781835661356,
+        "x": -43.259006432257934
+      }
+    ]
+  },
+  {
+    "id": "wf-outfit-fusion",
+    "folder": "平面模板/人物服装多模态融合",
+    "found": true,
+    "nCards": 10,
+    "nConns": 29,
+    "nGroups": 0,
+    "titled": 10,
+    "genCards": [
+      {
+        "idx": 4,
+        "title": "效果图4",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1"
+        ],
+        "order_conn": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096"
+        ],
+        "order_spatial": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "4"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "效果图5",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1"
+        ],
+        "order_conn": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096"
+        ],
+        "order_spatial": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "5"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 6,
+        "title": "效果图2",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1"
+        ],
+        "order_conn": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096"
+        ],
+        "order_spatial": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "2"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "quality"
+        ]
+      },
+      {
+        "idx": 7,
+        "title": "效果图3",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1"
+        ],
+        "order_conn": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096"
+        ],
+        "order_spatial": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "3"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 8,
+        "title": "效果图1",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1"
+        ],
+        "order_conn": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096"
+        ],
+        "order_spatial": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "1"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "quality"
+        ]
+      },
+      {
+        "idx": 9,
+        "title": "融合提示词",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1"
+        ],
+        "order_conn": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096"
+        ],
+        "order_spatial": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "环境参考（图4）",
+        "y": 421.28407699105304,
+        "x": -315.0448343540738
+      },
+      {
+        "idx": 1,
+        "title": "影调参考（图3）",
+        "y": 428.28203122610466,
+        "x": -649.0411274268522
+      },
+      {
+        "idx": 2,
+        "title": "模特图（图1）",
+        "y": -5.24057636565864,
+        "x": -739.4637621506058
+      },
+      {
+        "idx": 3,
+        "title": "服装图（图2）",
+        "y": 2.1977466743303467,
+        "x": -358.1334881421544
+      }
+    ]
+  },
+  {
+    "id": "wf-digital-model-1",
+    "folder": "平面模板/数字模特融合1",
+    "found": true,
+    "nCards": 6,
+    "nConns": 8,
+    "nGroups": 0,
+    "titled": 0,
+    "genCards": [],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "y": -271.89492359388726,
+        "x": 1135.7839813645935
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "y": -71.39228051774063,
+        "x": -171.47614543583904
+      },
+      {
+        "idx": 2,
+        "title": "",
+        "y": -444.571576894458,
+        "x": -137.31996869506975
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "y": -405.03114222850553,
+        "x": 2399.257768532043
+      }
+    ]
+  },
+  {
+    "id": "wf-digital-model-2",
+    "folder": "平面模板/数字模特融合2",
+    "found": true,
+    "nCards": 6,
+    "nConns": 8,
+    "nGroups": 0,
+    "titled": 0,
+    "genCards": [],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "y": 335.5896481883587,
+        "x": -852.366956983941
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "y": -37.589648188358694,
+        "x": -818.2107802431717
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "y": 153.63675487475547,
+        "x": 405.1915804158574
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "y": 138.83064051361706,
+        "x": 1581.0159048830403
+      }
+    ]
+  },
+  {
+    "id": "wf-phone-shoot",
+    "folder": "平面模板/服装手机风拍摄模板",
+    "found": true,
+    "nCards": 12,
+    "nConns": 28,
+    "nGroups": 0,
+    "titled": 0,
+    "genCards": [
+      {
+        "idx": 4,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "order_conn": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "order_spatial": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "order_conn": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "order_spatial": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 6,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "order_conn": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "order_spatial": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 7,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "order_conn": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "order_spatial": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 8,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage4"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513",
+          "df07922d-ae78-4046-9ad2-fa11db270ab5",
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5"
+        ],
+        "order_conn": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513",
+          "df07922d-ae78-4046-9ad2-fa11db270ab5"
+        ],
+        "order_spatial": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513",
+          "df07922d-ae78-4046-9ad2-fa11db270ab5"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 9,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 10,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "tokens",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "order_conn": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "order_spatial": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [
+          {
+            "kind": "refSlot",
+            "slotKey": "refImage2",
+            "stored": "图3",
+            "panel": "图3",
+            "mismatch": false
+          }
+        ],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 11,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "order_conn": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "order_spatial": [
+          "e7928ef1-d570-4f69-aca8-ef76c9a815f5",
+          "df1d84d6-e883-4d3d-8cee-0c807259e733",
+          "0417a064-e4f8-4b22-a97f-0e19715bd513"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "y": -434.8894849069176,
+        "x": -617.8006175755723
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "y": -66.91080372509896,
+        "x": -566.4952417545635
+      },
+      {
+        "idx": 2,
+        "title": "",
+        "y": 320.9574547973282,
+        "x": -595.5258571262195
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "y": 658.8894849069175,
+        "x": -577.6448105810811
+      }
+    ]
+  },
+  {
+    "id": "wf-model-bag",
+    "folder": "平面模板/模特箱包模板",
+    "found": true,
+    "nCards": 14,
+    "nConns": 24,
+    "nGroups": 0,
+    "titled": 0,
+    "genCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 2,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 4,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 8,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 9,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362",
+          "ce97df39-ddae-4b6b-851f-72416603dee2",
+          "1fb2b43a-c6d2-4c50-af6a-ec52d0240123"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362",
+          "ce97df39-ddae-4b6b-851f-72416603dee2",
+          "1fb2b43a-c6d2-4c50-af6a-ec52d0240123"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362",
+          "ce97df39-ddae-4b6b-851f-72416603dee2",
+          "1fb2b43a-c6d2-4c50-af6a-ec52d0240123"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 10,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 11,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "tokens",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a8d9da7c-9d95-4cdc-95fd-4c62cf8c546f",
+          "18bd0bba-3f2f-4886-b901-5ec267bac6c9"
+        ],
+        "order_conn": [
+          "a8d9da7c-9d95-4cdc-95fd-4c62cf8c546f",
+          "18bd0bba-3f2f-4886-b901-5ec267bac6c9"
+        ],
+        "order_spatial": [
+          "a8d9da7c-9d95-4cdc-95fd-4c62cf8c546f",
+          "18bd0bba-3f2f-4886-b901-5ec267bac6c9"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [
+          {
+            "kind": "refSlot",
+            "slotKey": "refImage0",
+            "stored": "图1",
+            "panel": "图1",
+            "mismatch": false
+          }
+        ],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 13,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 5,
+        "title": "",
+        "y": -671.5957128903362,
+        "x": -80.24628802946282
+      },
+      {
+        "idx": 6,
+        "title": "",
+        "y": -306.4688483137767,
+        "x": -118.53118939088353
+      },
+      {
+        "idx": 7,
+        "title": "",
+        "y": 68.76579435586928,
+        "x": -66.79762116632367
+      },
+      {
+        "idx": 12,
+        "title": "",
+        "y": -403.7846146457746,
+        "x": -1118.841409100699
+      }
+    ]
+  },
+  {
+    "id": "wf-model-pants",
+    "folder": "平面模板/模特裤子模板",
+    "found": true,
+    "nCards": 11,
+    "nConns": 23,
+    "nGroups": 0,
+    "titled": 0,
+    "genCards": [
+      {
+        "idx": 4,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "order_conn": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "order_spatial": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "5"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "order_conn": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "order_spatial": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "4"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 6,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "order_conn": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "order_spatial": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "3"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "quality"
+        ]
+      },
+      {
+        "idx": 7,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81"
+        ],
+        "order_conn": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81"
+        ],
+        "order_spatial": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "1"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 8,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "2"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 9,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "order_conn": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "order_spatial": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "2"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 10,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage4"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "83736a55-3e7d-47af-b699-50fbc55326cc",
+          "07edf403-d539-4727-8797-2959ba5c6cd5",
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb"
+        ],
+        "order_conn": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "83736a55-3e7d-47af-b699-50fbc55326cc",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "order_spatial": [
+          "a4b19e6e-a5ff-4d23-9eea-12f60da1c2eb",
+          "7bcb75ed-4bc0-4549-811b-ddec4765ae81",
+          "83736a55-3e7d-47af-b699-50fbc55326cc",
+          "07edf403-d539-4727-8797-2959ba5c6cd5"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "y": -56.40558146102421,
+        "x": -390.39468505896866
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "y": -62.30097704978243,
+        "x": -746.6703674762607
+      },
+      {
+        "idx": 2,
+        "title": "",
+        "y": 388.90189594794424,
+        "x": -744.7252253346696
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "y": 380.7319840284597,
+        "x": -437.01947487849793
+      }
+    ]
+  },
+  {
+    "id": "wf-skirt-flat",
+    "folder": "平面模板/裙子平面模板",
+    "found": true,
+    "nCards": 10,
+    "nConns": 29,
+    "nGroups": 0,
+    "titled": 10,
+    "genCards": [
+      {
+        "idx": 2,
+        "title": "效果图3",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "order_conn": [
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "order_spatial": [
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "3"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "效果图5",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "order_conn": [
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "order_spatial": [
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "5"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 4,
+        "title": "效果图4",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "order_conn": [
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "order_spatial": [
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "4"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "效果图2",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "order_conn": [
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "order_spatial": [
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "2"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 6,
+        "title": "效果图1",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "order_conn": [
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "order_spatial": [
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "1"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 7,
+        "title": "融合提示词",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "order_conn": [
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "order_spatial": [
+          "2ac94a8c-abb9-4ab8-a8fa-7420d4e6c437",
+          "e40d083c-a1bd-463b-acfc-e99ea6bcd814",
+          "e37fa339-43da-49f6-a853-657816f25dd5",
+          "701f4d02-6c39-477c-85a9-9f0a49c25d27"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "影调参考（图3）",
+        "y": 1093.9858955484883,
+        "x": 484.4618134590976
+      },
+      {
+        "idx": 1,
+        "title": "环境参考（图4）",
+        "y": 1093.9858955484883,
+        "x": 884.4618134590976
+      },
+      {
+        "idx": 8,
+        "title": "模特图（图1）",
+        "y": 692.6724374637809,
+        "x": 167.68555097908865
+      },
+      {
+        "idx": 9,
+        "title": "服装图（图2）",
+        "y": 645.0837091961755,
+        "x": 734.2945504194439
+      }
+    ]
+  },
+  {
+    "id": "wf-sport-duo-solo",
+    "folder": "平面模板/运动风服饰双人-单人",
+    "found": true,
+    "nCards": 9,
+    "nConns": 23,
+    "nGroups": 1,
+    "titled": 0,
+    "genCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage3"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67",
+          "99512863-bdba-49bd-9787-4e6fd51aa032"
+        ],
+        "order_conn": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67"
+        ],
+        "order_spatial": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "一",
+          "三",
+          "二"
+        ],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf"
+        ],
+        "order_conn": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf"
+        ],
+        "order_spatial": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67"
+        ],
+        "order_conn": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67"
+        ],
+        "order_spatial": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 6,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf"
+        ],
+        "order_conn": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf"
+        ],
+        "order_spatial": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 7,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf"
+        ],
+        "order_conn": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf"
+        ],
+        "order_spatial": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 8,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67"
+        ],
+        "order_conn": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67"
+        ],
+        "order_spatial": [
+          "99512863-bdba-49bd-9787-4e6fd51aa032",
+          "e25ebcf2-22a1-4478-b667-ace081ffcf67",
+          "4fc7934f-0065-41da-87c7-a900dd6ee8cf"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 2,
+        "title": "",
+        "y": -207.03912459814592,
+        "x": -463.5461692775293
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "y": 534.7351373997103,
+        "x": -397.1468587078366
+      },
+      {
+        "idx": 4,
+        "title": "",
+        "y": 143.8779434391131,
+        "x": -406.5423709492042
+      }
+    ]
+  },
+  {
+    "id": "wf-product-seeding-video",
+    "folder": "视频模板/产品带货种草视频模板",
+    "found": true,
+    "nCards": 6,
+    "nConns": 10,
+    "nGroups": 1,
+    "titled": 0,
+    "genCards": [
+      {
+        "idx": 3,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage2"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "28be3ea5-5a92-4fa4-b93c-c7ce33b0b938",
+          "467b3962-3f39-4331-8716-ebcd7c6583de"
+        ],
+        "order_conn": [
+          "467b3962-3f39-4331-8716-ebcd7c6583de",
+          "28be3ea5-5a92-4fa4-b93c-c7ce33b0b938"
+        ],
+        "order_spatial": [
+          "467b3962-3f39-4331-8716-ebcd7c6583de",
+          "28be3ea5-5a92-4fa4-b93c-c7ce33b0b938"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 4,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "template",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "467b3962-3f39-4331-8716-ebcd7c6583de",
+          "28be3ea5-5a92-4fa4-b93c-c7ce33b0b938"
+        ],
+        "order_conn": [
+          "467b3962-3f39-4331-8716-ebcd7c6583de",
+          "28be3ea5-5a92-4fa4-b93c-c7ce33b0b938"
+        ],
+        "order_spatial": [
+          "467b3962-3f39-4331-8716-ebcd7c6583de",
+          "28be3ea5-5a92-4fa4-b93c-c7ce33b0b938"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "type": "ai_video",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "467b3962-3f39-4331-8716-ebcd7c6583de",
+          "28be3ea5-5a92-4fa4-b93c-c7ce33b0b938"
+        ],
+        "order_conn": [
+          "467b3962-3f39-4331-8716-ebcd7c6583de",
+          "28be3ea5-5a92-4fa4-b93c-c7ce33b0b938"
+        ],
+        "order_spatial": [
+          "467b3962-3f39-4331-8716-ebcd7c6583de",
+          "28be3ea5-5a92-4fa4-b93c-c7ce33b0b938"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "y": -139.8208554315304,
+        "x": -849.94560937449
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "y": 32.060203474880836,
+        "x": -868.4904398340675
+      }
+    ]
+  },
+  {
+    "id": "wf-clothing-talk-video",
+    "folder": "视频模板/口播服装讲解视频模板",
+    "found": true,
+    "nCards": 8,
+    "nConns": 15,
+    "nGroups": 0,
+    "titled": 1,
+    "genCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "069a6587-86c1-4ff1-aa07-6de250ad7eb4",
+          "a042ecb5-045e-48a4-8633-0d1e9e50e9f4",
+          "10c641bd-dd36-470c-830d-0caf3be57b18",
+          "92a85770-8eb8-45cd-82f5-a77f889a86c5"
+        ],
+        "order_conn": [
+          "069a6587-86c1-4ff1-aa07-6de250ad7eb4",
+          "a042ecb5-045e-48a4-8633-0d1e9e50e9f4",
+          "10c641bd-dd36-470c-830d-0caf3be57b18",
+          "92a85770-8eb8-45cd-82f5-a77f889a86c5"
+        ],
+        "order_spatial": [
+          "a042ecb5-045e-48a4-8633-0d1e9e50e9f4",
+          "069a6587-86c1-4ff1-aa07-6de250ad7eb4",
+          "10c641bd-dd36-470c-830d-0caf3be57b18",
+          "92a85770-8eb8-45cd-82f5-a77f889a86c5"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 4,
+        "title": "人脸合成",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 6,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a042ecb5-045e-48a4-8633-0d1e9e50e9f4",
+          "069a6587-86c1-4ff1-aa07-6de250ad7eb4",
+          "10c641bd-dd36-470c-830d-0caf3be57b18",
+          "92a85770-8eb8-45cd-82f5-a77f889a86c5"
+        ],
+        "order_conn": [
+          "a042ecb5-045e-48a4-8633-0d1e9e50e9f4",
+          "069a6587-86c1-4ff1-aa07-6de250ad7eb4",
+          "10c641bd-dd36-470c-830d-0caf3be57b18",
+          "92a85770-8eb8-45cd-82f5-a77f889a86c5"
+        ],
+        "order_spatial": [
+          "a042ecb5-045e-48a4-8633-0d1e9e50e9f4",
+          "069a6587-86c1-4ff1-aa07-6de250ad7eb4",
+          "10c641bd-dd36-470c-830d-0caf3be57b18",
+          "92a85770-8eb8-45cd-82f5-a77f889a86c5"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 7,
+        "title": "",
+        "type": "ai_video",
+        "promptKind": "plain",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "10c641bd-dd36-470c-830d-0caf3be57b18",
+          "92a85770-8eb8-45cd-82f5-a77f889a86c5",
+          "a042ecb5-045e-48a4-8633-0d1e9e50e9f4",
+          "069a6587-86c1-4ff1-aa07-6de250ad7eb4"
+        ],
+        "order_conn": [
+          "10c641bd-dd36-470c-830d-0caf3be57b18",
+          "92a85770-8eb8-45cd-82f5-a77f889a86c5",
+          "a042ecb5-045e-48a4-8633-0d1e9e50e9f4",
+          "069a6587-86c1-4ff1-aa07-6de250ad7eb4"
+        ],
+        "order_spatial": [
+          "a042ecb5-045e-48a4-8633-0d1e9e50e9f4",
+          "069a6587-86c1-4ff1-aa07-6de250ad7eb4",
+          "10c641bd-dd36-470c-830d-0caf3be57b18",
+          "92a85770-8eb8-45cd-82f5-a77f889a86c5"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 1,
+        "title": "",
+        "y": -586.4131780277255,
+        "x": -459.14324689828663
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "y": -199.4990852339972,
+        "x": -420.0736942031788
+      }
+    ]
+  },
+  {
+    "id": "wf-solo-replica-video",
+    "folder": "视频模板/视频单人复刻模板",
+    "found": true,
+    "nCards": 16,
+    "nConns": 13,
+    "nGroups": 0,
+    "titled": 3,
+    "genCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "type": "ai_video",
+        "promptKind": "plain",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "08e2ec11-0754-475c-a753-d0e915b6f4e4",
+          "1f49ba81-c00f-41e8-8857-3633083f9c33",
+          "e27ae129-a7ab-4201-b054-8f979663a6a5"
+        ],
+        "order_conn": [
+          "08e2ec11-0754-475c-a753-d0e915b6f4e4",
+          "1f49ba81-c00f-41e8-8857-3633083f9c33",
+          "e27ae129-a7ab-4201-b054-8f979663a6a5"
+        ],
+        "order_spatial": [
+          "e27ae129-a7ab-4201-b054-8f979663a6a5",
+          "08e2ec11-0754-475c-a753-d0e915b6f4e4",
+          "1f49ba81-c00f-41e8-8857-3633083f9c33"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 2,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage2"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "6b782907-6b5d-4545-a4ce-7096c22630fb",
+          "39c62538-33f2-4ab2-bec2-522a83688d15"
+        ],
+        "order_conn": [
+          "39c62538-33f2-4ab2-bec2-522a83688d15",
+          "6b782907-6b5d-4545-a4ce-7096c22630fb"
+        ],
+        "order_spatial": [
+          "39c62538-33f2-4ab2-bec2-522a83688d15",
+          "6b782907-6b5d-4545-a4ce-7096c22630fb"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "二"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "人脸",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "292c7e65-6c64-4a2b-86d1-0664cd23fee7",
+          "5da71a2e-c06b-41ed-8aa4-0996b17990ae"
+        ],
+        "order_conn": [
+          "5da71a2e-c06b-41ed-8aa4-0996b17990ae",
+          "292c7e65-6c64-4a2b-86d1-0664cd23fee7"
+        ],
+        "order_spatial": [
+          "5da71a2e-c06b-41ed-8aa4-0996b17990ae",
+          "292c7e65-6c64-4a2b-86d1-0664cd23fee7"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 6,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "二"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 7,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "5da71a2e-c06b-41ed-8aa4-0996b17990ae"
+        ],
+        "order_conn": [
+          "5da71a2e-c06b-41ed-8aa4-0996b17990ae"
+        ],
+        "order_spatial": [
+          "5da71a2e-c06b-41ed-8aa4-0996b17990ae"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "一"
+        ],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 8,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 9,
+        "title": "反推脚本",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 10,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "二"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 11,
+        "title": "",
+        "type": "ai_video",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "2b4f14f7-5483-4f3b-b5ac-52e9619ad9a1"
+        ],
+        "order_conn": [
+          "2b4f14f7-5483-4f3b-b5ac-52e9619ad9a1"
+        ],
+        "order_spatial": [
+          "2b4f14f7-5483-4f3b-b5ac-52e9619ad9a1"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 12,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 15,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "一"
+        ],
+        "runtime": [
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 4,
+        "title": "",
+        "y": 750.9030488677973,
+        "x": -359.6227708404389
+      }
+    ]
+  },
+  {
+    "id": "wf-live-selling-video",
+    "folder": "视频模板/视频口播带货模板",
+    "found": true,
+    "nCards": 5,
+    "nConns": 9,
+    "nGroups": 0,
+    "titled": 0,
+    "genCards": [
+      {
+        "idx": 2,
+        "title": "",
+        "type": "ai_video",
+        "promptKind": "plain",
+        "nSlots": 3,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "21ad1017-8823-4a90-9b50-0b1ef64db5d3",
+          "8f45fdaa-87cb-4dab-8af3-cc4c1e1934ee",
+          "413a3075-6fff-4015-9a3a-79007530dd5c"
+        ],
+        "order_conn": [
+          "21ad1017-8823-4a90-9b50-0b1ef64db5d3",
+          "8f45fdaa-87cb-4dab-8af3-cc4c1e1934ee",
+          "413a3075-6fff-4015-9a3a-79007530dd5c"
+        ],
+        "order_spatial": [
+          "21ad1017-8823-4a90-9b50-0b1ef64db5d3",
+          "8f45fdaa-87cb-4dab-8af3-cc4c1e1934ee",
+          "413a3075-6fff-4015-9a3a-79007530dd5c"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage2"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "8f45fdaa-87cb-4dab-8af3-cc4c1e1934ee",
+          "21ad1017-8823-4a90-9b50-0b1ef64db5d3"
+        ],
+        "order_conn": [
+          "21ad1017-8823-4a90-9b50-0b1ef64db5d3",
+          "8f45fdaa-87cb-4dab-8af3-cc4c1e1934ee"
+        ],
+        "order_spatial": [
+          "21ad1017-8823-4a90-9b50-0b1ef64db5d3",
+          "8f45fdaa-87cb-4dab-8af3-cc4c1e1934ee"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "2",
+          "3"
+        ],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 4,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "21ad1017-8823-4a90-9b50-0b1ef64db5d3",
+          "8f45fdaa-87cb-4dab-8af3-cc4c1e1934ee"
+        ],
+        "order_conn": [
+          "21ad1017-8823-4a90-9b50-0b1ef64db5d3",
+          "8f45fdaa-87cb-4dab-8af3-cc4c1e1934ee"
+        ],
+        "order_spatial": [
+          "21ad1017-8823-4a90-9b50-0b1ef64db5d3",
+          "8f45fdaa-87cb-4dab-8af3-cc4c1e1934ee"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "y": 408.4697927744564,
+        "x": -279.07915636647016
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "y": 34.97924211722507,
+        "x": -286.54285102378475
+      }
+    ]
+  },
+  {
+    "id": "wf-drive-transform-video",
+    "folder": "视频模板/视频开车变装模板",
+    "found": true,
+    "nCards": 46,
+    "nConns": 35,
+    "nGroups": 0,
+    "titled": 3,
+    "genCards": [
+      {
+        "idx": 2,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage2"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "c26240bb-7cbf-477d-a638-2e6d7acd3c88",
+          "1b27bcad-bc4b-4c5e-959a-c3d56460f56f"
+        ],
+        "order_conn": [
+          "1b27bcad-bc4b-4c5e-959a-c3d56460f56f",
+          "c26240bb-7cbf-477d-a638-2e6d7acd3c88"
+        ],
+        "order_spatial": [
+          "1b27bcad-bc4b-4c5e-959a-c3d56460f56f",
+          "c26240bb-7cbf-477d-a638-2e6d7acd3c88"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage2"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "eb89f1d9-54ac-4e3b-845c-f7eb9ba4aef0",
+          "a6a7fa8b-e057-4769-bf15-7fbf39050f69"
+        ],
+        "order_conn": [
+          "a6a7fa8b-e057-4769-bf15-7fbf39050f69",
+          "eb89f1d9-54ac-4e3b-845c-f7eb9ba4aef0"
+        ],
+        "order_spatial": [
+          "a6a7fa8b-e057-4769-bf15-7fbf39050f69",
+          "eb89f1d9-54ac-4e3b-845c-f7eb9ba4aef0"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 4,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 6,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 7,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 9,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 10,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 11,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 12,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 13,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 24,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage2"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "2a39f869-1823-4cd2-8cb2-cbfcdeb9f6b6",
+          "97669eb9-13cb-4b58-b049-2c4ce59a85bc"
+        ],
+        "order_conn": [
+          "97669eb9-13cb-4b58-b049-2c4ce59a85bc",
+          "2a39f869-1823-4cd2-8cb2-cbfcdeb9f6b6"
+        ],
+        "order_spatial": [
+          "97669eb9-13cb-4b58-b049-2c4ce59a85bc",
+          "2a39f869-1823-4cd2-8cb2-cbfcdeb9f6b6"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 26,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage2"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "92f73168-07de-4890-8b57-9aae7ffccbc1",
+          "03c51dfb-7261-43a3-b555-54e25d7b7bee"
+        ],
+        "order_conn": [
+          "03c51dfb-7261-43a3-b555-54e25d7b7bee",
+          "92f73168-07de-4890-8b57-9aae7ffccbc1"
+        ],
+        "order_spatial": [
+          "03c51dfb-7261-43a3-b555-54e25d7b7bee",
+          "92f73168-07de-4890-8b57-9aae7ffccbc1"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 27,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage2"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "456f54bb-de63-417e-9fd6-2f685e8b2dd9",
+          "4f0b9796-81b1-4def-91ad-d18d5755aec0"
+        ],
+        "order_conn": [
+          "4f0b9796-81b1-4def-91ad-d18d5755aec0",
+          "456f54bb-de63-417e-9fd6-2f685e8b2dd9"
+        ],
+        "order_spatial": [
+          "4f0b9796-81b1-4def-91ad-d18d5755aec0",
+          "456f54bb-de63-417e-9fd6-2f685e8b2dd9"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 28,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 30,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 31,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 32,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 5,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3",
+          "refImage5"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "115bc90b-9648-4cf1-a476-20ab0c3baed7",
+          "494373df-ea37-426e-a64a-fa70eb40e408",
+          "b87fb41d-8a18-4991-9f0b-b2cd7ff7adc0",
+          "8c6ab2aa-fe99-48e9-890c-cbd848038ccc",
+          "884bde44-ff87-4870-908f-695fb17fc1f0"
+        ],
+        "order_conn": [
+          "884bde44-ff87-4870-908f-695fb17fc1f0",
+          "115bc90b-9648-4cf1-a476-20ab0c3baed7",
+          "494373df-ea37-426e-a64a-fa70eb40e408",
+          "b87fb41d-8a18-4991-9f0b-b2cd7ff7adc0",
+          "8c6ab2aa-fe99-48e9-890c-cbd848038ccc"
+        ],
+        "order_spatial": [
+          "494373df-ea37-426e-a64a-fa70eb40e408",
+          "115bc90b-9648-4cf1-a476-20ab0c3baed7",
+          "884bde44-ff87-4870-908f-695fb17fc1f0",
+          "b87fb41d-8a18-4991-9f0b-b2cd7ff7adc0",
+          "8c6ab2aa-fe99-48e9-890c-cbd848038ccc"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 33,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 34,
+        "title": "",
+        "type": "ai_video",
+        "promptKind": "plain",
+        "nSlots": 6,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3",
+          "refImage4",
+          "refImage5"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "7afb408e-c890-4a1a-8cac-a65b72dbf11e",
+          "0277c4c9-3b21-4ac4-a9c1-b9680a6ca130",
+          "1a1e644c-525d-4411-a349-3356a4afee46",
+          "c08d06f2-d0d1-4033-874f-b991f6b2b1a5",
+          "dbd23d52-3607-47de-b0e7-8338421f0131",
+          "6b83015a-df59-42af-97dc-e25327147326"
+        ],
+        "order_conn": [
+          "7afb408e-c890-4a1a-8cac-a65b72dbf11e",
+          "0277c4c9-3b21-4ac4-a9c1-b9680a6ca130",
+          "1a1e644c-525d-4411-a349-3356a4afee46",
+          "c08d06f2-d0d1-4033-874f-b991f6b2b1a5",
+          "dbd23d52-3607-47de-b0e7-8338421f0131",
+          "6b83015a-df59-42af-97dc-e25327147326"
+        ],
+        "order_spatial": [
+          "7afb408e-c890-4a1a-8cac-a65b72dbf11e",
+          "1a1e644c-525d-4411-a349-3356a4afee46",
+          "0277c4c9-3b21-4ac4-a9c1-b9680a6ca130",
+          "c08d06f2-d0d1-4033-874f-b991f6b2b1a5",
+          "dbd23d52-3607-47de-b0e7-8338421f0131",
+          "6b83015a-df59-42af-97dc-e25327147326"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "provider"
+        ]
+      },
+      {
+        "idx": 35,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 36,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "5e174063-ec33-48d0-b6aa-bda6750bc80c"
+        ],
+        "order_conn": [
+          "5e174063-ec33-48d0-b6aa-bda6750bc80c"
+        ],
+        "order_spatial": [
+          "5e174063-ec33-48d0-b6aa-bda6750bc80c"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 37,
+        "title": "人脸合成",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage2"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "39ee7775-ed20-4e96-88a2-2e7bbdd60663",
+          "70ed71c1-3fdb-435d-928b-290dd80dc3ec"
+        ],
+        "order_conn": [
+          "70ed71c1-3fdb-435d-928b-290dd80dc3ec",
+          "39ee7775-ed20-4e96-88a2-2e7bbdd60663"
+        ],
+        "order_spatial": [
+          "70ed71c1-3fdb-435d-928b-290dd80dc3ec",
+          "39ee7775-ed20-4e96-88a2-2e7bbdd60663"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 38,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "5e174063-ec33-48d0-b6aa-bda6750bc80c"
+        ],
+        "order_conn": [
+          "5e174063-ec33-48d0-b6aa-bda6750bc80c"
+        ],
+        "order_spatial": [
+          "5e174063-ec33-48d0-b6aa-bda6750bc80c"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 42,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 6,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3",
+          "refImage4",
+          "refImage6"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "90ecea7f-eeb9-4346-b176-89bcfc5a80aa",
+          "6cc07978-0ad4-4c69-b51b-eefa9cc7a46d",
+          "f7621861-cea1-400b-8192-e1654cab09f5",
+          "dc3f0b86-5f29-4aad-85b6-977c861dac89",
+          "25a17a46-ec0b-4769-b9b4-ab82e2e77e6a",
+          "cda9bd16-7efd-49f7-9b31-5796b74bd107"
+        ],
+        "order_conn": [
+          "cda9bd16-7efd-49f7-9b31-5796b74bd107",
+          "90ecea7f-eeb9-4346-b176-89bcfc5a80aa",
+          "6cc07978-0ad4-4c69-b51b-eefa9cc7a46d",
+          "f7621861-cea1-400b-8192-e1654cab09f5",
+          "dc3f0b86-5f29-4aad-85b6-977c861dac89",
+          "25a17a46-ec0b-4769-b9b4-ab82e2e77e6a"
+        ],
+        "order_spatial": [
+          "90ecea7f-eeb9-4346-b176-89bcfc5a80aa",
+          "cda9bd16-7efd-49f7-9b31-5796b74bd107",
+          "6cc07978-0ad4-4c69-b51b-eefa9cc7a46d",
+          "f7621861-cea1-400b-8192-e1654cab09f5",
+          "dc3f0b86-5f29-4aad-85b6-977c861dac89",
+          "25a17a46-ec0b-4769-b9b4-ab82e2e77e6a"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 43,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 45,
+        "title": "",
+        "type": "ai_video",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "y": 328.6194900144667,
+        "x": 142.28206030780166
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "y": 314.9586452198969,
+        "x": -557.3541744328159
+      },
+      {
+        "idx": 8,
+        "title": "",
+        "y": -1007.8113570996754,
+        "x": -1295.2835063449638
+      },
+      {
+        "idx": 14,
+        "title": "",
+        "y": -994.2903661633804,
+        "x": 1872.0074364832508
+      },
+      {
+        "idx": 15,
+        "title": "",
+        "y": -794.8628380106544,
+        "x": 1884.71407503527
+      },
+      {
+        "idx": 16,
+        "title": "",
+        "y": -601.5627976794719,
+        "x": 1880.7323179743507
+      },
+      {
+        "idx": 17,
+        "title": "",
+        "y": -99.0430805985718,
+        "x": -573.5605564984653
+      },
+      {
+        "idx": 18,
+        "title": "",
+        "y": -111.50120320789053,
+        "x": 124.56836350119374
+      },
+      {
+        "idx": 19,
+        "title": "",
+        "y": -93.67415335888472,
+        "x": 787.430414319766
+      },
+      {
+        "idx": 20,
+        "title": "",
+        "y": -78.77424782014373,
+        "x": 1500.0076383939304
+      },
+      {
+        "idx": 21,
+        "title": "人物1",
+        "y": -624.3848872632714,
+        "x": -2605.5130920404827
+      },
+      {
+        "idx": 22,
+        "title": "人物2",
+        "y": -220.6758686933872,
+        "x": -2637.070836529214
+      },
+      {
+        "idx": 23,
+        "title": "",
+        "y": -116.59772820631792,
+        "x": -1254.2872615430388
+      },
+      {
+        "idx": 25,
+        "title": "",
+        "y": 271.263149852203,
+        "x": 805.2275948811894
+      },
+      {
+        "idx": 29,
+        "title": "",
+        "y": 1070.5507700382375,
+        "x": 95.1845696872988
+      },
+      {
+        "idx": 39,
+        "title": "",
+        "y": -288.81754392041944,
+        "x": -1868.1802840344424
+      },
+      {
+        "idx": 40,
+        "title": "",
+        "y": 419.1481914631472,
+        "x": 1495.94458959411
+      },
+      {
+        "idx": 41,
+        "title": "",
+        "y": 270.7466986301729,
+        "x": -1249.5980752436335
+      }
+    ]
+  },
+  {
+    "id": "wf-clothing-fixed-video",
+    "folder": "视频模板/视频服装固定展示模板",
+    "found": true,
+    "nCards": 12,
+    "nConns": 11,
+    "nGroups": 0,
+    "titled": 1,
+    "genCards": [
+      {
+        "idx": 2,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "ed146f4a-2564-4e36-8ba8-ca1bc2211494",
+          "024cf3a9-7bb0-48ec-be74-40e4560f905c"
+        ],
+        "order_conn": [
+          "024cf3a9-7bb0-48ec-be74-40e4560f905c",
+          "ed146f4a-2564-4e36-8ba8-ca1bc2211494"
+        ],
+        "order_spatial": [
+          "024cf3a9-7bb0-48ec-be74-40e4560f905c",
+          "ed146f4a-2564-4e36-8ba8-ca1bc2211494"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 4,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "tokens",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "a1d8ac9c-a976-4eaa-ae91-0319e06ec8aa"
+        ],
+        "order_conn": [
+          "a1d8ac9c-a976-4eaa-ae91-0319e06ec8aa"
+        ],
+        "order_spatial": [
+          "a1d8ac9c-a976-4eaa-ae91-0319e06ec8aa"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [
+          {
+            "kind": "refSlot",
+            "slotKey": "refImage1",
+            "stored": "图2",
+            "panel": "图1",
+            "mismatch": true
+          }
+        ],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "360df3f2-c2ae-4a7e-8fdb-9a8dae19fde9"
+        ],
+        "order_conn": [
+          "360df3f2-c2ae-4a7e-8fdb-9a8dae19fde9"
+        ],
+        "order_spatial": [
+          "360df3f2-c2ae-4a7e-8fdb-9a8dae19fde9"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 7,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 9,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "tokens",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "7d00681f-daa5-4f58-89f7-e8086707ef2b",
+          "a1d8ac9c-a976-4eaa-ae91-0319e06ec8aa"
+        ],
+        "order_conn": [
+          "7d00681f-daa5-4f58-89f7-e8086707ef2b",
+          "a1d8ac9c-a976-4eaa-ae91-0319e06ec8aa"
+        ],
+        "order_spatial": [
+          "7d00681f-daa5-4f58-89f7-e8086707ef2b",
+          "a1d8ac9c-a976-4eaa-ae91-0319e06ec8aa"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [
+          {
+            "kind": "refSlot",
+            "slotKey": "refImage0",
+            "stored": "图1",
+            "panel": "图1",
+            "mismatch": false
+          },
+          {
+            "kind": "refSlot",
+            "slotKey": "refImage1",
+            "stored": "图2",
+            "panel": "图2",
+            "mismatch": false
+          }
+        ],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 10,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "y": 121.79679063002808,
+        "x": -2180.9991684592515
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "y": 505.92052190672734,
+        "x": -2159.823245448302
+      },
+      {
+        "idx": 6,
+        "title": "帧 15 · 00:07",
+        "y": 198.4001915899709,
+        "x": -1539.9920318301806
+      },
+      {
+        "idx": 11,
+        "title": "",
+        "y": 209.9946799075218,
+        "x": -383.0334203090231
+      }
+    ]
+  },
+  {
+    "id": "wf-clothing-show-video",
+    "folder": "视频模板/视频服装展示模板",
+    "found": true,
+    "nCards": 4,
+    "nConns": 6,
+    "nGroups": 0,
+    "titled": 0,
+    "genCards": [
+      {
+        "idx": 1,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "20b9eae9-5095-4a82-a74f-f9b4446490f5"
+        ],
+        "order_conn": [
+          "20b9eae9-5095-4a82-a74f-f9b4446490f5"
+        ],
+        "order_spatial": [
+          "20b9eae9-5095-4a82-a74f-f9b4446490f5"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 2,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "20b9eae9-5095-4a82-a74f-f9b4446490f5"
+        ],
+        "order_conn": [
+          "20b9eae9-5095-4a82-a74f-f9b4446490f5"
+        ],
+        "order_spatial": [
+          "20b9eae9-5095-4a82-a74f-f9b4446490f5"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "1",
+          "2"
+        ],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "type": "ai_video",
+        "promptKind": "tokens",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [
+          "15f425a4-1c92-4d04-8120-1b53c6cba062",
+          "20b9eae9-5095-4a82-a74f-f9b4446490f5"
+        ],
+        "order_spatial": [
+          "15f425a4-1c92-4d04-8120-1b53c6cba062",
+          "20b9eae9-5095-4a82-a74f-f9b4446490f5"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [
+          {
+            "kind": "upstream",
+            "sourceCardId": "20b9eae9-5095-4a82-a74f-f9b4446490f5",
+            "stored": "图2",
+            "dangling": true
+          }
+        ],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "y": 164.41792423772813,
+        "x": -343.1114324478956
+      }
+    ]
+  },
+  {
+    "id": "wf-content-replace-video",
+    "folder": "视频模板/视频画面内容替换模板",
+    "found": true,
+    "nCards": 4,
+    "nConns": 3,
+    "nGroups": 0,
+    "titled": 0,
+    "genCards": [
+      {
+        "idx": 3,
+        "title": "",
+        "type": "ai_video",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage2"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "493c43f8-231d-4e76-820d-835e94347cb9",
+          "73b2898c-98cd-48f6-8e9f-4412d4c57b7e"
+        ],
+        "order_conn": [
+          "73b2898c-98cd-48f6-8e9f-4412d4c57b7e",
+          "493c43f8-231d-4e76-820d-835e94347cb9"
+        ],
+        "order_spatial": [
+          "73b2898c-98cd-48f6-8e9f-4412d4c57b7e",
+          "493c43f8-231d-4e76-820d-835e94347cb9"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 1,
+        "title": "",
+        "y": 320.1033307211205,
+        "x": 110.98210249666371
+      },
+      {
+        "idx": 2,
+        "title": "",
+        "y": -55.633286356971304,
+        "x": 92.1613710761112
+      }
+    ]
+  },
+  {
+    "id": "wf-kv-poster",
+    "folder": "详情页模板/kv海报模板",
+    "found": true,
+    "nCards": 3,
+    "nConns": 3,
+    "nGroups": 0,
+    "titled": 0,
+    "genCards": [
+      {
+        "idx": 2,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "ecaac66e-a450-471b-b810-f4faebde5c57"
+        ],
+        "order_conn": [
+          "ecaac66e-a450-471b-b810-f4faebde5c57"
+        ],
+        "order_spatial": [
+          "ecaac66e-a450-471b-b810-f4faebde5c57"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "y": 70.62319694215375,
+        "x": -176.39922880721497
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "y": 89.93879120829615,
+        "x": 905.3992288072149
+      }
+    ]
+  },
+  {
+    "id": "wf-detail-cn",
+    "folder": "详情页模板/国内电商详情页模板",
+    "found": true,
+    "nCards": 19,
+    "nConns": 33,
+    "nGroups": 0,
+    "titled": 4,
+    "genCards": [
+      {
+        "idx": 1,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 2,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 4,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 6,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 7,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 8,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 9,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 10,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "quality"
+        ]
+      },
+      {
+        "idx": 11,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 12,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 13,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 14,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 15,
+        "title": "详情页3",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "4"
+        ],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 16,
+        "title": "详情页2",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 17,
+        "title": "详情页1",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "详情页",
+        "y": 458.00347919670224,
+        "x": -595.9694733039755
+      }
+    ]
+  },
+  {
+    "id": "wf-detail-overseas",
+    "folder": "详情页模板/海外电商详情页模板",
+    "found": true,
+    "nCards": 13,
+    "nConns": 22,
+    "nGroups": 0,
+    "titled": 1,
+    "genCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_conn": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_spatial": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_conn": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_spatial": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 2,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_conn": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_spatial": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_conn": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_spatial": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 4,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_conn": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_spatial": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 6,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_conn": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_spatial": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 7,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_conn": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_spatial": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 8,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_conn": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_spatial": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 9,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_conn": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_spatial": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 11,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_conn": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_spatial": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 12,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_conn": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "order_spatial": [
+          "87eba1de-9a4f-4b08-bc1d-6c0bc0404757"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 10,
+        "title": "详情页",
+        "y": 329.0122273005116,
+        "x": -852.013171190909
+      }
+    ]
+  },
+  {
+    "id": "wf-hot-replica-main",
+    "folder": "详情页模板/爆款复刻主图模板",
+    "found": true,
+    "nCards": 4,
+    "nConns": 5,
+    "nGroups": 0,
+    "titled": 0,
+    "genCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "6925c862-110d-4caf-97c1-e020d1e70ec3",
+          "9ba9b74a-bbfe-4a49-a158-c5350da0ad61"
+        ],
+        "order_conn": [
+          "6925c862-110d-4caf-97c1-e020d1e70ec3",
+          "9ba9b74a-bbfe-4a49-a158-c5350da0ad61"
+        ],
+        "order_spatial": [
+          "9ba9b74a-bbfe-4a49-a158-c5350da0ad61",
+          "6925c862-110d-4caf-97c1-e020d1e70ec3"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "quality"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage2"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "6925c862-110d-4caf-97c1-e020d1e70ec3",
+          "9ba9b74a-bbfe-4a49-a158-c5350da0ad61"
+        ],
+        "order_conn": [
+          "9ba9b74a-bbfe-4a49-a158-c5350da0ad61",
+          "6925c862-110d-4caf-97c1-e020d1e70ec3"
+        ],
+        "order_spatial": [
+          "9ba9b74a-bbfe-4a49-a158-c5350da0ad61",
+          "6925c862-110d-4caf-97c1-e020d1e70ec3"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 1,
+        "title": "",
+        "y": 10.840956221960028,
+        "x": -424.5012425020347
+      },
+      {
+        "idx": 2,
+        "title": "",
+        "y": 355.15904377804003,
+        "x": -462.2100735134531
+      }
+    ]
+  },
+  {
+    "id": "wf-outfit-fusion-trial",
+    "folder": "试用版模板/人物服装多模态融合",
+    "found": true,
+    "nCards": 10,
+    "nConns": 29,
+    "nGroups": 0,
+    "titled": 10,
+    "genCards": [
+      {
+        "idx": 4,
+        "title": "效果图4",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1"
+        ],
+        "order_conn": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096"
+        ],
+        "order_spatial": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "4"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "效果图5",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1"
+        ],
+        "order_conn": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096"
+        ],
+        "order_spatial": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "5"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 6,
+        "title": "效果图2",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1"
+        ],
+        "order_conn": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096"
+        ],
+        "order_spatial": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "2"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "quality"
+        ]
+      },
+      {
+        "idx": 7,
+        "title": "效果图3",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1"
+        ],
+        "order_conn": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096"
+        ],
+        "order_spatial": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "3"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 8,
+        "title": "效果图1",
+        "type": "ai_image",
+        "promptKind": "template",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1"
+        ],
+        "order_conn": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096"
+        ],
+        "order_spatial": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "1"
+        ],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "quality"
+        ]
+      },
+      {
+        "idx": 9,
+        "title": "融合提示词",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1"
+        ],
+        "order_conn": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096"
+        ],
+        "order_spatial": [
+          "c3b369e6-86e4-4969-9aee-bfa5623c18f1",
+          "e8c3cac1-95e4-417c-b106-21ed3effdc95",
+          "23eafac6-f9bf-4ce5-ad6b-e63a37d66096",
+          "7210ee8c-2a1f-48b2-bb6c-cd8a0a9c7ea2"
+        ],
+        "slot_eq_conn": false,
+        "slot_eq_spatial": false,
+        "conn_eq_spatial": false,
+        "inlineRefs": [],
+        "literalNums": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+        ],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "环境参考（图4）",
+        "y": 421.28407699105304,
+        "x": -315.0448343540738
+      },
+      {
+        "idx": 1,
+        "title": "影调参考（图3）",
+        "y": 428.28203122610466,
+        "x": -649.0411274268522
+      },
+      {
+        "idx": 2,
+        "title": "模特图（图1）",
+        "y": -5.24057636565864,
+        "x": -739.4637621506058
+      },
+      {
+        "idx": 3,
+        "title": "服装图（图2）",
+        "y": 2.1977466743303467,
+        "x": -358.1334881421544
+      }
+    ]
+  },
+  {
+    "id": "wf-face-merge-trial",
+    "folder": "试用版模板/人脸合成",
+    "found": true,
+    "nCards": 3,
+    "nConns": 2,
+    "nGroups": 0,
+    "titled": 3,
+    "genCards": [
+      {
+        "idx": 2,
+        "title": "人脸合成",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "e7415662-b658-4c9d-aeb7-9937cc9acb5a",
+          "f103cd5c-916f-4ea4-b0f0-87f479916253"
+        ],
+        "order_conn": [
+          "e7415662-b658-4c9d-aeb7-9937cc9acb5a",
+          "f103cd5c-916f-4ea4-b0f0-87f479916253"
+        ],
+        "order_spatial": [
+          "e7415662-b658-4c9d-aeb7-9937cc9acb5a",
+          "f103cd5c-916f-4ea4-b0f0-87f479916253"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "人物1",
+        "y": 80.0,
+        "x": 320.0
+      },
+      {
+        "idx": 1,
+        "title": "人物2",
+        "y": 480.0,
+        "x": 320.0
+      }
+    ]
+  },
+  {
+    "id": "wf-detail-cn-trial",
+    "folder": "试用版模板/国内电商详情页模板",
+    "found": true,
+    "nCards": 19,
+    "nConns": 33,
+    "nGroups": 0,
+    "titled": 4,
+    "genCards": [
+      {
+        "idx": 1,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 2,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 4,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 5,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 6,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 7,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 8,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 9,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 10,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "quality"
+        ]
+      },
+      {
+        "idx": 11,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 12,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 13,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 14,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 15,
+        "title": "详情页3",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage0"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "4"
+        ],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 16,
+        "title": "详情页2",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 17,
+        "title": "详情页1",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 1,
+        "slotKeys": [
+          "refImage1"
+        ],
+        "slotGap": true,
+        "order_slot": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_conn": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "order_spatial": [
+          "a70f620b-9cdb-4cff-af95-14e0b73bd284"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 0,
+        "title": "详情页",
+        "y": 458.00347919670224,
+        "x": -595.9694733039755
+      }
+    ]
+  },
+  {
+    "id": "wf-model-bag-trial",
+    "folder": "试用版模板/模特箱包模板",
+    "found": true,
+    "nCards": 14,
+    "nConns": 24,
+    "nGroups": 0,
+    "titled": 0,
+    "genCards": [
+      {
+        "idx": 0,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 1,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 2,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 3,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 4,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 8,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 9,
+        "title": "",
+        "type": "ai_chat",
+        "promptKind": "plain",
+        "nSlots": 4,
+        "slotKeys": [
+          "refImage0",
+          "refImage1",
+          "refImage2",
+          "refImage3"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362",
+          "ce97df39-ddae-4b6b-851f-72416603dee2",
+          "1fb2b43a-c6d2-4c50-af6a-ec52d0240123"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362",
+          "ce97df39-ddae-4b6b-851f-72416603dee2",
+          "1fb2b43a-c6d2-4c50-af6a-ec52d0240123"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362",
+          "ce97df39-ddae-4b6b-851f-72416603dee2",
+          "1fb2b43a-c6d2-4c50-af6a-ec52d0240123"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "runtime": [
+          "upstreamCardId",
+          "model",
+          "provider"
+        ]
+      },
+      {
+        "idx": 10,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_conn": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "order_spatial": [
+          "b6986206-3b55-4b57-a458-ec9087e30e19",
+          "c9668163-b964-4bb4-90db-9dc6202b1362"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      },
+      {
+        "idx": 11,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "tokens",
+        "nSlots": 2,
+        "slotKeys": [
+          "refImage0",
+          "refImage1"
+        ],
+        "slotGap": false,
+        "order_slot": [
+          "a8d9da7c-9d95-4cdc-95fd-4c62cf8c546f",
+          "18bd0bba-3f2f-4886-b901-5ec267bac6c9"
+        ],
+        "order_conn": [
+          "a8d9da7c-9d95-4cdc-95fd-4c62cf8c546f",
+          "18bd0bba-3f2f-4886-b901-5ec267bac6c9"
+        ],
+        "order_spatial": [
+          "a8d9da7c-9d95-4cdc-95fd-4c62cf8c546f",
+          "18bd0bba-3f2f-4886-b901-5ec267bac6c9"
+        ],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [
+          {
+            "kind": "refSlot",
+            "slotKey": "refImage0",
+            "stored": "图1",
+            "panel": "图1",
+            "mismatch": false
+          }
+        ],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "upstreamCardId",
+          "model",
+          "provider",
+          "resolution"
+        ]
+      },
+      {
+        "idx": 13,
+        "title": "",
+        "type": "ai_image",
+        "promptKind": "plain",
+        "nSlots": 0,
+        "slotKeys": [],
+        "slotGap": false,
+        "order_slot": [],
+        "order_conn": [],
+        "order_spatial": [],
+        "slot_eq_conn": true,
+        "slot_eq_spatial": true,
+        "conn_eq_spatial": true,
+        "inlineRefs": [],
+        "literalNums": [],
+        "runtime": [
+          "results",
+          "selectedIndex",
+          "model",
+          "provider",
+          "resolution",
+          "quality"
+        ]
+      }
+    ],
+    "inputImageCards": [
+      {
+        "idx": 5,
+        "title": "",
+        "y": -671.5957128903362,
+        "x": -80.24628802946282
+      },
+      {
+        "idx": 6,
+        "title": "",
+        "y": -306.4688483137767,
+        "x": -118.53118939088353
+      },
+      {
+        "idx": 7,
+        "title": "",
+        "y": 68.76579435586928,
+        "x": -66.79762116632367
+      },
+      {
+        "idx": 12,
+        "title": "",
+        "y": -403.7846146457746,
+        "x": -1118.841409100699
+      }
+    ]
+  }
+]

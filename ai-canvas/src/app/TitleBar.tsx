@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Minus, Square, X, PanelLeft, Plus, Pencil, MessageSquare, Download, ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { NewProjectDialog } from "@/features/overlays/NewProjectDialog";
+import MembershipChip from "@/features/auth/MembershipChip";
 import { useUIStore } from "@/stores/uiStore";
 import type { SaveStatus } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
@@ -539,6 +540,9 @@ export default function TitleBar() {
       ) : (
         <div data-tauri-drag-region className="flex-1" />
       )}
+
+      {/* 会员升级入口:仅试用/未开通用户显示,正式版返回 null */}
+      <MembershipChip />
 
       {isTauri && (
         <div className="flex">

@@ -14,7 +14,8 @@ import { scheduleFitCardsToViewport } from "@/lib/viewport";
 import { cn } from "@/lib/utils";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { canUseTemplate, canSeeTemplate } from "@/lib/entitlements";
-import { TEMPLATE_CATEGORIES, TEMPLATE_CATEGORY_ORDER } from "@/config/templateCategories";
+import { useCategoryStore } from "@/stores/categoryStore";
+import { categoryLabelMap, categoryOrderMap } from "@/config/templateCategories";
 
 function formatRelativeTime(iso: string): string {
   const d = new Date(iso);
@@ -112,8 +113,9 @@ export function NewProjectDialog({
 
   useEffect(() => {
     if (!open) return;
-    // 进弹窗也拉一次服务端模板(首页可能还没拉过)
+    // 进弹窗也拉一次服务端模板 + 分类(首页可能还没拉过)
     void useTemplateStore.getState().load();
+    void useCategoryStore.getState().load();
   }, [open]);
 
   useEffect(() => {
@@ -202,9 +204,12 @@ export function NewProjectDialog({
   );
 
   const templates = useTemplateStore((s) => s.templates);
+  const categories = useCategoryStore((s) => s.categories);
 
-  // 按分类分组(顺序按 TEMPLATE_CATEGORIES,只留有模板的分类)
+  // 按分类分组(顺序按服务端分组 sort,只留有模板的分类)
   const groups = useMemo(() => {
+    const labelMap = categoryLabelMap(categories);
+    const orderMap = categoryOrderMap(categories);
     const byCat = new Map<string, WorkflowTemplate[]>();
     for (const wf of templates) {
       if (!canSeeTemplate(ent, wf)) continue; // trial 模板只对非正式版展示:正式版有完整模板,藏掉重复的试用副本
@@ -215,11 +220,11 @@ export function NewProjectDialog({
     return [...byCat.entries()]
       .map(([key, list]) => ({
         key,
-        label: TEMPLATE_CATEGORIES.find((c) => c.key === key)?.label ?? key,
+        label: labelMap[key] ?? key,
         list,
       }))
-      .sort((a, b) => (TEMPLATE_CATEGORY_ORDER[a.key] ?? 99) - (TEMPLATE_CATEGORY_ORDER[b.key] ?? 99));
-  }, [templates, ent]);
+      .sort((a, b) => (orderMap[a.key] ?? 99) - (orderMap[b.key] ?? 99));
+  }, [templates, ent, categories]);
 
   const [activeCat, setActiveCat] = useState<string>("");
   const activeKey = groups.some((g) => g.key === activeCat) ? activeCat : (groups[0]?.key ?? "");

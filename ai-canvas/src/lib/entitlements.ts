@@ -49,3 +49,20 @@ export function canSeeTemplate(ent: Entitlements, tpl: { category: string }): bo
   if (tpl.category === "trial") return !ent.isOfficial;
   return true;
 }
+
+/**
+ * 该模板能否在「画布右键/双击 → 添加模板」菜单里直接插入 = 可见且可用。
+ *
+ * 这是 in-canvas 快速插入的**唯一门禁口径**:该菜单是纯文本列表、没有「锁」升级位,
+ * 所以白名单外的模板必须直接不列(否则试用版用户会看到并直接实例化正式版模板 → 绕过付费墙)。
+ *
+ * ⚠️ 与首页 `WorkflowGrid` / 新建弹窗 `NewProjectDialog` 的口径**不同**:那两处刻意展示
+ * 锁定的正式版模板(canSeeTemplate)作升级引导,各自用 `canUseTemplate` 算 `locked`。
+ * 不要把它们改成本函数,否则会丢掉引导升级的锁定卡。
+ */
+export function canInsertTemplate(
+  ent: Entitlements,
+  tpl: { id: string; category: string },
+): boolean {
+  return canSeeTemplate(ent, tpl) && canUseTemplate(ent, tpl.id);
+}

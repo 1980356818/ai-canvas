@@ -1,0 +1,7 @@
+[
+  { "key": "flat", "label": "平面模板", "sort": 0 },
+  { "key": "video", "label": "视频模板", "sort": 1 },
+  { "key": "detail", "label": "详情页模板", "sort": 2 },
+  { "key": "trial", "label": "试用版模板", "sort": 3 },
+  { "key": "digital-human", "label": "数字人融合模板", "sort": 4 }
+]

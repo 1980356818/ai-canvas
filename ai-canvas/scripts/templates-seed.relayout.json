@@ -77,7 +77,7 @@
       },
       {
         "type": "ai_image",
-        "title": "效果图2",
+        "title": "图片1",
         "relativeX": 1315,
         "relativeY": 40,
         "width": 255.0,
@@ -862,7 +862,7 @@
     "cards": [
       {
         "type": "ai_image",
-        "title": "效果图1",
+        "title": "参考图1",
         "relativeX": 1320,
         "relativeY": 174,
         "width": 255.0,
@@ -884,7 +884,7 @@
       },
       {
         "type": "ai_image",
-        "title": "参考图1",
+        "title": "参考图2",
         "relativeX": 0,
         "relativeY": 389,
         "width": 340.0,
@@ -896,7 +896,7 @@
       },
       {
         "type": "ai_image",
-        "title": "参考图2",
+        "title": "参考图3",
         "relativeX": 0,
         "relativeY": 0,
         "width": 340.0,
@@ -936,7 +936,7 @@
       },
       {
         "type": "ai_image",
-        "title": "效果图2",
+        "title": "图片1",
         "relativeX": 2555,
         "relativeY": 174,
         "width": 340.0,
@@ -1041,7 +1041,7 @@
       },
       {
         "type": "ai_image",
-        "title": "效果图2",
+        "title": "参考图3",
         "relativeX": 1320,
         "relativeY": 174,
         "width": 255.0,
@@ -1067,7 +1067,7 @@
       },
       {
         "type": "ai_image",
-        "title": "效果图1",
+        "title": "图片1",
         "relativeX": 2555,
         "relativeY": 174,
         "width": 340.0,
@@ -4315,7 +4315,7 @@
       },
       {
         "type": "ai_image",
-        "title": "效果图22",
+        "title": "图片1",
         "relativeX": 1940,
         "relativeY": 2810,
         "width": 255.0,
@@ -5022,7 +5022,7 @@
       },
       {
         "type": "ai_image",
-        "title": "效果图1",
+        "title": "图片1",
         "relativeX": 1320,
         "relativeY": 40,
         "width": 255.0,

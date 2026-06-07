@@ -1,0 +1,266 @@
+[
+  {
+    "localRel": "covers/white-bg.jpg",
+    "remoteRel": "covers/white-bg.2b4ddc9cac8b94c2.jpg"
+  },
+  {
+    "localRel": "white-bg/source-photo.jpg",
+    "remoteRel": "white-bg/source-photo.2c233c37fc87d62c.jpg"
+  },
+  {
+    "localRel": "white-bg/refined-3d.jpg",
+    "remoteRel": "white-bg/refined-3d.73585cf2f27cd56a.jpg"
+  },
+  {
+    "localRel": "white-bg/multi-angle.jpg",
+    "remoteRel": "white-bg/multi-angle.b07bb436aae01ff2.jpg"
+  },
+  {
+    "localRel": "covers/tryon.jpg",
+    "remoteRel": "covers/tryon.ffd9fb7d9c098cd1.jpg"
+  },
+  {
+    "localRel": "tryon/model.jpg",
+    "remoteRel": "tryon/model.3111b6b3cbcc2329.jpg"
+  },
+  {
+    "localRel": "tryon/garment.jpg",
+    "remoteRel": "tryon/garment.b6a8a8388a0ea5cf.jpg"
+  },
+  {
+    "localRel": "tryon/result.jpg",
+    "remoteRel": "tryon/result.f66d628103e40987.jpg"
+  },
+  {
+    "localRel": "covers/scene-replace.jpg",
+    "remoteRel": "covers/scene-replace.e320b1bc1ea5962b.jpg"
+  },
+  {
+    "localRel": "scene-replace/person.jpg",
+    "remoteRel": "scene-replace/person.f710ac24b8287920.jpg"
+  },
+  {
+    "localRel": "scene-replace/scene.jpg",
+    "remoteRel": "scene-replace/scene.5be87f8c7228e861.jpg"
+  },
+  {
+    "localRel": "scene-replace/result.jpg",
+    "remoteRel": "scene-replace/result.acf74d34d232e64e.jpg"
+  },
+  {
+    "localRel": "covers/pose-fission.jpg",
+    "remoteRel": "covers/pose-fission.3ad5ba77a5168831.jpg"
+  },
+  {
+    "localRel": "pose-fission/person.jpg",
+    "remoteRel": "pose-fission/person.0e1b7ce9b0c40b10.jpg"
+  },
+  {
+    "localRel": "pose-fission/result.jpg",
+    "remoteRel": "pose-fission/result.7658e7168cb5f84c.jpg"
+  },
+  {
+    "localRel": "covers/face-merge.jpg",
+    "remoteRel": "covers/face-merge.80f5ca558bdb4a89.jpg"
+  },
+  {
+    "localRel": "face-merge/person-1.jpg",
+    "remoteRel": "face-merge/person-1.aa8c4cfe06aa7d8f.jpg"
+  },
+  {
+    "localRel": "face-merge/person-2.jpg",
+    "remoteRel": "face-merge/person-2.902229345c2f42b2.jpg"
+  },
+  {
+    "localRel": "face-merge/result.jpg",
+    "remoteRel": "face-merge/result.538b8758e3ed2ef1.jpg"
+  },
+  {
+    "localRel": "covers/look-fission.jpg",
+    "remoteRel": "covers/look-fission.df2576958727b8ef.jpg"
+  },
+  {
+    "localRel": "look-fission/person.jpg",
+    "remoteRel": "look-fission/person.3c6452aafc49678a.jpg"
+  },
+  {
+    "localRel": "look-fission/result-1.jpg",
+    "remoteRel": "look-fission/result-1.349843d181855c04.jpg"
+  },
+  {
+    "localRel": "look-fission/result-2.jpg",
+    "remoteRel": "look-fission/result-2.48795c7d29b9bbdc.jpg"
+  },
+  {
+    "localRel": "look-fission/result-3.jpg",
+    "remoteRel": "look-fission/result-3.7fbbdb7ad70b15b3.jpg"
+  },
+  {
+    "localRel": "covers/multimodal-fusion.jpg",
+    "remoteRel": "covers/multimodal-fusion.8a6cad2468643eb3.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion/person.jpg",
+    "remoteRel": "multimodal-fusion/person.8daf4ccc09ce8bd1.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion/garment.jpg",
+    "remoteRel": "multimodal-fusion/garment.ccf4a193a8d71222.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion/scene.jpg",
+    "remoteRel": "multimodal-fusion/scene.c09ae0866c9d7121.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion/pose.jpg",
+    "remoteRel": "multimodal-fusion/pose.b7683fc4c3771705.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion/result.jpg",
+    "remoteRel": "multimodal-fusion/result.f710ac24b8287920.jpg"
+  },
+  {
+    "localRel": "covers/multimodal-fusion-6.jpg",
+    "remoteRel": "covers/multimodal-fusion-6.e8e90381b69a6b65.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-6/person.jpg",
+    "remoteRel": "multimodal-fusion-6/person.f8b185ce301f0fb3.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-6/garment.jpg",
+    "remoteRel": "multimodal-fusion-6/garment.88f1d327dd39d829.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-6/scene.jpg",
+    "remoteRel": "multimodal-fusion-6/scene.f7b29c6c06b3c42a.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-6/pose.jpg",
+    "remoteRel": "multimodal-fusion-6/pose.f7b29c6c06b3c42a.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-6/result-1.jpg",
+    "remoteRel": "multimodal-fusion-6/result-1.b82a5156aabee1cd.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-6/result-2.jpg",
+    "remoteRel": "multimodal-fusion-6/result-2.83432e6e3580b712.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-6/result-3.jpg",
+    "remoteRel": "multimodal-fusion-6/result-3.8e75d7abc2f25ec1.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-6/result-4.jpg",
+    "remoteRel": "multimodal-fusion-6/result-4.811632be562a0cb9.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-6/result-5.jpg",
+    "remoteRel": "multimodal-fusion-6/result-5.8e61e1e64f4ab652.jpg"
+  },
+  {
+    "localRel": "covers/studio-look.jpg",
+    "remoteRel": "covers/studio-look.b2a0160dc4c655df.jpg"
+  },
+  {
+    "localRel": "studio-look/person.jpg",
+    "remoteRel": "studio-look/person.aa8c4cfe06aa7d8f.jpg"
+  },
+  {
+    "localRel": "studio-look/garment.jpg",
+    "remoteRel": "studio-look/garment.b6a8a8388a0ea5cf.jpg"
+  },
+  {
+    "localRel": "studio-look/scene.jpg",
+    "remoteRel": "studio-look/scene.94e81de5cf1bedd9.jpg"
+  },
+  {
+    "localRel": "studio-look/result-1.jpg",
+    "remoteRel": "studio-look/result-1.92d2bb5fbb410f20.jpg"
+  },
+  {
+    "localRel": "studio-look/result-2.jpg",
+    "remoteRel": "studio-look/result-2.a24f2b83de5c6437.jpg"
+  },
+  {
+    "localRel": "studio-look/result-3.jpg",
+    "remoteRel": "studio-look/result-3.fd6c9302e20468eb.jpg"
+  },
+  {
+    "localRel": "studio-look/result-4.jpg",
+    "remoteRel": "studio-look/result-4.ab4881f0165d3cf8.jpg"
+  },
+  {
+    "localRel": "covers/mirror-selfie-1.jpg",
+    "remoteRel": "covers/mirror-selfie-1.2846daaa36eff7d7.jpg"
+  },
+  {
+    "localRel": "mirror-selfie/person.jpg",
+    "remoteRel": "mirror-selfie/person.aa8c4cfe06aa7d8f.jpg"
+  },
+  {
+    "localRel": "mirror-selfie/garment-cut.jpg",
+    "remoteRel": "mirror-selfie/garment-cut.b6a8a8388a0ea5cf.jpg"
+  },
+  {
+    "localRel": "mirror-selfie/scene.jpg",
+    "remoteRel": "mirror-selfie/scene.3a76bd5bc81923c0.jpg"
+  },
+  {
+    "localRel": "mirror-selfie/result-1.jpg",
+    "remoteRel": "mirror-selfie/result-1.f6c590ce28e8c97f.jpg"
+  },
+  {
+    "localRel": "covers/mirror-selfie.jpg",
+    "remoteRel": "covers/mirror-selfie.b4284c80eb2aae89.jpg"
+  },
+  {
+    "localRel": "mirror-selfie/result-2.jpg",
+    "remoteRel": "mirror-selfie/result-2.047ad1b92256976c.jpg"
+  },
+  {
+    "localRel": "mirror-selfie/result-3.jpg",
+    "remoteRel": "mirror-selfie/result-3.0470820ae08e1433.jpg"
+  },
+  {
+    "localRel": "covers/multimodal-fusion-2.jpg",
+    "remoteRel": "covers/multimodal-fusion-2.e6b0299d74d2efec.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-2/person.jpg",
+    "remoteRel": "multimodal-fusion-2/person.2fe632986242f835.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-2/garment.jpg",
+    "remoteRel": "multimodal-fusion-2/garment.69389248e3fc19ac.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-2/tone.jpg",
+    "remoteRel": "multimodal-fusion-2/tone.d8c64e480370c98f.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-2/scene.jpg",
+    "remoteRel": "multimodal-fusion-2/scene.d8c64e480370c98f.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-2/result-1.jpg",
+    "remoteRel": "multimodal-fusion-2/result-1.2efa829cc66568d4.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-2/result-2.jpg",
+    "remoteRel": "multimodal-fusion-2/result-2.dbbb8493ed4831de.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-2/result-3.jpg",
+    "remoteRel": "multimodal-fusion-2/result-3.146cbc9b72512c29.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-2/result-4.jpg",
+    "remoteRel": "multimodal-fusion-2/result-4.7ea4375c694c76ae.jpg"
+  },
+  {
+    "localRel": "multimodal-fusion-2/result-5.jpg",
+    "remoteRel": "multimodal-fusion-2/result-5.0d146e1f6ffbd591.jpg"
+  }
+]

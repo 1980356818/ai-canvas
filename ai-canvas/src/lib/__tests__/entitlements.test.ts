@@ -13,6 +13,7 @@ import {
   entitlementsFromUser,
   canUseTemplate,
   canSeeTemplate,
+  canInsertTemplate,
 } from "@/lib/entitlements";
 
 function makeUser(tier: string | null, features: TierFeatures | null): AuthUser {
@@ -108,5 +109,36 @@ describe("canSeeTemplate (展示可见性,独立于能否使用)", () => {
     const ent = entitlementsFromUser(makeUser(null, null));
     expect(canSeeTemplate(ent, trialTpl)).toBe(true);
     expect(canSeeTemplate(ent, flatTpl)).toBe(true);
+  });
+});
+
+/**
+ * 画布右键/双击「添加模板」插入门禁回归。
+ *
+ * 历史 bug:该菜单只过滤 canSeeTemplate(没有 canUseTemplate),试用版用户能看到并
+ * 直接实例化正式版模板,绕过付费墙。canInsertTemplate 必须同时满足「可见 + 可用」。
+ */
+describe("canInsertTemplate (画布插入门禁 = 可见且可用)", () => {
+  // 试用版白名单 = trial 分类模板(对齐 TRIAL_FEATURES.templates);正式版模板 id 不在内。
+  const trialAllowed = { id: "wf-white-bg", category: "trial" };
+  const officialFlat = { id: "wf-pose-fission", category: "flat" };
+
+  it("试用版 → 只能插入白名单内模板,正式版模板(白名单外)一律不可插入【bug 回归】", () => {
+    const ent = entitlementsFromUser(makeUser("trial", TRIAL_FEATURES));
+    expect(canInsertTemplate(ent, trialAllowed)).toBe(true);
+    // 这条若回到 true,就是 bug 复发:试用版又能从右键菜单插入正式版模板。
+    expect(canInsertTemplate(ent, officialFlat)).toBe(false);
+  });
+
+  it("正式版 → 可插入正式版模板,但 trial 分类(重复试用副本)不列出", () => {
+    const ent = entitlementsFromUser(makeUser("vip1", VIP_FEATURES));
+    expect(canInsertTemplate(ent, officialFlat)).toBe(true);
+    expect(canInsertTemplate(ent, trialAllowed)).toBe(false); // canSeeTemplate 藏掉 trial
+  });
+
+  it("过期/无会员 → 白名单为空,任何模板都不可插入", () => {
+    const ent = entitlementsFromUser(makeUser(null, null));
+    expect(canInsertTemplate(ent, trialAllowed)).toBe(false);
+    expect(canInsertTemplate(ent, officialFlat)).toBe(false);
   });
 });

@@ -25,8 +25,9 @@ import { useGroupRunStatusStore } from "@/stores/groupRunStatusStore";
 import { CARD_DEFAULTS } from "@/shared/constants";
 import { useTemplateStore } from "@/stores/templateStore";
 import { useAuthStore } from "@/stores/authStore";
-import { canSeeTemplate, entitlementsFromUser } from "@/lib/entitlements";
-import { TEMPLATE_CATEGORY_LABEL, TEMPLATE_CATEGORY_ORDER } from "@/config/templateCategories";
+import { canInsertTemplate, canUseTemplate, entitlementsFromUser } from "@/lib/entitlements";
+import { useCategoryStore } from "@/stores/categoryStore";
+import { categoryLabelMap, categoryOrderMap } from "@/config/templateCategories";
 import { extractCardMedia } from "@/config/model-ref-images";
 import { exportFile, revealInExplorer, batchExportFiles } from "@/lib/media";
 import { copyCards, cutCards, pasteCards } from "@/lib/clipboard";
@@ -395,6 +396,13 @@ function ContextMenuPanel({
     const cards = projectId
       ? useCardStore.getState().getCardsByProject(projectId)
       : [];
+    // 模板门禁:只列「当前会员可在画布直接插入」的模板(可见且可用,见 canInsertTemplate)。
+    // 关键是其中的 canUseTemplate:否则试用版用户会在此菜单看到并直接实例化正式版模板(绕过付费墙)。
+    const ent = entitlementsFromUser(useAuthStore.getState().user);
+    const usableTemplates = useTemplateStore
+      .getState()
+      .templates.filter((wf) => wf.connections && wf.connections.length > 0)
+      .filter((wf) => canInsertTemplate(ent, wf));
     entries = [
       {
         type: "submenu",
@@ -430,21 +438,20 @@ function ContextMenuPanel({
       {
         type: "submenu",
         label: "添加模板",
-        disabled: noProject,
+        disabled: noProject || usableTemplates.length === 0,
         // 模板按分类分二级子菜单(27 个平铺太长);分类顺序同首页
         children: (() => {
-          const ent = entitlementsFromUser(useAuthStore.getState().user);
-          const tpls = useTemplateStore.getState().templates
-            .filter((wf) => wf.connections && wf.connections.length > 0)
-            .filter((wf) => canSeeTemplate(ent, wf)); // trial 模板对正式版用户隐藏
-          const cats = [...new Set(tpls.map((t) => t.category))].sort(
-            (a, b) => (TEMPLATE_CATEGORY_ORDER[a] ?? 99) - (TEMPLATE_CATEGORY_ORDER[b] ?? 99),
+          const cats0 = useCategoryStore.getState().categories;
+          const labelMap = categoryLabelMap(cats0);
+          const orderMap = categoryOrderMap(cats0);
+          const cats = [...new Set(usableTemplates.map((t) => t.category))].sort(
+            (a, b) => (orderMap[a] ?? 99) - (orderMap[b] ?? 99),
           );
           return cats.map((cat) => ({
             type: "submenu" as const,
-            label: TEMPLATE_CATEGORY_LABEL[cat] ?? cat,
+            label: labelMap[cat] ?? cat,
             disabled: noProject,
-            children: tpls
+            children: usableTemplates
               .filter((wf) => wf.category === cat)
               .map((wf) => ({
                 type: "item" as const,
@@ -452,6 +459,14 @@ function ContextMenuPanel({
                 disabled: noProject,
                 onSelect: () => {
                   if (!projectId) return;
+                  // 防御性二次校验:列表已过滤,这里对付费墙再确认一次,杜绝任何绕过。
+                  if (!canUseTemplate(ent, wf.id)) {
+                    useUIStore
+                      .getState()
+                      .openUpgrade(`「${wf.name}」是正式版模板,升级会员后即可使用`);
+                    hide();
+                    return;
+                  }
                   const world = clientToWorld(contextMenu.x, contextMenu.y);
                   void instantiateWorkflowTemplate(wf, projectId, world.x, world.y).then((cardIds) => {
                     useCanvasStore.getState().setSelectedCardIds(cardIds);

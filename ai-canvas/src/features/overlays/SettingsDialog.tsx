@@ -30,6 +30,8 @@ import {
   Copy,
   Check,
   Download,
+  Crown,
+  ArrowUpCircle,
 } from "lucide-react";
 import {
   getSetting,
@@ -50,6 +52,8 @@ import { modelService } from "@/services/models";
 import { useUIStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
 import { apiChangePassword, apiGetDeviceInfo, apiUnbindDevice, type DeviceInfo } from "@/platform/auth.api";
+import { useMembership } from "@/hooks/useMembership";
+import { formatExpireDate } from "@/lib/membership";
 import { isTauri } from "@/platform/runtime";
 import { invoke } from "@tauri-apps/api/core";
 import { isPlatformVisible } from "@/config/platforms";
@@ -1202,6 +1206,8 @@ function AccountTab({ onClose }: { onClose: () => void }) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const addToast = useUIStore((s) => s.addToast);
+  const openUpgrade = useUIStore((s) => s.openUpgrade);
+  const membership = useMembership();
   const [confirming, setConfirming] = useState(false);
 
   const [showChangePwd, setShowChangePwd] = useState(false);
@@ -1309,9 +1315,52 @@ function AccountTab({ onClose }: { onClose: () => void }) {
             {user?.status === "active" ? "已激活" : "未激活"}
           </span>
         </div>
-        {user?.memberExpireAt && (
+      </div>
+
+      {/* 会员等级 / 升级入口 */}
+      <div className="rounded-lg border border-border p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Crown className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">会员等级</h3>
+          </div>
+          <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+            {membership.tierLabel}
+          </span>
+        </div>
+
+        {membership.expireAt && (
+          <div className="mt-3 flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">会员到期</span>
+            <span className="text-foreground">
+              {formatExpireDate(membership.expireAt)}
+              {membership.remainingDays != null && membership.remainingDays > 0
+                ? `（剩 ${membership.remainingDays} 天）`
+                : ""}
+            </span>
+          </div>
+        )}
+
+        {membership.canUpgrade ? (
+          <>
+            <p className="mt-3 text-xs text-muted-foreground">
+              升级正式版即可解锁全部模板与功能。
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                openUpgrade();
+              }}
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <ArrowUpCircle className="h-4 w-4" />
+              升级正式版 / 兑换激活码
+            </button>
+          </>
+        ) : (
           <p className="mt-3 text-xs text-muted-foreground">
-            会员到期：{new Date(user.memberExpireAt).toLocaleDateString("zh-CN")}
+            您已是正式版会员，可使用全部功能。
           </p>
         )}
       </div>
