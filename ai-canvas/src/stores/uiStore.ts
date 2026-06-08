@@ -16,6 +16,7 @@ interface UIState {
   chatPanelVisible: boolean;
   taskRecordVisible: boolean;
   settingsVisible: boolean;
+  priceListVisible: boolean;
   saveStatus: SaveStatus;
   toasts: ToastItem[];
   contextMenu: {
@@ -44,6 +45,7 @@ interface UIState {
   toggleChatPanel: () => void;
   toggleTaskRecord: () => void;
   toggleSettings: () => void;
+  togglePriceList: () => void;
   setSaveStatus: (status: SaveStatus) => void;
 
   addToast: (toast: Omit<ToastItem, "id">) => void;
@@ -78,6 +80,7 @@ export const useUIStore = create<UIState>((set) => ({
   chatPanelVisible: false,
   taskRecordVisible: false,
   settingsVisible: false,
+  priceListVisible: false,
   saveStatus: "saved",
   toasts: [],
   contextMenu: { visible: false, x: 0, y: 0, target: "canvas" },
@@ -100,6 +103,8 @@ export const useUIStore = create<UIState>((set) => ({
     set((s) => ({ taskRecordVisible: !s.taskRecordVisible })),
   toggleSettings: () =>
     set((s) => ({ settingsVisible: !s.settingsVisible })),
+  togglePriceList: () =>
+    set((s) => ({ priceListVisible: !s.priceListVisible })),
   setSaveStatus: (status) => set({ saveStatus: status }),
 
   addToast: (toast) => {

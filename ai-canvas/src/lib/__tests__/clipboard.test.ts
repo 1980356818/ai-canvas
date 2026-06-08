@@ -147,3 +147,197 @@ describe("普通复制 → 粘贴 = 复制(回归,不受剪切改动影响)", ()
     expect(useCardStore.getState().getCardsByProject("p1").length).toBe(2);
   });
 });
+
+describe("复制带「上游输入连线」(incoming)", () => {
+  function connect(id: string, source: string, target: string) {
+    useConnectionStore.getState().addConnection({
+      id,
+      projectId: "p1",
+      sourceCardId: source,
+      targetCardId: target,
+      createdAt: "t0",
+    });
+  }
+
+  it("复制单张下游卡 → 副本继承同样的上游输入连线", async () => {
+    useCardStore.getState().addCard(makeCard("up", 0, 0));
+    useCardStore.getState().addCard(makeCard("a", 300, 0));
+    connect("c-up-a", "up", "a");
+
+    await copyCards(new Set(["a"]));
+    const newIds = await pasteCards("p1", { worldX: 600, worldY: 0 });
+    expect(newIds.length).toBe(1);
+    const newId = newIds[0]!;
+
+    // 副本有且仅有一条来自 up 的上游输入连线
+    const into = useConnectionStore
+      .getState()
+      .getConnectionsByProject("p1")
+      .filter((c) => c.targetCardId === newId);
+    expect(into.length).toBe(1);
+    expect(into[0]!.sourceCardId).toBe("up");
+    // 原连线不受影响
+    expect(useConnectionStore.getState().hasConnection("up", "a")).toBe(true);
+  });
+
+  it("出方向连线不复制 —— 下游邻居不会被副本多连一路", async () => {
+    useCardStore.getState().addCard(makeCard("a", 0, 0));
+    useCardStore.getState().addCard(makeCard("down", 300, 0));
+    connect("c-a-down", "a", "down");
+
+    await copyCards(new Set(["a"]));
+    const newIds = await pasteCards("p1", { worldX: 600, worldY: 0 });
+    const newId = newIds[0]!;
+
+    // 副本不产生指向 down 的出方向连线
+    expect(useConnectionStore.getState().hasConnection(newId, "down")).toBe(false);
+    // down 仍只有来自原 a 的一路输入
+    const intoDown = useConnectionStore
+      .getState()
+      .getConnectionsByProject("p1")
+      .filter((c) => c.targetCardId === "down");
+    expect(intoDown.length).toBe(1);
+    expect(intoDown[0]!.sourceCardId).toBe("a");
+  });
+
+  it("上游邻居在目标项目不存在(跨项目粘贴)→ 跳过该入边,不报错", async () => {
+    useCardStore.getState().addCard(makeCard("up", 0, 0));
+    useCardStore.getState().addCard(makeCard("a", 300, 0));
+    connect("c-up-a", "up", "a");
+
+    await copyCards(new Set(["a"]));
+    // 粘贴到另一个项目:up 不在 p2 → 入边应被跳过
+    const newIds = await pasteCards("p2", { worldX: 0, worldY: 0 });
+    expect(newIds.length).toBe(1);
+    const newId = newIds[0]!;
+    const into = useConnectionStore
+      .getState()
+      .getConnectionsByProject("p2")
+      .filter((c) => c.targetCardId === newId);
+    expect(into.length).toBe(0);
+  });
+
+  it("多选复制:内部连线两端重映射 + 各自的上游输入连线一并继承", async () => {
+    // up → a → b,选中 {a, b} 复制
+    useCardStore.getState().addCard(makeCard("up", 0, 0));
+    useCardStore.getState().addCard(makeCard("a", 300, 0));
+    useCardStore.getState().addCard(makeCard("b", 600, 0));
+    connect("c-up-a", "up", "a");
+    connect("c-a-b", "a", "b");
+
+    await copyCards(new Set(["a", "b"]));
+    const newIds = await pasteCards("p1", { worldX: 900, worldY: 0 });
+    expect(newIds.length).toBe(2);
+    const newSet = new Set(newIds);
+
+    const conns = useConnectionStore.getState().getConnectionsByProject("p1");
+    // a' = 收到来自 up 的入边的新卡
+    const aPrimeEdge = conns.find(
+      (c) => c.sourceCardId === "up" && newSet.has(c.targetCardId),
+    );
+    expect(aPrimeEdge).toBeDefined();
+    const aPrime = aPrimeEdge!.targetCardId;
+    // 内部连线 a→b 被重映射为 a'→b'(两端都是新卡)
+    const internal = conns.find(
+      (c) => c.sourceCardId === aPrime && newSet.has(c.targetCardId),
+    );
+    expect(internal).toBeDefined();
+    expect(internal!.targetCardId).not.toBe(aPrime);
+    // 原图保持不变:up→a、a→b 仍在
+    expect(useConnectionStore.getState().hasConnection("up", "a")).toBe(true);
+    expect(useConnectionStore.getState().hasConnection("a", "b")).toBe(true);
+  });
+});
+
+describe("剪切移动保留全部连线(all)", () => {
+  function connect(id: string, source: string, target: string) {
+    useConnectionStore.getState().addConnection({
+      id,
+      projectId: "p1",
+      sourceCardId: source,
+      targetCardId: target,
+      createdAt: "t0",
+    });
+  }
+
+  const refsOf = (id: string) =>
+    ((useCardStore.getState().getCard(id)!.data as Record<string, unknown>)
+      .refImages as Record<string, { sourceCardId?: string }> | undefined) ?? {};
+
+  it("移动单卡 → 上游输入连线跟随到新卡", async () => {
+    useCardStore.getState().addCard(makeCard("up", 0, 0));
+    useCardStore.getState().addCard(makeCard("a", 300, 0));
+    connect("c-up-a", "up", "a");
+
+    await cutCards(new Set(["a"]));
+    const newIds = await pasteCards("p1", { worldX: 600, worldY: 0 });
+    const newId = newIds[0]!;
+
+    expect(useCardStore.getState().getCard("a")).toBeUndefined(); // 原卡移走
+    expect(useConnectionStore.getState().hasConnection("up", newId)).toBe(true);
+    expect(useConnectionStore.getState().hasConnection("up", "a")).toBe(false);
+    expect(useCardStore.getState().getCardsByProject("p1").length).toBe(2); // up + 新卡
+  });
+
+  it("移动单卡 → 下游输出连线跟随到新卡", async () => {
+    useCardStore.getState().addCard(makeCard("a", 0, 0));
+    useCardStore.getState().addCard(makeCard("down", 300, 0));
+    connect("c-a-down", "a", "down");
+
+    await cutCards(new Set(["a"]));
+    const newIds = await pasteCards("p1", { worldX: 600, worldY: 0 });
+    const newId = newIds[0]!;
+
+    expect(useConnectionStore.getState().hasConnection(newId, "down")).toBe(true);
+    expect(useConnectionStore.getState().hasConnection("a", "down")).toBe(false);
+  });
+
+  it("移动带下游的卡 → 下游引用数据改挂到新卡(数据跟随移动,不丢)", async () => {
+    useCardStore.getState().addCard(makeCard("a", 0, 0));
+    useCardStore.getState().addCard(makeCard("down", 300, 0));
+    connect("c-a-down", "a", "down");
+
+    // 前置:a→down 已把 a 的图注入 down(确认注入管线在测试环境生效)
+    expect(Object.values(refsOf("down")).some((r) => r.sourceCardId === "a")).toBe(true);
+
+    await cutCards(new Set(["a"]));
+    const newIds = await pasteCards("p1", { worldX: 600, worldY: 0 });
+    const newId = newIds[0]!;
+
+    // down 的参考图现在挂在新卡上,原卡 id 的残留被清掉 —— 数据完整跟随移动
+    const downRefs = refsOf("down");
+    expect(Object.values(downRefs).some((r) => r.sourceCardId === newId)).toBe(true);
+    expect(Object.values(downRefs).some((r) => r.sourceCardId === "a")).toBe(false);
+  });
+
+  it("移动后撤销 → 原卡及其连线单步复原,新卡连线移除", async () => {
+    useCardStore.getState().addCard(makeCard("up", 0, 0));
+    useCardStore.getState().addCard(makeCard("a", 300, 0));
+    connect("c-up-a", "up", "a");
+
+    await cutCards(new Set(["a"]));
+    const newIds = await pasteCards("p1", { worldX: 600, worldY: 0 });
+    const newId = newIds[0]!;
+    expect(useCardStore.getState().getCard("a")).toBeUndefined();
+
+    history.undo();
+    expect(useCardStore.getState().getCard("a")).toBeDefined();
+    expect(useConnectionStore.getState().hasConnection("up", "a")).toBe(true);
+    expect(useCardStore.getState().getCard(newId)).toBeUndefined();
+    expect(useConnectionStore.getState().hasConnection("up", newId)).toBe(false);
+  });
+
+  it("跨项目移动 → 边界连线丢弃(邻居不在目标项目),卡片移过去", async () => {
+    useCardStore.getState().addCard(makeCard("up", 0, 0));
+    useCardStore.getState().addCard(makeCard("a", 300, 0));
+    connect("c-up-a", "up", "a");
+
+    await cutCards(new Set(["a"]));
+    const newIds = await pasteCards("p2", { worldX: 0, worldY: 0 });
+    const newId = newIds[0]!;
+
+    expect(useCardStore.getState().getCard(newId)!.projectId).toBe("p2");
+    expect(useConnectionStore.getState().hasConnection("up", newId)).toBe(false);
+    expect(useCardStore.getState().getCard("a")).toBeUndefined(); // 原卡移走
+  });
+});

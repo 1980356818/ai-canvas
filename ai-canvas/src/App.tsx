@@ -23,6 +23,7 @@ import { Toast } from "@/features/overlays/Toast";
 import { ContextMenu } from "@/features/overlays/ContextMenu";
 import SettingsDialog from "@/features/overlays/SettingsDialog";
 import TaskRecordDialog from "@/features/tasks/TaskRecordDialog";
+import PriceListDialog from "@/features/overlays/PriceListDialog";
 import { CropDialog } from "@/features/overlays/CropDialog";
 import SideCapsule from "@/features/overlays/SideCapsule";
 import LoginWindow from "@/features/auth/LoginWindow";
@@ -107,6 +108,9 @@ function AuthenticatedApp() {
         </ErrorBoundary>
         <ErrorBoundary fallback={null}>
           <TaskRecordDialog />
+        </ErrorBoundary>
+        <ErrorBoundary fallback={null}>
+          <PriceListDialog />
         </ErrorBoundary>
         <ErrorBoundary fallback={null}>
           <CropDialog />

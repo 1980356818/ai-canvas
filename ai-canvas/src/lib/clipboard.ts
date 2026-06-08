@@ -10,6 +10,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { clipboardWriteText, clipboardReadText, updateProjectMeta, saveGroupsBatch, deleteCard } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
 import { recordBatchCreate, recordMove } from "@/lib/history";
+import { injectOnConnect } from "@/lib/dataFlow";
 import { groupToRow } from "@/lib/mappers";
 import { DEFAULT_GROUP_COLOR } from "@/types/group";
 import type { CardGroup } from "@/types";
@@ -60,11 +61,26 @@ function syncNodeCount(projectId: string) {
 // Core: collect
 // ---------------------------------------------------------------------------
 
-export function collectSelected(cardIds: Set<string>): {
+/**
+ * 连线收集模式 —— 决定哪些「与选区相连」的连线被纳入 payload。
+ * 跨界连线(一端在选区外)的另一端在 materialize 时按原 id 重连,且仅当该邻居仍在目标项目内。
+ *  - "internal":仅两端都在选区内的连线(自洽子图)。
+ *  - "incoming"(复制用):内部连线 + 指向选区内卡片的「上游输入」连线;出方向不带,
+ *    避免下游邻居被副本多喂一路输入(产品决策:复制只继承上游输入)。
+ *  - "all"(移动用):一切与选区相连的连线(内部 + 上游输入 + 下游输出),
+ *    使整卡搬移时接线完全跟随。
+ */
+export type ConnectionCollectMode = "internal" | "incoming" | "all";
+
+export function collectSelected(
+  cardIds: Set<string>,
+  opts: { connectionMode?: ConnectionCollectMode } = {},
+): {
   cards: CanvasCard[];
   connections: Connection[];
   groups: ClipboardGroup[];
 } {
+  const connectionMode = opts.connectionMode ?? "internal";
   const cardStore = useCardStore.getState();
   const cards: CanvasCard[] = [];
   for (const id of cardIds) {
@@ -72,12 +88,23 @@ export function collectSelected(cardIds: Set<string>): {
     if (c) cards.push(c);
   }
 
-  // Only keep connections whose BOTH ends are in the copy set
   const connections: Connection[] = [];
   for (const conn of useConnectionStore.getState().connections.values()) {
-    if (cardIds.has(conn.sourceCardId) && cardIds.has(conn.targetCardId)) {
-      connections.push(conn);
+    const srcIn = cardIds.has(conn.sourceCardId);
+    const tgtIn = cardIds.has(conn.targetCardId);
+    let keep: boolean;
+    switch (connectionMode) {
+      case "all":
+        keep = srcIn || tgtIn;
+        break;
+      case "incoming":
+        keep = tgtIn;
+        break;
+      default:
+        keep = srcIn && tgtIn;
+        break;
     }
+    if (keep) connections.push(conn);
   }
 
   // 组复制语义:只复制"selection 完全包住"的组,部分选中的组不带组结构。
@@ -160,7 +187,10 @@ async function writeSelectionToClipboard(cardIds: Set<string>): Promise<{
   extras: string;
   systemOk: boolean;
 }> {
-  const { cards, connections, groups } = collectSelected(cardIds);
+  // 复制语义:副本继承上游输入连线(incoming);出方向连线不带。
+  const { cards, connections, groups } = collectSelected(cardIds, {
+    connectionMode: "incoming",
+  });
   if (cards.length === 0) return { count: 0, extras: "", systemOk: false };
 
   const payload: ClipboardPayload = {
@@ -250,7 +280,8 @@ export async function pasteCards(
   // 重新采集「当前」的剪切卡(保留剪切后的任何编辑),在落点重建,然后才删除原卡。
   // 原卡此刻才离开画布 —— 在这之前它一直安全;若中途已被删/清空则退回普通粘贴。
   if (cutIds.size > 0) {
-    const live = collectSelected(cutIds);
+    // 移动:保留卡片的全部连线(上游输入 + 下游输出 + 内部),使接线完全跟随。
+    const live = collectSelected(cutIds, { connectionMode: "all" });
     if (live.cards.length > 0) {
       const payload: ClipboardPayload = {
         kind: CLIPBOARD_KIND,
@@ -267,6 +298,9 @@ export async function pasteCards(
       const newCardIds = materialize(payload, projectId, position, false);
       recordMove(newCardIds, srcCards);
       deleteOriginalsAfterMove([...cutIds]);
+      // 原卡删除后,其占用的下游邻居槽位才释放;此刻对新卡的下游再注入一次,补回
+      // 「原卡占槽 → materialize 注入落空」错过的引用。injectOnConnect 命中即 no-op,幂等安全。
+      reinjectDownstream(newCardIds);
       const srcPid = canvas.cutSourceProjectId;
       useCanvasStore.getState().clearCutCards();
       // materialize 内部已 sync 过 target,但删原卡后计数又变,需再 sync 一次。
@@ -300,6 +334,22 @@ export async function pasteCards(
   }
 
   return materialize(payload, projectId, position);
+}
+
+/**
+ * 对一批新卡的所有「出方向」连线重新注入上游输出(幂等)。
+ * 移动落地后调用:原卡删除会释放它曾占用的下游邻居槽位,而 materialize 阶段那次注入
+ * 可能因槽位仍被原卡占用而落空 —— 这里补一次,把新卡输出写进刚释放的槽位。
+ * injectOnConnect 内部「值相同则不写」,对已注入成功的连线不会重复改动。
+ */
+function reinjectDownstream(newCardIds: string[]) {
+  if (newCardIds.length === 0) return;
+  const ids = new Set(newCardIds);
+  for (const conn of useConnectionStore.getState().connections.values()) {
+    if (ids.has(conn.sourceCardId)) {
+      injectOnConnect(conn.sourceCardId, conn.targetCardId);
+    }
+  }
 }
 
 /**
@@ -376,17 +426,36 @@ function materialize(
     newCardIds.push(newId);
   }
 
-  // Recreate connections with remapped IDs
+  // Recreate connections with remapped IDs.
+  // 每端独立解析:被复制的一端映射到新卡;选区外的另一端按原 id 重连,但仅当该邻居仍在
+  // 目标项目内(跨项目粘贴 / 邻居已删 → 跳过该端)。由此一套逻辑同时覆盖:
+  //   · 内部连线(两端都被复制,如多选复制 / 移动)
+  //   · 上游输入连线(仅目标被复制,复制 "incoming" 与移动 "all" 都会产生)
+  //   · 下游输出连线(仅源被复制,仅移动 "all" 会产生)
+  // 连线建立后 onConnectionsAdded 生命周期会把上游当前输出注入下游对应槽位,无需手动搬运引用。
+  const resolveEnd = (
+    mapped: string | undefined,
+    originalId: string,
+  ): string | undefined => {
+    if (mapped) return mapped;
+    const neighbor = useCardStore.getState().getCard(originalId);
+    return neighbor && neighbor.projectId === projectId ? originalId : undefined;
+  };
   for (const src of srcConns) {
-    const newSourceId = idMap.get(src.sourceCardId);
-    const newTargetId = idMap.get(src.targetCardId);
-    if (!newSourceId || !newTargetId) continue;
+    const mappedSource = idMap.get(src.sourceCardId);
+    const mappedTarget = idMap.get(src.targetCardId);
+    // 防御:至少一端必须是被复制的卡(collectSelected 已保证),否则不是本次该重建的连线。
+    if (!mappedSource && !mappedTarget) continue;
+
+    const sourceCardId = resolveEnd(mappedSource, src.sourceCardId);
+    const targetCardId = resolveEnd(mappedTarget, src.targetCardId);
+    if (!sourceCardId || !targetCardId) continue;
 
     const conn: Connection = {
       id: crypto.randomUUID(),
       projectId,
-      sourceCardId: newSourceId,
-      targetCardId: newTargetId,
+      sourceCardId,
+      targetCardId,
       createdAt: now,
     };
     useConnectionStore.getState().addConnection(conn);

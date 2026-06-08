@@ -1,4 +1,4 @@
-import { Home, FolderOpen, LayoutDashboard, Settings, Sun, Moon, ClipboardList } from "lucide-react";
+import { Home, FolderOpen, LayoutDashboard, Settings, Sun, Moon, ClipboardList, ReceiptText } from "lucide-react";
 import { useUIStore } from "@/stores/uiStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -25,6 +25,7 @@ export default function SideCapsule() {
   const setAppView = useUIStore((s) => s.setAppView);
   const addToast = useUIStore((s) => s.addToast);
   const toggleTaskRecord = useUIStore((s) => s.toggleTaskRecord);
+  const togglePriceList = useUIStore((s) => s.togglePriceList);
   const toggleSettings = useUIStore((s) => s.toggleSettings);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const sidebarVisible = useUIStore((s) => s.sidebarVisible);
@@ -89,6 +90,14 @@ export default function SideCapsule() {
           className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <ClipboardList className="h-5 w-5" />
+        </button>
+
+        <button
+          onClick={togglePriceList}
+          title="价格表"
+          className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <ReceiptText className="h-5 w-5" />
         </button>
 
         <ThemeToggle />

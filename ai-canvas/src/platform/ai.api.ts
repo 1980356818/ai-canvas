@@ -168,6 +168,32 @@ export async function listModels(provider?: string): Promise<ModelInfo[]> {
   return raw.data ?? [];
 }
 
+/** /v1/models 模型条目里携带的价格字段(ModelInfo 未声明,但 runtime 实有)。 */
+export interface RawPriceModel {
+  id: string;
+  display_name?: string | null;
+  capability?: string | null;
+  cost_per_request?: number | null;
+  cost_per_second?: number | null;
+  input_cost_per_1m?: number | null;
+  output_cost_per_1m?: number | null;
+  lines?: Array<{ tag?: string | null; cost_type?: string | null }> | null;
+}
+
+/**
+ * 拉取极境模型列表(含价格字段),价格表专用。
+ *
+ * 复用 gateway 的 `list_models`(GET /v1/models,**不传 platform=全量**,覆盖所有
+ * SKU),返回原样 JSON —— 价格字段 runtime 已在,只是 listModels() 的 ModelInfo
+ * 类型未声明。零 Rust 改动。
+ */
+export async function listModelsWithPricing(provider = "jijing"): Promise<RawPriceModel[]> {
+  requireTauri("listModelsWithPricing");
+  await ensureTauriAPIs();
+  const raw = await getInvoke()<{ data?: RawPriceModel[] }>("list_models", { provider });
+  return raw.data ?? [];
+}
+
 function extractNestedUrl(raw: Record<string, unknown>): string | undefined {
   const output = raw.output as Record<string, unknown> | undefined;
   if (output) {

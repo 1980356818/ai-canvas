@@ -6400,7 +6400,7 @@
     "description": "试用：两张人像融合生成新面孔（可选性别）",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6646c08bcbd3a754.jpg",
+    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/covers/face-merge.80f5ca558bdb4a89.jpg",
     "cards": [
       {
         "type": "ai_image",
