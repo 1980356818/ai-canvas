@@ -78,8 +78,17 @@ export async function mediaToApiRef(
 ): Promise<string> {
   if (!input) return "";
 
-  // 已是远端 URL — 原样直传, 不浪费上传带宽
-  if (input.startsWith("http://") || input.startsWith("https://")) {
+  // ⚠ Tauri 本地 asset 显示 URL 必须先归一回本地路径再真上传 —— 不能命中下面
+  // 的「http(s):// → 远端直传」快路径。Windows/Android 的 `convertFileSrc`
+  // 产出 `http://asset.localhost/<encoded-abs>` (mac/Linux 是 `asset://localhost/...`),
+  // 前者以 `http://` 开头会被误判成「已是远端」直接塞进上游请求体, 上游 fetch
+  // 这个指向用户本机的 URL → "Error while downloading file. Upstream status code: 502"。
+  // 归一出的绝对路径落在 app data_dir 内, upload_to_server 的 resolve_input_path 接受。
+  const localFromAsset = tauriAssetUrlToLocalPath(input);
+  if (localFromAsset) {
+    input = localFromAsset;
+  } else if (input.startsWith("http://") || input.startsWith("https://")) {
+    // 真·远端 URL — 原样直传, 不浪费上传带宽
     return input;
   }
 
@@ -125,6 +134,44 @@ function isWebViewOnlyUrl(input: string): boolean {
   if (input.startsWith("data:") || input.startsWith("blob:")) return true;
   if (input.startsWith("/src/") || input.startsWith("/assets/")) return true;
   return false;
+}
+
+/**
+ * Tauri 本地 asset 显示 URL → 本机绝对文件路径(命中则返回, 否则 null)。
+ *
+ * `convertFileSrc` 的产物跨平台不同协议:
+ * - mac/Linux/iOS:  `asset://localhost/<encodeURIComponent(absPath)>`
+ * - Windows/Android: `http://asset.localhost/<encodeURIComponent(absPath)>`
+ *   (若 app 配了 https scheme 则 `https://asset.localhost/...`)
+ *
+ * 这类 URL 只有本机 WebView 能读, 送上游 AI API 必定下不动。`mediaToApiRef`
+ * 用它把显示 URL 还原成绝对路径再走 `upload_to_server` 真上传, 防止 Windows
+ * 下 `http://asset.localhost/...` 被当成「已是远端」直传给上游(→ 502)。
+ *
+ * 真·远端 URL(host ≠ `asset.localhost`)与非 URL 字符串(相对路径/`data:`/
+ * `blob:`)一律返回 null, 交给调用方原有分支处理。
+ */
+export function tauriAssetUrlToLocalPath(input: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(input);
+  } catch {
+    return null; // 相对路径 / local:// 等非合法 URL — 不是 asset URL
+  }
+  const isAssetScheme = u.protocol === "asset:";
+  const isAssetHttpHost =
+    (u.protocol === "http:" || u.protocol === "https:") &&
+    u.hostname === "asset.localhost";
+  if (!isAssetScheme && !isAssetHttpHost) return null;
+
+  // convertFileSrc 把**整条**文件路径(含 Windows 盘符 `C:\` 或 Unix 前导 `/`)
+  // 作为单个 URI component 拼在 `localhost/` 之后。所以反解 = 去掉 URL 结构上的
+  // 前导 "/" 再 decode 一次, 而不是 decode 整个 pathname(那会把结构斜杠和路径
+  // 自身的前导斜杠叠成 "//home/...")。
+  //   Windows: "/C%3A%5CUsers..." → "C:\Users..."
+  //   Unix:    "/%2Fhome%2Fu..."  → "/home/u..."
+  const path = decodeURIComponent(u.pathname.replace(/^\//, ""));
+  return path || null;
 }
 
 // ─── 批量入口 + 预热入口 ─────────────────────────────────────────────

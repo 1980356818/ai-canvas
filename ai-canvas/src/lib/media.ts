@@ -370,8 +370,11 @@ export async function persistFrontendAsset(
 export function normalizeToStoragePath(url: string): string | null {
   if (!url) return null;
 
-  // asset:// → 反解
-  if (url.startsWith("asset://")) {
+  // asset:// (mac/Linux) 或 http(s)://asset.localhost (Windows/Android 的
+  // convertFileSrc 产物) → 反解为相对存储路径。两种协议指向同一本机文件,
+  // 只反解协议头不同。漏掉 http 形态会让 Windows 下的显示 URL 被当成「需落盘
+  // 的远端 URL」(返回 null) 进而被原样持久化进 card.data, 再送上游 → 502。
+  if (url.startsWith("asset://") || isAssetHttpHostUrl(url)) {
     return assetUrlToRelPath(url);
   }
 
@@ -414,8 +417,20 @@ function isRelativeStoragePath(s: string): boolean {
 }
 
 /**
- * asset://localhost/<encoded-abs-path> → 相对路径 (media/images/xxx.jpg)。
- * 不在 _basePath 内则返回 null。
+ * 是否为 Windows/Android `convertFileSrc` 产出的 asset 显示 URL
+ * (`http://asset.localhost/...` 或配了 https scheme 时的 `https://asset.localhost/...`)。
+ * mac/Linux 的 `asset://localhost/...` 由调用方单独按 `asset://` 前缀判, 不在此列。
+ */
+function isAssetHttpHostUrl(url: string): boolean {
+  return (
+    url.startsWith("http://asset.localhost/") ||
+    url.startsWith("https://asset.localhost/")
+  );
+}
+
+/**
+ * asset://localhost/<encoded-abs-path>(或 http(s)://asset.localhost/<encoded-abs-path>)
+ * → 相对路径 (media/images/xxx.jpg)。不在 _basePath 内则返回 null。
  */
 function assetUrlToRelPath(assetUrl: string): string | null {
   if (!_basePath) return null;
