@@ -152,26 +152,42 @@ function isWebViewOnlyUrl(input: string): boolean {
  * `blob:`)一律返回 null, 交给调用方原有分支处理。
  */
 export function tauriAssetUrlToLocalPath(input: string): string | null {
-  let u: URL;
-  try {
-    u = new URL(input);
-  } catch {
-    return null; // 相对路径 / local:// 等非合法 URL — 不是 asset URL
-  }
-  const isAssetScheme = u.protocol === "asset:";
-  const isAssetHttpHost =
-    (u.protocol === "http:" || u.protocol === "https:") &&
-    u.hostname === "asset.localhost";
-  if (!isAssetScheme && !isAssetHttpHost) return null;
+  if (!input) return null;
 
-  // convertFileSrc 把**整条**文件路径(含 Windows 盘符 `C:\` 或 Unix 前导 `/`)
-  // 作为单个 URI component 拼在 `localhost/` 之后。所以反解 = 去掉 URL 结构上的
-  // 前导 "/" 再 decode 一次, 而不是 decode 整个 pathname(那会把结构斜杠和路径
-  // 自身的前导斜杠叠成 "//home/...")。
-  //   Windows: "/C%3A%5CUsers..." → "C:\Users..."
-  //   Unix:    "/%2Fhome%2Fu..."  → "/home/u..."
-  const path = decodeURIComponent(u.pathname.replace(/^\//, ""));
-  return path || null;
+  // ⚠ 引擎无关解析: **故意不用 `new URL()`**。WKWebView/WebKit(macOS)对自定义
+  // scheme `asset://` 的 `new URL()` 解析与 Chromium/Node 不一致 —— 实测会让 macOS
+  // 反解走偏, 本机引用没换成上传后的 HTTP URL 就漏给上游 → 上游 fetch 不到本机地址
+  // → 502 "模型服务暂时不可用"(单测跑在 Node, 用 Node 的 URL 解析, 恰好测不出这个
+  // 平台差异)。纯字符串 + 一次 decodeURIComponent 在所有引擎上行为一致。
+  // Rust 出网末端的 `tauri_asset_url_to_abs_path`(commands/ai.rs)是同款逻辑的兜底。
+  //
+  // convertFileSrc 把**整条**文件路径(含 Windows 盘符 `C:\` 或 Unix 前导 `/`)作为
+  // 单个 encodeURIComponent component 拼在 host 的 `/` 之后, 故反解 = 取 host 后段
+  // 再 decode 一次:
+  //   Windows: http://asset.localhost/C%3A%5CUsers...  → "C:\Users..."
+  //   Unix:    asset://localhost/%2Fhome%2Fu...        → "/home/u..."
+  let afterHost: string | null = null;
+  if (input.startsWith("http://asset.localhost/")) {
+    afterHost = input.slice("http://asset.localhost/".length);
+  } else if (input.startsWith("https://asset.localhost/")) {
+    afterHost = input.slice("https://asset.localhost/".length);
+  } else if (input.startsWith("asset://")) {
+    // asset://<host>/<enc> —— 跳过 host 段, 取第一个 '/' 之后
+    const rest = input.slice("asset://".length);
+    const slash = rest.indexOf("/");
+    if (slash >= 0) afterHost = rest.slice(slash + 1);
+  }
+  // 真·远端 URL(host ≠ asset.localhost)/ 相对路径 / local:// / data: / blob: → null,
+  // 交给调用方原有分支(直传 / 上传)处理。
+  if (afterHost === null) return null;
+
+  const enc = afterHost.split(/[?#]/, 1)[0] ?? afterHost;
+  try {
+    const path = decodeURIComponent(enc);
+    return path || null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── 批量入口 + 预热入口 ─────────────────────────────────────────────

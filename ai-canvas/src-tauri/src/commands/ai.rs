@@ -132,6 +132,34 @@ fn inline_local_files(
                     rel, bytes.len(), b64.len(), mime, stats.total_b64_bytes
                 );
                 *s = format!("data:{};base64,{}", mime, b64);
+            } else if let Some(abs) = tauri_asset_url_to_abs_path(s.as_str()) {
+                // 末端兜底(规范化护栏)。前端本应把本机媒体引用先上传成 HTTP URL 再进 body
+                // (见 src/platform/media.ts::mediaToApiRef)。但某些平台 —— 实测 macOS /
+                // WKWebView —— 的 `convertFileSrc` 反解走偏, 会让 `asset://localhost/...` 或
+                // `http(s)://asset.localhost/...` 这类**指向用户本机的显示 URL**漏进出网 body。
+                // 上游 fetch 不到本机地址 → 502 → 客户端看到 "模型服务暂时不可用"。
+                // 这里在出网最后一米兜住: 反解成 data_dir 内的真实文件 → 读出来内联 base64,
+                // 上游就能拿到图。**只接受落在 data_dir 内的路径**(canonicalize + starts_with
+                // 校验, 防任意文件读取 / SSRF)。真·远端 URL(host ≠ asset.localhost)不会命中
+                // tauri_asset_url_to_abs_path, 原样放行不受影响。
+                if let Some(canonical) = resolve_abs_within_data_dir(&abs, data_dir) {
+                    let bytes = std::fs::read(&canonical)
+                        .map_err(|e| format!("读取本地 asset 文件失败 '{}': {}", abs, e))?;
+                    let mime = mime_from_path(&canonical);
+                    let b64 = BASE64_ENGINE.encode(&bytes);
+                    stats.files += 1;
+                    stats.total_bytes += bytes.len();
+                    stats.total_b64_bytes += b64.len();
+                    check_inline_total_bytes(stats.total_b64_bytes)?;
+                    tracing::warn!(
+                        "[ai_proxy] 末端兜底命中: 出网 body 含本机 asset 显示 URL(前缀 {:?}), \
+                         已就地内联 base64 ({} bytes)。请求已救活, 但说明前端在本平台没把它上传成 \
+                         HTTP URL —— 需排查 mediaToApiRef / convertFileSrc 反解(典型: macOS/WKWebView)。",
+                        s.chars().take(28).collect::<String>(), bytes.len()
+                    );
+                    *s = format!("data:{};base64,{}", mime, b64);
+                }
+                // 反解不出 / 越权 / 文件不存在: 不动它, 让原样继续(失败时 dump_failed_request 会记下)。
             }
         }
         serde_json::Value::Array(arr) => {
@@ -187,6 +215,86 @@ fn resolve_local_path(rel: &str, data_dir: &Path) -> Result<PathBuf, String> {
         return Err(format!("local:// 路径越权: {}", rel));
     }
     Ok(canonical)
+}
+
+// ── 末端兜底: Tauri asset 显示 URL → data_dir 内真实文件 ──────────────────────
+//
+// 见 inline_local_files 里 else-if 分支的注释。这组 helper 把 `convertFileSrc`
+// 的产物反解成绝对路径(**引擎无关**: 纯字符串 + 手动 percent-decode, 不依赖任何
+// URL 解析器 —— 前端用 `new URL()` 在 WKWebView/WebKit 上对自定义 scheme `asset://`
+// 的解析与 Chromium/Node 不一致, 这里从根上避开同类坑), 再做 data_dir 内的安全校验。
+
+/// Tauri `convertFileSrc` 显示 URL → 本机绝对路径(命中返 Some, 否则 None)。
+///   - macOS/Linux/iOS:  `asset://<host>/<encodeURIComponent(absPath)>`(host 通常 localhost)
+///   - Windows/Android:  `http(s)://asset.localhost/<encodeURIComponent(absPath)>`
+/// 真·远端 URL(host ≠ asset.localhost)与非 asset 串一律返回 None, 调用方原样放行。
+fn tauri_asset_url_to_abs_path(s: &str) -> Option<String> {
+    let after_host: &str = if let Some(r) = s.strip_prefix("http://asset.localhost/") {
+        r
+    } else if let Some(r) = s.strip_prefix("https://asset.localhost/") {
+        r
+    } else if let Some(r) = s.strip_prefix("asset://") {
+        // asset://<host>/<enc> —— 跳过 host 段, 取第一个 '/' 之后
+        let slash = r.find('/')?;
+        &r[slash + 1..]
+    } else {
+        return None;
+    };
+    let enc = after_host.split(['?', '#']).next().unwrap_or(after_host);
+    match percent_decode(enc) {
+        Some(p) if !p.is_empty() => Some(p),
+        _ => None,
+    }
+}
+
+/// 手动 percent-decode(`%XX` → 字节, 其余原样)。无外部依赖, 全引擎一致。
+fn percent_decode(s: &str) -> Option<String> {
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            match (hex_nibble(bytes[i + 1]), hex_nibble(bytes[i + 2])) {
+                (Some(hi), Some(lo)) => {
+                    out.push((hi << 4) | lo);
+                    i += 3;
+                }
+                _ => {
+                    out.push(bytes[i]);
+                    i += 1;
+                }
+            }
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+fn hex_nibble(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+/// 把一个"声称的绝对路径"安全解析为 data_dir 内的真实文件(防任意文件读取 / SSRF)。
+/// 不存在 / 越权 / 解析失败一律返回 None。
+fn resolve_abs_within_data_dir(abs: &str, data_dir: &Path) -> Option<PathBuf> {
+    let candidate = PathBuf::from(abs);
+    if !candidate.is_file() {
+        return None;
+    }
+    let canonical = candidate.canonicalize().ok()?;
+    let dir_canonical = data_dir.canonicalize().ok()?;
+    if canonical.starts_with(&dir_canonical) {
+        Some(canonical)
+    } else {
+        None
+    }
 }
 
 /// 文件扩展名 → MIME。与前端 `src/shared/mediaFormats.ts` 白名单同步。

@@ -434,21 +434,38 @@ function isAssetHttpHostUrl(url: string): boolean {
  */
 function assetUrlToRelPath(assetUrl: string): string | null {
   if (!_basePath) return null;
+
+  // 引擎无关反解(理由同 src/platform/media.ts::tauriAssetUrlToLocalPath):**不用
+  // `new URL()`** —— 取 host 后段 + 一次 decodeURIComponent → 本机绝对路径, 再剥掉
+  // _basePath 前缀得相对 storagePath。纯字符串解析在 WKWebView/WebKit 上与 Chromium
+  // 一致, 避开 macOS 把 asset:// 显示 URL 当成"需落盘的远端 URL"误存进 card.data。
+  let afterHost: string | null = null;
+  if (assetUrl.startsWith("http://asset.localhost/")) {
+    afterHost = assetUrl.slice("http://asset.localhost/".length);
+  } else if (assetUrl.startsWith("https://asset.localhost/")) {
+    afterHost = assetUrl.slice("https://asset.localhost/".length);
+  } else if (assetUrl.startsWith("asset://")) {
+    const rest = assetUrl.slice("asset://".length);
+    const slash = rest.indexOf("/");
+    if (slash >= 0) afterHost = rest.slice(slash + 1);
+  }
+  if (afterHost === null) return null;
+
+  const enc = afterHost.split(/[?#]/, 1)[0] ?? afterHost;
+  let absPath: string;
   try {
-    const decoded = decodeURIComponent(new URL(assetUrl).pathname);
-    const normBase = _basePath.replace(/\\/g, "/");
-    const normDecoded = decoded.replace(/\\/g, "/");
-    const prefix = normDecoded.startsWith(normBase + "/")
-      ? normBase + "/"
-      : normDecoded.startsWith("/" + normBase + "/")
-        ? "/" + normBase + "/"
-        : null;
-    if (!prefix) return null;
-    const rel = normDecoded.slice(prefix.length);
-    return rel || null;
+    absPath = decodeURIComponent(enc);
   } catch {
     return null;
   }
+
+  // 绝对路径 → 相对 storagePath:统一 `/` 分隔后剥掉 _basePath 前缀。
+  const normBase = _basePath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const normAbs = absPath.replace(/\\/g, "/");
+  const prefix = normBase + "/";
+  if (!normAbs.startsWith(prefix)) return null;
+  const rel = normAbs.slice(prefix.length);
+  return rel || null;
 }
 
 /**
