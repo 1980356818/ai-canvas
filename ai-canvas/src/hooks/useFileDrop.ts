@@ -210,6 +210,12 @@ async function handleDropOnCard(
   const update: Partial<CanvasCard> = { data: d };
   if (latest.type === "ai_image" || latest.type === "ai_multiangle") {
     d.imageUrl = saved.localPath;
+    // 显示层(CardContent)与下游取图(dataFlow)都优先 results[selectedIndex],只写 imageUrl
+    // 会"卡片按新图改尺寸、画面却还是旧结果"(模板实例卡自带 results,实测踩坑)。生成完成与
+    // 选变体路径都维持 imageUrl=选中结果 的不变量;拖入新图 = 旧生成结果作废,一并清掉。
+    delete d.results;
+    delete d.selectedIndex;
+    delete d.revisedPrompt;
     const sized = cardSizeFromPersist(saved);
     const cx = latest.x + latest.width / 2;
     const cy = latest.y + latest.height / 2;

@@ -634,6 +634,77 @@ mod tests {
     // 静态状态会跨测污染,且要 mock spawn_blocking 里的子进程行为;
     // 收益不如把 `try_resolve_no_download` 这层纯函数测透。
 
+    // ── 参考视频像素压缩:纯函数测试 ──────────────────────────────────
+
+    #[test]
+    fn target_dims_skips_when_within_budget() {
+        // 720p (921,600) < 预算 → 不压
+        assert_eq!(compute_target_dims(1280, 720, 2_073_600), None);
+        // 竖屏 1080p 恰好等于预算 → 不压(≤ 即放行)
+        assert_eq!(compute_target_dims(1080, 1920, 2_073_600), None);
+        // 极小素材 → 不压(也不放大)
+        assert_eq!(compute_target_dims(640, 480, 2_073_600), None);
+    }
+
+    #[test]
+    fn target_dims_downscale_keeps_under_budget_and_even() {
+        let budget = 2_073_600u64;
+        for (w, h) in [
+            (3840u32, 2160u32), // 4K 16:9
+            (1920, 1088),       // 1080p+8 刚超
+            (2560, 1440),       // 2K
+            (4096, 2160),       // DCI 4K
+            (1620, 2880),       // 竖屏高分
+            (3440, 1440),       // 21:9 超宽
+        ] {
+            let (tw, th) = compute_target_dims(w, h, budget).expect("超预算应压缩");
+            assert!(
+                tw as u64 * th as u64 <= budget,
+                "{}x{} → {}x{} 仍超预算",
+                w,
+                h,
+                tw,
+                th
+            );
+            assert_eq!(tw % 2, 0, "宽非偶: {}", tw);
+            assert_eq!(th % 2, 0, "高非偶: {}", th);
+            assert!(tw <= w && th <= h, "{}x{} 不应放大成 {}x{}", w, h, tw, th);
+            // 不过度压缩:贴近临界点,至少用到预算 90%(极端宽幅因偶数取整略松,仍 > 85%)
+            let used = (tw as f64 * th as f64) / budget as f64;
+            assert!(used > 0.85, "{}x{} → {}x{} 过度压缩, 仅用 {:.3}", w, h, tw, th, used);
+            // 比例基本保持(±2%)
+            let ar0 = w as f64 / h as f64;
+            let ar1 = tw as f64 / th as f64;
+            assert!(
+                (ar0 - ar1).abs() / ar0 < 0.02,
+                "{}x{} → {}x{} 比例漂移过大",
+                w,
+                h,
+                tw,
+                th
+            );
+        }
+    }
+
+    #[test]
+    fn parse_video_dimensions_from_log_line() {
+        let landscape = "  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(tv, bt709), 1920x1080 [SAR 1:1 DAR 16:9], 30 fps, 30 tbr, 15360 tbn";
+        assert_eq!(parse_video_dimensions_line(landscape), Some((1920, 1080)));
+        // 竖屏
+        let portrait = "Stream #0:0: Video: hevc, yuv420p, 1080x1920, 24 fps";
+        assert_eq!(parse_video_dimensions_line(portrait), Some((1080, 1920)));
+        // 非视频行不解析(避免把 Duration / 比特率里的数字误当尺寸)
+        assert_eq!(
+            parse_video_dimensions_line("  Duration: 00:00:05.00, start: 0.000000, bitrate: 1234 kb/s"),
+            None
+        );
+        // 音频流行不解析
+        assert_eq!(
+            parse_video_dimensions_line("  Stream #0:1: Audio: aac (LC), 48000 Hz, stereo, fltp, 128 kb/s"),
+            None
+        );
+    }
+
     /// 简易 HTTP server,只支持 GET 单个固定字节流。给下载测试当 mock。
     /// 故意手撸不引 hyper —— 测试栈轻一点。
     fn spawn_mock_static_server(
@@ -893,6 +964,135 @@ mod tests {
             "端到端 OK: video={} bytes, jpg={} bytes",
             std::fs::metadata(&video).unwrap().len(),
             bytes.len()
+        );
+    }
+
+    /// 端到端:造一个 4K testsrc → 用与 `compress_reference_video` **完全一致**的
+    /// scale + 编码 args 缩到预算下 → 再 `ffmpeg -i` 探产物分辨率,验证 == 目标尺寸
+    /// 且 W×H ≤ 预算。覆盖纯函数测试碰不到的部分:真实 ffmpeg `scale` 滤镜 +
+    /// libx264 编码 + arg 串是否正确。
+    ///
+    /// `#[ignore]`:依赖磁盘上有可用 ffmpeg + ~数秒编码;手动
+    /// `cargo test -- --ignored end_to_end_compress_reference_video`。
+    #[test]
+    #[ignore]
+    fn end_to_end_compress_reference_video_downscales_4k() {
+        use ffmpeg_sidecar::command::FfmpegCommand;
+        use ffmpeg_sidecar::event::FfmpegEvent;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        std::fs::create_dir_all(&data_dir).unwrap();
+
+        let ffmpeg_path = if let Ok(env) = std::env::var("AICAT_FFMPEG_PATH") {
+            let p = PathBuf::from(env);
+            assert!(ffmpeg_runs(&p), "AICAT_FFMPEG_PATH={:?} 跑不通", p);
+            p
+        } else if ffmpeg_runs(Path::new(r"D:\AICat\ffmpeg.exe")) {
+            PathBuf::from(r"D:\AICat\ffmpeg.exe")
+        } else {
+            let exe_dir = std::env::current_exe().unwrap().parent().unwrap().to_path_buf();
+            try_resolve_no_download(Some(&exe_dir), &data_dir, &ffmpeg_runs)
+                .expect("找不到任何可用 ffmpeg,先装到 PATH 或设 AICAT_FFMPEG_PATH")
+                .0
+        };
+        eprintln!("使用 ffmpeg: {}", ffmpeg_path.display());
+
+        // 1) 造 4K (3840x2160) 1s 测试视频
+        let video = tmp.path().join("src4k.mp4");
+        let status = FfmpegCommand::new_with_path(&ffmpeg_path)
+            .args([
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=duration=1:size=3840x2160:rate=10",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                video.to_str().unwrap(),
+            ])
+            .spawn()
+            .expect("spawn 造 4K 视频失败")
+            .as_inner_mut()
+            .wait()
+            .expect("wait 造 4K 视频失败");
+        assert!(status.success(), "造 4K 视频 exit code != 0");
+
+        // 2) 目标尺寸 + 与命令一致的 scale + 编码
+        let budget = 2_073_600u64;
+        let (tw, th) = compute_target_dims(3840, 2160, budget).expect("4K 应压缩");
+        assert_eq!((tw, th), (1920, 1080), "4K→预算 的目标尺寸应为 1920x1080");
+        let out = tmp.path().join("out.mp4");
+        let scale = format!("scale={}:{}", tw, th);
+        let status = FfmpegCommand::new_with_path(&ffmpeg_path)
+            .args([
+                "-y",
+                "-i",
+                video.to_str().unwrap(),
+                "-vf",
+                &scale,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "20",
+                "-pix_fmt",
+                "yuv420p",
+                "-an",
+                "-movflags",
+                "+faststart",
+                out.to_str().unwrap(),
+            ])
+            .spawn()
+            .expect("spawn 压缩失败")
+            .as_inner_mut()
+            .wait()
+            .expect("wait 压缩失败");
+        assert!(status.success(), "压缩 exit code != 0");
+        assert!(out.is_file(), "压缩产物未生成");
+
+        // 3) 探产物分辨率,验证 == 目标尺寸且 ≤ 预算
+        let mut child = FfmpegCommand::new_with_path(&ffmpeg_path)
+            .args(["-hide_banner", "-i", out.to_str().unwrap()])
+            .spawn()
+            .expect("spawn 探测失败");
+        let mut dims: Option<(u32, u32)> = None;
+        for ev in child.iter().expect("ffmpeg iter") {
+            match ev {
+                FfmpegEvent::ParsedInputStream(s) => {
+                    if let Some(v) = s.video_data() {
+                        dims = Some((v.width, v.height));
+                        break;
+                    }
+                }
+                FfmpegEvent::Log(_, line) => {
+                    if dims.is_none() {
+                        if let Some(d) = parse_video_dimensions_line(&line) {
+                            dims = Some(d);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        let _ = child.as_inner_mut().wait();
+        let (ow, oh) = dims.expect("无法探出产物分辨率");
+        assert_eq!((ow, oh), (tw, th), "产物分辨率应 == 目标尺寸");
+        assert!(
+            (ow as u64 * oh as u64) <= budget,
+            "产物 {}x{} 仍超预算 {}",
+            ow,
+            oh,
+            budget
+        );
+        eprintln!(
+            "端到端压缩 OK: 3840x2160 → {}x{} ({} bytes)",
+            ow,
+            oh,
+            std::fs::metadata(&out).unwrap().len()
         );
     }
 }
@@ -1229,4 +1429,238 @@ fn parse_showinfo_pts_time(line: &str) -> Option<f64> {
         .find(|c: char| !c.is_ascii_digit() && c != '.' && c != '-')
         .unwrap_or(tail.len());
     tail[..end].parse::<f64>().ok()
+}
+
+// ── 参考视频像素压缩 (Seedance 2.0 r2v) ───────────────────────────────
+//
+// 上游对火山 doubao-seedance-2-0 参考生视频(r2v)的参考视频限制单帧像素数
+// (宽 × 高) ≤ ~2.08M。用户素材(手机直拍 / 2K / 4K)超了会被拒,报错形如
+// "content[N] ... video pixel count ... must be less than or equal to 2086876"。
+//
+// 本命令在提交前把过大的参考视频等比缩到预算以下,**不过度压缩**:
+//   - 单帧像素已 ≤ 预算 → 原样返回(零再编码、零质损)
+//   - 超了 → 等比缩到临界点正下方(偶数边)再 H.264 编码,落 media/compressed/ 缓存
+// 远端 URL 当前不支持(同抽帧:需先本地化)。
+//
+// 设计文档:docs/r2v参考视频像素压缩-设计与施工图.md
+
+/// 默认像素预算 —— 与前端 `MAX_REF_VIDEO_PIXELS` 对齐(1080p 等效,硬上限
+/// 2,086,876 留余量)。前端总会显式传 `max_pixels`,这里仅作 0 值兜底。
+const DEFAULT_MAX_REF_VIDEO_PIXELS: u64 = 2_073_600;
+
+/// 等比缩到「宽 × 高 ≤ max_pixels」且边长为偶数(H.264 要求)。
+/// 已达标返回 `None`(无需压缩);否则返回 `(目标宽, 目标高)`,保证 ≤ max_pixels 且不放大。
+fn compute_target_dims(w: u32, h: u32, max_pixels: u64) -> Option<(u32, u32)> {
+    let pixels = w as u64 * h as u64;
+    if pixels == 0 || pixels <= max_pixels {
+        return None;
+    }
+    let scale = (max_pixels as f64 / pixels as f64).sqrt();
+    // floor 后必 ≤ 真实缩放值,故 tw*th ≤ max_pixels;再向下取偶只会更小。
+    let mut tw = ((w as f64) * scale).floor() as u32;
+    let mut th = ((h as f64) * scale).floor() as u32;
+    tw -= tw % 2;
+    th -= th % 2;
+    // 浮点边角兜底:万一仍超预算,逐步收缩较长边(实际几乎不触发)。
+    while tw >= 2 && th >= 2 && (tw as u64 * th as u64) > max_pixels {
+        if tw >= th {
+            tw -= 2;
+        } else {
+            th -= 2;
+        }
+    }
+    Some((tw.max(2), th.max(2)))
+}
+
+/// 从一行 ffmpeg 日志里解析视频分辨率(仅 `Video:` 流行)。
+/// 形如 "Stream #0:0[0x1](und): Video: h264 ..., yuv420p, 1920x1080 [SAR 1:1 DAR 16:9], 30 fps"
+/// → 取第一个形如 `<数字>x<数字>` 且两边都 ≥ 16 的 token(排除 stream id `0x1` / SAR/DAR 的 `a:b`)。
+fn parse_video_dimensions_line(line: &str) -> Option<(u32, u32)> {
+    if !line.contains("Video:") {
+        return None;
+    }
+    // 按「非字母数字且非 'x'」切词,使 "1920x1080" 保持完整 token。
+    for tok in line.split(|c: char| !c.is_ascii_alphanumeric() && c != 'x') {
+        if let Some((a, b)) = tok.split_once('x') {
+            if !a.is_empty()
+                && !b.is_empty()
+                && a.bytes().all(|c| c.is_ascii_digit())
+                && b.bytes().all(|c| c.is_ascii_digit())
+            {
+                if let (Ok(w), Ok(h)) = (a.parse::<u32>(), b.parse::<u32>()) {
+                    if w >= 16 && h >= 16 {
+                        return Some((w, h));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// 探视频流尺寸。优先 ffmpeg-sidecar 结构化事件(`ParsedInputStream`),
+/// 兜底文本解析(与 `parse_duration_line` 同范式)。`-i` 无输出 → ffmpeg 退非零,
+/// 不检查退出码,只取它打到 stderr 的输入元数据。
+async fn probe_video_dimensions(ffmpeg_bin: &Path, abs_video: &Path) -> Result<(u32, u32), String> {
+    let video_str = abs_video.to_string_lossy().to_string();
+    let ffmpeg_bin = ffmpeg_bin.to_path_buf();
+    tokio::task::spawn_blocking(move || -> Result<(u32, u32), String> {
+        use ffmpeg_sidecar::command::FfmpegCommand;
+        use ffmpeg_sidecar::event::FfmpegEvent;
+
+        let mut child = FfmpegCommand::new_with_path(&ffmpeg_bin)
+            .args(["-hide_banner", "-i", &video_str])
+            .spawn()
+            .map_err(|e| format!("ffmpeg spawn 失败: {}", e))?;
+
+        let mut dims: Option<(u32, u32)> = None;
+        for ev in child.iter().map_err(|e| format!("ffmpeg iter 失败: {}", e))? {
+            match ev {
+                FfmpegEvent::ParsedInputStream(stream) => {
+                    if let Some(v) = stream.video_data() {
+                        if v.width > 0 && v.height > 0 {
+                            dims = Some((v.width, v.height));
+                            break;
+                        }
+                    }
+                }
+                FfmpegEvent::Log(_, line) => {
+                    if dims.is_none() {
+                        if let Some(d) = parse_video_dimensions_line(&line) {
+                            dims = Some(d);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        let _ = child.as_inner_mut().wait();
+        dims.ok_or_else(|| "无法从 ffmpeg 输出解析视频分辨率".to_string())
+    })
+    .await
+    .map_err(|e| format!("ffmpeg 线程出错: {}", e))?
+}
+
+/// 把参考视频等比缩到「单帧像素 ≤ max_pixels」以下。
+///
+/// 返回值是可被 `mediaToApiRef` 消费的引用:
+///   - 已达标 / 探尺寸失败 → 原样返回入参(不再编码,不阻断生成)
+///   - 需压缩 → 返回压缩产物相对路径 `media/compressed/...`
+///
+/// 仅「判定需压缩但编码失败」才返 `Err`(让上层呈现原因);其余一律放行。
+#[tauri::command]
+pub async fn compress_reference_video(
+    state: State<'_, AppState>,
+    video_path: String,
+    max_pixels: u64,
+) -> Result<String, String> {
+    // 远程 URL 暂不支持(需先下载本地化,留给后续迭代),与抽帧一致。
+    if video_path.starts_with("http://") || video_path.starts_with("https://") {
+        return Err("暂不支持远程视频 URL,请先把视频拖到画布做本地化".to_string());
+    }
+    let max_pixels = if max_pixels == 0 {
+        DEFAULT_MAX_REF_VIDEO_PIXELS
+    } else {
+        max_pixels
+    };
+
+    let data_dir = state.data_dir.clone();
+    let abs_video = resolve_video_path(&video_path, &data_dir)?;
+    let ffmpeg_bin = ensure_ffmpeg(&data_dir).await?;
+
+    // 1. 探源尺寸 — 失败则原样放行(不阻断生成;素材真超限时退回上游原报错,无回归)。
+    let (w, h) = match probe_video_dimensions(&ffmpeg_bin, &abs_video).await {
+        Ok(d) => d,
+        Err(e) => {
+            tracing::warn!(error = %e, path = %abs_video.display(), "compress_reference_video: 探尺寸失败, 原样放行");
+            return Ok(video_path);
+        }
+    };
+
+    // 2. 决策 — 已达标(不过度压缩)直接原样返回。
+    let Some((tw, th)) = compute_target_dims(w, h, max_pixels) else {
+        tracing::info!(w, h, max_pixels, "compress_reference_video: 已达标, 不压缩");
+        return Ok(video_path);
+    };
+
+    // 3. 缓存键 = 源 sha + 预算 + 目标尺寸;命中即返。
+    let sha = {
+        let p = abs_video.clone();
+        tokio::task::spawn_blocking(move || compute_sha256(&p))
+            .await
+            .map_err(|e| format!("sha256 线程出错: {}", e))??
+    };
+    let short_sha = &sha[..16];
+    let out_dir = data_dir.join("media").join("compressed");
+    std::fs::create_dir_all(&out_dir).map_err(|e| format!("创建压缩目录失败: {}", e))?;
+    let out_name = format!("{}_{}_{}x{}.mp4", short_sha, max_pixels, tw, th);
+    let out_path = out_dir.join(&out_name);
+    let rel = format!("media/compressed/{}", out_name);
+    if out_path.is_file() {
+        tracing::info!(rel, "compress_reference_video: 命中缓存");
+        return Ok(rel);
+    }
+
+    // 4. ffmpeg 缩放再编码 → 先写 .partial 再原子改名,中断不污染缓存。
+    //    -an 丢音轨(reference_video 只取视觉,音频走独立 audio_url;顺带减体积),
+    //    -crf 20 + veryfast 对参考素材足够,+faststart 利于上游边下边解。
+    let tmp_path = out_dir.join(format!("{}.partial", out_name));
+    let _ = std::fs::remove_file(&tmp_path);
+    let video_str = abs_video.to_string_lossy().to_string();
+    let tmp_str = tmp_path.to_string_lossy().to_string();
+    let ffmpeg_bin2 = ffmpeg_bin.clone();
+    let encode = tokio::task::spawn_blocking(move || -> Result<(), String> {
+        use ffmpeg_sidecar::command::FfmpegCommand;
+        let scale = format!("scale={}:{}", tw, th);
+        let mut child = FfmpegCommand::new_with_path(&ffmpeg_bin2)
+            .args([
+                "-y",
+                "-i",
+                &video_str,
+                "-vf",
+                &scale,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "20",
+                "-pix_fmt",
+                "yuv420p",
+                "-an",
+                "-movflags",
+                "+faststart",
+                &tmp_str,
+            ])
+            .spawn()
+            .map_err(|e| format!("ffmpeg spawn 失败: {}", e))?;
+        let status = child
+            .as_inner_mut()
+            .wait()
+            .map_err(|e| format!("ffmpeg wait 失败: {}", e))?;
+        if !status.success() {
+            return Err(format!("ffmpeg 退出码: {:?}", status.code()));
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("ffmpeg 线程出错: {}", e))?;
+
+    if let Err(e) = encode {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(format!("参考视频压缩失败 ({}x{}→{}x{}): {}", w, h, tw, th, e));
+    }
+    if !tmp_path.is_file() {
+        return Err(format!(
+            "压缩产物未生成: ffmpeg 退出成功但没写出 {:?}",
+            tmp_path
+        ));
+    }
+    // 原子改名:Windows 上目标已存在时 rename 会 Err,先删。
+    let _ = std::fs::remove_file(&out_path);
+    std::fs::rename(&tmp_path, &out_path)
+        .map_err(|e| format!("rename {:?} → {:?} 失败: {}", tmp_path, out_path, e))?;
+
+    tracing::info!(w, h, tw, th, rel, "compress_reference_video: 压缩完成");
+    Ok(rel)
 }

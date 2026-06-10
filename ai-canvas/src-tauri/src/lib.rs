@@ -963,6 +963,8 @@ pub fn run() {
             commands::frame_extract::extract_frames_at_timestamps,
             commands::frame_extract::probe_video_duration,
             commands::frame_extract::detect_scene_changes,
+            // 参考视频像素压缩(Seedance 2.0 r2v 单帧像素超限时等比缩)
+            commands::frame_extract::compress_reference_video,
             // 启动时 ffmpeg 探测 + 主动下载 (前端 FfmpegSetupDialog 用)
             commands::frame_extract::check_ffmpeg_status,
             commands::frame_extract::download_ffmpeg,

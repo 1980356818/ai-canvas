@@ -468,16 +468,51 @@ function assetUrlToRelPath(assetUrl: string): string | null {
   return rel || null;
 }
 
+// ── 模板资源显示缓存:公网 URL → 本地副本 ─────────────────────────────
+//
+// 模板图的**规范 URL 永远是极境公网 URL**(https://.../aicanvas-static/...):它能
+// 直接当远端参考图送上游(mediaToApiRef 对 http(s) 透传,零上传)、也能被服务端
+// SSRF 闸放行。本地下载的副本**只作显示加速 + 离线缓存**,按公网 URL 索引,
+// **绝不写进卡片 / 请求数据** —— 写进去就是 `http://asset.localhost/D:\...` 本机
+// 显示地址,泄漏给上游后被 SSRF 闸以 "asset.localhost -> 127.0.0.1" 拦掉(历史事故根因)。
+// 模板视频本就走这条路(不本地化、保留公网 URL 流式),这里让图片与之统一。
+const _templateAssetLocalRel = new Map<string, string>();
+
+/** 注册「公网模板 URL → 本地相对路径」显示缓存(templateStore.load 下载后调用)。 */
+export function registerTemplateAssetCache(publicUrl: string, rel: string): void {
+  if (publicUrl && rel) _templateAssetLocalRel.set(publicUrl, rel);
+}
+
+/** 相对存储路径 → Tauri 本机显示 URL(convertFileSrc 零拷贝);APIs 未就绪返回 null。 */
+function relToDisplayUrl(rel: string): string | null {
+  if (!_convertFileSrc || !_basePath) return null;
+  const sep = _basePath.includes("\\") ? "\\" : "/";
+  const absPath = _basePath + sep + rel.replace(/\//g, sep);
+  return _convertFileSrc(absPath);
+}
+
+/** 模板公网 URL 若已下载到本地,返回其本机显示 URL;否则 null(让 getDisplayUrl 继续透传)。 */
+function templateCacheDisplayUrl(url: string): string | null {
+  const rel = _templateAssetLocalRel.get(url);
+  return rel ? relToDisplayUrl(rel) : null;
+}
+
 /**
- * Convert a stored relative path to a URL that `<img src>` can display.
- * Uses Tauri's asset protocol for zero-copy file loading.
- * Passthrough for data:/http:/blob: URLs.
+ * Convert a stored URL/path to a URL that `<img src>` can display.
+ * - 模板公网 URL 命中本地缓存 → 本机文件(离线 / 秒开)
+ * - 相对存储路径 → Tauri asset 协议零拷贝
+ * - data: / blob: / http(s): / 绝对路径 → 透传
  */
 export function getDisplayUrl(storedPath: string): string {
   if (!storedPath) return "";
 
   // 防御：如果入参是 asset:// 显示 URL，直接原样返回（不二次转换）
   if (storedPath.startsWith("asset://")) return storedPath;
+
+  // 模板公网 URL → 本地缓存副本(必须在下面 http(s) 透传之前判,否则 https 模板 URL
+  // 会被直接透传走网络,失去离线 / 秒开)。未命中或 APIs 未就绪则继续往下透传。
+  const tmplLocal = templateCacheDisplayUrl(storedPath);
+  if (tmplLocal) return tmplLocal;
 
   if (
     storedPath.startsWith("blob:") ||
@@ -489,13 +524,7 @@ export function getDisplayUrl(storedPath: string): string {
     return storedPath;
   }
 
-  if (_convertFileSrc && _basePath) {
-    const sep = _basePath.includes("\\") ? "\\" : "/";
-    const absPath = _basePath + sep + storedPath.replace(/\//g, sep);
-    return _convertFileSrc(absPath);
-  }
-
-  return storedPath;
+  return relToDisplayUrl(storedPath) ?? storedPath;
 }
 
 /**

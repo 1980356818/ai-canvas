@@ -28,6 +28,7 @@ import { resolveDefaultModelForCardType } from "@/services/modelDefaults";
 import { useCardStore } from "@/stores/cardStore";
 import { autoSave } from "@/lib/autoSave";
 import { uploadMediaBatch, type MediaUploadProgress } from "@/platform/media";
+import { shrinkReferenceVideoForSeedance } from "@/lib/videoCompress";
 import { normalizeVideoSize } from "@/shared/constants";
 import { type InlineImageRef, toDisplayText } from "@/lib/promptSerializer";
 import {
@@ -269,7 +270,21 @@ export async function buildVideoRequest(
       };
     }
     if (data.refVideos?.length) {
-      const uploadedVideos = await uploadMediaBatch(data.refVideos.map((entry) => entry.url), {
+      // Seedance r2v(火山 doubao-seedance-2-0:V161 原生 / V145 Nexus)对参考视频有
+      // 单帧像素上限,提交前等比缩到临界点下(已达标不动)。其余族(omni 等上游不同)
+      // 不缩。详见 docs/r2v参考视频像素压缩-设计与施工图.md。
+      const shrinkVideos = isSeedanceV2 || isSeedanceVip;
+      let refVideoUrls: string[];
+      if (shrinkVideos) {
+        // 压缩可能要几秒(4K 再编码),先报一个阶段让进度条不显得卡住。
+        opts?.onUploadProgress?.("压缩参考视频", { uploaded: 0, total: data.refVideos.length });
+        refVideoUrls = await Promise.all(
+          data.refVideos.map((entry) => shrinkReferenceVideoForSeedance(entry.url)),
+        );
+      } else {
+        refVideoUrls = data.refVideos.map((entry) => entry.url);
+      }
+      const uploadedVideos = await uploadMediaBatch(refVideoUrls, {
         onProgress: reportUpload("参考视频"),
       });
       uploadedVideos.forEach((url) => {

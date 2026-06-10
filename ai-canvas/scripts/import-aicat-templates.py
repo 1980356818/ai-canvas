@@ -75,17 +75,63 @@ REGISTRY = collections.OrderedDict([
     (("平面模板", "数字模特融合1"), {"id": "wf-digital-model-1", "category": "flat", "desc": "真人服装上身到数字模特，自然换装"}),
     (("平面模板", "数字模特融合2"), {"id": "wf-digital-model-2", "category": "flat", "desc": "数字模特服装融合，多角度成片"}),
     (("平面模板", "服装手机风拍摄模板"), {"id": "wf-phone-shoot", "category": "flat", "desc": "服装手机随手拍风格，真实生活感成片"}),
-    (("平面模板", "模特箱包模板"), {"id": "wf-model-bag", "category": "flat", "desc": "箱包+模特融合，生成商业展示图"}),
+    (("平面模板", "模特箱包模板"), {"id": "wf-model-bag", "category": "flat", "desc": "箱包+模特融合，生成商业展示图",
+        # 卡8/13 是带生成痕迹的起始素材卡(改图提示词的输入图未随导入保留,模板内不可重跑),
+        # 通用名会被 relabel 按「有content=效果图」判回效果图N,误导用户以为是产出 → 固化描述性名。
+        "titles": {8: "人物搭配三视图", 13: "服装搭配图"}}),
     (("平面模板", "模特裤子模板"), {"id": "wf-model-pants", "category": "flat", "desc": "裤装上身，模特多姿态展示成片"}),
     (("平面模板", "裙子平面模板"), {"id": "wf-skirt-flat", "category": "flat", "desc": "裙装平面图融合，生成模特上身效果"}),
     (("平面模板", "运动风服饰双人-单人"), {"id": "wf-sport-duo-solo", "category": "flat", "desc": "运动风服饰，单人/双人场景成片"}),
     # ── 视频 video ──
     (("视频模板", "产品带货种草视频模板"), {"id": "wf-product-seeding-video", "category": "video", "desc": "产品图一键生成带货种草短视频", "cover_from": ("平面模板", "产品带货种草视频模板")}),
-    (("视频模板", "口播服装讲解视频模板"), {"id": "wf-clothing-talk-video", "category": "video", "desc": "服装口播讲解视频，模特出镜解说"}),
-    (("视频模板", "视频单人复刻模板"), {"id": "wf-solo-replica-video", "category": "video", "desc": "上传参考视频，单人动作复刻成片"}),
+    # 下列 titles 均为「改图孤儿卡」(带生成痕迹但改图输入未随导入保留,模板内不可重跑,实为静态素材):
+    # 通用名会被 relabel 按「有content=效果图」判回效果图N 误导用户 → 固化描述性名(同 wf-model-bag)。
+    (("视频模板", "口播服装讲解视频模板"), {"id": "wf-clothing-talk-video", "category": "video", "desc": "服装口播讲解视频，模特出镜解说",
+        "titles": {5: "无人场景图"},
+        # 卖的是裤子:卡0 图1/图2=裤子正背+细节(连线序 参考图2,参考图1),图3=无人场景,图4=人脸合成;
+        # 卡6 图1/图2=裤子(参考图1,参考图2),图3=场景,图4=人脸;卡7 图1=场景,图2=人脸,图3/图4=裤子。
+        "prompts": {
+            0: "把这个脚本的服装卖点替换成图1和图2裤子的卖点，场景描述替换成图3的描述，人物的描述替换成图4的人物描述，生成一个新的口播脚本。",
+            6: "根据脚本，生成一个口播分镜图，服装参考图1和图2，场景参考图3，人物参考图4。",
+            7: "根据脚本生成一个15秒的人物口播视频，场景参考图1，人物参考图2，裤子参考图3和图4。生成出来的视频不要带字幕。",
+        }}),
+    (("视频模板", "视频单人复刻模板"), {"id": "wf-solo-replica-video", "category": "video", "desc": "上传参考视频，单人动作复刻成片",
+        "titles": {1: "服装搭配图", 6: "模特三视图", 8: "服装搭配图", 10: "模特三视图", 12: "分镜帧图"},
+        # 卡5: 图1=效果图1(新人三视图) 图2=参考图1(原视频抽帧图);卡0: 图1=分镜帧图 图2=模特三视图 图3=服装搭配图;
+        # 卡11: 图1=模特三视图;卡15(提示词3)源里没接任何输入却引用 文本/图一 → 补 反推脚本+模特三视图(镜像卡7)。
+        "prompts": {
+            0: "根据视频脚本、图1分镜图生成视频，要求人物参考跟图2一致，服装参考跟图3一致。视频中禁止出现任何字幕。",
+            5: "把图2中的人物以及服装穿搭替换成图1人物的形象以及穿搭。",
+            7: "把文本中的人物、服装描述，替换为图一中的人物、服装描述。",
+            11: "根据视频脚本生成视频，要求人物、服装参考跟图1一致。不要出现任何文字字幕。",
+            15: "把文本中的人物、服装描述，替换为图一中的人物、服装描述。",
+        },
+        "rewire": [("append", 9, 15), ("append", 10, 15)]}),
     (("视频模板", "视频口播带货模板"), {"id": "wf-live-selling-video", "category": "video", "desc": "口播带货视频，模特讲解上身效果"}),
-    (("视频模板", "视频开车变装模板"), {"id": "wf-drive-transform-video", "category": "video", "desc": "开车变装创意短视频一键生成"}),
-    (("视频模板", "视频服装固定展示模板"), {"id": "wf-clothing-fixed-video", "category": "video", "desc": "服装固定机位展示视频"}),
+    # 「一周穿搭」主题:5 套造型三视图与故事版(卡33)的 镜头01-05|周一-周五 一一对应,同图同名。
+    (("视频模板", "视频开车变装模板"), {"id": "wf-drive-transform-video", "category": "video", "desc": "开车变装创意短视频一键生成",
+        "titles": {4: "周一造型", 5: "周二造型", 6: "周三造型", 7: "周四造型", 9: "周四造型", 10: "周三造型",
+                   11: "周一造型", 12: "周五造型", 13: "周二造型", 28: "周四造型", 31: "周二造型", 33: "一周穿搭故事版",
+                   44: "参考视频"},
+        # 卡30(反推)源里没接视频却引用"这个视频" → 补 参考视频(44);卡32 重排成 图1..图5=周一..周五;
+        # 卡42 源把周四(28)接了两次没接周五 → 换成周五(12),与成品故事版(卡33,镜头5=周五)一致;
+        # 其底图 参考图13 是 6 镜头版(镜头4/5 都是周四),故提示词要求去掉镜头六保留五镜头。
+        # 卡34: 图1=故事版,图2..图6=周一..周五造型(图2/4/5/6 是另一批次三视图即参考图3/4/5/6,图3=周二造型)。
+        "prompts": {
+            32: "把脚本中人物、服装的描写分别替换成图1、图2、图3、图4、图5的人物和服装。",
+            34: "根据视频脚本、图1分镜图生成视频，要求周一人物、服装参考跟图2一致，周二人物、服装参考跟图3一致，周三人物、服装参考跟图4一致，周四人物、服装参考跟图5一致，周五人物、服装参考跟图6一致，画面中不要出现任何文字字幕。",
+            42: "把图1中镜头一的人物、服装替换成图2的样子，镜头二的人物、服装替换成图3的样子，镜头三的人物、服装替换成图4的样子，镜头四的人物、服装替换成图5的样子，镜头五的人物、服装替换成图6的样子，去掉镜头六，最终保留五个镜头。",
+        },
+        "rewire": [("replace", 28, 42, 12), ("reorder", 32, [11, 13, 10, 9, 12, 30]), ("append", 44, 30)]}),
+    (("视频模板", "视频服装固定展示模板"), {"id": "wf-clothing-fixed-video", "category": "video", "desc": "服装固定机位展示视频",
+        "titles": {7: "模特三视图", 10: "场景四视图"},
+        # 卡2: 图1=参考图1(模特图) 图2=参考图2(服装平铺图);卡4(换脚本人物服装)源里没接人物服装来源 →
+        # 补 模特三视图(7)成图2,原有 图1=效果图2(无人场景)保持位次不变。
+        "prompts": {
+            2: "图1的模特穿上图2的服装，生成白底角色三视图。",
+            4: "把这个脚本中描述人物、服装的内容替换成图2的人物、服装描述，环境描述替换成图1的描述。",
+        },
+        "rewire": [("append", 7, 4)]}),
     (("视频模板", "视频服装展示模板"), {"id": "wf-clothing-show-video", "category": "video", "desc": "服装动态展示视频成片"}),
     (("视频模板", "视频画面内容替换模板"), {"id": "wf-content-replace-video", "category": "video", "desc": "替换视频画面内容/主体"}),
     # ── 详情页 detail ──
@@ -97,7 +143,8 @@ REGISTRY = collections.OrderedDict([
     (("试用版模板", "人物服装多模态融合"), {"id": "wf-outfit-fusion-trial", "category": "trial", "lock": True, "desc": "试用：模特服装多模态融合（提示词已封装）", "cover_from": ("平面模板", "人物服装多模态融合")}),
     (("试用版模板", "人脸合成"), {"id": "wf-face-merge-trial", "category": "trial", "lock": True, "desc": "试用：两张人像融合生成新面孔（可选性别）", "cover_from": ("平面模板", "人物换脸模板")}),
     (("试用版模板", "国内电商详情页模板"), {"id": "wf-detail-cn-trial", "category": "trial", "lock": True, "desc": "试用：一键生成国内电商详情页（提示词已封装）"}),
-    (("试用版模板", "模特箱包模板"), {"id": "wf-model-bag-trial", "category": "trial", "lock": True, "desc": "试用：箱包模特融合展示（提示词已封装）", "cover_from": ("平面模板", "模特箱包模板")}),
+    (("试用版模板", "模特箱包模板"), {"id": "wf-model-bag-trial", "category": "trial", "lock": True, "desc": "试用：箱包模特融合展示（提示词已封装）", "cover_from": ("平面模板", "模特箱包模板"),
+        "titles": {8: "人物搭配三视图", 13: "服装搭配图"}}),
 ])
 
 CATEGORY_ORDER = {"flat": 0, "video": 1, "detail": 2, "trial": 3}
@@ -336,10 +383,25 @@ def convert_tokens_to_plain(data, card_id, img_order):
     data["content"] = REF_TOKEN_RE.sub(lambda m: label_for(m.group(1)), content)
 
 
+RUNTIME_RESULT_FIELDS = ["results", "selectedIndex", "revisedPrompt"]
+
+
 def sanitize_card_data(data, card_id, img_order):
-    """令牌转纯文本 → 删运行态参考绑定。保留 imageUrl/results/content/size/model 等预览与配置。"""
+    """令牌转纯文本 → 删运行态参考绑定与生成结果。保留 imageUrl/content/size/model 等预览与配置。
+    results/selectedIndex 必须剥:显示层与下游取图都优先 results,实例化后用户拖图替换只写 imageUrl,
+    会"尺寸变了图不变"(2026-06-10 包包模板实测);剥之前把选中结果镜像进 imageUrl,预览零变化。"""
     convert_tokens_to_plain(data, card_id, img_order)
-    for k in RUNTIME_REF_FIELDS:
+    res = data.get("results")
+    if isinstance(res, list) and res:
+        try:
+            idx = int(data.get("selectedIndex") or 0)
+        except (TypeError, ValueError):
+            idx = 0
+        sel = res[min(max(idx, 0), len(res) - 1)]
+        url = sel.get("url") if isinstance(sel, dict) else None
+        if url and not data.get("imageUrl") and not data.get("videoUrl"):
+            data["imageUrl"] = url
+    for k in RUNTIME_REF_FIELDS + RUNTIME_RESULT_FIELDS:
         data.pop(k, None)
 
 
@@ -517,6 +579,51 @@ def _apply_relabel(templates):
         print(f"[import] ⚠ relabel 失败,保留原标签:{e}")
 
 
+def _apply_repairs(templates):
+    """按 REGISTRY 的 prompts/rewire 修复源 .aicat 自带的作者级缺陷(断头提示词/缺失或接错的连线)。
+    源工程里这些卡的引用走的是 refImages 槽位(无连线),导入清洗运行态后令牌无处可解,
+    提示词剩下「替换成，，，。」这类空洞;修法=按连线序的「图N」重写 + 把缺的线补上。
+    放在 relayout/relabel 之后:只动 data.content 与 connections,不动标题/坐标,
+    与离线直接修 seed 的语义完全一致(防重导漂移)。op 形式:
+      ("append", src, dst)              末尾追加连线(其 图N 排该卡最后,幂等)
+      ("replace", old_src, dst, new_src) 原位替换连线源(保持 图N 位次)
+      ("reorder", dst, [src, ...])       指向 dst 的连线按给定源顺序原位重排(改 图N 位次)
+    断言失败说明源 .aicat 卡序变了 → 该模板跳过并大声警告,需重新核对下标。"""
+    by_id = {reg["id"]: reg for _, reg in REGISTRY.items() if reg.get("id")}
+    for t in templates:
+        reg = by_id.get(t.get("id")) or {}
+        if not (reg.get("prompts") or reg.get("rewire")):
+            continue
+        try:
+            cards = t["cards"]
+            for idx, content in (reg.get("prompts") or {}).items():
+                assert 0 <= idx < len(cards), f"prompts 下标越界 {idx}"
+                cards[idx].setdefault("data", {})["content"] = content
+            conns = t.setdefault("connections", [])
+            for op in (reg.get("rewire") or []):
+                if op[0] == "append":
+                    _, src, dst = op
+                    if not any(c["sourceIndex"] == src and c["targetIndex"] == dst for c in conns):
+                        conns.append({"sourceIndex": src, "targetIndex": dst})
+                elif op[0] == "replace":
+                    _, old_src, dst, new_src = op
+                    hit = [c for c in conns if c["sourceIndex"] == old_src and c["targetIndex"] == dst]
+                    assert hit, f"replace 找不到连线 {old_src}->{dst}"
+                    hit[0]["sourceIndex"] = new_src
+                elif op[0] == "reorder":
+                    _, dst, order = op
+                    pos = [i for i, c in enumerate(conns) if c["targetIndex"] == dst]
+                    cur = {conns[i]["sourceIndex"]: conns[i] for i in pos}
+                    assert sorted(cur) == sorted(order), f"reorder {dst}: 现有源 {sorted(cur)} ≠ 给定 {sorted(order)}"
+                    for i, src in zip(pos, order):
+                        conns[i] = cur[src]
+                else:
+                    raise AssertionError(f"未知 rewire op {op[0]!r}")
+            print(f"[import] 已修复 {t['id']}(prompts {len(reg.get('prompts') or {})} / rewire {len(reg.get('rewire') or [])})")
+        except Exception as e:
+            print(f"[import] ⚠⚠ {t.get('id')} repairs 失败(源卡序可能变了,提示词仍是断头的!):{e}")
+
+
 def main():
     print(f"[import] 源={BASE}\n[import] 暂存={STAGE}\n")
     templates = []
@@ -541,6 +648,8 @@ def main():
     _apply_relayout(templates)
     # 再按真实角色规范化图片卡标签(根治"生成图被误标成参考图/图片")。
     _apply_relabel(templates)
+    # 最后修复源 .aicat 自带的断头提示词/错连线(REGISTRY prompts/rewire)。
+    _apply_repairs(templates)
 
     seed_path = os.path.join(REPO, "scripts", "templates-seed.json")
     fallback_path = os.path.join(REPO, "src", "config", "templatesFallback.json")

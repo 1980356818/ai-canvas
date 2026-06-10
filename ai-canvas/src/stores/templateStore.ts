@@ -3,7 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import type { WorkflowTemplate } from "@/types";
 import { apiGetTemplates } from "@/platform/templates.api";
 import { syncTemplateAssets } from "@/platform/templateAssets";
-import { getDisplayUrl, initMediaService } from "@/lib/media";
+import { registerTemplateAssetCache, initMediaService } from "@/lib/media";
 import { lsGet, lsSet } from "@/platform/storage";
 import fallbackTemplates from "@/config/templatesFallback.json";
 
@@ -34,25 +34,6 @@ function collectAssetUrls(list: WorkflowTemplate[]): string[] {
   return [...out];
 }
 
-/** 把命中 map 的远程 URL 换成本地 `asset://` 显示 URL;没命中的保留(远程 URL 走 getDisplayUrl 透传)。 */
-function localize<T>(node: T, map: Record<string, string>): T {
-  if (typeof node === "string") {
-    const rel = map[node];
-    return (rel ? getDisplayUrl(rel) : node) as unknown as T;
-  }
-  if (Array.isArray(node)) {
-    return node.map((x) => localize(x, map)) as unknown as T;
-  }
-  if (node && typeof node === "object") {
-    const o: Record<string, unknown> = {};
-    for (const k of Object.keys(node)) {
-      o[k] = localize((node as Record<string, unknown>)[k], map);
-    }
-    return o as unknown as T;
-  }
-  return node;
-}
-
 interface TemplateState {
   templates: WorkflowTemplate[];
   loaded: boolean;
@@ -63,13 +44,17 @@ interface TemplateState {
  * 模板来源(服务端化)。定义在画布 server `aicat.template`;图在极境 NAS
  * (`ai.snoworangekeji.cn/aicanvas-static/templates/`,**内容哈希命名**)。
  *
- *   初始 = 本地缓存(上次拉的定义,远程 URL) → 没有就内置 fallback
+ *   初始 = 本地缓存(上次拉的定义,公网 URL) → 没有就内置 fallback
  *   load() = 拉定义 → Rust `sync_template_assets` 把图下到 `{data_dir}/template-assets/`
- *            (内容哈希:换图=换名=换URL,存在即跳过=下载一次,清孤儿) → 图 URL 换本地 asset://
+ *            (内容哈希:换图=换名=换URL,存在即跳过=下载一次,清孤儿) → 注册「公网 URL→本地副本」
+ *            显示缓存(registerTemplateAssetCache),**不改写定义里的 URL**
  *
- * 首屏先用远程 URL 显示(极境宽带快、零 COS),`load()` 完成后切本地文件,之后纯本地、可离线。
+ * **数据层(模板定义 / 实例化出的卡片 refImages)永远是极境公网 URL** —— 可直接当远端参考图
+ * 送上游(零上传、不泄漏本机路径),也能被服务端 SSRF 闸放行。本地副本只作显示缓存:
+ * getDisplayUrl 命中缓存就换本机文件显示(离线 / 秒开),否则按公网 URL 透传走网络。
+ * 首屏先用公网 URL 显示(极境宽带快、零 COS),`load()` 完成后显示切本地文件。
  * **不用浏览器缓存**——本地文件夹可控、永不淘汰、哈希命名根治 stale。
- * 非 Tauri 环境(dev 浏览器)拿不到 Rust → 保留远程 URL 渲染。
+ * 非 Tauri 环境(dev 浏览器)拿不到 Rust → 数据层公网 URL 照样显示 + 可直接送上游。
  */
 export const useTemplateStore = create<TemplateState>((set) => ({
   templates: lsGet<WorkflowTemplate[] | null>(CACHE_KEY, null) ?? FALLBACK,
@@ -84,22 +69,22 @@ export const useTemplateStore = create<TemplateState>((set) => ({
     try {
       const list = await apiGetTemplates(version);
       if (Array.isArray(list) && list.length > 0) {
-        lsSet(CACHE_KEY, list); // 缓存原始(远程 URL)定义,离线兜底
-        let display = list;
+        lsSet(CACHE_KEY, list); // 缓存原始(公网 URL)定义,离线兜底
         try {
           await initMediaService(); // 确保 convertFileSrc / basePath 就绪
           const urls = collectAssetUrls(list);
           if (urls.length > 0) {
             const mappings = await syncTemplateAssets(urls);
-            const map: Record<string, string> = {};
-            for (const m of mappings) if (m.rel) map[m.url] = m.rel;
-            display = localize(list, map);
+            // 只注册「公网 URL → 本地副本」显示缓存,**不改写定义里的 URL**:
+            // 数据层保留公网 URL(可直接当远端参考图、零上传、不泄漏本机路径),
+            // getDisplayUrl 命中缓存时才换本机文件显示(离线 / 秒开)。详见 lib/media.ts 缓存块注释。
+            for (const m of mappings) if (m.rel) registerTemplateAssetCache(m.url, m.rel);
           }
         } catch (e) {
-          // 非 Tauri / 下载失败 → 用远程 URL(getDisplayUrl 对 https 透传)
-          console.warn("[templates] 本地化失败,用远程图:", e);
+          // 非 Tauri / 下载失败 → 数据层公网 URL 照样显示(getDisplayUrl 透传)+ 可直接送上游
+          console.warn("[templates] 模板资源本地化失败,用远程图:", e);
         }
-        set({ templates: display, loaded: true });
+        set({ templates: list, loaded: true });
         return;
       }
     } catch (e) {

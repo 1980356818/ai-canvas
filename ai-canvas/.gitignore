@@ -2,6 +2,7 @@ node_modules/
 dist/
 src-tauri/target/
 release/
+__pycache__/
 *.tsbuildinfo
 *.log
 .DS_Store

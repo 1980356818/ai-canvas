@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { WorkflowTemplate } from "@/shared/constants";
 import { Lock, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getDisplayUrl } from "@/lib/media";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { canUseTemplate, canSeeTemplate } from "@/lib/entitlements";
 import { useCategoryStore } from "@/stores/categoryStore";
@@ -56,7 +57,7 @@ function FeatureCard({ workflow, locked }: { workflow: WorkflowTemplate; locked:
       <div className="relative w-full overflow-hidden">
         {workflow.coverImage ? (
           <img
-            src={workflow.coverImage}
+            src={getDisplayUrl(workflow.coverImage)}
             alt={workflow.name}
             className={cn(
               "block aspect-video w-full object-cover transition-transform duration-300 group-hover:scale-105",

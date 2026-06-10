@@ -387,7 +387,8 @@ export function NewProjectDialog({
           <div className="grid grid-cols-5 gap-2 overflow-y-auto">
             {activeGroup?.list.map((wf) => {
               const locked = !canUseTemplate(ent, wf.id);
-              const cover = wf.coverImage;
+              // 公网 URL → 本地缓存副本显示(命中则离线/秒开,未命中透传走网络)。
+              const cover = wf.coverImage ? getDisplayUrl(wf.coverImage) : undefined;
               const isVideo = wf.category === "video";
               return (
                 <button
