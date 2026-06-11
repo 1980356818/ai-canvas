@@ -35,6 +35,7 @@ import {
   getInlineRefUrls,
   toDisplayText,
 } from "@/lib/promptSerializer";
+import { uncloakPrompt } from "@/lib/promptCloak";
 
 interface MediaAttachment {
   url: string;
@@ -98,7 +99,9 @@ export async function buildChatRequest(
 ): Promise<BuildChatRequestResult> {
   const data = card.data as ChatCardData;
 
-  const rawPrompt = data.content?.trim();
+  // 试用版模板提示词以 ENC1:: 编码存放;在此「读 content」处 just-in-time 解码。
+  // uncloak 对非编码文本透传 → 普通对话卡零副作用。绝不在卡片 data 落地处解码。
+  const rawPrompt = uncloakPrompt(data.content).trim() || undefined;
   const displayPrompt = rawPrompt ? toDisplayText(rawPrompt, data.inlineRefs ?? []) : "";
   const hasUpstreamText = !!(data.upstreamTexts && Object.keys(data.upstreamTexts).length > 0);
   if (!displayPrompt.trim() && !hasUpstreamText) {
@@ -198,7 +201,9 @@ export async function buildChatRequest(
     contextPrefix =
       "<upstream_context>\n" + sections.join("\n\n") + "\n</upstream_context>\n\n";
   }
-  const systemPrompt = contextPrefix + (data._systemPrompt || CHAT_EDITOR_DEFAULT_SYSTEM_PROMPT);
+  // _systemPrompt 同样可能被 ENC1:: 编码(试用模板)→ 解码后再拼;空/undefined 透传为 ""。
+  const systemPrompt =
+    contextPrefix + (uncloakPrompt(data._systemPrompt) || CHAT_EDITOR_DEFAULT_SYSTEM_PROMPT);
 
   const hasMedia = userContent.some((p) => p.type === "image_url");
   const unifiedUserContent: UnifiedContentPart[] = hasMedia

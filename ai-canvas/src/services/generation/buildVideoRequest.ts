@@ -31,6 +31,7 @@ import { uploadMediaBatch, type MediaUploadProgress } from "@/platform/media";
 import { shrinkReferenceVideoForSeedance } from "@/lib/videoCompress";
 import { normalizeVideoSize } from "@/shared/constants";
 import { type InlineImageRef, toDisplayText } from "@/lib/promptSerializer";
+import { uncloakPrompt } from "@/lib/promptCloak";
 import {
   getRefSlotsForVideoModel,
   resolveVideoImageMode,
@@ -139,8 +140,11 @@ function buildFinalPrompt(data: VideoCardData): string {
       if (text.trim()) parts.push(text.trim());
     }
   }
-  if (data.content?.trim()) {
-    parts.push(toDisplayText(data.content.trim(), data.inlineRefs ?? []));
+  // 试用版模板提示词以 ENC1:: 编码存放;在此「读 content」处 just-in-time 解码。
+  // 非编码文本透传,零副作用。见 docs/平面模板试用版-提示词封装-施工图.md。
+  const content = uncloakPrompt(data.content);
+  if (content.trim()) {
+    parts.push(toDisplayText(content.trim(), data.inlineRefs ?? []));
   }
   return parts.join("\n\n");
 }

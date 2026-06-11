@@ -17,6 +17,7 @@ import { buildVideoRequest, type BuildVideoRequestResult } from "@/services/gene
 import { buildImageRequest, type BuildImageRequestResult } from "@/services/generation/buildImageRequest";
 import { buildTryonRequest } from "@/services/generation/buildTryonRequest";
 import { buildChatRequest } from "@/services/generation/buildChatRequest";
+import { cloakPrompt, uncloakPrompt } from "@/lib/promptCloak";
 
 function makeCard(type: CardType, data: Record<string, unknown>): CanvasCard {
   return {
@@ -412,5 +413,75 @@ describe("buildChatRequest", () => {
     const r = await buildChatRequest(makeCard("ai_chat", { model: "gemini-3.1-pro-preview" }));
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.outcome).toBe("skipped");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// 提示词障眼法封装(试用版)—— cloak/uncloak codec + build*Request 出口解码
+// 见 docs/平面模板试用版-提示词封装-施工图.md
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("promptCloak codec", () => {
+  it("round-trip:中文/长文/含标点", () => {
+    for (const s of ["a poster", "红裙", "模特服装多模态融合：把图1的人物换成图2的服装", "line1\n行二 @ref"]) {
+      expect(uncloakPrompt(cloakPrompt(s))).toBe(s);
+    }
+  });
+
+  it("非编码文本 / 空 / undefined / null 原样透传", () => {
+    expect(uncloakPrompt("普通提示词")).toBe("普通提示词");
+    expect(uncloakPrompt("")).toBe("");
+    expect(uncloakPrompt(undefined)).toBe("");
+    expect(uncloakPrompt(null)).toBe("");
+    // cloak 对空/已编码幂等
+    expect(cloakPrompt("")).toBe("");
+    expect(cloakPrompt(cloakPrompt("x"))).toBe(cloakPrompt("x"));
+  });
+
+  it("跨语言对拍:TS 编码 === scripts/promptcloak.py 产出(改 KEY/算法两端必同步)", () => {
+    // 下列固定串来自 `python scripts/promptcloak.py`。TS 编码必须逐字节一致,
+    // 且客户端必须能解开 Python 的产出(=派生脚本写进定义、API 下发的真实形态)。
+    expect(cloakPrompt("a poster")).toBe("ENC1::AENdGwEdBB4=");
+    expect(cloakPrompt("红裙")).toBe("ENC1::htmPnNHw");
+    expect(cloakPrompt("模特服装多模态融合：把图1的人物换成图2的服装")).toBe(
+      "ENC1::h8uMk/vQh/Cgi8/qhM+31JiT0OHixer/jPHkwt/2ievhyKmOA9H758nOyI7oxcvuzonp+8ipjgDR++fL6P+Bwuk=",
+    );
+    expect(uncloakPrompt("ENC1::htmPnNHw")).toBe("红裙");
+  });
+});
+
+describe("build*Request 解码试用版编码提示词", () => {
+  it("image: 编码 content → request.prompt 为明文", async () => {
+    const r = assertOk(
+      await buildImageRequest(
+        makeCard("ai_image", { model: "nano-banana", content: cloakPrompt("a poster"), size: "1:1" }),
+      ),
+    );
+    expect(r.request.prompt).toBe("a poster");
+  });
+
+  it("video: 编码 content → request.prompt 为明文", async () => {
+    const r = assertOk(
+      await buildVideoRequest(makeCard("ai_video", { model: "veo3.1", content: cloakPrompt("a cat walking") })),
+    );
+    expect(r.request.prompt).toBe("a cat walking");
+  });
+
+  it("tryon: 编码 content → 模特换装前缀 + 明文", async () => {
+    const r = assertOk(
+      await buildTryonRequest(
+        makeCard("ai_tryon", { model: "nano-banana", personImageUrl: "http://p", content: cloakPrompt("红裙") }),
+      ),
+    );
+    expect(r.request.prompt).toBe("模特换装: 红裙");
+  });
+
+  it("chat: 编码 content → message text 为明文", async () => {
+    const r = assertOk(
+      await buildChatRequest(
+        makeCard("ai_chat", { model: "gemini-3.1-pro-preview", content: cloakPrompt("你好") }),
+      ),
+    );
+    expect(r.request.messages[0]!.content).toEqual([{ type: "text", text: "你好" }]);
   });
 });

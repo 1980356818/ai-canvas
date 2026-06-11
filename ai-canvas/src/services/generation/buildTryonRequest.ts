@@ -19,6 +19,7 @@ import type { ImageGenRequest } from "@/providers/types";
 import { resolveDefaultModelForCardType } from "@/services/modelDefaults";
 import { useCardStore } from "@/stores/cardStore";
 import { autoSave } from "@/lib/autoSave";
+import { uncloakPrompt } from "@/lib/promptCloak";
 import { uploadMediaBatch, type MediaUploadProgress } from "@/platform/media";
 import type { RefImageEntry } from "@/config/model-ref-images";
 import type {
@@ -70,7 +71,8 @@ export async function buildTryonRequest(
     return { ok: false, outcome: "skipped", reason: "请至少上传一张图片" };
   }
 
-  const instruction = data.content?.trim() || TRYON_DEFAULT_INSTRUCTION;
+  // 试用版模板换装指令可能以 ENC1:: 编码存放;在此解码,非编码文本透传。
+  const instruction = uncloakPrompt(data.content).trim() || TRYON_DEFAULT_INSTRUCTION;
   const prompt = `模特换装: ${instruction}`;
 
   const rawRefs = [
