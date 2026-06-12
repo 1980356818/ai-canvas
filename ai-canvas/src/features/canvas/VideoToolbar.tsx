@@ -12,10 +12,8 @@ import {
 import { useCanvasStore, liveViewport, subscribeViewport } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
-// persistImage 名字虽叫 image,但内部走 saveMedia 对任意媒体源 (含 HTTP 视频 URL) 都通用,
-// 远程视频→本地落盘走这条路径无需新增 API。
-import { persistImage, exportFile, getDisplayUrl } from "@/lib/media";
-import { autoSave } from "@/lib/autoSave";
+import { exportFile, getDisplayUrl } from "@/lib/media";
+import { localizeCardMedia, hasLocalizableMedia, cancelCardMediaLocalization } from "@/lib/mediaLocalize";
 import { cn } from "@/lib/utils";
 import {
   extractFramesFromVideo,
@@ -963,44 +961,37 @@ export default function VideoToolbar() {
     }
   }, [card]);
 
-  const isRemoteUrl = useCallback((url?: string) => {
-    return !!url && (url.startsWith("http://") || url.startsWith("https://"));
-  }, []);
-
   const handleSaveLocal = useCallback(async () => {
     if (!card || saving) return;
-    const d = card.data as VideoData;
-    if (!d.videoUrl || !isRemoteUrl(d.videoUrl)) return;
-
     setSaving(true);
     try {
-      const { localPath } = await persistImage(d.videoUrl, card.title || undefined, card.projectId);
-      useCardStore.getState().updateCard(card.id, {
-        data: { ...card.data, videoUrl: localPath },
-      });
-      autoSave.markDirty(card.id);
-      useUIStore.getState().addToast({
-        type: "success",
-        title: "视频已保存到本地",
-        duration: 2500,
-      });
-    } catch (err) {
-      useUIStore.getState().addToast({
-        type: "error",
-        title: "保存失败",
-        description: String(err),
-        duration: 5000,
-      });
+      // 统一收敛入口(videoUrl 等结果字段一起补,与后台自动补救同一实现)。
+      const r = await localizeCardMedia(card.id);
+      if (r.failed > 0) {
+        useUIStore.getState().addToast({
+          type: "error",
+          title: "保存失败",
+          description: "视频下载失败，后台将继续重试",
+          duration: 5000,
+        });
+      } else if (r.saved > 0 || r.repaired > 0) {
+        cancelCardMediaLocalization(card.id);
+        useUIStore.getState().addToast({
+          type: "success",
+          title: "视频已保存到本地",
+          duration: 2500,
+        });
+      }
     } finally {
       setSaving(false);
     }
-  }, [card, saving, isRemoteUrl]);
+  }, [card, saving]);
 
   if (!card || card.type !== "ai_video") return null;
   const d = card.data as VideoData;
   if (!d.videoUrl) return null;
 
-  const showSaveLocal = isRemoteUrl(d.videoUrl);
+  const showSaveLocal = hasLocalizableMedia(card.data);
   const continueCheck = canContinueShot(d.model);
   const continueDisabled = !continueCheck.ok || isVeoReferenceMode(d.model, d.imageMode);
   const continueTitle = isVeoReferenceMode(d.model, d.imageMode)

@@ -10,7 +10,7 @@ import { modelService } from "@/services/models";
 import { resolveDefaultModelForCardType } from "@/services/modelDefaults";
 import { buildImageRequest } from "@/services/generation/buildImageRequest";
 import { runEditorGeneration } from "@/services/generation/runEditorGeneration";
-import { scheduleBackgroundSave } from "@/lib/media";
+import { scheduleCardMediaLocalization } from "@/lib/mediaLocalize";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug";
 import {
@@ -427,8 +427,6 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           if (count !== requestedCount) {
             log.warn(`batchSize ${requestedCount} clamped to ${count} (max 4 to avoid GPU pressure)`);
           }
-          // 把卡片自身的 projectId 作为本次任务的归属,整个异步链都用这个快照(请求体里已由 build 快照)。
-          const ownerProjectId = card.projectId;
           let results: ImageResult[];
 
           if (count === 1) {
@@ -506,11 +504,9 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             (r) => r.url.startsWith("http://") || r.url.startsWith("https://"),
           );
           if (hasRemote) {
-            for (let i = 0; i < results.length; i++) {
-              if (results[i]!.url.startsWith("http")) {
-                scheduleBackgroundSave(card.id, results[i]!.url, i === 0 ? "imageUrl" : undefined, ownerProjectId);
-              }
-            }
+            // 整卡交给统一收敛模块:imageUrl 与 results[].url 一起补
+            // (旧逐 URL 入队按 cardId 单飞,批量第 2..N 张永远救不回)。
+            scheduleCardMediaLocalization(card.id);
             useUIStore.getState().addToast({
               type: "warning",
               title: `${results.length} 张图片已生成，部分保存到本地失败`,

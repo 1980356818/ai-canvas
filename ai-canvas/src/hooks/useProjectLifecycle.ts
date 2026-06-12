@@ -26,6 +26,7 @@ import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
 import { startDataFlowWatcher } from "@/lib/dataFlow";
 import { initMediaService } from "@/lib/media";
+import { sweepProjectMediaLocalization } from "@/lib/mediaLocalize";
 import {
   cardToRow,
   rowToCard,
@@ -181,6 +182,13 @@ export function useProjectLifecycle() {
       // 避免快速切项目时把就绪 id 错置成上一个项目。
       if (useProjectStore.getState().currentProjectId === currentProjectId) {
         useProjectStore.getState().setHydratedProjectId(currentProjectId);
+
+        // 补救扫描:上一会话没本地化成功的生成结果(卡片里残留远端 http URL,
+        // 远端地址可能带时效签名,越早抢救越好)统一错峰入队后台落地。
+        const swept = sweepProjectMediaLocalization(currentProjectId);
+        if (swept > 0) {
+          console.log(`[生命周期诊断] ${swept} 张卡片存在未本地化的远端媒体,已入队后台保存`);
+        }
       }
     })().catch(console.error);
 

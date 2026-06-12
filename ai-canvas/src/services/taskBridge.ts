@@ -24,6 +24,7 @@ import { useTasksStore } from "@/stores/tasksStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useCardStore } from "@/stores/cardStore";
 import { autoSave } from "@/lib/autoSave";
+import { scheduleCardMediaLocalization } from "@/lib/mediaLocalize";
 import type { AsyncTask, CanvasCard, TaskStatus } from "@/types";
 import type { CardGenProgress } from "@/types/ui";
 
@@ -177,6 +178,10 @@ function applyResultToCard(task: AsyncTask): void {
 
   cardStore.updateCardData(task.cardId, patch);
   autoSave.markDirty(task.cardId);
+
+  // finalize(saveMedia)失败时 url 仍是远端 http(s) —— 远端地址不可靠(时效签名 /
+  // 境外站国内不可达),交给统一收敛模块退避补救。本地路径时这里是 no-op。
+  scheduleCardMediaLocalization(task.cardId);
 }
 
 /**

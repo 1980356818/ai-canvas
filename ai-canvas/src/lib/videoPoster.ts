@@ -37,7 +37,7 @@ export function ensureVideoPoster(
   projectId?: string,
 ): void {
   if (!cardId || !videoStoredPath) return;
-  // 远程视频抽帧会被 CORS taint(canvas 读不到像素)。等 scheduleBackgroundSave 把它
+  // 远程视频抽帧会被 CORS taint(canvas 读不到像素)。等 mediaLocalize 后台收敛把它
   // 本地化后 videoUrl 变成本地路径,VideoPreview 会带新路径再喊一次,那时才抽得出。
   if (videoStoredPath.startsWith("http://") || videoStoredPath.startsWith("https://")) return;
   if (inFlight.has(cardId)) return;

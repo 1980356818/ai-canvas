@@ -39,7 +39,7 @@ import { buildChatRequest } from "@/services/generation/buildChatRequest";
 import { streamChatToCard } from "@/services/generation/streamChatToResult";
 import { runFrameExtraction } from "@/lib/frameExtraction";
 import { hasApiKey } from "@/platform";
-import { scheduleBackgroundSave } from "@/lib/media";
+import { scheduleCardMediaLocalization } from "@/lib/mediaLocalize";
 import { autoSave } from "@/lib/autoSave";
 import type { CanvasCard } from "@/types";
 import type { ImageGenResponse } from "@/providers/types";
@@ -120,11 +120,9 @@ async function runImageCard(card: CanvasCard, count = 1): Promise<RunCardResult>
     data: { ...latest, imageUrl: results[0]!.url, results, selectedIndex: 0 },
   });
   autoSave.markDirty(card.id);
-  for (let i = 0; i < results.length; i++) {
-    if (results[i]!.url.startsWith("http")) {
-      scheduleBackgroundSave(card.id, results[i]!.url, i === 0 ? "imageUrl" : undefined, card.projectId);
-    }
-  }
+  // 批量结果可能残留远端 URL(saveMedia 当时失败)——整卡交给统一收敛模块,
+  // imageUrl 与 results[].url 一起补,无远端时是 no-op。
+  scheduleCardMediaLocalization(card.id);
   return { outcome: "ok" };
 }
 

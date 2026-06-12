@@ -15,7 +15,7 @@
  *  - 约束校验**不弹 toast**,违例返回 `{ ok:false, outcome, reason, toast? }`;
  *    由调用方决定呈现 —— 编辑器弹 `toast.{title,description}`,cardRunner 用 `outcome`+`reason`。
  *  - 上传失败(网络/鉴权)直接 throw,由调用方 try/catch(编辑器 setError;cardRunner 兜成 failed)。
- *  - 几何 resize / scheduleBackgroundSave / 成功 toast 等"善后"留在编辑器,本函数不碰。
+ *  - 几何 resize / 媒体本地化补救(mediaLocalize)/ 成功 toast 等"善后"留在编辑器,本函数不碰。
  *  - provider 解析留给调用方(编辑器 `resolveProvider` 会抛、cardRunner `tryResolveProvider` 返 undefined),
  *    本函数把解析后的 `modelId` / `providerId` 一并返回供其反查。
  *
