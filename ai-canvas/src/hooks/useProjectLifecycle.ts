@@ -96,6 +96,8 @@ export function useProjectLifecycle() {
     prevProjectIdRef.current = currentProjectId;
 
     useCanvasStore.getState().setEditingCardId(null);
+    // 切项目即清就绪信号;加载完成后由下方 IIFE 末尾重新点亮(automation project.open 依赖)。
+    useProjectStore.getState().setHydratedProjectId(null);
 
     if (!currentProjectId) {
       useCardStore.getState().clear();
@@ -173,6 +175,12 @@ export function useProjectLifecycle() {
         }
       } catch (err) {
         console.warn("[生命周期诊断] resumeAll failed:", err);
+      }
+
+      // 就绪信号:卡片/连线/组已水合到 store。守卫 currentProjectId 未在加载期间被切走,
+      // 避免快速切项目时把就绪 id 错置成上一个项目。
+      if (useProjectStore.getState().currentProjectId === currentProjectId) {
+        useProjectStore.getState().setHydratedProjectId(currentProjectId);
       }
     })().catch(console.error);
 

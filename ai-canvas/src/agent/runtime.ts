@@ -2,7 +2,9 @@ import type { AgentContext, AgentMessage, AgentStatus, ContentPart } from "./typ
 import type { AIProvider, UnifiedMessage, UnifiedContentPart } from "@/providers/types";
 import type { ToolRegistry } from "./tools/registry";
 
-const MAX_TOOL_ROUNDS = 8;
+// 对话面板接入完整画布编排动词后,一个"建多卡 + 连线 + 同步运行"的工作流需要更多轮次
+// (run_* 同步等待出图)。从 8 放宽到 24。
+const MAX_TOOL_ROUNDS = 24;
 
 export interface RuntimeCallbacks {
   onMessage: (msg: AgentMessage) => void;

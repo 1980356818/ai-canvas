@@ -65,6 +65,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "./ConfirmDialog";
 import UpdatesTab from "./UpdatesTab";
+import { AutomationSettings } from "./AutomationSettings";
 
 type SettingsTab = "platforms" | "general" | "backup" | "updates" | "account";
 type ConnStatus = "idle" | "testing" | "ok" | "error";
@@ -477,6 +478,7 @@ export default function SettingsDialog() {
                 onPick={handlePickExportPath}
                 onClear={() => setExportPath("")}
               />
+              <AutomationSettings />
             </div>
           )}
 

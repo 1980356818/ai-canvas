@@ -1,3 +1,4 @@
+mod automation;
 mod backup;
 mod commands;
 mod db;
@@ -845,6 +846,9 @@ pub fn run() {
                 data_dir: data_dir.clone(),
                 backup_dir: backup_dir.clone(),
             });
+            // 自动化桥运行态。server 默认不起;前端 host 装好 listener 后按设置决定是否
+            // invoke automation_start。详见 src/automation/mod.rs。
+            app.manage(automation::AutomationState::new());
             boot_log("state managed (http clients deferred)");
 
             // 定时备份：每 30 分钟一份，跟随保留策略自动清理旧份。
@@ -892,6 +896,8 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // 退出前清掉 automation bridge.json,避免遗留陈旧端口/token。
+                automation::cleanup_on_exit(window.app_handle());
                 window.app_handle().exit(0);
             }
         })
@@ -975,6 +981,14 @@ pub fn run() {
             commands::update::install_latest_update,
             commands::update::switch_to_version,
             commands::update::get_runtime_info,
+            // automation: 本地自动化桥 (127.0.0.1 HTTP/MCP),外部 AI 工具 / 应用内对话面板
+            // 操控画布。详见 src/automation/mod.rs + docs/automation/。
+            automation::automation_status,
+            automation::automation_start,
+            automation::automation_stop,
+            automation::automation_respond,
+            automation::automation_set_descriptor,
+            automation::automation_log_tail,
         ])
         .run(tauri::generate_context!());
 
