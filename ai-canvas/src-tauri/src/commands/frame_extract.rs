@@ -374,7 +374,8 @@ async fn download_from_server(
     Ok(final_path)
 }
 
-async fn ensure_ffmpeg(data_dir: &Path) -> Result<PathBuf, String> {
+// pub(crate):image_shrink(参考图体积压缩)复用同一份 ffmpeg 解析/下载链。
+pub(crate) async fn ensure_ffmpeg(data_dir: &Path) -> Result<PathBuf, String> {
     let cell = FFMPEG_PATH.get_or_init(|| Mutex::new(None));
     let mut cached = cell.lock().await;
     if let Some(p) = cached.as_ref() {
@@ -1245,7 +1246,8 @@ fn resolve_video_path(input: &str, data_dir: &Path) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
-fn compute_sha256(path: &Path) -> Result<String, String> {
+// pub(crate):image_shrink 复用作压缩产物缓存键。
+pub(crate) fn compute_sha256(path: &Path) -> Result<String, String> {
     use std::fs::File;
     use std::io::Read;
 

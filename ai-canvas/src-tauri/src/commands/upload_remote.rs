@@ -197,6 +197,22 @@ pub async fn upload_to_server(
     }
 
     let content_type = super::ai::mime_from_path(&abs_path).to_string();
+
+    // >10MB 的静态图片先压到 ~9.75MB 以内再进上传管线(文本/图片节点参考图直传
+    // 上游会撞服务端 inliner 20MB cap / 上游拉不动国内 COS 大图)。best-effort:
+    // 压不了(ffmpeg 缺失 / 解码失败)原样上传,绝不因压缩挡住上传。
+    // 压缩产物按源 sha 落 media/compressed/ 缓存;后续 sha256 / uploaded_files
+    // 缓存 / in-flight 单飞 / presign 全部基于压缩后的文件,预热与主路径自然命中
+    // 同一份。卡片 data 与本地显示不受影响,只有送上游的字节被压。
+    let (abs_path, size, content_type) = match super::image_shrink::shrink_image_for_upload(
+        &data_dir, &abs_path, size, &content_type,
+    )
+    .await
+    {
+        Some((shrunk_path, shrunk_size)) => (shrunk_path, shrunk_size, "image/jpeg".to_string()),
+        None => (abs_path, size, content_type),
+    };
+
     enforce_upload_size_limit(size, &content_type)?;
 
     // 流式 sha256 — 64KB chunk, 500MB 视频也只占 64KB 内存

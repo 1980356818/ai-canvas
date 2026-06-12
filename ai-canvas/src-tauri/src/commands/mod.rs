@@ -31,6 +31,8 @@ pub mod upload_remote;
 pub mod upload_presign;
 // frame_extract: ffmpeg-sidecar 抽关键帧。前端解析分镜 JSON 后批量请求时间点的图像。
 pub mod frame_extract;
+// image_shrink: >10MB 参考图上传前压到 ~10MB 内 (upload_remote 内部调,无 Tauri command)。
+pub mod image_shrink;
 // template_assets: 模板图下载到 data_dir/template-assets/(内容哈希命名,本地持久化,非浏览器缓存)。
 pub mod template_assets;
 // update: 自动更新 + 版本切换。详见 update.rs 顶部注释。
