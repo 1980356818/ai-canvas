@@ -16,6 +16,7 @@ import { useGroupStore } from "@/stores/groupStore";
 import { useCardStore } from "@/stores/cardStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useGroupRunStatusStore } from "@/stores/groupRunStatusStore";
+import { reconcileFrameMembership } from "@/lib/frameMembership";
 import { createLogger } from "@/lib/debug";
 
 const log = createLogger("GroupRun");
@@ -181,11 +182,21 @@ export function planGroupRun(
   groupId: string,
   opts: RunGroupOptions = {},
 ): RunPlanResult {
-  const group = useGroupStore.getState().getGroup(groupId);
+  const groupStore = useGroupStore.getState();
+  const group = groupStore.getGroup(groupId);
   if (!group) return { ok: false, reason: "group-not-found" };
 
+  // Frame 容器化:运行前按存储边界重算成员归属,确保「跑的 = 用户在框里看到的卡」。
+  // group.cardIds 只是派生缓存,平时由 installFrameMembershipAutoReconcile 订阅卡片几何
+  // 自动维护(异步去抖)。组运行须**同步**保证最新,等不了微任务,故这里显式 reconcile
+  // 一次再读成员(O(框×卡),仅有变化时落库,代价可忽略)。见 frameMembership 头部契约。
+  reconcileFrameMembership(group.projectId);
+
   const cardStore = useCardStore.getState();
-  const cardIds = group.cardIds.filter((cid) => cardStore.getCard(cid));
+  // reconcile 可能经 updateGroup(不可变写)替换了 group 对象 → 重取最新成员再读 cardIds。
+  const cardIds = (groupStore.getGroup(groupId) ?? group).cardIds.filter((cid) =>
+    cardStore.getCard(cid),
+  );
   if (cardIds.length === 0) return { ok: false, reason: "empty" };
 
   // 组内子图:两端都在组里的边(组运行 = 严格作用域,不引组外卡)。

@@ -1,8 +1,18 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { reconcileFrameMembership, cardsInFrame } from "@/lib/frameMembership";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import {
+  reconcileFrameMembership,
+  cardsInFrame,
+  scheduleFrameMembershipReconcile,
+  installFrameMembershipAutoReconcile,
+} from "@/lib/frameMembership";
 import { useCardStore } from "@/stores/cardStore";
 import { useGroupStore } from "@/stores/groupStore";
+import { useProjectStore } from "@/stores/projectStore";
 import type { CanvasCard, CardGroup } from "@/types";
+
+/** 把队列里的微任务跑干净(scheduleFrameMembershipReconcile 用 queueMicrotask 去抖)。 */
+const flushMicrotasks = () =>
+  new Promise<void>((resolve) => queueMicrotask(resolve));
 
 const P = "proj-1";
 
@@ -122,5 +132,84 @@ describe("reconcileFrameMembership", () => {
 
     expect(idsOf("F")).toEqual([]); // A 出组
     expect(useGroupStore.getState().getGroup("F")).toBeDefined(); // 空框仍在
+  });
+});
+
+describe("scheduleFrameMembershipReconcile(微任务去抖)", () => {
+  it("调度后在微任务末跑一次 reconcile;同 tick 多次调度合并", async () => {
+    useCardStore.getState().setCards([
+      mkCard("A", 50, 50), // ∈
+      mkCard("B", 150, 150), // ∈,但不在 cardIds
+    ]);
+    useGroupStore
+      .getState()
+      .setGroups([mkFrame("F", { x: 0, y: 0, width: 300, height: 300 }, ["A"])]);
+
+    scheduleFrameMembershipReconcile(P);
+    scheduleFrameMembershipReconcile(P); // 合并,不重复跑
+    expect(idsOf("F")).toEqual(["A"]); // 同步阶段还没跑(去抖到微任务)
+
+    await flushMicrotasks();
+    expect(idsOf("F")).toEqual(["A", "B"]); // 微任务末已校准
+  });
+});
+
+describe("installFrameMembershipAutoReconcile(订阅 layoutVersion 自动校准)", () => {
+  let uninstall: (() => void) | null = null;
+
+  beforeEach(() => {
+    useCardStore.getState().setCards([]);
+    useGroupStore.getState().setGroups([]);
+    useProjectStore.getState().setCurrentProjectId(P);
+  });
+
+  afterEach(() => {
+    uninstall?.();
+    uninstall = null;
+  });
+
+  it("卡片几何/增删改动后自动重算成员(卡侧无需手动 reconcile)", async () => {
+    useCardStore.getState().setCards([mkCard("A", 50, 50)]); // ∈
+    useGroupStore
+      .getState()
+      .setGroups([mkFrame("F", { x: 0, y: 0, width: 300, height: 300 }, ["A"])]);
+
+    uninstall = installFrameMembershipAutoReconcile();
+
+    // 模拟「在框里新建一张卡」(addCard bump layoutVersion)——卡侧不手动 reconcile。
+    useCardStore.getState().addCard(mkCard("C", 150, 150)); // center (200,200) ∈
+    await flushMicrotasks();
+
+    expect(idsOf("F")).toEqual(["A", "C"]); // C 被自动吸收进框
+  });
+
+  it("卸载后不再自动校准", async () => {
+    useCardStore.getState().setCards([mkCard("A", 50, 50)]);
+    useGroupStore
+      .getState()
+      .setGroups([mkFrame("F", { x: 0, y: 0, width: 300, height: 300 }, ["A"])]);
+
+    const off = installFrameMembershipAutoReconcile();
+    off(); // 立即卸载
+
+    useCardStore.getState().addCard(mkCard("C", 150, 150));
+    await flushMicrotasks();
+
+    expect(idsOf("F")).toEqual(["A"]); // 没有自动校准,C 未入组
+  });
+
+  it("幂等:重复安装只订阅一次(不重复吸收 / 不抛错)", async () => {
+    useCardStore.getState().setCards([mkCard("A", 50, 50)]);
+    useGroupStore
+      .getState()
+      .setGroups([mkFrame("F", { x: 0, y: 0, width: 300, height: 300 }, ["A"])]);
+
+    installFrameMembershipAutoReconcile();
+    uninstall = installFrameMembershipAutoReconcile(); // 第二次 = no-op,返回同一卸载器
+
+    useCardStore.getState().addCard(mkCard("C", 150, 150));
+    await flushMicrotasks();
+
+    expect(idsOf("F")).toEqual(["A", "C"]);
   });
 });

@@ -27,6 +27,7 @@ import { reconcileFrameMembership } from "@/lib/frameMembership";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
 import { startDataFlowWatcher } from "@/lib/dataFlow";
+import { installFrameMembershipAutoReconcile } from "@/lib/frameMembership";
 import { initMediaService } from "@/lib/media";
 import { sweepProjectMediaLocalization } from "@/lib/mediaLocalize";
 import {
@@ -186,6 +187,10 @@ export function useProjectLifecycle() {
 
       dataFlowCleanup.current?.();
       dataFlowCleanup.current = startDataFlowWatcher();
+
+      // 成员归属自动校准:订阅 cardStore.layoutVersion,卡侧任何几何/增删改动后自动
+      // 重算框成员(幂等,全局一次)。卡侧路径从此无需手动 reconcile。见 frameMembership 头部契约。
+      installFrameMembershipAutoReconcile();
 
       // 关键恢复点：任何在上一次会话被中断的"活动中"任务（queued/submitting/
       // polling），TaskManager 会在这里从 SQLite 一次性捞回来继续轮询。
