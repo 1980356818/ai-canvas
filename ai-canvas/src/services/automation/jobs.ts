@@ -1,7 +1,7 @@
 /**
  * 自动化运行任务注册表 (`run.*` 动词的异步句柄)。
  *
- * 为什么需要它:`cardRunner.runCard` / `groupRunner.runGroup` 是 await 到完成的 (生成
+ * 为什么需要它:`cardRunner.runCard` / `groupRun.runGroup` 是 await 到完成的 (生成
  * 30–200s)。若 `run.card` 同步等完再回 HTTP,agent 端会长时间挂起。改成:`run.*` 立即
  * 建一个 job 并后台跑,返回 `jobId`;agent 轮询 `task.status`,完成后 `task.cancel` 可中断。
  *
@@ -22,7 +22,7 @@ export interface Job {
   result?: unknown;
   /** 失败原因 (state==="failed")。 */
   error?: string;
-  /** 取消句柄:透传给 runCard(signal) / cancelGroup。 */
+  /** 取消句柄:透传给 runCard(signal);分组停止走 stopGroup(不经此 controller)。 */
   controller: AbortController;
 }
 

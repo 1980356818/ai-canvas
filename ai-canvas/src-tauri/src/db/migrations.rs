@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: u32 = 10;
+const CURRENT_VERSION: u32 = 12;
 
 pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     let version: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -35,6 +35,10 @@ pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     }
     if version < 10 {
         migrate_v10(conn)?;
+    }
+    // 注:本仓没有 v11 —— bounds 迁移用 v12(原因见 migrate_v12 注释)。
+    if version < 12 {
+        migrate_v12(conn)?;
     }
 
     Ok(())
@@ -329,5 +333,34 @@ fn migrate_v10(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     conn.execute_batch("PRAGMA user_version = 10;")?;
+    Ok(())
+}
+
+fn migrate_v12(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::info!("running migration v12: card group stored frame bounds");
+
+    // ⚠ 用 v12(跳过 v11):部分历史/开发库已被一条早先(已移除)的迁移占用到 user_version=11,
+    //   而那条 v11 并不含 bounds 列。若把本迁移设为 v11,这些库会因 version 已=11 而跳过它,
+    //   导致 groups.rs 引用的 x/y/width/height 列缺失而报错。设为 v12 保证在 v10/v11 库上都会执行。
+    //   (与 lumaxflow 的 v12=bounds 编号也对齐。)
+    //
+    // Frame 容器化:组从「card_ids 清单 + 成员外接框」升级为拥有自己存储边界的容器。
+    // 成员 = 落在边界矩形内的卡片(空间即真相),由前端「成员校准权威」在每次几何提交时
+    // 从边界重算 card_ids(card_ids 列保留为派生缓存)。
+    //
+    // 新增 4 列存边界;width=0 作「未回填」哨兵 —— 老行 / 旧导入在「打开项目」时由前端
+    // 用当前成员外接框回填(见 hooks/useProjectLifecycle.ts),保证老项目视觉零变化。
+    // 详见 docs/Frame容器化-架构与施工图.md。
+    conn.execute_batch(
+        "
+        ALTER TABLE card_groups ADD COLUMN x      REAL NOT NULL DEFAULT 0;
+        ALTER TABLE card_groups ADD COLUMN y      REAL NOT NULL DEFAULT 0;
+        ALTER TABLE card_groups ADD COLUMN width  REAL NOT NULL DEFAULT 0;
+        ALTER TABLE card_groups ADD COLUMN height REAL NOT NULL DEFAULT 0;
+
+        PRAGMA user_version = 12;
+        ",
+    )?;
+
     Ok(())
 }

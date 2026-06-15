@@ -228,3 +228,27 @@ export async function buildChatRequest(
     warning,
   };
 }
+
+/**
+ * 采集 ai_chat 的运行输入切片(同步,供 runInputFingerprint)。
+ * prompt/_systemPrompt 用 builder 同款 uncloak + toDisplayText(content+inlineRefs);
+ * upstreamTexts 作对象交给 stableHash 排序键 → 键序无关;素材只取 url/kind。
+ */
+export function collectChatInputs(card: CanvasCard): Record<string, unknown> {
+  const data = card.data as ChatCardData;
+  const rawPrompt = uncloakPrompt(data.content).trim();
+  const displayPrompt = rawPrompt ? toDisplayText(rawPrompt, data.inlineRefs ?? []) : "";
+  return {
+    kind: "ai_chat",
+    model: (data.model ?? "").trim(),
+    provider: data.provider ?? "",
+    prompt: displayPrompt,
+    upstreamTexts: data.upstreamTexts ?? {},
+    systemPrompt: uncloakPrompt(data._systemPrompt) || CHAT_EDITOR_DEFAULT_SYSTEM_PROMPT,
+    refImages: Object.fromEntries(
+      Object.entries(data.refImages ?? {}).map(([k, e]) => [k, e.url]),
+    ),
+    directMedia: (data.directMedia ?? []).map((m) => ({ url: m.url, kind: m.kind })),
+    refVideos: (data.refVideos ?? []).map((v) => v.url),
+  };
+}

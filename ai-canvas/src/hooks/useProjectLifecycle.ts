@@ -22,6 +22,8 @@ import {
 import { rebuildMissingConnections } from "@/lib/connectionRecovery";
 import { cleanupDanglingReferencesInCards } from "@/lib/referenceConsistency";
 import { sanitizeGroupsAgainstCards } from "@/lib/groupConsistency";
+import { computeEnvelopeBounds } from "@/lib/groupBounds";
+import { reconcileFrameMembership } from "@/lib/frameMembership";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
 import { startDataFlowWatcher } from "@/lib/dataFlow";
@@ -142,7 +144,25 @@ export function useProjectLifecycle() {
         changedIds: changedGroupIds,
         droppedIds: droppedGroupIds,
       } = sanitizeGroupsAgainstCards(loadedGroups);
+
+      // Frame 容器化:回填存储边界(老行 width===0 → 当前成员外接框,视觉零变化),
+      // setGroups 后按边界重算成员 —— 导入掉组 / 框内非成员卡一次性归位(空间即真相)。
+      const cardsSnapshot = useCardStore.getState().cards;
+      const backfilledGroupIds: string[] = [];
+      for (const g of validGroups) {
+        if (g.width === 0) {
+          const env = computeEnvelopeBounds(g, cardsSnapshot);
+          if (env) {
+            g.x = env.x;
+            g.y = env.y;
+            g.width = env.width;
+            g.height = env.height;
+            backfilledGroupIds.push(g.id);
+          }
+        }
+      }
       useGroupStore.getState().setGroups(validGroups);
+      reconcileFrameMembership(currentProjectId);
 
       const persistenceTasks: Promise<unknown>[] = [];
       if (validConnections.length !== persistedConnections.length) {
@@ -152,8 +172,9 @@ export function useProjectLifecycle() {
         const changedCards = cards.filter((card) => changedCardIds.includes(card.id));
         persistenceTasks.push(saveCardsBatch(changedCards.map(cardToRow)));
       }
-      if (changedGroupIds.length > 0) {
-        const changedGroups = validGroups.filter((g) => changedGroupIds.includes(g.id));
+      const groupIdsToPersist = new Set([...changedGroupIds, ...backfilledGroupIds]);
+      if (groupIdsToPersist.size > 0) {
+        const changedGroups = validGroups.filter((g) => groupIdsToPersist.has(g.id));
         persistenceTasks.push(saveGroupsBatch(changedGroups.map(groupToRow)));
       }
       for (const gid of droppedGroupIds) {

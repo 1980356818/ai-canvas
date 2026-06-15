@@ -8,8 +8,10 @@
  *    会先把卡片从原组移除再加入新组,而不是阻挡用户。
  *  • 不嵌套(子组里再有子组)。Figma frame 嵌套是 90% 用户的 bug 来源,
  *    本项目作为画布工具不需要这个复杂度。
- *  • bounds 不存储 —— 由组内 cardIds 实时计算 min/max(x,y,x+w,y+h)+padding,
- *    cardStore.layoutVersion 变就重算。把派生数据存进 row 早晚要不一致。
+ *  • Frame 容器化:bounds(x/y/width/height)**已存储**,是组的「真相源」。
+ *    成员 = 中心点落在 bounds 内的卡片(空间即真相);cardIds 降级为「派生缓存」,
+ *    由 frameMembership 校准权威在每次几何提交时重算并落库,折叠态冻结。
+ *    详见 docs/Frame容器化-架构与施工图.md。
  *  • color 与 CARD_COLOR_PRESETS 兼容,但走独立的 GROUP_PALETTE,
  *    让组的颜色语义独立于卡片着色。
  */
@@ -20,11 +22,16 @@ export interface CardGroup {
   title: string;
   color: string;
   collapsed: boolean;
+  /** Frame 边界(world 坐标)。真相源;width===0 作「未回填」哨兵(打开项目时回填)。 */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
   createdAt: string;
   updatedAt: string;
 }
 
-/** SQLite 行格式。card_ids 用 JSON 字符串存。 */
+/** SQLite 行格式。card_ids 用 JSON 字符串存;x/y/width/height 为 Frame 边界。 */
 export interface CardGroupRow {
   id: string;
   project_id: string;
@@ -32,6 +39,10 @@ export interface CardGroupRow {
   title: string;
   color: string;
   collapsed: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
   created_at: string;
   updated_at: string;
 }

@@ -33,6 +33,9 @@ function bezierMidpoint(x1: number, y1: number, x2: number, y2: number) {
   };
 }
 
+/** 空 offsets:allConns 用「已提交几何」建路径,拖拽位移由 liveConns 增量施加。 */
+const EMPTY_OFFSETS: Map<string, { dx: number; dy: number }> = new Map();
+
 function getPortPositions(
   card: CanvasCard,
   dragOffsets: Map<string, { dx: number; dy: number }>,
@@ -316,15 +319,16 @@ export default memo(function ConnectionLayer({
         continue;
       }
 
-      // F7: 端点 reroute 到折叠胶囊中心(拖拽期间也带 dragOffsets,胶囊跟手)
-      let srcPort = getPortPositions(src, dragOffsets).output;
-      let tgtPort = getPortPositions(tgt, dragOffsets).input;
+      // 端点用「已提交几何」算(EMPTY_OFFSETS,不带拖拽位移);拖拽跟手由下方
+      // liveConns 仅对「可见 + 端点正被拖动」的连线增量施加,避免每帧 O(总连线) 重建路径。
+      let srcPort = getPortPositions(src, EMPTY_OFFSETS).output;
+      let tgtPort = getPortPositions(tgt, EMPTY_OFFSETS).input;
       if (srcCollapsedGroup) {
-        const c = collapsedCapsuleCenter(srcCollapsedGroup, cards, dragOffsets);
+        const c = collapsedCapsuleCenter(srcCollapsedGroup, cards);
         if (c) srcPort = c;
       }
       if (tgtCollapsedGroup) {
-        const c = collapsedCapsuleCenter(tgtCollapsedGroup, cards, dragOffsets);
+        const c = collapsedCapsuleCenter(tgtCollapsedGroup, cards);
         if (c) tgtPort = c;
       }
 
@@ -352,7 +356,7 @@ export default memo(function ConnectionLayer({
     }
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionsVersion, layoutVersion, groupVersion, projectId, dragOffsets]);
+  }, [connectionsVersion, layoutVersion, groupVersion, projectId]);
 
   // 视口剔除：仅做 bbox 比较（廉价）。viewport 变化（缩放/平移）时只跑这层 filter，
   // 不再触发 allConns 的全量 path / 索引重算 —— 这是缩放卡顿的主因之一。
@@ -372,6 +376,23 @@ export default memo(function ConnectionLayer({
     });
   }, [allConns, vpBounds]);
 
+  // 拖拽实时跟手:仅对「可见 + 端点正被拖动」的连线增量改写端点与路径。
+  // 非拖拽(dragOffsets 空)时直接复用 projectConns;未被拖动的连线返回同一引用,
+  // <Wire> 的 memo 命中、零 reconcile。每帧代价 = O(可见连线),与总连线数无关。
+  const liveConns = useMemo(() => {
+    if (dragOffsets.size === 0) return projectConns;
+    return projectConns.map((w) => {
+      const so = dragOffsets.get(w.conn.sourceCardId);
+      const to = dragOffsets.get(w.conn.targetCardId);
+      if (!so && !to) return w;
+      const x1 = w.x1 + (so?.dx ?? 0);
+      const y1 = w.y1 + (so?.dy ?? 0);
+      const x2 = w.x2 + (to?.dx ?? 0);
+      const y2 = w.y2 + (to?.dy ?? 0);
+      return { ...w, x1, y1, x2, y2, d: bezierPath(x1, y1, x2, y2) };
+    });
+  }, [projectConns, dragOffsets]);
+
   const handleDelete = useCallback((id: string) => {
     disconnectConnectionAndCleanup(id);
   }, []);
@@ -388,7 +409,7 @@ export default memo(function ConnectionLayer({
 
   return (
     <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
-      {projectConns.map(({ conn, d, srcColor, tgtColor, x1, y1, x2, y2, crossGroup }) => (
+      {liveConns.map(({ conn, d, srcColor, tgtColor, x1, y1, x2, y2, crossGroup }) => (
         <Wire
           key={conn.id}
           id={conn.id}

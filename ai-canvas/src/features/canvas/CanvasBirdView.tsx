@@ -285,10 +285,13 @@ export default function CanvasBirdView({
         d.didMove = true;
         const dx = world.x - d.startWorldX;
         const dy = world.y - d.startWorldY;
-        const store = useCardStore.getState();
+        // 批量一次提交:N 张卡只 bump 一次 layoutVersion(空间索引单次 diff +
+        // 鸟瞰 canvas 单次重绘),替代每张卡一次 updateCard 的 O(N×总数)。
+        const updates: { id: string; partial: { x: number; y: number } }[] = [];
         for (const [id, start] of d.cardStarts) {
-          store.updateCard(id, { x: start.x + dx, y: start.y + dy });
+          updates.push({ id, partial: { x: start.x + dx, y: start.y + dy } });
         }
+        useCardStore.getState().updateCards(updates);
       }
     },
     [screenToCanvas],

@@ -49,6 +49,12 @@ interface CardState {
   removeCard: (id: string) => void;
   updateCard: (id: string, partial: Partial<CanvasCard>) => void;
   /**
+   * 批量更新多张卡片,只 bump 一次 layoutVersion / dataVersion。
+   * 多选拖拽 / 整组拖拽落点提交用它,避免 N 次 updateCard → N 次 layoutVersion +1
+   * → 空间索引 N 次全量 diff(O(N×总数),上千卡时是落点卡顿源)。
+   */
+  updateCards: (updates: Array<{ id: string; partial: Partial<CanvasCard> }>) => void;
+  /**
    * Atomically shallow-merge `dataPatch` into the LATEST card.data in the
    * store. Use this in editors instead of `updateCard({ data: { ...data, ...patch } })`
    * to avoid stale-closure overwrites (e.g. when reference-cleanup runs between
@@ -132,6 +138,40 @@ export const useCardStore = create<CardState>((set, get) => ({
         layoutVersion: layoutChanged ? s.layoutVersion + 1 : s.layoutVersion,
         dataVersion: dataChanged ? s.dataVersion + 1 : s.dataVersion,
         lastMutatedDataIds: dataChanged ? new Set([id]) : s.lastMutatedDataIds,
+      };
+    }),
+
+  updateCards: (updates) =>
+    set((s) => {
+      if (updates.length === 0) return s;
+      const next = new Map(s.cards);
+      const now = new Date().toISOString();
+      let layoutChanged = false;
+      let dataChanged = false;
+      const mutatedData = new Set<string>();
+      for (const { id, partial } of updates) {
+        const card = next.get(id);
+        if (!card) continue;
+        const updated = { ...card, ...partial, updatedAt: now };
+        next.set(id, updated);
+        if (
+          updated.x !== card.x ||
+          updated.y !== card.y ||
+          updated.width !== card.width ||
+          updated.height !== card.height
+        ) {
+          layoutChanged = true;
+        }
+        if (partial.data !== undefined && partial.data !== card.data) {
+          dataChanged = true;
+          mutatedData.add(id);
+        }
+      }
+      return {
+        cards: next,
+        layoutVersion: layoutChanged ? s.layoutVersion + 1 : s.layoutVersion,
+        dataVersion: dataChanged ? s.dataVersion + 1 : s.dataVersion,
+        lastMutatedDataIds: dataChanged ? mutatedData : s.lastMutatedDataIds,
       };
     }),
 

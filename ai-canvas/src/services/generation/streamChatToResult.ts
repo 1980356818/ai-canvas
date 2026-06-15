@@ -23,6 +23,11 @@
 import type { AIProvider, ChatRequest } from "@/providers/types";
 import { useUIStore } from "@/stores/uiStore";
 import { diagInfo, diagError } from "@/lib/diag";
+import {
+  beginGeneration,
+  confirmGeneration,
+  failGeneration,
+} from "./runProvenance";
 
 export interface ChatStreamResult {
   /** 累积的答案文本(不含 reasoning)。空串表示模型没吐任何答案。 */
@@ -169,6 +174,9 @@ export function streamChatToCard(
   let lastReasoningLen = 0;
   let lastTextLen = 0;
 
+  // chat 不走 TaskManager/taskBridge,溯源就近挂这里:提交前盖 pending 戳,成功确认、失败清。
+  // streamChatToCard 是 ChatEditor 手点 / cardRunner 组运行共用的唯一对话咽喉,两路统一覆盖。
+  beginGeneration(cardId);
   return streamChatToResult(provider, req, {
     signal: opts?.signal,
     onReasoning: (delta) => {
@@ -188,5 +196,14 @@ export function streamChatToCard(
         streamText: full,
       });
     },
-  });
+  }).then(
+    (result) => {
+      confirmGeneration(cardId); // 答案收齐(调用方随后写 data.result)→ 确认溯源戳
+      return result;
+    },
+    (err: unknown) => {
+      failGeneration(cardId); // 流式失败 / 被 abort → 清戳,断点续跑重跑
+      throw err;
+    },
+  );
 }

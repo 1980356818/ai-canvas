@@ -16,15 +16,17 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 vi.mock("@/services/cardRunner", () => ({
   runCard: vi.fn(async () => ({ outcome: "ok" as const })),
 }));
-vi.mock("@/services/groupRunner", () => ({
+vi.mock("@/services/groupRun", () => ({
   runGroup: vi.fn(async () => ({
     groupId: "g",
     ok: 1,
     skipped: 0,
     failed: 0,
+    notDispatched: 0,
     ran: true,
+    endState: "completed" as const,
   })),
-  cancelGroup: vi.fn(() => true),
+  stopGroup: vi.fn(() => true),
 }));
 vi.mock("@/lib/autoSave", () => ({
   autoSave: { markDirty: vi.fn(), forceSave: vi.fn() },

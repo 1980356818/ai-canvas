@@ -7,7 +7,7 @@
 import type { VerbDefinition } from "../types";
 import { fail } from "../types";
 import { runCard } from "@/services/cardRunner";
-import { runGroup } from "@/services/groupRunner";
+import { runGroup } from "@/services/groupRun";
 import { useCardStore } from "@/stores/cardStore";
 import { useGroupStore } from "@/stores/groupStore";
 import {
@@ -83,8 +83,9 @@ const runGroupVerb: VerbDefinition = {
     const job = createJob("group", groupId);
     void (async () => {
       try {
-        const result = await runGroup(groupId);
-        if (result.canceled) {
+        // agent 默认显式 rerun 以保确定性(不依赖全局默认 mode)。
+        const result = await runGroup(groupId, { mode: "rerun" });
+        if (result.endState === "stopped") {
           settleCancelled(job);
         } else if (result.failed > 0) {
           settleFailed(job, `${result.failed} 个节点失败`);
