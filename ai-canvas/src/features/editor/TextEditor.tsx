@@ -98,7 +98,7 @@ export default function TextEditor({ card }: TextEditorProps) {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto rounded-lg border border-input bg-muted/20 px-3 py-2">
+        <div className="min-h-[120px] flex-1 overflow-y-auto rounded-lg border border-input bg-muted/20 px-3 py-2">
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/80">
             {data.content ?? ""}
           </p>
@@ -113,7 +113,7 @@ export default function TextEditor({ card }: TextEditorProps) {
         {card.type === "sticky_note" ? "便签内容" : "文本内容"}
       </label>
       <textarea
-        className="flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
+        className="min-h-[140px] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm leading-relaxed text-foreground outline-none ring-ring placeholder:text-muted-foreground focus:ring-1"
         value={data.content ?? ""}
         onChange={onChange}
         placeholder="在这里输入内容..."

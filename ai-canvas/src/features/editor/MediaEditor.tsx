@@ -661,7 +661,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
                 <ArrowDownLeft className="h-3 w-3" />
                 上游文字 · 自动拼接到提示词前
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex max-h-[88px] flex-wrap gap-1.5 overflow-y-auto">
                 {upstreamEntries.map(([cardId, text]) => (
                   <span
                     key={cardId}
