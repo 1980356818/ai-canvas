@@ -57,6 +57,8 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "uuid",
+ "webview2-com",
+ "windows",
  "winreg 0.52.0",
  "zip 2.4.2",
 ]

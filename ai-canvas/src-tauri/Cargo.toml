@@ -80,6 +80,11 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+# 关闭 WebView2 自带的「密码自动保存 + 通用表单自动填充」(见 lib.rs::disable_webview2_autofill)。
+# 应用自己管理登录凭据,内置 Edge 的填表器是第二个抢登录框的人 → 半填 bug。
+# 版本对齐 wry/tauri 已引入的 0.38 / 0.61,避免 COM 接口类型重复导致 cast 不兼容。
+webview2-com = "0.38"
+windows = "0.61"
 
 [profile.release]
 # 关键诊断保留：

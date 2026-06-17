@@ -182,6 +182,15 @@ export async function apiResetPassword(
   });
 }
 
+// ── 登录凭据记忆（应用自管，单一真相） ───────────────────────────────────────
+// 本应用是登录框唯一的"填表人"。账号 + 密码作为**一个对象**整存整取，所以只会
+// "要么都填、要么都不填"，不可能半填。写入只发生在 authStore.login 成功后（唯一
+// 出口），清除发生在 logout，二者成对。
+//
+// 桌面端(Tauri/Windows)还在 Rust 侧关掉了 WebView2 自带的密码自动保存 + 通用表单
+// 自动填充(见 src-tauri/src/lib.rs::disable_webview2_autofill)，避免内置 Edge 的
+// 密码管理器作为第二个"填表人"和这里抢登录框 —— 那正是"用户名空着、密码还在"
+// 半填 bug 的根因。
 const SAVED_CRED_KEY = "saved_credentials";
 const AUTO_LOGIN_KEY = "auto_login";
 
