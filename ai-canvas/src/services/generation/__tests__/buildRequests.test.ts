@@ -18,6 +18,13 @@ import { buildImageRequest, type BuildImageRequestResult } from "@/services/gene
 import { buildTryonRequest } from "@/services/generation/buildTryonRequest";
 import { buildChatRequest } from "@/services/generation/buildChatRequest";
 import { cloakPrompt, uncloakPrompt } from "@/lib/promptCloak";
+import { registry } from "@/providers/registry";
+import { JiJingProvider } from "@/providers/jijing";
+
+// 图片分档 SKU 解析 (gpt-image-2 → gpt-image-2-{q}-{res}) 走 provider 注册表;
+// app 在 @/providers/index.ts 里 bootstrap 注册,node 测试不跑那条 side-effect,
+// 故在此显式注册极境 provider,否则 resolveImageModelId 拿不到 provider 会原样返回 baseId。
+registry.register(new JiJingProvider());
 
 function makeCard(type: CardType, data: Record<string, unknown>): CanvasCard {
   return {
@@ -315,6 +322,43 @@ describe("buildImageRequest", () => {
     expect(r.request.quality).toBe("high");
     expect(r.request.resolution).toBe("4K");
     // size 为比例;像素换算 (toGptImage2Size → 2880x2880) 在 provider.generateImage 完成。
+    expect(r.request.size).toBe("1:1");
+  });
+
+  it("gpt-image-2 分档版 + 1K → 拆出 gpt-image-2-medium-1k SKU", async () => {
+    const r = assertOk(
+      await buildImageRequest(
+        makeCard("ai_image", {
+          model: "gpt-image-2",
+          provider: "jijing",
+          content: "a cat",
+          size: "1:1",
+          resolution: "1K",
+          quality: "medium",
+        }),
+      ),
+    );
+    // 分辨率编进 id:1K → -1k 分档 SKU(后端三档路由已就绪)。
+    expect(r.request.model).toBe("gpt-image-2-medium-1k");
+    expect(r.request.resolution).toBe("1K");
+  });
+
+  it("gpt-image-2-official + 1K → id 原样透传,resolution 随选下发", async () => {
+    const r = assertOk(
+      await buildImageRequest(
+        makeCard("ai_image", {
+          model: "gpt-image-2-official",
+          provider: "jijing",
+          content: "a cat",
+          size: "1:1",
+          resolution: "1K",
+          quality: "high",
+        }),
+      ),
+    );
+    // 官方聚合版 id 不拆;1K 只影响 provider.generateImage 里的 size 像素 (1024x1024)。
+    expect(r.request.model).toBe("gpt-image-2-official");
+    expect(r.request.resolution).toBe("1K");
     expect(r.request.size).toBe("1:1");
   });
 

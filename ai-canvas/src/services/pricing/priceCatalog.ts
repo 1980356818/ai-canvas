@@ -20,7 +20,7 @@ import {
 import {
   supportsImageQuality,
   IMAGE_QUALITY_OPTIONS,
-  SUPPORTED_RESOLUTIONS,
+  getImageResolutionOptions,
   type ImageResolution,
 } from "@/shared/constants";
 import {
@@ -73,7 +73,9 @@ function imageVariants(modelId: string): Variant[] {
     resolveJiJingImageModelId(modelId, "2K", "low") !==
       resolveJiJingImageModelId(modelId, "2K", "high");
 
-  const resolutions: (ImageResolution | null)[] = resMatters ? [...SUPPORTED_RESOLUTIONS] : [null];
+  // 档位按模型给 (gpt-image-2 含 1K;nano-banana 只 2K/4K) —— 避免给 nano-banana 枚举出
+  // 上游不存在的 -1k SKU(会塌回 -2k 冒重复/幻影行)。official 因 resMatters=false 自动收敛单行。
+  const resolutions: (ImageResolution | null)[] = resMatters ? getImageResolutionOptions(modelId) : [null];
   const qualities: ({ value: string; label: string } | null)[] = qMatters
     ? [...IMAGE_QUALITY_OPTIONS]
     : [null];

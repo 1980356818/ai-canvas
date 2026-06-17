@@ -254,11 +254,26 @@ function parseFirstUrl(raw: string | undefined): string | undefined {
   return trimmed;
 }
 
+/** 从数组里取第一个非空 URL。极境成功响应有时只填 resultUrls(复数),resultUrl 留空。 */
+function firstUrlFromArray(v: unknown): string | undefined {
+  if (Array.isArray(v)) {
+    for (const item of v) {
+      if (typeof item === "string" && item.trim()) return item.trim();
+    }
+  }
+  return undefined;
+}
+
 export function normalizeTaskInfo(raw: Record<string, unknown>): TaskInfo {
   if (import.meta.env.DEV) {
     console.log("[TaskPoll] raw fields:", Object.keys(raw));
   }
-  const rawUrl = (raw.resultUrl ?? raw.result_url ?? raw.video_url ?? extractNestedUrl(raw)) as string | undefined;
+  const rawUrl = (raw.resultUrl
+    ?? raw.result_url
+    ?? raw.video_url
+    ?? firstUrlFromArray(raw.resultUrls)
+    ?? firstUrlFromArray(raw.result_urls)
+    ?? extractNestedUrl(raw)) as string | undefined;
   const info: TaskInfo = {
     id: String(raw.id ?? raw.task_id ?? ""),
     status: String(raw.status ?? ""),

@@ -5,6 +5,7 @@ import { makeSmoothProgressTracker } from "./progress";
 import type { GenerationProgress } from "../types";
 import { getComflyKeyTag } from "../comfly/models";
 import { taskManager } from "@/services/taskManager";
+import { NO_RESULT_URL_MESSAGE } from "@/services/taskOutcome";
 import type { AsyncTask } from "@/types";
 
 /**
@@ -160,7 +161,7 @@ function extractMediaResult(
     const r = finalTask.result;
     const url = typeof r.url === "string" ? r.url : "";
     if (!url) {
-      throw new Error(req.failedFallbackMessage ?? "任务完成但未返回结果地址");
+      throw new Error(req.failedFallbackMessage ?? NO_RESULT_URL_MESSAGE);
     }
     return {
       url,
@@ -233,7 +234,7 @@ async function executeLegacyDirectly(
   if (status === "failed" || status === "error" || status === "cancelled" || status === "expired") {
     throw new Error(result.errorMessage || failedFallback);
   }
-  if (!result.resultUrl) throw new Error("任务完成但未返回结果地址");
+  if (!result.resultUrl) throw new Error(NO_RESULT_URL_MESSAGE);
 
   emit?.({ percent: 92, phase: "saving", label: savingLabel });
   return await saveAndReturn(result.resultUrl, req.projectId, req.title, emit);

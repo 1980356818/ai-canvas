@@ -30,6 +30,7 @@ import {
   getAllowedSizesForModel,
   coerceToAllowedSize,
   normalizeResolution,
+  getImageResolutionOptions,
   DEFAULT_IMAGE_QUALITY,
   supportsImageQuality,
 } from "@/shared/constants";
@@ -174,6 +175,11 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   );
 
   const allowedSizes = useMemo(() => getAllowedSizesForModel(currentModel), [currentModel]);
+  // 分辨率档位按模型给 (1K 仅 gpt-image-2 系;nano-banana 系只有 2K/4K)。
+  const resolutionOptions = useMemo(
+    () => getImageResolutionOptions(currentModel).map((r) => ({ value: r, label: r })),
+    [currentModel],
+  );
 
   const handleModelChange = useCallback(
     (modelId: string, providerId: string) => {
@@ -723,6 +729,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             resolution={supportsResolution ? currentResolution : undefined}
             onChange={handleSizeChange}
             onResolutionChange={supportsResolution ? handleResolutionChange : undefined}
+            resolutionOptions={supportsResolution ? resolutionOptions : undefined}
             quality={qualitySupported ? currentQuality : undefined}
             onQualityChange={qualitySupported ? handleQualityChange : undefined}
             disabled={generating}

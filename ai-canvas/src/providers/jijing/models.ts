@@ -12,6 +12,10 @@ export {
 
 export const JIJING_CHAT_MODELS: ModelInfo[] = [
   { id: "gemini-3.1-pro-preview", display_name: "Gemini 3.1 Pro", capability: "CHAT" },
+  // gemini-3.5-flash: 极境后端原生 id 直透 (CHAT, vision, 1M 上下文, min_vip 0)。
+  //   按 token 计费 (input 4.04 / output 18.18 per 1M), 价格走 /v1/models 动态映射, 无需硬编码。
+  //   modelSupportsVision 默认放行 → 自动获得 12 个对话参考图槽位。
+  { id: "gemini-3.5-flash", display_name: "Gemini 3.5 Flash", capability: "CHAT" },
   // gpt-5.5-medium: 后端 ModelRouter 识别 "-medium" 后缀, 自动注入 reasoning_effort=medium,
   // 触发 Sub2API channel 1075 的 GPT-5.5 thinking 模式。显示名按用户要求仅保留 "GPT 5.5"。
   { id: "gpt-5.5-medium", display_name: "GPT 5.5", capability: "CHAT" },
@@ -88,7 +92,8 @@ export function resolveJiJingImageModelId(baseId: string, resolution: string, qu
     return resolution === "4K" ? "nano-banana-pro-4k" : "nano-banana-pro-2k";
   }
   if (baseId === "gpt-image-2") {
-    const res = resolution === "4K" ? "4k" : "2k";
+    // 分档 SKU 把分辨率编进 id (后端三档 -1k/-2k/-4k 各自路由+计价均已就绪)。
+    const res = resolution === "4K" ? "4k" : resolution === "1K" ? "1k" : "2k";
     const q = quality?.toLowerCase();
     if (q && ["low", "medium", "high"].includes(q)) {
       return `gpt-image-2-${q}-${res}`;

@@ -27,7 +27,7 @@ export const generateImageTool: ToolDefinition = {
         type: "string",
         enum: [...SUPPORTED_RESOLUTIONS],
         description:
-          "图像画质档位。用户明确说出 4K / 4k / 超清 / ultra HD 时填 \"4K\"；其它情况省略此字段，系统会默认 2K。",
+          "图像画质档位。用户说 4K / 超清 / ultra HD 填 \"4K\"；说 1K / 省钱 / 低清 / 小图 填 \"1K\"（仅 gpt-image-2 支持，其它模型会回落 2K）；其它情况省略此字段，系统会默认 2K。",
       },
       cardTitle: {
         type: "string",

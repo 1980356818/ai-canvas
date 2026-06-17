@@ -198,6 +198,10 @@ export default function FloatingEditor() {
     320,
     Math.round((typeof window !== "undefined" ? window.innerHeight : 900) * MAX_EDITOR_HEIGHT_RATIO),
   );
+  // 自适应高度时给提示词框封顶(PromptTextarea 读 --prompt-max-h 内部滚动),
+  // 留出"生成"按钮 + 模型行 + 内边距(~140px)的空间,提示词再长也不会把按钮挤出可视区。
+  // 上限 240px 让输入框保持紧凑;手动拉伸(userSize)时不设此变量 → 提示词框照常填满。
+  const promptMaxH = Math.max(110, Math.min(240, maxAutoHeight - 140));
 
   const width = userSize ? userSize.w : Math.max(minWidth, card.width);
   // 自适应高度:测得自然高度则用之(夹在 [MIN, maxAuto] 内),尚未测量时退回基础估算值。
@@ -207,6 +211,12 @@ export default function FloatingEditor() {
       : baseInitialHeight;
   const height = userSize ? userSize.h : autoHeight;
 
+  // 仅自适应高度时下发提示词封顶变量;手动拉伸时不设,后代 PromptTextarea 回退 none(不封顶)。
+  const panelStyle: React.CSSProperties = { width, height };
+  if (!userSize) {
+    (panelStyle as Record<string, string | number>)["--prompt-max-h"] = `${promptMaxH}px`;
+  }
+
   return (
     <div
       ref={panelRef}
@@ -214,10 +224,7 @@ export default function FloatingEditor() {
       data-floating-editor
       data-editor-zoom="1"
       // left / top / transform 由上方 useLayoutEffect 通过 ref imperative 设置
-      style={{
-        width,
-        height,
-      }}
+      style={panelStyle}
       onWheel={(e) => e.stopPropagation()}
       onPointerDown={(e) => {
         e.stopPropagation();
