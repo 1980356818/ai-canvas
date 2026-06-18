@@ -41,7 +41,7 @@ import {
 } from "@/lib/mediaLocalize";
 import type { CanvasCard } from "@/types";
 
-const TEMPLATE_URL = "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/x.jpg";
+const TEMPLATE_URL = "https://www.jjowo.com/aicanvas-static/templates/imported/x.jpg";
 
 let seq = 0;
 function makeCard(

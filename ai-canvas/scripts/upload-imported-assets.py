@@ -1,6 +1,6 @@
 """
 把 import-aicat-templates.py 暂存的模板媒体(图/视频,内容哈希命名)上传到**极境 NAS**,
-nginx 静态 serve(`ai.snoworangekeji.cn/aicanvas-static/templates/imported/`,**非 COS**)。
+nginx 静态 serve(`www.jjowo.com/aicanvas-static/templates/imported/`,**非 COS**)。
 
 源:templates-imported-manifest.json 里的 localAbs(暂存绝对路径,默认 D:\\tmp\\aicat\\assets)
 标:192.168.31.244:/mnt/nas/ec_system/aicanvas-static/templates/<remoteRel>(imported/<sha16>.<ext>)
@@ -28,7 +28,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 MANIFEST = os.path.join(_HERE, "templates-imported-manifest.json")
 REMOTE_DIR = "/mnt/nas/ec_system/aicanvas-static/templates"
 REMOTE_OWNER = "www:www"
-PUBLIC_HOST = "ai.snoworangekeji.cn"
+PUBLIC_HOST = "www.jjowo.com"
 
 
 def run(ssh, cmd, check=True):

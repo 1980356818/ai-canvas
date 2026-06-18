@@ -97,9 +97,9 @@ const FFMPEG_BUNDLE: FfmpegBundle = FfmpegBundle {
 
 /// ffmpeg 下载源。跟前端 `server_base_url`(auth/updater)解耦 ——
 /// 文件物理位置:`192.168.31.244:/mnt/nas/ec_system/aicanvas-static/`,
-/// nginx 反代:`ai.snoworangekeji.cn/aicanvas-static/`,配置在
-/// `/www/server/panel/vhost/nginx/ai.snoworangekeji.cn.conf`。
-const FFMPEG_DOWNLOAD_BASE_URL: &str = "https://ai.snoworangekeji.cn/aicanvas-static";
+/// nginx 反代:`www.jjowo.com/aicanvas-static/`,配置在
+/// `/www/server/panel/vhost/nginx/www.jjowo.com.conf`。
+const FFMPEG_DOWNLOAD_BASE_URL: &str = "https://www.jjowo.com/aicanvas-static";
 
 /// 验证一个候选路径是不是真能跑通 `ffmpeg -version`。
 /// 单纯 `is_file()` 不够 —— Defender 隔离 / 拷贝中断 / 反病毒标记 +

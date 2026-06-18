@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname, basename, extname } from "node:path";
 
 const SRC_PREFIX = "/src/assets/templates/";
-const BASE = "https://ai.snoworangekeji.cn/aicanvas-static/templates/";
+const BASE = "https://www.jjowo.com/aicanvas-static/templates/";
 const ROOT = process.cwd();
 const LOCAL_TPL_DIR = resolve(ROOT, "src/assets/templates");
 

@@ -333,13 +333,13 @@ mod tests {
     /// `invalid type: string, expected u64` bug)。
     #[test]
     fn parses_cached_presign_response_with_string_size() {
-        let body = r#"{"code":200,"message":"操作成功","data":{"cached":true,"existingId":"file-2058","existingUrl":"https://cdn.snoworangekeji.cn/media/input/1/x.png","existingSha256":"abc123","existingContentType":"image/png","existingSize":"204800","existingPurpose":"media-input"},"success":true}"#;
+        let body = r#"{"code":200,"message":"操作成功","data":{"cached":true,"existingId":"file-2058","existingUrl":"https://cdn.jjowo.com/media/input/1/x.png","existingSha256":"abc123","existingContentType":"image/png","existingSize":"204800","existingPurpose":"media-input"},"success":true}"#;
         let env: ServerEnvelope<ServerPresignResponse> = serde_json::from_str(body).unwrap();
         let data = env.data.unwrap();
         assert!(data.cached);
         assert_eq!(data.existing_size, Some(204_800));
         assert_eq!(data.existing_content_type.as_deref(), Some("image/png"));
-        assert_eq!(data.existing_url.as_deref(), Some("https://cdn.snoworangekeji.cn/media/input/1/x.png"));
+        assert_eq!(data.existing_url.as_deref(), Some("https://cdn.jjowo.com/media/input/1/x.png"));
     }
 
     /// 服务端 `type=local` 时的 fallback 文案必须被识别。

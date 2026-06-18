@@ -33,7 +33,7 @@ describe("tauriAssetUrlToLocalPath", () => {
 
   it("真·远端 URL(host ≠ asset.localhost)返回 null —— 仍走原直传快路径", () => {
     expect(
-      tauriAssetUrlToLocalPath("https://ai.snoworangekeji.cn/uploads/media/a.png"),
+      tauriAssetUrlToLocalPath("https://www.jjowo.com/uploads/media/a.png"),
     ).toBeNull();
     expect(tauriAssetUrlToLocalPath("http://example.com/asset.localhost/x")).toBeNull();
   });

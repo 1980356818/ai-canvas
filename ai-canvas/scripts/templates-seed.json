@@ -8592,5 +8592,97 @@
       }
     ],
     "min_app_version": "1.3.8"
+  },
+  {
+    "id": "wf-face-outfit-swap",
+    "name": "换脸换衣服",
+    "description": "上传原图、套装、人脸与服装细节，一键换脸换装，生成真实感融合大片",
+    "icon": "ImageIcon",
+    "category": "flat",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/0ca0e7b255ba855d.jpg",
+    "cards": [
+      {
+        "type": "ai_image",
+        "title": "图4 服装细节",
+        "relativeX": 0,
+        "relativeY": 742,
+        "width": 340.0,
+        "height": 294.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/4a94cbb559bc4082.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "图3 人脸",
+        "relativeX": 25,
+        "relativeY": 1048,
+        "width": 340.0,
+        "height": 306.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/dd169baaddde5d08.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "图2 套装",
+        "relativeX": 7,
+        "relativeY": 374,
+        "width": 297.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/95ee7df0e21b5ed0.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "图1 原图",
+        "relativeX": 11,
+        "relativeY": 0,
+        "width": 249.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/373efb547b78dd50.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图",
+        "relativeX": 491,
+        "relativeY": 539,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "content": "以图1 作为基础原图，保持其他因素不变的情况下，进行两项精准替换：1.将图2 的套装（保持图2套装版型、长度、颜色不变）替换至图1；2. 将图3模特的面部五官、脸部轮廓、骨相、皮肤颜色、发色及发型100%移植到图1 。图4 为图2的细节补充，参考图4，精准还原图4 所示的服装局部特征。最终生成一张真实感极强的融合图像。不改变图1的人物动作。",
+          "size": "3:4",
+          "model": "nano-banana-pro",
+          "provider": "jijing",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/79dec96a0e40f944.jpg"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceIndex": 3,
+        "targetIndex": 4
+      },
+      {
+        "sourceIndex": 2,
+        "targetIndex": 4
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 4
+      },
+      {
+        "sourceIndex": 0,
+        "targetIndex": 4
+      }
+    ]
   }
 ]

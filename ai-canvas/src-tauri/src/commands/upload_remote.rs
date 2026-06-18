@@ -1036,7 +1036,7 @@ mod tests {
     /// - 服务端额外的 `id` / `purpose` / `success` 顶级字段不破坏解析
     #[test]
     fn parses_real_production_upload_response() {
-        let body = r#"{"code":200,"message":"操作成功","data":{"id":"file-2058649766147788801","url":"https://ai.snoworangekeji.cn/uploads/media/input/1/20260525/c8c1fd40eb4843938736d24a803f54e8.mp4","sha256":"59c8411ae005d4f13877dce5365950f11b30e9a68085983ca86e8c8a029ad159","contentType":"video/mp4","size":"2050933","purpose":"media-input","cached":false},"success":true}"#;
+        let body = r#"{"code":200,"message":"操作成功","data":{"id":"file-2058649766147788801","url":"https://www.jjowo.com/uploads/media/input/1/20260525/c8c1fd40eb4843938736d24a803f54e8.mp4","sha256":"59c8411ae005d4f13877dce5365950f11b30e9a68085983ca86e8c8a029ad159","contentType":"video/mp4","size":"2050933","purpose":"media-input","cached":false},"success":true}"#;
         let env: ServerEnvelope<ServerFileUploadResponse> = serde_json::from_str(body).unwrap();
         assert_eq!(env.code, 200);
         let data = env.data.expect("data 存在");

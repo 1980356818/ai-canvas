@@ -25,7 +25,7 @@ import { getDisplayUrl, registerTemplateAssetCache, initMediaService } from "@/l
 import { mediaToApiRef } from "@/platform/media";
 
 const PUBLIC_URL =
-  "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/1e537dc5a0bd88cb.jpg";
+  "https://www.jjowo.com/aicanvas-static/templates/imported/1e537dc5a0bd88cb.jpg";
 const REL = "template-assets/1e537dc5a0bd88cb.jpg";
 
 describe("模板资源 URL 规范化(数据层公网 / 显示层本地缓存)", () => {

@@ -163,8 +163,8 @@ const ALL_PLATFORMS: { id: string; name: string; apiBaseUrl: string; homepageUrl
   {
     id: "jijing",
     name: "极境",
-    apiBaseUrl: "https://api.snoworangekeji.cn",
-    homepageUrl: "https://api.snoworangekeji.cn",
+    apiBaseUrl: "https://api.jjowo.com",
+    homepageUrl: "https://api.jjowo.com",
   },
 ];
 

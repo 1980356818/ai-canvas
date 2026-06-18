@@ -7,7 +7,7 @@
   scripts/templates-imported-manifest.json 给 upload-imported-assets.py(localAbs → remoteRel)
 
 媒体抽到仓库外的暂存目录 `D:\\tmp\\aicat\\assets\\<sha16>.<ext>`(图不进仓库/不进包),
-公网 = https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/<sha16>.<ext>(极境 NAS, 非 COS)。
+公网 = https://www.jjowo.com/aicanvas-static/templates/imported/<sha16>.<ext>(极境 NAS, 非 COS)。
 
 分类(category slug):flat 平面 / video 视频 / detail 详情页 / trial 试用版。
 试用版(trial):对带提示词的卡设 `_locked:true` 隐藏提示词(只 UI 隐藏,见会员门禁说明)。
@@ -52,7 +52,7 @@ BASE = r"C:\Users\Administrator\Desktop\模板修改\6.6号模板"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC_TPL = os.path.join(REPO, "src", "assets", "templates")  # /assets 内建图解析源
 STAGE = r"D:\tmp\aicat\assets"
-NAS_BASE = "https://ai.snoworangekeji.cn/aicanvas-static/templates/"
+NAS_BASE = "https://www.jjowo.com/aicanvas-static/templates/"
 REMOTE_SUBDIR = "imported"
 
 IMG_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif"}

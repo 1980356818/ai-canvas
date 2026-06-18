@@ -1,10 +1,10 @@
 """
 按 seed-templates.mts 产的 manifest,把模板图(内容哈希命名)上传到**极境 NAS**,
-nginx 静态 serve(`ai.snoworangekeji.cn/aicanvas-static/`,跟 ffmpeg 同套),**不走腾讯 COS**。
+nginx 静态 serve(`www.jjowo.com/aicanvas-static/`,跟 ffmpeg 同套),**不走腾讯 COS**。
 
 源:src/assets/templates/<localRel>
-标:192.168.31.244:/mnt/nas/ec_system/aicanvas-static/templates/<remoteRel>(带 sha16)
-公网:https://ai.snoworangekeji.cn/aicanvas-static/templates/<remoteRel>
+标:111.170.157.39:/www/aicanvas-static/templates/<remoteRel>(带 sha16)
+公网:https://www.jjowo.com/aicanvas-static/templates/<remoteRel>
 
 幂等:哈希命名 → 远端同名即同内容 → 存在就跳过。
 prune:删 templates/ 下不在 manifest 里的旧文件(旧哈希/已删模板),保持整洁。
@@ -19,16 +19,16 @@ import posixpath
 
 import paramiko
 
-SERVER = os.environ.get("AICAT_SSH_HOST", "192.168.31.244")
+SERVER = os.environ.get("AICAT_SSH_HOST", "111.170.157.39")
 USER = os.environ.get("AICAT_SSH_USER", "root")
 PWD = os.environ.get("AICAT_SSH_PASSWORD")
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 MANIFEST = os.path.join(_HERE, "templates-assets-manifest.json")
 LOCAL_DIR = os.path.join(_HERE, "..", "src", "assets", "templates")
-REMOTE_DIR = "/mnt/nas/ec_system/aicanvas-static/templates"
-REMOTE_OWNER = "www:www"
-PUBLIC_HOST = "ai.snoworangekeji.cn"
+REMOTE_DIR = "/www/aicanvas-static/templates"
+REMOTE_OWNER = "www-data:www-data"
+PUBLIC_HOST = "www.jjowo.com"
 
 
 def run(ssh, cmd, check=True):
