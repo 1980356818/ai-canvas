@@ -1,0 +1,7 @@
+{
+  "identifier": "com.ai-canvas.devloop",
+  "build": {
+    "beforeDevCommand": "npm run check:ipc-guards && npm run version:sync && npm run dev -- --port 1640 --strictPort",
+    "devUrl": "http://127.0.0.1:1640"
+  }
+}

@@ -14,7 +14,7 @@
 
 use std::collections::HashSet;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use futures_util::StreamExt;
 use serde::Serialize;
@@ -26,6 +26,17 @@ use crate::AppState;
 const SUBDIR: &str = "template-assets";
 /// 单文件下载并发上限。
 const CONCURRENCY: usize = 6;
+
+/// 串行化整次同步。`load()` 可能被并发调用(React StrictMode 双挂载 / dev HMR / 重入),
+/// 而本函数末尾的 prune 会删掉目录里**所有** `.partial`。两次调用一旦重叠,后者的 prune
+/// 会把前者**正在下载**的 `.partial` 删掉 → 前者 `rename(.partial → 正式名)` 报
+/// `os error 2`(找不到文件)→ 本地零落地、封面裂图(线上实测 59/59 全栽在这)。
+/// 全局串行:后到的调用等前一次跑完,届时文件已在 → 秒级跳过,无竞争。
+static SYNC_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+
+fn sync_lock() -> &'static tokio::sync::Mutex<()> {
+    SYNC_LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+}
 
 #[derive(Serialize)]
 pub struct AssetMapping {
@@ -110,6 +121,9 @@ pub async fn sync_template_assets(
     state: State<'_, AppState>,
     urls: Vec<String>,
 ) -> Result<Vec<AssetMapping>, String> {
+    // 串行化:避免并发调用的 prune 删掉彼此在途的 .partial(见 sync_lock 注释)。
+    let _guard = sync_lock().lock().await;
+
     let dir = Arc::new(state.data_dir.join(SUBDIR));
     tokio::fs::create_dir_all(dir.as_path())
         .await
