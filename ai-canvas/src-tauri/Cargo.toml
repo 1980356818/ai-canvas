@@ -18,12 +18,21 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
-# 跨平台 TLS 一致性：rustls-tls-native-roots
+# 跨平台 TLS 一致性 + 信任根自带（rustls-tls-webpki-roots）
 #   - native-tls 在 macOS 上 = SecureTransport (Apple 自 10.15 已 deprecated)，
 #     在 Windows 上 = SChannel；两端行为分裂，是 Mac 闪退/Win 不复现的主因。
-#   - rustls 是纯 Rust，三端行为完全一致；native-roots 复用系统 CA 信任链。
+#   - rustls 是纯 Rust，三端行为完全一致。
+#   - 信任根**必须用 webpki-roots（编译期内置 Mozilla 根集），不能用 native-roots**：
+#     native-roots 只信任目标机器 Windows 证书库，而 Windows 的根证书是「按需下载」
+#     (Automatic Root Update)——大量国内机器（全新装机 / LTSC / 装机优化软件关了
+#     根更新 / 长期不连 Windows Update）根本没有 Let's Encrypt 的 ISRG Root X1，
+#     于是我们服务器（api.jjowo.com 等都是 LE 证书）会被 rustls 判为
+#     `invalid peer certificate: UnknownIssuer`——开发机证书库全、复现不了，用户机却必挂。
+#     webpki-roots 把根集打进二进制，所有机器一致，不依赖 OS 证书库是否被刷新。
+#   - 本应用只连公共 CA 证书的服务端（极境 / 各 provider / COS / CDN），不需要企业自签 CA，
+#     因此放弃 native-roots（唯一作用是信任用户侧 MITM 代理的私有 CA）无副作用。
 # 详见 docs/性能与IPC规范.md §11.1。
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots", "stream", "http2", "multipart"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots", "stream", "http2", "multipart"] }
 base64 = "0.22"
 # zip: 项目「导出/导入」(.aicat) 的打包格式。default-features=false 只保留核心
 # 读写 + Stored(不压缩)—— 媒体(图/视频)本就是压缩格式,再 Deflate 纯浪费 CPU;
