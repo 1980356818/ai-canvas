@@ -29,6 +29,12 @@ import {
   MAX_EMPTY_SUCCESS_POLLS,
   NO_RESULT_URL_MESSAGE,
 } from "@/services/taskOutcome";
+import {
+  splitModelFallbacks,
+  isRouteUnconfiguredResponse,
+  applyModelFallback,
+} from "./modelFallback";
+import type { AiProxyResponse, AsyncTask } from "@/types";
 
 export interface MediaHandlerOptions {
   /**
@@ -75,14 +81,36 @@ async function submitMedia(
   opts: MediaHandlerOptions,
 ): Promise<SubmitOutcome> {
   const task = ctx.task;
+  const { body, fallbacks } = splitModelFallbacks(request);
 
-  let raw;
+  let raw = await submitOnce(task, body);
+  // 「模型未配置路由」(SKU 被极境关停)→ 依次换降级候选重发,任务**不进 failed**,
+  // 也不弹提示(静默降级)。其它错误(限流/余额/内容拦截…)不命中,照常 throw。
+  for (const fb of fallbacks) {
+    if (!isRouteUnconfiguredResponse(raw)) break;
+    raw = await submitOnce(task, applyModelFallback(body, fb));
+  }
+
+  return parseSubmitOutcome(raw, opts);
+}
+
+/** 发一次提交请求;裸 native 错误翻成 TaskError(transient/permanent 判定交给上层)。 */
+async function submitOnce(
+  task: AsyncTask,
+  body: Record<string, unknown>,
+): Promise<AiProxyResponse> {
   try {
-    raw = await aiProxy(task.provider, task.submitEndpoint, request);
+    return await aiProxy(task.provider, task.submitEndpoint, body);
   } catch (err) {
     throw classifyNative(err);
   }
+}
 
+/** 把提交响应解析成 SubmitOutcome(5xx/4xx 抛错 → 同步快路径 → 提取 task_id)。 */
+function parseSubmitOutcome(
+  raw: AiProxyResponse,
+  opts: MediaHandlerOptions,
+): SubmitOutcome {
   if (raw.status >= 500) {
     throw new TaskError("server_5xx", `HTTP ${raw.status}: ${truncate(raw.body, 200)}`, {
       status: raw.status,

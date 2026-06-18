@@ -21,6 +21,7 @@ import {
 import { aiProxy, aiProxyStream, isTauri, listModels as platformListModels } from "@/platform";
 import { uploadMediaBatch } from "@/platform/media";
 import { executeAsyncMediaTask } from "../shared/asyncMediaTask";
+import { MODEL_FALLBACKS_FIELD } from "../shared/modelFallback";
 import { PROGRESS_EXPECTED_SEC } from "../shared/progress";
 import { normalizeResolution } from "@/shared/constants";
 import { diagInfo } from "@/lib/diag";
@@ -77,6 +78,14 @@ function toGptImage2Size(size: string, resolution: string): string | undefined {
   const ratio = toAspectRatio(size);
   return GPT_IMAGE_2_SIZE_MAP[resolution]?.[ratio];
 }
+
+// 极境分档 SKU 被关停时,网关提交会报「模型[xxx]未配置路由」。给会被关的档位挂一条
+// 静默降级候选(同画质、低一档分辨率):提交层(mediaHandler / asyncMediaTask)遇到
+// 路由未配置时自动改用,任务不进 failed、不弹提示。
+// 范围刻意最小 —— 只覆盖 medium-2K→1K(用户决策);需要扩展(high / 4K 链)按此格式加条目即可。
+const GPT_IMAGE_2_ROUTE_FALLBACK: Record<string, { model: string; resolution: string }> = {
+  "gpt-image-2-medium-2k": { model: "gpt-image-2-medium-1k", resolution: "1K" },
+};
 
 function makeRequestId(): string {
   return globalThis.crypto?.randomUUID?.().slice(0, 8)
@@ -265,6 +274,16 @@ export abstract class OpenAICompatProvider implements AIProvider {
       } else {
         body.quality = req.quality || "standard";
       }
+    }
+
+    // 极境分档模型被关停(网关「未配置路由」)→ 给可降级的档位挂静默降级候选,
+    // 提交层遇到路由未配置时自动改用(详见 GPT_IMAGE_2_ROUTE_FALLBACK)。
+    const routeFallback = isGptImage2 ? GPT_IMAGE_2_ROUTE_FALLBACK[modelId] : undefined;
+    if (routeFallback && req.prompt) {
+      const fbSize = toGptImage2Size(req.size || "1024x1024", routeFallback.resolution);
+      body[MODEL_FALLBACKS_FIELD] = [
+        { model: routeFallback.model, ...(fbSize ? { size: fbSize } : {}) },
+      ];
     }
 
     if (req.referenceImages?.length) {

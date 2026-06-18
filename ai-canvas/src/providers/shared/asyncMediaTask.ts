@@ -1,6 +1,11 @@
 import { aiProxy, saveMedia } from "@/platform";
 import { waitForTask } from "@/services/tasks";
 import { throwIfError } from "../errors";
+import {
+  splitModelFallbacks,
+  isRouteUnconfiguredResponse,
+  applyModelFallback,
+} from "./modelFallback";
 import { makeSmoothProgressTracker } from "./progress";
 import type { GenerationProgress } from "../types";
 import { getComflyKeyTag } from "../comfly/models";
@@ -194,7 +199,13 @@ async function executeLegacyDirectly(
 
   emit?.({ percent: 0, phase: "submitting", label: submittingLabel });
 
-  const raw = await aiProxy(req.providerId, req.submitEndpoint, req.body);
+  const { body, fallbacks } = splitModelFallbacks(req.body);
+  let raw = await aiProxy(req.providerId, req.submitEndpoint, body);
+  // 「模型未配置路由」(SKU 被关停)→ 静默降级重发,与 TaskManager 路径(mediaHandler)同款。
+  for (const fb of fallbacks) {
+    if (!isRouteUnconfiguredResponse(raw)) break;
+    raw = await aiProxy(req.providerId, req.submitEndpoint, applyModelFallback(body, fb));
+  }
   throwIfError(raw.status, raw.body);
 
   const data = JSON.parse(raw.body) as unknown;
