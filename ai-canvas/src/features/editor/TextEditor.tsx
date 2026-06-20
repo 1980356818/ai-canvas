@@ -24,34 +24,35 @@ interface TextEditorProps {
 }
 
 export default function TextEditor({ card }: TextEditorProps) {
-  const updateCard = useCardStore((s) => s.updateCard);
+  const updateCardData = useCardStore((s) => s.updateCardData);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const data = card.data as TextData;
 
   const onChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const content = e.target.value;
-      updateCard(card.id, { data: { ...data, content } });
+      updateCardData(card.id, { content });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const handleParamChange = useCallback(
     (key: string, value: string) => {
-      const params = { ...data._params, [key]: value };
-      let content = data.content ?? "";
-      if (data._promptTemplate) {
-        content = data._promptTemplate;
+      const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as TextData;
+      const params = { ...latest._params, [key]: value };
+      let content = latest.content ?? "";
+      if (latest._promptTemplate) {
+        content = latest._promptTemplate;
         for (const [k, v] of Object.entries(params)) {
           content = content.replaceAll(`{{${k}}}`, v);
         }
       }
-      updateCard(card.id, { data: { ...data, _params: params, content } });
+      updateCardData(card.id, { _params: params, content });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   if (data._locked) {

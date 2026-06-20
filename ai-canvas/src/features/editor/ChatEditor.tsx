@@ -69,7 +69,6 @@ interface ChatData {
 }
 
 export default function ChatEditor({ card }: { card: CanvasCard }) {
-  const updateCard = useCardStore((s) => s.updateCard);
   const updateCardData = useCardStore((s) => s.updateCardData);
   const setCardProgress = useUIStore((s) => s.setCardProgress);
   const generating = useUIStore(selectCardBusy(card.id));
@@ -87,14 +86,14 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     } else if (data.model) {
       setCurrentModel(data.model);
       const p = modelService.tryResolveProvider(data.model);
-      if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
+      if (p) updateCardData(card.id, { provider: p.descriptor.id });
     } else {
       // 默认模型统一走 modelDefaults 的单一口径(见 services/modelDefaults.ts)。
       let cancelled = false;
       resolveDefaultModelForCardType(card.type).then((ref) => {
         if (cancelled || !ref) return;
         setCurrentModel(ref.modelId);
-        updateCard(card.id, { data: { ...data, model: ref.modelId, provider: ref.providerId } });
+        updateCardData(card.id, { model: ref.modelId, provider: ref.providerId });
       });
       return () => {
         cancelled = true;
@@ -106,12 +105,9 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
     const d = card.data as Record<string, unknown>;
     if (d.upstreamContext && !d.upstreamTexts) {
       const srcId = (d.upstreamCardId as string) || "legacy";
-      updateCard(card.id, {
-        data: {
-          ...card.data,
-          upstreamTexts: { [srcId]: d.upstreamContext as string },
-          upstreamContext: undefined,
-        },
+      updateCardData(card.id, {
+        upstreamTexts: { [srcId]: d.upstreamContext as string },
+        upstreamContext: undefined,
       });
       autoSave.markDirty(card.id);
     }
@@ -132,11 +128,11 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
   const handleModelChange = useCallback(
     (modelId: string, providerId: string) => {
       setCurrentModel(modelId);
-      updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+      updateCardData(card.id, { model: modelId, provider: providerId });
       autoSave.markDirty(card.id);
       useSettingsStore.getState().setLastModel("chat", modelId, providerId);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const addDirectMedia = useCallback(
@@ -152,27 +148,30 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
           const { localPath } = await persistImage(src, undefined, pid);
           url = localPath;
         }
+        const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
         if (kind === "video") {
-          const videos = [...(data.refVideos ?? []), { url }];
-          updateCard(card.id, { data: { ...data, refVideos: videos } });
+          const videos = [...((latest.refVideos as VideoRefEntry[] | undefined) ?? []), { url }];
+          updateCardData(card.id, { refVideos: videos });
         } else {
-          const newMedia = [...directMedia, { url, displayUrl: getDisplayUrl(url), kind }];
-          updateCard(card.id, { data: { ...data, directMedia: newMedia } });
+          const curMedia = (latest.directMedia as MediaAttachment[] | undefined) ?? [];
+          const newMedia = [...curMedia, { url, displayUrl: getDisplayUrl(url), kind }];
+          updateCardData(card.id, { directMedia: newMedia });
         }
         autoSave.markDirty(card.id);
       } catch (err) {
         console.error(`Failed to add ${kind}:`, err);
       }
     },
-    [card.id, card.projectId, data, directMedia, generating, updateCard],
+    [card.id, card.projectId, generating, updateCardData],
   );
 
   const addFilesAsMedia = useCallback(
     async (files: File[]) => {
       if (generating) return;
       const pid = card.projectId;
-      const newMedia = [...directMedia];
-      const newVideos = [...(data.refVideos ?? [])];
+      const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
+      const newMedia = [...((latest.directMedia as MediaAttachment[] | undefined) ?? [])];
+      const newVideos = [...((latest.refVideos as VideoRefEntry[] | undefined) ?? [])];
       let changed = false;
       for (const raw of files) {
         try {
@@ -193,26 +192,25 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         } catch { /* skip */ }
       }
       if (changed) {
-        updateCard(card.id, {
-          data: {
-            ...data,
-            directMedia: newMedia,
-            refVideos: newVideos.length > 0 ? newVideos : undefined,
-          },
+        updateCardData(card.id, {
+          directMedia: newMedia,
+          refVideos: newVideos.length > 0 ? newVideos : undefined,
         });
         autoSave.markDirty(card.id);
       }
     },
-    [card.id, card.projectId, data, directMedia, generating, updateCard],
+    [card.id, card.projectId, generating, updateCardData],
   );
 
   const removeDirectMedia = useCallback(
     (idx: number) => {
-      const newMedia = directMedia.filter((_, i) => i !== idx);
-      updateCard(card.id, { data: { ...data, directMedia: newMedia } });
+      const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
+      const curMedia = (latest.directMedia as MediaAttachment[] | undefined) ?? [];
+      const newMedia = curMedia.filter((_, i) => i !== idx);
+      updateCardData(card.id, { directMedia: newMedia });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, directMedia, updateCard],
+    [card.id, updateCardData],
   );
 
   const disconnectVideo = useCallback(
@@ -263,17 +261,18 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
 
   const onPromptChange = useCallback(
     (newContent: string, newRefs: InlineImageRef[]) => {
-      updateCard(card.id, { data: { ...data, content: newContent, inlineRefs: newRefs } });
+      updateCardData(card.id, { content: newContent, inlineRefs: newRefs });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const setRefImage = useCallback(
     (slotKey: string, entry: RefImageEntry) => {
-      const refImages = { ...data.refImages, [slotKey]: entry };
-      updateCard(card.id, { data: { ...data, refImages } });
+      const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
+      const refImages = { ...(latest.refImages as Record<string, RefImageEntry> | undefined), [slotKey]: entry };
+      updateCardData(card.id, { refImages });
       autoSave.markDirty(card.id);
 
       if (entry.sourceCardId) {
@@ -291,7 +290,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         }
       }
     },
-    [card.id, data, updateCard],
+    [card.id, card.projectId, updateCardData],
   );
 
   const clearRefImage = useCallback(
@@ -327,17 +326,19 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
 
   const handleReorder = useCallback(
     (fromSlotKey: string, toSlotKey: string) => {
-      if (!data.refImages?.[fromSlotKey] || !data.refImages?.[toSlotKey]) return;
+      const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as ChatData;
+      const curRefImages = latest.refImages;
+      if (!curRefImages?.[fromSlotKey] || !curRefImages?.[toSlotKey]) return;
       if (fromSlotKey === toSlotKey) return;
 
       const occupiedKeys = refSlots
         .map((s) => s.key)
-        .filter((key) => data.refImages![key]);
+        .filter((key) => curRefImages[key]);
       const fromIdx = occupiedKeys.indexOf(fromSlotKey);
       const toIdx = occupiedKeys.indexOf(toSlotKey);
       if (fromIdx === -1 || toIdx === -1) return;
 
-      const entries = occupiedKeys.map((k) => data.refImages![k]!);
+      const entries = occupiedKeys.map((k) => curRefImages[k]!);
       const [moved] = entries.splice(fromIdx, 1);
       entries.splice(toIdx, 0, moved!);
 
@@ -347,18 +348,16 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       });
 
       const { content: newContent, inlineRefs: newInlineRefs } = reorderInlineRefs(
-        data.content ?? "",
-        data.inlineRefs ?? [],
+        latest.content ?? "",
+        latest.inlineRefs ?? [],
         occupiedKeys,
         fromIdx,
         toIdx,
       );
-      updateCard(card.id, {
-        data: { ...data, refImages, content: newContent, inlineRefs: newInlineRefs },
-      });
+      updateCardData(card.id, { refImages, content: newContent, inlineRefs: newInlineRefs });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard, refSlots],
+    [card.id, updateCardData, refSlots],
   );
 
   const handleGenerate = useCallback(async () => {
@@ -392,7 +391,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
       run: async () => {
         diagInfo("chat-gen", "③ runEditorGeneration.run 开始，构建请求", { cardId: card.id });
         if (data.result) {
-          updateCard(card.id, { data: { ...data, _resultStale: true } });
+          updateCardData(card.id, { _resultStale: true });
         }
         try {
           // 翻译逻辑(多模态 serialize / 媒体并行上传 / vision 判定 / <upstream_context> 前缀)统一走
@@ -462,11 +461,8 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
           }
 
           // 读最新卡片数据再写:gpt-5.5 生成期长达 90–140s,期间用户可能改了提示词,
-          // 或上游节点注入了新 upstreamTexts;用渲染时捕获的旧闭包 data 会把这些覆盖掉。
-          const latest = (useCardStore.getState().getCard(card.id)?.data ?? data) as ChatData;
-          useCardStore.getState().updateCard(card.id, {
-            data: { ...latest, result, _resultStale: false },
-          });
+          // 或上游节点注入了新 upstreamTexts;updateCardData 原子合并到最新 data,不会覆盖。
+          useCardStore.getState().updateCardData(card.id, { result, _resultStale: false });
           autoSave.markDirty(card.id);
           useUIStore.getState().addToast({
             type: "success",
@@ -482,7 +478,7 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
         }
       },
     });
-  }, [data, card, generating, updateCard, setCardProgress]);
+  }, [data, card, generating, updateCardData, setCardProgress]);
 
   const hasUpstream = !!(
     (data as Record<string, unknown>).upstreamTexts &&

@@ -47,6 +47,11 @@ interface CardState {
   setCards: (cards: CanvasCard[]) => void;
   addCard: (card: CanvasCard) => void;
   removeCard: (id: string) => void;
+  /**
+   * Update geometry (x/y/width/height) or top-level card fields.
+   * **禁止用 `{ data: { ...data, ... } }` 改 data** — 闭包里的 data 可能是旧快照,
+   * 会覆盖其他 handler 刚写的字段。改 data 一律用 `updateCardData(id, patch)`。
+   */
   updateCard: (id: string, partial: Partial<CanvasCard>) => void;
   /**
    * 批量更新多张卡片,只 bump 一次 layoutVersion / dataVersion。

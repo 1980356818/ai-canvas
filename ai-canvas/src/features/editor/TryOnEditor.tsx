@@ -28,7 +28,7 @@ interface TryOnEditorProps {
 }
 
 export default function TryOnEditor({ card }: TryOnEditorProps) {
-  const updateCard = useCardStore((s) => s.updateCard);
+  const updateCardData = useCardStore((s) => s.updateCardData);
   const setCardProgress = useUIStore((s) => s.setCardProgress);
   const generating = useUIStore(selectCardBusy(card.id));
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -47,14 +47,14 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
     } else if (data.model) {
       setCurrentModel(data.model);
       const p = modelService.tryResolveProvider(data.model);
-      if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
+      if (p) updateCardData(card.id, { provider: p.descriptor.id });
     } else {
       // 默认模型统一走 modelDefaults 的单一口径(见 services/modelDefaults.ts)。
       let cancelled = false;
       resolveDefaultModelForCardType(card.type).then((ref) => {
         if (cancelled || !ref) return;
         setCurrentModel(ref.modelId);
-        updateCard(card.id, { data: { ...data, model: ref.modelId, provider: ref.providerId } });
+        updateCardData(card.id, { model: ref.modelId, provider: ref.providerId });
       });
       return () => {
         cancelled = true;
@@ -65,10 +65,10 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
   const handleModelChange = useCallback(
     (modelId: string, providerId: string) => {
       setCurrentModel(modelId);
-      updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+      updateCardData(card.id, { model: modelId, provider: providerId });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const personEntry: RefImageEntry | undefined = data.personImageUrl
@@ -81,34 +81,32 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
 
   const setPersonImage = useCallback(
     (entry: RefImageEntry) => {
-      const refImages = { ...data.refImages, person: entry };
-      updateCard(card.id, {
-        data: { ...data, personImageUrl: entry.url, refImages },
-      });
+      const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
+      const refImages = { ...(latest.refImages as Record<string, RefImageEntry> | undefined), person: entry };
+      updateCardData(card.id, { personImageUrl: entry.url, refImages });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const setGarmentImage = useCallback(
     (entry: RefImageEntry) => {
-      const refImages = { ...data.refImages, garment: entry };
-      updateCard(card.id, {
-        data: { ...data, garmentImageUrl: entry.url, refImages },
-      });
+      const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
+      const refImages = { ...(latest.refImages as Record<string, RefImageEntry> | undefined), garment: entry };
+      updateCardData(card.id, { garmentImageUrl: entry.url, refImages });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const onPromptChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const content = e.target.value;
-      updateCard(card.id, { data: { ...data, content } });
+      updateCardData(card.id, { content });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const handleGenerate = useCallback(async () => {
@@ -145,7 +143,7 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
           },
         });
 
-        updateCard(card.id, { data: { ...data, resultImageUrl: result.url } });
+        updateCardData(card.id, { resultImageUrl: result.url });
         autoSave.markDirty(card.id);
         useUIStore.getState().addToast({
           type: "success",
@@ -155,7 +153,7 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
         });
       },
     });
-  }, [data, card, generating, updateCard, setCardProgress]);
+  }, [card, generating, updateCardData, setCardProgress]);
 
   const canGenerate = !generating && (data.personImageUrl || data.garmentImageUrl);
 
@@ -168,11 +166,10 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
           entry={personEntry}
           onImage={setPersonImage}
           onClear={() => {
-            const refImages = { ...data.refImages };
+            const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
+            const refImages = { ...(latest.refImages as Record<string, RefImageEntry> | undefined) };
             delete refImages.person;
-            updateCard(card.id, {
-              data: { ...data, personImageUrl: undefined, refImages },
-            });
+            updateCardData(card.id, { personImageUrl: undefined, refImages });
             autoSave.markDirty(card.id);
           }}
           disabled={generating}
@@ -185,11 +182,10 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
           entry={garmentEntry}
           onImage={setGarmentImage}
           onClear={() => {
-            const refImages = { ...data.refImages };
+            const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
+            const refImages = { ...(latest.refImages as Record<string, RefImageEntry> | undefined) };
             delete refImages.garment;
-            updateCard(card.id, {
-              data: { ...data, garmentImageUrl: undefined, refImages },
-            });
+            updateCardData(card.id, { garmentImageUrl: undefined, refImages });
             autoSave.markDirty(card.id);
           }}
           disabled={generating}

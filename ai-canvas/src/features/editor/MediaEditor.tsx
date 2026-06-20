@@ -133,14 +133,13 @@ export default function MediaEditor({ card }: MediaEditorProps) {
     } else if (data.model) {
       setCurrentModel(data.model);
       const p = modelService.tryResolveProvider(data.model);
-      if (p) updateCard(card.id, { data: { ...data, provider: p.descriptor.id } });
+      if (p) updateCardData(card.id, { provider: p.descriptor.id });
     } else {
-      // 默认模型统一走 modelDefaults 的单一口径(见 services/modelDefaults.ts)。
       let cancelled = false;
       resolveDefaultModelForCardType(card.type).then((ref) => {
         if (cancelled || !ref) return;
         setCurrentModel(ref.modelId);
-        updateCard(card.id, { data: { ...data, model: ref.modelId, provider: ref.providerId } });
+        updateCardData(card.id, { model: ref.modelId, provider: ref.providerId });
       });
       return () => {
         cancelled = true;
@@ -188,15 +187,15 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       const corrected = coerceToAllowedSize(currentSize, allowed);
       if (corrected !== currentSize) {
         setCurrentSize(corrected);
-        updateCard(card.id, { data: { ...data, model: modelId, provider: providerId, size: corrected } });
+        updateCardData(card.id, { model: modelId, provider: providerId, size: corrected });
       } else {
-        updateCard(card.id, { data: { ...data, model: modelId, provider: providerId } });
+        updateCardData(card.id, { model: modelId, provider: providerId });
       }
       autoSave.markDirty(card.id);
       const category: ModelCategory = isEnhancerModel(modelId) ? "enhancer" : "image";
       useSettingsStore.getState().setLastModel(category, modelId, providerId);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const handleSizeChange = useCallback(
@@ -205,7 +204,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
       useSettingsStore.getState().setLastImageSize(sizeValue);
 
       if (data.imageUrl || sizeValue === "auto") {
-        updateCard(card.id, { data: { ...data, size: sizeValue } });
+        updateCardData(card.id, { size: sizeValue });
         autoSave.markDirty(card.id);
         return;
       }
@@ -221,40 +220,39 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         x: centerX - dims.width / 2,
         y: centerY - dims.height / 2,
         ...dims,
-        data: { ...data, size: sizeValue },
       });
+      updateCardData(card.id, { size: sizeValue });
       autoSave.markDirty(card.id);
     },
-    [card.id, card.x, card.y, card.width, card.height, data, updateCard],
+    [card.id, card.x, card.y, card.width, card.height, data, updateCard, updateCardData],
   );
 
   const handleResolutionChange = useCallback(
     (res: string) => {
-      // 收敛到 "2K" | "4K",避免 SizeCombo 等上游传入未规范化值导致 state 漂移。
       const next = normalizeResolution(res);
       setCurrentResolution(next);
-      updateCard(card.id, { data: { ...data, resolution: next } });
+      updateCardData(card.id, { resolution: next });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const handleQualityChange = useCallback(
     (q: string) => {
       setCurrentQuality(q);
-      updateCard(card.id, { data: { ...data, quality: q } });
+      updateCardData(card.id, { quality: q });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const onPromptChange = useCallback(
     (newContent: string, newRefs: InlineImageRef[]) => {
-      updateCard(card.id, { data: { ...data, content: newContent, inlineRefs: newRefs } });
+      updateCardData(card.id, { content: newContent, inlineRefs: newRefs });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const removeUpstreamEntry = useCallback(
@@ -266,8 +264,9 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
   const setRefImage = useCallback(
     (slotKey: string, entry: RefImageEntry) => {
-      const refImages = { ...data.refImages, [slotKey]: entry };
-      updateCard(card.id, { data: { ...data, refImages } });
+      const current = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
+      const refImages = { ...(current.refImages as Record<string, unknown> | undefined), [slotKey]: entry };
+      updateCardData(card.id, { refImages });
       autoSave.markDirty(card.id);
 
       if (entry.sourceCardId) {
@@ -285,7 +284,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         }
       }
     },
-    [card.id, data, updateCard],
+    [card.id, card.projectId, updateCardData],
   );
 
   const clearRefImage = useCallback(
@@ -347,12 +346,10 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         fromIdx,
         toIdx,
       );
-      updateCard(card.id, {
-        data: { ...data, refImages, content: newContent, inlineRefs: newInlineRefs },
-      });
+      updateCardData(card.id, { refImages, content: newContent, inlineRefs: newInlineRefs });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard, refSlots],
+    [card.id, data, updateCardData, refSlots],
   );
 
   const handleGenerate = useCallback(async () => {
@@ -400,9 +397,11 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             }
           }
 
-          // 翻译逻辑(SKU 解析 / enhancer / Real-ESRGAN 预检 / 参考图上传 / 条件传参)统一走
-          // buildImageRequest,与 cardRunner 组运行共用同一份。batchSize 不进 build,批量在这里循环。
-          const built = await buildImageRequest(card, {
+          // 生成前把 UI 当前选择同步回 card.data——防止 stale-closure 导致 quality/resolution 丢失
+          updateCardData(card.id, { quality: currentQuality, resolution: currentResolution, size: currentSize });
+          const freshCard = useCardStore.getState().cards.get(card.id)!;
+
+          const built = await buildImageRequest(freshCard, {
             onUploadProgress: (kind, { uploaded, total }) =>
               setCardProgress(card.id, {
                 percent: 0,
@@ -495,15 +494,10 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             throw new Error("所有图片生成均失败");
           }
 
-          const newData: Record<string, unknown> = {
-            ...data,
-            imageUrl: results[0]!.url,
-            results,
-            selectedIndex: 0,
-          };
-          // 同一次 updateCard 一次性写完 data + 几何,layoutVersion 只 bump 一次,
-          // CardLayer 不会因为"先 resize 再写 data"被触发两次重算。
-          updateCard(card.id, pendingGeometry ? { data: newData, ...pendingGeometry } : { data: newData });
+          if (pendingGeometry) {
+            updateCard(card.id, pendingGeometry);
+          }
+          updateCardData(card.id, { imageUrl: results[0]!.url, results, selectedIndex: 0 });
           autoSave.markDirty(card.id);
 
           const hasRemote = results.some(
@@ -539,33 +533,34 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         }
       },
     });
-  }, [card, data, generating, updateCard, currentModel, currentSize, setCardProgress]);
+  }, [card, data, generating, updateCard, updateCardData, currentModel, currentSize, currentQuality, currentResolution, setCardProgress]);
 
   const isLocked = !!data._locked;
   const currentBatchSize = data.batchSize ?? 1;
 
   const handleBatchSizeChange = useCallback(
     (size: number) => {
-      updateCard(card.id, { data: { ...data, batchSize: size } });
+      updateCardData(card.id, { batchSize: size });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const handleParamChange = useCallback(
     (key: string, value: string) => {
-      const params = { ...data._params, [key]: value };
-      let content = data.content ?? "";
-      if (data._promptTemplate) {
-        content = data._promptTemplate;
+      const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
+      const params = { ...(latest._params as Record<string, string> | undefined), [key]: value };
+      let content = (latest.content as string) ?? "";
+      if (latest._promptTemplate) {
+        content = latest._promptTemplate as string;
         for (const [k, v] of Object.entries(params)) {
           content = content.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v);
         }
       }
-      updateCard(card.id, { data: { ...data, _params: params, content } });
+      updateCardData(card.id, { _params: params, content });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   return (

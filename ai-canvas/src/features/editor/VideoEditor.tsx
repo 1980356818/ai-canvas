@@ -343,12 +343,11 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       if (providerId !== undefined) patch.provider = providerId;
       setCurrentModel(nextModel);
       if (Object.keys(patch).length > 0) {
-        const cardUpdate: Parameters<typeof updateCard>[1] = { data: { ...data, ...patch } };
+        updateCardData(card.id, patch);
         if (typeof patch.size === "string") {
           const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === patch.size);
-          if (opt) Object.assign(cardUpdate, sizeFromRatio(opt.ratio));
+          if (opt) updateCard(card.id, sizeFromRatio(opt.ratio));
         }
-        updateCard(card.id, cardUpdate);
         if (patch.veoTier) setCurrentTier(patch.veoTier as VeoQualityTier);
         if (patch.seedanceTier) setCurrentSeedanceTier(patch.seedanceTier as SeedanceQualityTier);
         if (patch.seedanceVipResolution) setCurrentSeedanceVipResolution(patch.seedanceVipResolution as SeedanceVipResolution);
@@ -388,11 +387,12 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
 
   const setRefImage = useCallback(
     (slotKey: string, entry: RefImageEntry) => {
-      const refImages = { ...data.refImages, [slotKey]: entry };
-      updateCard(card.id, { data: { ...data, refImages } });
+      const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
+      const refImages = { ...(latest.refImages as Record<string, RefImageEntry> | undefined), [slotKey]: entry };
+      updateCardData(card.id, { refImages });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const clearRefImage = useCallback(
@@ -502,32 +502,34 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const handleModelChange = useCallback(
     (modelId: string, providerId: string) => {
       setCurrentModel(modelId);
-      const newData: Record<string, unknown> = { ...data, model: modelId, provider: providerId };
+      const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as VideoData;
+      const dataPatch: Record<string, unknown> = { model: modelId, provider: providerId };
+      const geoPatch: Record<string, unknown> = {};
       const newIsSeedance = isSeedanceModel(modelId);
       const newIsVeo = isVeoModel(modelId);
 
       // Dale Seedance 上游硬约束: 不支持参考视频 (2026-05-16 实测)。
-      if (newIsSeedance && Array.isArray(newData.refVideos) && (newData.refVideos as unknown[]).length > 0) {
-        newData.refVideos = undefined;
+      if (newIsSeedance && Array.isArray(latest.refVideos) && latest.refVideos.length > 0) {
+        dataPatch.refVideos = undefined;
       }
       // dbgoc Veo 上游: 不支持参考音频/参考视频。
       // Grok (PearNo) 同理: 只支持参考图。
       if (newIsVeo || isGrokVideoModel(modelId)) {
-        newData.refAudios = undefined;
-        newData.refVideos = undefined;
+        dataPatch.refAudios = undefined;
+        dataPatch.refVideos = undefined;
       }
       // Veo 参考模式: Cat 上游硬约束 fast 1-2 张, std/pro 1-3 张. 按当前 tier 算上限截断.
-      if (newIsVeo && imageMode === "reference" && data.refImages) {
+      if (newIsVeo && imageMode === "reference" && latest.refImages) {
         const safeTier = VEO_TIERS.some((t) => t.value === currentTier) ? currentTier : "fast-720p";
         const maxCount = veoRefImageMaxCount(safeTier);
         const oldSlots = getRefSlotsForVideoModel(currentModel, "reference");
         const entries = oldSlots
-          .map((s) => data.refImages?.[s.key])
+          .map((s) => latest.refImages?.[s.key])
           .filter((e): e is RefImageEntry => !!e)
           .slice(0, maxCount);
         const refImages: Record<string, RefImageEntry> = {};
         entries.forEach((e, i) => { refImages[`refImage${i}`] = e; });
-        newData.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
+        dataPatch.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
       }
 
       // 切换模型时, 把比例/分辨率收敛到新模型支持的集合, 避免发送不支持的值。
@@ -535,77 +537,80 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       if (allowedSizes && !allowedSizes.includes(currentSize)) {
         const fallback = getDefaultVideoSizeForModel(modelId);
         setCurrentSize(fallback);
-        newData.size = fallback;
+        dataPatch.size = fallback;
         const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === fallback);
-        if (opt) Object.assign(newData, sizeFromRatio(opt.ratio));
+        if (opt) Object.assign(geoPatch, sizeFromRatio(opt.ratio));
       }
       // Veo 默认时长 8s,与 dbgoc 上游 default_duration 对齐。
       if (newIsVeo) {
         const allowed = VEO_DURATION_OPTIONS.map((o) => Number(o.value));
         if (!allowed.includes(currentDuration)) {
           setCurrentDuration(8);
-          newData.duration = 8;
+          dataPatch.duration = 8;
         }
       }
       // V138 VIP: economy 项不支持视频参考, 切到 economy 时清空 refVideos.
       // alias 项首次进入时确保 seedanceVipResolution 有值 (默认 720P).
       // V145: 切到任意 VIP 模型时把 duration 强制 15 (UI 只放 15s 选项).
       if (isSeedanceVipEconomyModel(modelId)) {
-        if (Array.isArray(newData.refVideos) && (newData.refVideos as unknown[]).length > 0) {
-          newData.refVideos = undefined;
+        // Re-check latest after prior patches may have set refVideos to undefined
+        if (dataPatch.refVideos === undefined) { /* already cleared above */ }
+        else if (Array.isArray(latest.refVideos) && latest.refVideos.length > 0) {
+          dataPatch.refVideos = undefined;
         }
       }
-      if (isSeedanceVipAliasModel(modelId) && !data.seedanceVipResolution) {
-        newData.seedanceVipResolution = "720p";
+      if (isSeedanceVipAliasModel(modelId) && !latest.seedanceVipResolution) {
+        dataPatch.seedanceVipResolution = "720p";
         setCurrentSeedanceVipResolution("720p");
       }
       if (isSeedanceVipModel(modelId) && currentDuration !== 15) {
         setCurrentDuration(15);
-        newData.duration = 15;
+        dataPatch.duration = 15;
       }
       // V161 火山方舟原生 alias `seedance-v2`: 首次进入时默认 standard 画质,
       // duration 收敛到 [4,15] (老卡片可能是 grok 的 12s 之类, 直接保留亦合法).
-      if (isSeedanceV2AliasModel(modelId) && !data.seedanceV2Version) {
-        newData.seedanceV2Version = "standard";
+      if (isSeedanceV2AliasModel(modelId) && !latest.seedanceV2Version) {
+        dataPatch.seedanceV2Version = "standard";
         setCurrentSeedanceV2Version("standard");
       }
-      if (isSeedanceV2AliasModel(modelId) && !data.seedanceV2Resolution) {
-        newData.seedanceV2Resolution = "720p";
+      if (isSeedanceV2AliasModel(modelId) && !latest.seedanceV2Resolution) {
+        dataPatch.seedanceV2Resolution = "720p";
         setCurrentSeedanceV2Resolution("720p");
       }
       if (isSeedanceV2AliasModel(modelId) && (currentDuration < 4 || currentDuration > 15)) {
         setCurrentDuration(5);
-        newData.duration = 5;
+        dataPatch.duration = 5;
       }
 
-      updateCard(card.id, { data: newData });
+      updateCardData(card.id, dataPatch);
+      if (Object.keys(geoPatch).length > 0) updateCard(card.id, geoPatch);
       autoSave.markDirty(card.id);
       useSettingsStore.getState().setLastModel("video", modelId, providerId);
     },
-    [card.id, data, imageMode, currentModel, updateCard, currentSize, currentDuration],
+    [card.id, imageMode, currentModel, updateCard, updateCardData, currentSize, currentDuration],
   );
 
   const handleSizeChange = useCallback(
     (size: string) => {
       setCurrentSize(size);
-      const updates: Parameters<typeof updateCard>[1] = { data: { ...data, size } };
-      if (!data.videoUrl) {
+      const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
+      updateCardData(card.id, { size });
+      if (!latest.videoUrl) {
         const opt = IMAGE_SIZE_OPTIONS.find((o) => o.value === size);
-        if (opt) Object.assign(updates, sizeFromRatio(opt.ratio));
+        if (opt) updateCard(card.id, sizeFromRatio(opt.ratio));
       }
-      updateCard(card.id, updates);
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCard, updateCardData],
   );
 
   const handleTierChange = useCallback(
     (tier: VeoQualityTier) => {
       setCurrentTier(tier);
-      updateCard(card.id, { data: { ...data, veoTier: tier } });
+      updateCardData(card.id, { veoTier: tier });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const handleVeoQualityChange = useCallback(
@@ -625,19 +630,19 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const handleSeedanceTierChange = useCallback(
     (tier: SeedanceQualityTier) => {
       setCurrentSeedanceTier(tier);
-      updateCard(card.id, { data: { ...data, seedanceTier: tier } });
+      updateCardData(card.id, { seedanceTier: tier });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const handleSeedanceVipResolutionChange = useCallback(
     (resolution: SeedanceVipResolution) => {
       setCurrentSeedanceVipResolution(resolution);
-      updateCard(card.id, { data: { ...data, seedanceVipResolution: resolution } });
+      updateCardData(card.id, { seedanceVipResolution: resolution });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const handleSeedanceV2VersionChange = useCallback(
@@ -650,10 +655,10 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         patch.seedanceV2Resolution = clampedRes;
         setCurrentSeedanceV2Resolution(clampedRes);
       }
-      updateCard(card.id, { data: { ...data, ...patch } });
+      updateCardData(card.id, patch);
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard, currentSeedanceV2Resolution],
+    [card.id, updateCardData, currentSeedanceV2Resolution],
   );
 
   const handleSeedanceV2ResolutionChange = useCallback(
@@ -661,46 +666,46 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       // 防御: fast + 1080p 非法,钳回 720p(UI 已置灰,正常点不到)。
       const safe = clampSeedanceV2Resolution(currentSeedanceV2Version, resolution);
       setCurrentSeedanceV2Resolution(safe);
-      updateCard(card.id, { data: { ...data, seedanceV2Resolution: safe } });
+      updateCardData(card.id, { seedanceV2Resolution: safe });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard, currentSeedanceV2Version],
+    [card.id, updateCardData, currentSeedanceV2Version],
   );
 
   const handleGrokTierChange = useCallback(
     (tier: GrokDurationTier) => {
       setCurrentGrokTier(tier);
-      updateCard(card.id, { data: { ...data, grokTier: tier } });
+      updateCardData(card.id, { grokTier: tier });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const handleDurationChange = useCallback(
     (val: string) => {
       const dur = Number(val);
       setCurrentDuration(dur);
-      updateCard(card.id, { data: { ...data, duration: dur } });
+      updateCardData(card.id, { duration: dur });
       autoSave.markDirty(card.id);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const handleAudioToggle = useCallback(() => {
     const next = !currentAudio;
     setCurrentAudio(next);
-    updateCard(card.id, { data: { ...data, generateAudio: next } });
+    updateCardData(card.id, { generateAudio: next });
     autoSave.markDirty(card.id);
-  }, [card.id, data, currentAudio, updateCard]);
+  }, [card.id, currentAudio, updateCardData]);
 
 
   const onPromptChange = useCallback(
     (newContent: string, newRefs: InlineImageRef[]) => {
-      updateCard(card.id, { data: { ...data, content: newContent, inlineRefs: newRefs } });
+      updateCardData(card.id, { content: newContent, inlineRefs: newRefs });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const removeUpstreamEntry = useCallback(
@@ -736,7 +741,8 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   );
 
   const handleGenerate = useCallback(async () => {
-    const prompt = buildFinalPrompt(data);
+    const latestData = (useCardStore.getState().getCard(card.id)?.data ?? {}) as VideoData;
+    const prompt = buildFinalPrompt(latestData);
     if (!prompt || generating) return;
     // 十步骨架(API Key 预检 / 进度开关 / 错误兜底)统一走 runEditorGeneration;
     // 编辑器侧只剩 prompt 守卫、build、provider 解析、几何/toast 善后。
@@ -778,7 +784,8 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
 
         const sizeOpt = IMAGE_SIZE_OPTIONS.find((o) => o.value === currentSize);
         const cardSize = sizeOpt ? sizeFromRatio(sizeOpt.ratio) : {};
-        updateCard(card.id, { data: { ...data, videoUrl: result.url }, ...cardSize });
+        updateCardData(card.id, { videoUrl: result.url });
+        if (Object.keys(cardSize).length > 0) updateCard(card.id, cardSize);
         autoSave.markDirty(card.id);
 
         const isRemote = result.url.startsWith("http://") || result.url.startsWith("https://");
@@ -800,7 +807,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         }
       },
     });
-  }, [card, data, generating, updateCard, currentModel, currentSize, setCardProgress]);
+  }, [card, generating, updateCard, updateCardData, currentModel, currentSize, setCardProgress]);
 
   const isLocked = !!data._locked;
 

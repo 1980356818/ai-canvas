@@ -72,7 +72,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
       useSettingsStore.getState().setLastImageSize(sizeValue);
 
       if (data.imageUrl || sizeValue === "auto") {
-        updateCard(card.id, { data: { ...data, size: sizeValue } });
+        updateCardData(card.id, { size: sizeValue });
         autoSave.markDirty(card.id);
         return;
       }
@@ -88,33 +88,32 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
         x: centerX - dims.width / 2,
         y: centerY - dims.height / 2,
         ...dims,
-        data: { ...data, size: sizeValue },
       });
+      updateCardData(card.id, { size: sizeValue });
       autoSave.markDirty(card.id);
     },
-    [card.id, card.x, card.y, card.width, card.height, data, updateCard],
+    [card.id, card.x, card.y, card.width, card.height, data.imageUrl, updateCard, updateCardData],
   );
 
   const handleAngleChange = useCallback(
     (key: string, value: number) => {
-      const newData = { ...data, [key]: value };
-      newData.content = buildPrompt(
+      const content = buildPrompt(
         key === "h" ? value : h,
         key === "v" ? value : v,
         key === "z" ? value : z,
       );
-      newData.model = MULTIANGLE_MODEL_ID;
-      updateCard(card.id, { data: newData });
+      updateCardData(card.id, { [key]: value, content, model: MULTIANGLE_MODEL_ID });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
     },
-    [card.id, data, h, v, z, updateCard],
+    [card.id, h, v, z, updateCardData],
   );
 
   const setRefImage = useCallback(
     (slotKey: string, entry: RefImageEntry) => {
-      const refImages = { ...data.refImages, [slotKey]: entry };
-      updateCard(card.id, { data: { ...data, refImages, model: MULTIANGLE_MODEL_ID } });
+      const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
+      const refImages = { ...(latest.refImages as Record<string, RefImageEntry> | undefined), [slotKey]: entry };
+      updateCardData(card.id, { refImages, model: MULTIANGLE_MODEL_ID });
       autoSave.markDirty(card.id);
 
       if (entry.sourceCardId) {
@@ -132,7 +131,7 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
         }
       }
     },
-    [card.id, data, updateCard],
+    [card.id, card.projectId, updateCardData],
   );
 
   const clearRefImage = useCallback(
@@ -192,13 +191,11 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
           },
         });
 
-        updateCard(card.id, {
-          data: { ...data, imageUrl: result.url, content: prompt, model: MULTIANGLE_MODEL_ID },
-        });
+        updateCardData(card.id, { imageUrl: result.url, content: prompt, model: MULTIANGLE_MODEL_ID });
         autoSave.markDirty(card.id);
       },
     });
-  }, [data, card, h, v, z, generating, canGenerate, updateCard, setCardProgress]);
+  }, [card, h, v, z, generating, canGenerate, updateCardData, setCardProgress]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const handleFile = useCallback(

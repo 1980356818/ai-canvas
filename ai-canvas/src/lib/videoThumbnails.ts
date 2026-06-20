@@ -194,15 +194,17 @@ export function captureFrameFromVideo(
 
 // ── 首帧抽取 (poster 用) ──────────────────────────────────────────────
 //
-// 比 generateVideoThumbnails 轻:不 seek,onloadeddata 拿到首帧即抽。
+// 比 generateVideoThumbnails 轻:只 seek 一个小偏移抽一帧(不跑整条缩略图带)。
 // 两个用途:
 //   1. 文件 drop import 时当场抽 poster (useFileDrop)
 //   2. AI 生成视频落卡后补 poster (videoPoster)
 // 都是因为 VideoPreview 用 `<video preload="none">`,点播放前不解码视频帧,
 // poster 必须事先备好,否则卡片全黑。
+// 注意:**不抽 t=0**。WebView2 在 onloadeddata 时常还没把首帧呈现到表面,drawImage 会得到
+// 纯黑;且 AI 视频开头常是黑场淡入。所以 seek 到 ~0.2s 起、测平均亮度,纯黑就再往后 seek。
 
 /**
- * 抽 srcUrl 视频的第一帧 → JPEG dataUrl + 原始宽高。
+ * 抽 srcUrl 视频的一帧(从 ~0.2s 起,跳过开头纯黑/未呈现帧)→ JPEG dataUrl + 原始宽高。
  *
  * 整体失败 (解码不了 / 8s 超时 / 0 尺寸) 返回 `null` —— 调用方据此判定"视频不可用"。
  * 仅缩略图失败 (canvas 被 CORS taint, 远程无 CORS 头) 返回 `{ dataUrl: null, width, height }`
@@ -253,7 +255,7 @@ export async function extractFirstFrame(src: string | File): Promise<{
       if (done) return;
       done = true;
       clearTimeout(timer);
-      video.onloadeddata = null;
+      video.onloadedmetadata = null;
       video.onerror = null;
       video.removeAttribute("src");
       scheduleRevoke(); // 必须在 load() 之前挂好 emptied 监听
@@ -263,35 +265,96 @@ export async function extractFirstFrame(src: string | File): Promise<{
 
     const timer = setTimeout(() => finish(null), 8000);
 
-    video.onloadeddata = () => {
+    // 画当前帧 → JPEG dataUrl，并尽量测一下平均亮度(供"跳过纯黑帧"判定)。
+    // CORS taint(远程无 CORS 头)时 getImageData/toDataURL 抛错 → dataUrl/luma 均 null，
+    // 退化成"视频能播但没 poster"，与历史行为一致。
+    const captureFrame = (): { dataUrl: string | null; luma: number | null; w: number; h: number } => {
       const w = video.videoWidth;
       const h = video.videoHeight;
-      if (w === 0 || h === 0) {
+      if (w === 0 || h === 0) return { dataUrl: null, luma: null, w, h };
+      // 长边压到 480px，JPEG q=0.7 —— 典型 20-60KB 一张，画布上做卡片缩略图绰绰有余
+      const maxDim = 480;
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      const tw = Math.max(1, Math.round(w * scale));
+      const th = Math.max(1, Math.round(h * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = tw;
+      canvas.height = th;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return { dataUrl: null, luma: null, w, h };
+      try {
+        ctx.drawImage(video, 0, 0, tw, th);
+        let luma: number | null = null;
+        try {
+          const { data } = ctx.getImageData(0, 0, tw, th);
+          let sum = 0;
+          let n = 0;
+          // 每隔几个像素采样即可，够判黑;step=16 → 每 4 个像素取 1。
+          for (let i = 0; i < data.length; i += 16) {
+            sum += 0.299 * data[i]! + 0.587 * data[i + 1]! + 0.114 * data[i + 2]!;
+            n++;
+          }
+          luma = n > 0 ? sum / n : null;
+        } catch {
+          luma = null; // CORS taint:测不了亮度，直接接受这帧
+        }
+        return { dataUrl: canvas.toDataURL("image/jpeg", 0.7), luma, w, h };
+      } catch {
+        // drawImage/toDataURL 被 CORS taint 拒绝。视频本身能播，只是这卡没缩略图。
+        return { dataUrl: null, luma: null, w, h };
+      }
+    };
+
+    // 历史 bug:在 onloadeddata(t≈0)直接 drawImage，WebView2 此刻常还没把首帧"呈现"到
+    // <video> 表面 → 抽出来是纯黑(服务端模板里就这么烤进去一批纯黑 poster)。改成 seek 到
+    // 一个小偏移再抽:seek 完成的 'seeked' 才保证那一帧已解码就绪;再等一个 rAF 让合成器贴图，
+    // 然后测亮度，纯黑就往后再 seek 一点。绝大多数视频用第一个偏移就拿到正常帧。
+    const SEEK_TARGETS = [0.2, 0.8, 1.6, 3.0]; // 秒，依次尝试
+    const DARK_LUMA = 10; // 平均亮度(0-255)低于此视作纯黑/接近纯黑
+    let attempt = 0;
+
+    const grabAt = (t: number) => {
+      if (done) return;
+      const onSeeked = () => {
+        video.removeEventListener("seeked", onSeeked);
+        // 等一个 rAF，确保 seek 后的帧已被合成器贴到表面再 drawImage。
+        requestAnimationFrame(() => {
+          if (done) return;
+          const cap = captureFrame();
+          if (cap.w === 0) {
+            finish(null);
+            return;
+          }
+          const dark = cap.luma != null && cap.luma < DARK_LUMA;
+          if (!dark || attempt >= SEEK_TARGETS.length) {
+            finish({ dataUrl: cap.dataUrl, width: cap.w, height: cap.h });
+          } else {
+            grabNext(); // 纯黑且还有偏移没试 → 再往后 seek
+          }
+        });
+      };
+      video.addEventListener("seeked", onSeeked, { once: true });
+      try {
+        video.currentTime = t;
+      } catch {
+        finish(null);
+      }
+    };
+
+    const grabNext = () => {
+      const dur = video.duration;
+      let t = SEEK_TARGETS[attempt] ?? 0;
+      attempt++;
+      if (Number.isFinite(dur) && dur > 0) t = Math.min(t, Math.max(0, dur - 0.05));
+      grabAt(t);
+    };
+
+    video.onloadedmetadata = () => {
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
         finish(null);
         return;
       }
-
-      let dataUrl: string | null = null;
-      try {
-        // 长边压到 480px，JPEG q=0.7 —— 典型 20-60KB 一张，画布上做卡片缩略图绰绰有余
-        const maxDim = 480;
-        const scale = Math.min(1, maxDim / Math.max(w, h));
-        const tw = Math.max(1, Math.round(w * scale));
-        const th = Math.max(1, Math.round(h * scale));
-        const canvas = document.createElement("canvas");
-        canvas.width = tw;
-        canvas.height = th;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, tw, th);
-          dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-        }
-      } catch {
-        // canvas 被 CORS taint(读像素被拒)。视频本身能播,只是这卡没缩略图。
-        dataUrl = null;
-      }
-
-      finish({ dataUrl, width: w, height: h });
+      grabNext();
     };
 
     video.onerror = () => finish(null);
