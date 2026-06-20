@@ -24,10 +24,6 @@ env:
   CARGO_INCREMENTAL: 0
   VITE_COMFLY_BASE_URL: https://ai.comfly.org
 
-defaults:
-  run:
-    working-directory: ai-canvas
-
 jobs:
   # ─── Windows (x86_64) ────────────────────────────────────
   build-windows:
@@ -43,7 +39,6 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: ai-canvas/package-lock.json
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -51,7 +46,7 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: ai-canvas/src-tauri -> target
+          workspaces: src-tauri -> target
 
       - name: Install frontend dependencies
         run: npm ci
@@ -60,11 +55,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # tauri-action 自动识别这俩;有了才会签 .sig,updater 才认
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          projectPath: ai-canvas
           tagName: ${{ github.ref_name }}
           releaseName: "${{ env.APP_NAME }} ${{ github.ref_name }}"
           releaseBody: "See the assets below to download the installer."
@@ -85,7 +76,6 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: ai-canvas/package-lock.json
 
       - name: Setup Rust (both targets)
         uses: dtolnay/rust-toolchain@stable
@@ -95,31 +85,24 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: ai-canvas/src-tauri -> target
+          workspaces: src-tauri -> target
 
       - name: Install frontend dependencies
         run: npm ci
 
       - name: Build Tauri (aarch64)
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build -- --target aarch64-apple-darwin
 
       - name: Build Tauri (x86_64)
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build -- --target x86_64-apple-darwin
 
       - name: Read version
         id: version
         run: |
-          VERSION=$(python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
+          VERSION=$(node -p "require('./package.json').version")
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create universal binary & pkg
-        working-directory: ai-canvas
         env:
           APP_VERSION: ${{ steps.version.outputs.value }}
         run: |
@@ -129,64 +112,39 @@ jobs:
 
           cp -R "$ARM_APP" "$UNIVERSAL_APP"
 
-          BINARY_NAME=$(ls "$ARM_APP/Contents/MacOS/" | head -1)
-          echo "=== Detected binary: $BINARY_NAME ==="
-
+          echo "=== Merging main executable ==="
           lipo -create \
-            "$ARM_APP/Contents/MacOS/$BINARY_NAME" \
-            "$INTEL_APP/Contents/MacOS/$BINARY_NAME" \
-            -output "$UNIVERSAL_APP/Contents/MacOS/$BINARY_NAME"
+            "$ARM_APP/Contents/MacOS/${{ env.APP_NAME }}" \
+            "$INTEL_APP/Contents/MacOS/${{ env.APP_NAME }}" \
+            -output "$UNIVERSAL_APP/Contents/MacOS/${{ env.APP_NAME }}"
 
+          echo "=== Merging dylibs (if any) ==="
           find "$ARM_APP/Contents" -name "*.dylib" -type f | while read arm_dylib; do
             rel="${arm_dylib#$ARM_APP/}"
             intel_dylib="$INTEL_APP/$rel"
             if [ -f "$intel_dylib" ]; then
+              echo "  Merging $rel"
               lipo -create "$arm_dylib" "$intel_dylib" -output "$UNIVERSAL_APP/$rel"
             fi
           done
 
-          file "$UNIVERSAL_APP/Contents/MacOS/$BINARY_NAME"
-          lipo -info "$UNIVERSAL_APP/Contents/MacOS/$BINARY_NAME"
+          echo "=== Verifying universal binary ==="
+          file "$UNIVERSAL_APP/Contents/MacOS/${{ env.APP_NAME }}"
+          lipo -info "$UNIVERSAL_APP/Contents/MacOS/${{ env.APP_NAME }}"
 
-          # Info.plist 注入(防御:不依赖 Tauri 2 自动 merge src-tauri/Info.plist
-          # 的能力,显式用 PlistBuddy 把所有要的 key 写入最终 bundle)。
-          # 详见 docs/mac-build-guide.md §3.6 + docs/性能与IPC规范.md §11.3。
+          echo "=== Patching ATS ==="
           PLIST="$UNIVERSAL_APP/Contents/Info.plist"
-
-          # 1. NSAppTransportSecurity — WKWebView 内 <img>/<video>/fetch 放行非 ATS 兼容资源
           /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" "$PLIST"
 
-          # 2. LSMinimumSystemVersion — 与 tauri.conf.json bundle.macOS.minimumSystemVersion 对齐
-          /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string 12.0" "$PLIST" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion 12.0" "$PLIST"
-
-          # 3. NSHighResolutionCapable — Retina 屏字体不模糊
-          /usr/libexec/PlistBuddy -c "Add :NSHighResolutionCapable bool true" "$PLIST" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :NSHighResolutionCapable true" "$PLIST"
-
-          # 4. CFBundleDisplayName — Finder/Dock 显示名(覆盖 Tauri 默认的 productName)
-          /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string AICat" "$PLIST" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName AICat" "$PLIST"
-
-          # 5. CFBundleName — 系统原生工具显示名(Activity Monitor / Login Items 等)
-          /usr/libexec/PlistBuddy -c "Add :CFBundleName string AICat" "$PLIST" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :CFBundleName AICat" "$PLIST"
-
-          # 6. NSHumanReadableCopyright — Get Info 面板的版权字符串
-          /usr/libexec/PlistBuddy -c "Add :NSHumanReadableCopyright string '© 2024 AI猫'" "$PLIST" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :NSHumanReadableCopyright '© 2024 AI猫'" "$PLIST"
-
-          # 验证:dump 完整 Info.plist 到日志,出问题时一眼能看出哪个 key 没进去
-          echo "=== Final Info.plist ==="
-          /usr/libexec/PlistBuddy -c "Print" "$PLIST"
-          echo "=== End Info.plist ==="
-
+          echo "=== Codesigning ==="
           codesign --force --deep --sign - "$UNIVERSAL_APP"
           codesign --verify --verbose "$UNIVERSAL_APP"
 
+          echo "=== Creating pkg installer ==="
           PKG="${{ env.APP_NAME }}_${APP_VERSION}_universal.pkg"
+
           pkgbuild \
             --component "$UNIVERSAL_APP" \
             --install-location /Applications \
@@ -196,23 +154,7 @@ jobs:
 
           ls -lh "$PKG"
 
-      - name: Sign pkg for updater
-        continue-on-error: true
-        working-directory: ai-canvas
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APP_VERSION: ${{ steps.version.outputs.value }}
-        run: |
-          # pkgbuild 出来的 .pkg 是 Tauri 流程之外手攒的,Tauri 不会自动 sign,
-          # 这里用 `tauri signer sign` 显式补一份 .pkg.sig,让 updater(release.py
-          # → /api/admin/release/upload)走得通 — 跟 Windows .exe.sig 对称。
-          PKG="${{ env.APP_NAME }}_${APP_VERSION}_universal.pkg"
-          npx tauri signer sign --private-key "$TAURI_SIGNING_PRIVATE_KEY" --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$PKG"
-          ls -lh "$PKG" "$PKG.sig"
-
       - name: Upload to release
-        working-directory: ai-canvas
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APP_VERSION: ${{ steps.version.outputs.value }}
@@ -221,5 +163,3 @@ jobs:
           PKG="${{ env.APP_NAME }}_${APP_VERSION}_universal.pkg"
           gh release create "$TAG" --draft --title "${{ env.APP_NAME }} $TAG" --notes "See the assets below to download the installer." 2>/dev/null || true
           gh release upload "$TAG" "$PKG" --clobber
-          [ -f "$PKG.sig" ] && gh release upload "$TAG" "$PKG.sig" --clobber || true
-# end
