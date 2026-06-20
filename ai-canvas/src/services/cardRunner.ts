@@ -65,16 +65,6 @@ export interface RunCardOptions {
   signal?: AbortSignal;
 }
 
-interface ChatLikeData {
-  content?: string;
-  model?: string;
-  provider?: string;
-  result?: string;
-  upstreamTexts?: Record<string, string>;
-  _systemPrompt?: string;
-  _resultStale?: boolean;
-}
-
 // ────────────────────────────────────────────────────────────────
 // 各类型卡片的执行入口
 // ────────────────────────────────────────────────────────────────
@@ -114,10 +104,8 @@ async function runImageCard(card: CanvasCard, count = 1): Promise<RunCardResult>
   if (results.length === 0) {
     return { outcome: "failed", reason: "所有图片生成均失败" };
   }
-  const cs = useCardStore.getState();
-  const latest = (cs.getCard(card.id)?.data ?? {}) as Record<string, unknown>;
-  cs.updateCard(card.id, {
-    data: { ...latest, imageUrl: results[0]!.url, results, selectedIndex: 0 },
+  useCardStore.getState().updateCardData(card.id, {
+    imageUrl: results[0]!.url, results, selectedIndex: 0,
   });
   autoSave.markDirty(card.id);
   for (let i = 0; i < results.length; i++) {
@@ -159,11 +147,8 @@ async function runChatCard(card: CanvasCard, signal?: AbortSignal): Promise<RunC
     return { outcome: "failed", reason: `未找到模型 "${built.request.model}" 的平台` };
   }
 
-  const data = card.data as ChatLikeData;
   // 标"过期",编辑器若开着会显示旧结果半透明
-  useCardStore.getState().updateCard(card.id, {
-    data: { ...data, _resultStale: true },
-  });
+  useCardStore.getState().updateCardData(card.id, { _resultStale: true });
 
   // chat 走流式(streamChatToResult)而非 provider.chat:gpt-5.5 等推理模型单次响应
   // 90–140s,非流式长连接会被 Cloudflare/反代切成 524(源站已完成并计费,客户端却拿不到)。
@@ -177,11 +162,8 @@ async function runChatCard(card: CanvasCard, signal?: AbortSignal): Promise<RunC
       "\n\n---\n⚠️ *回复因达到输出上限被截断,可尝试拆分提问以获取完整内容。*";
   }
 
-  // 读最新卡片数据再写,避免长生成期间的并发改动被旧 data 覆盖(见 ChatEditor 同款处理)。
-  const latest = (useCardStore.getState().getCard(card.id)?.data ?? data) as ChatLikeData;
-  useCardStore.getState().updateCard(card.id, {
-    data: { ...latest, result, _resultStale: false },
-  });
+  // 原子合并到最新 card.data,避免长生成期间的并发改动被旧快照覆盖。
+  useCardStore.getState().updateCardData(card.id, { result, _resultStale: false });
   autoSave.markDirty(card.id);
   return { outcome: "ok" };
 }

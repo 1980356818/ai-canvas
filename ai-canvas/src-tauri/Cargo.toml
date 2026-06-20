@@ -1,6 +1,6 @@
 [package]
 name = "ai-canvas"
-version = "1.3.8"
+version = "1.4.1"
 edition = "2021"
 
 [lib]
@@ -18,12 +18,21 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
-# 跨平台 TLS 一致性：rustls-tls-native-roots
+# 跨平台 TLS 一致性 + 信任根自带（rustls-tls-webpki-roots）
 #   - native-tls 在 macOS 上 = SecureTransport (Apple 自 10.15 已 deprecated)，
 #     在 Windows 上 = SChannel；两端行为分裂，是 Mac 闪退/Win 不复现的主因。
-#   - rustls 是纯 Rust，三端行为完全一致；native-roots 复用系统 CA 信任链。
+#   - rustls 是纯 Rust，三端行为完全一致。
+#   - 信任根**必须用 webpki-roots（编译期内置 Mozilla 根集），不能用 native-roots**：
+#     native-roots 只信任目标机器 Windows 证书库，而 Windows 的根证书是「按需下载」
+#     (Automatic Root Update)——大量国内机器（全新装机 / LTSC / 装机优化软件关了
+#     根更新 / 长期不连 Windows Update）根本没有 Let's Encrypt 的 ISRG Root X1，
+#     于是我们服务器（api.jjowo.com 等都是 LE 证书）会被 rustls 判为
+#     `invalid peer certificate: UnknownIssuer`——开发机证书库全、复现不了，用户机却必挂。
+#     webpki-roots 把根集打进二进制，所有机器一致，不依赖 OS 证书库是否被刷新。
+#   - 本应用只连公共 CA 证书的服务端（极境 / 各 provider / COS / CDN），不需要企业自签 CA，
+#     因此放弃 native-roots（唯一作用是信任用户侧 MITM 代理的私有 CA）无副作用。
 # 详见 docs/性能与IPC规范.md §11.1。
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots", "stream", "http2", "multipart"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots", "stream", "http2", "multipart"] }
 base64 = "0.22"
 # zip: 项目「导出/导入」(.aicat) 的打包格式。default-features=false 只保留核心
 # 读写 + Stored(不压缩)—— 媒体(图/视频)本就是压缩格式,再 Deflate 纯浪费 CPU;
@@ -44,9 +53,15 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 sha2 = "0.10"
-tokio = { version = "1", features = ["time", "sync", "fs", "io-util"] }
+# net: automation 本地 HTTP 桥 (src/automation/) 用 TcpListener 绑 127.0.0.1。
+tokio = { version = "1", features = ["time", "sync", "fs", "io-util", "net"] }
 # url 解析:版本切换时用 Url::parse() 拼 manifest 端点,避免拼错字符串。
 url = "2"
+# axum: 本地自动化桥的 HTTP server (127.0.0.1, 仅本机)。外部 AI 工具 (Claude Code /
+# Codex) 经 REST /v1/call 与 MCP /mcp 操控画布。server 只做哑管道:把请求 emit 给前端
+# 执行 (与 UI 同一代码路径), 自身不碰业务。详见 src/automation/mod.rs 顶部注释 +
+# docs/automation/自动化接口-设计与施工图.md。默认 features 已含 json/http1/tokio。
+axum = "0.7"
 # ffmpeg-sidecar: 视频抽帧用。不走 C/C++ binding，直接调编译好的 ffmpeg 二进制 —
 # Windows/macOS/Linux 三端零 C 编译依赖。1.2.5+ 不再走它的 download_ffmpeg 路径,
 # 改用我们自己服务器 + SHA 校验,但 FfmpegCommand / event 解析继续用它。
@@ -74,6 +89,11 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+# 关闭 WebView2 自带的「密码自动保存 + 通用表单自动填充」(见 lib.rs::disable_webview2_autofill)。
+# 应用自己管理登录凭据,内置 Edge 的填表器是第二个抢登录框的人 → 半填 bug。
+# 版本对齐 wry/tauri 已引入的 0.38 / 0.61,避免 COM 接口类型重复导致 cast 不兼容。
+webview2-com = "0.38"
+windows = "0.61"
 
 [profile.release]
 # 关键诊断保留：

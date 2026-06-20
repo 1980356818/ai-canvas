@@ -943,10 +943,13 @@ export default function VideoToolbar() {
     const d = card.data as VideoData;
     if (!d.videoUrl) return;
     if (d.videoUrl.startsWith("data:") || d.videoUrl.startsWith("http")) {
+      // 远程/内联视频不能直接走 exportFile(它只认本地存储路径)。引导用户先点旁边的
+      // 「保存到本地」(handleSaveLocal → localizeCardMedia)落盘,localPath 就位后即可下载。
       useUIStore.getState().addToast({
         type: "info",
-        title: "该视频暂不支持直接下载",
-        duration: 2500,
+        title: "请先点「保存到本地」",
+        description: "远程视频需先保存到本地，再下载导出。",
+        duration: 3500,
       });
       return;
     }

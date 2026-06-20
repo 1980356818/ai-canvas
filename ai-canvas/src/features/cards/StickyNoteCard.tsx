@@ -8,7 +8,7 @@ export default memo(function StickyNoteCard({ card }: { card: CanvasCard }) {
   const data = card.data as { content?: string };
   const content = data.content ?? "";
   const isEditing = useCanvasStore((s) => s.editingCardId === card.id);
-  const updateCard = useCardStore((s) => s.updateCard);
+  const updateCardData = useCardStore((s) => s.updateCardData);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const cursorRef = useRef<{ start: number; end: number } | null>(null);
@@ -34,11 +34,11 @@ export default memo(function StickyNoteCard({ card }: { card: CanvasCard }) {
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       cursorRef.current = { start: e.target.selectionStart, end: e.target.selectionEnd };
       const val = e.target.value;
-      updateCard(card.id, { data: { ...data, content: val } });
+      updateCardData(card.id, { content: val });
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => autoSave.markDirty(card.id), 300);
     },
-    [card.id, data, updateCard],
+    [card.id, updateCardData],
   );
 
   const stopDrag = useCallback((e: React.PointerEvent | React.MouseEvent) => {
