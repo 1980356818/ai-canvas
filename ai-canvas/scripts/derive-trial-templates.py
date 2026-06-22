@@ -34,7 +34,11 @@ CARD_LOCK_DESC = "试用模板：提示词已封装，升级正式版后可查�
 
 # 已有专门手作 trial 双胞胎(不同 id、含特殊处理)的 flat,不自动派生,避免重复:
 #   wf-face-swap(换脸) → 手作 wf-face-merge-trial(带 gender 选项锁),保留手作版。
-EXCLUDE_FLAT = {"wf-face-swap"}
+EXCLUDE_SRC = {"wf-face-swap"}
+EXCLUDE_FLAT = EXCLUDE_SRC  # 向后兼容(legacy 脚本仍 import 此名)
+
+# 允许派生 trial 的源类别。detail(详情页)与 flat 共享同一套客户端解码钩子,可一并派生。
+ALLOWED_SOURCE_CATEGORIES = {"flat", "detail"}
 
 
 def cloak_card_prompts(card) -> int:
@@ -59,22 +63,90 @@ def cloak_card_prompts(card) -> int:
     return n
 
 
+def _downstream_targets(tpl, src_idx):
+    """返回 [(target_idx, target_card), ...](按 connections sourceIndex/targetIndex 解析,过滤越界)。"""
+    cards = tpl.get("cards", [])
+    out = []
+    for conn in tpl.get("connections", []) or []:
+        if conn.get("sourceIndex") == src_idx:
+            ti = conn.get("targetIndex")
+            if isinstance(ti, int) and 0 <= ti < len(cards):
+                out.append((ti, cards[ti]))
+    return out
+
+
+def handle_chat_result(tpl) -> tuple[int, int, int]:
+    """处理 ai_chat 卡的 result 字段(试用版语义清场)。**必须在 cloak_template 之前调用**。
+
+    - BOTH(content+result 都非空):清空 result(content 走 cloak 钩子封装)。
+    - RESULT_ONLY(content 空、result 非空):
+        * 下游含 ai_chat → 把 result 明文前置拼到下游 ai_chat 的 content,
+          然后清空本卡 result(下游 content 后续 cloak 会一并封装)。
+        * 下游不含 ai_chat(空 / 仅 ai_image):保留 result 原样(用户向导/说明文,
+          非提示词;拼到 ai_image 会污染图像 prompt)。
+
+    返回 (cleared_count, injected_count, preserved_count)。
+    """
+    cleared = injected = preserved = 0
+    cards = tpl.get("cards", [])
+    for idx, card in enumerate(cards):
+        if card.get("type") != "ai_chat":
+            continue
+        data = card.get("data")
+        if not isinstance(data, dict):
+            continue
+        content_v = data.get("content")
+        result_v = data.get("result")
+        content_s = content_v.strip() if isinstance(content_v, str) else ""
+        result_s = result_v.strip() if isinstance(result_v, str) else ""
+        if not result_s:
+            continue
+        if content_s:
+            # Case 1 BOTH:清空 result(content 由 cloak 钩子处理)
+            data["result"] = ""
+            cleared += 1
+            continue
+        # Case 2 RESULT_ONLY:看下游
+        targets = _downstream_targets(tpl, idx)
+        chat_targets = [(ti, tc) for ti, tc in targets if tc.get("type") == "ai_chat"]
+        if not chat_targets:
+            preserved += 1
+            continue
+        for _, tc in chat_targets:
+            tdata = tc.get("data")
+            if not isinstance(tdata, dict):
+                tdata = {}
+                tc["data"] = tdata
+            existing = tdata.get("content")
+            existing_s = existing if isinstance(existing, str) else ""
+            if is_cloaked(existing_s):
+                # 下游 content 已被封装(异常路径) → 跳过避免破坏解码
+                continue
+            merged = (result_v + "\n\n" + existing_s) if existing_s else result_v
+            tdata["content"] = merged
+            injected += 1
+        data["result"] = ""
+    return cleared, injected, preserved
+
+
 def cloak_template(tpl) -> int:
     """对一个模板的所有卡就地封装提示词。返回封装字段总数。"""
     return sum(cloak_card_prompts(c) for c in tpl.get("cards", []))
 
 
-def make_trial_twin(flat, min_app_version):
-    """flat 模板 → trial 双胞胎(深拷贝改 id/category/name + 封装提示词 + 复用封面)。"""
-    twin = copy.deepcopy(flat)
-    twin["id"] = flat["id"] + TRIAL_SUFFIX
+def make_trial_twin(src, min_app_version):
+    """源模板(flat/detail)→ trial 双胞胎(深拷贝改 id/category/name + result 处理 + 封装提示词 + 复用封面)。"""
+    twin = copy.deepcopy(src)
+    twin["id"] = src["id"] + TRIAL_SUFFIX
     twin["category"] = "trial"
-    name = flat.get("name") or flat["id"]
+    name = src.get("name") or src["id"]
     if "试用" not in name:
         twin["name"] = f"{name}（试用）"
     twin["description"] = TRIAL_TPL_DESC
     if min_app_version:
         twin["min_app_version"] = min_app_version
+    # 顺序固定:先 result 处理(可能改下游 content),再 cloak(把新 content 一并封装)
+    handle_chat_result(twin)
     locked = cloak_template(twin)
     return twin, locked
 
@@ -92,23 +164,39 @@ def main():
 
     templates = json.load(open(SEED, encoding="utf-8"))
     existing_ids = {t["id"] for t in templates}
-    all_flat = [t for t in templates if t.get("category") == "flat"]
-    flats = [t for t in all_flat if t["id"] not in EXCLUDE_FLAT]
+    all_src = [t for t in templates if t.get("category") in ALLOWED_SOURCE_CATEGORIES]
+    srcs = [t for t in all_src if t["id"] not in EXCLUDE_SRC]
+    by_cat = {}
+    for t in srcs:
+        by_cat[t.get("category")] = by_cat.get(t.get("category"), 0) + 1
 
     print(
-        f"[derive] flat {len(all_flat)} 个,排除 {sorted(EXCLUDE_FLAT)} → 派生 {len(flats)} 个 trial 双胞胎"
+        f"[derive] 源 {len(all_src)} 个 {dict(by_cat)},排除 {sorted(EXCLUDE_SRC)} → 派生 {len(srcs)} 个 trial 双胞胎"
         + ("" if args.min_app_version else "  (⚠ 未设 --min-app-version)")
     )
 
     twins = []
     total_locked = 0
-    for f in flats:
+    total_stats = [0, 0, 0]  # cleared, injected, preserved
+    for f in srcs:
+        # 复算 stats(make_trial_twin 内部已跑过 handle_chat_result,这里独立干跑一次拿计数)
+        preview = copy.deepcopy(f)
+        c, inj, kept = handle_chat_result(preview)
+        total_stats[0] += c
+        total_stats[1] += inj
+        total_stats[2] += kept
+
         twin, locked = make_trial_twin(f, args.min_app_version)
         twins.append(twin)
         total_locked += locked
         tag = "↻覆盖手作" if twin["id"] in existing_ids else "+新增"
         cover = "复用封面" if twin.get("coverImage") else "无封面"
-        print(f"  {tag:<8} {twin['id']:<34} 封装 {locked:>2} 条  {cover}")
+        extra = []
+        if c: extra.append(f"清result {c}")
+        if inj: extra.append(f"拼下游 {inj}")
+        if kept: extra.append(f"留result {kept}")
+        extras = " ".join(extra)
+        print(f"  {tag:<8} {twin['id']:<34} 封装 {locked:>2} 条  {cover}  {f.get('category'):<6} {extras}")
 
     # 合并:替换同 id 的旧 trial(手作 outfit-fusion-trial/model-bag-trial → 封装版),
     # 保留其余(含手作 face-merge-trial / detail-cn-trial,且对它们也补封装)。
@@ -129,6 +217,10 @@ def main():
     print(
         f"[derive] 完成:派生 {len(twins)} + 保留手作补封装 {kept_cloaked} 条 → "
         f"trial 共 {trial_total} 个 / 模板总 {len(merged)} 个;新派生封装 {total_locked} 条提示词"
+    )
+    print(
+        f"[derive] result 字段处理:Case1 清空 {total_stats[0]} 个 / "
+        f"Case2 拼下游 {total_stats[1]} 个 / 保留(下游非chat) {total_stats[2]} 个"
     )
 
     if not args.write:
