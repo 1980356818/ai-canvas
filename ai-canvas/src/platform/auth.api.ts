@@ -8,6 +8,8 @@ const USER_KEY = "auth_user";
 export interface TierFeatures {
   /** 允许的模板 id 列表；字符串 "*" = 全部 */
   templates?: string[] | "*";
+  /** 允许的模板「分类」grant；命中即该分类全部可用（与 templates 取并集） */
+  templateCategories?: string[];
   allowBlank?: boolean;
   allowImport?: boolean;
   [k: string]: unknown;

@@ -26,6 +26,7 @@ import { CARD_DEFAULTS } from "@/shared/constants";
 import { useTemplateStore } from "@/stores/templateStore";
 import { useAuthStore } from "@/stores/authStore";
 import { canInsertTemplate, canUseTemplate, entitlementsFromUser } from "@/lib/entitlements";
+import { lockedTemplateMsg } from "@/config/membershipCopy";
 import { useCategoryStore } from "@/stores/categoryStore";
 import { categoryLabelMap, categoryOrderMap } from "@/config/templateCategories";
 import { extractCardMedia } from "@/config/model-ref-images";
@@ -460,10 +461,10 @@ function ContextMenuPanel({
                 onSelect: () => {
                   if (!projectId) return;
                   // 防御性二次校验:列表已过滤,这里对付费墙再确认一次,杜绝任何绕过。
-                  if (!canUseTemplate(ent, wf.id)) {
+                  if (!canUseTemplate(ent, wf)) {
                     useUIStore
                       .getState()
-                      .openUpgrade(`「${wf.name}」是正式版模板,升级会员后即可使用`);
+                      .openUpgrade(lockedTemplateMsg(wf.name));
                     hide();
                     return;
                   }

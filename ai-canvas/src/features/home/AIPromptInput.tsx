@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import ModelSelector from "@/features/editor/ModelSelector";
 import { VIDEO_EXTENSIONS_REGEX, IMAGE_EXTENSIONS_REGEX } from "@/shared/mediaFormats";
 import { useEntitlements } from "@/hooks/useEntitlements";
+import { AI_CREATE_LOCK_MSG } from "@/config/membershipCopy";
 
 interface UploadedMedia {
   url: string;
@@ -184,7 +185,7 @@ export default function AIPromptInput() {
   const handleSend = useCallback(async () => {
     if (sending) return;
     if (!ent.allowBlank) {
-      useUIStore.getState().openUpgrade("AI 自由创作为正式版功能，升级会员后解锁");
+      useUIStore.getState().openUpgrade(AI_CREATE_LOCK_MSG);
       return;
     }
     const trimmed = prompt.trim();

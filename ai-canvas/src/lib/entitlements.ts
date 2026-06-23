@@ -13,6 +13,8 @@ export interface Entitlements {
   isOfficial: boolean;
   /** 允许的项目模板 id 列表；"*" = 全部 */
   templates: string[] | "*";
+  /** 允许的模板「分类」grant；命中即该分类全部可用（与 templates 取并集） */
+  templateCategories: string[];
   /** 允许空白项目 / AI 自由创作（首页 AIPromptInput） */
   allowBlank: boolean;
   /** 允许导入 .aicat */
@@ -24,20 +26,29 @@ export function entitlementsFromUser(user: AuthUser | null): Entitlements {
   const f = (user?.features ?? {}) as TierFeatures;
   const templates: string[] | "*" =
     f.templates === "*" ? "*" : Array.isArray(f.templates) ? f.templates : [];
+  const templateCategories = Array.isArray(f.templateCategories) ? f.templateCategories : [];
   return {
     tier: user?.tier ?? null,
     tierName: user?.tierName ?? null,
     isOfficial: !!user?.isOfficial,
     templates,
+    templateCategories,
     allowBlank: !!f.allowBlank,
     allowImport: !!f.allowImport,
   };
 }
 
-/** 该模板 id 是否允许使用。 */
-export function canUseTemplate(ent: Entitlements, templateId: string): boolean {
+/**
+ * 该模板是否允许「使用」(新建/插入)。命中任一即可:
+ *   "*" 全放行 · 模板分类在 templateCategories grant 内 · 模板 id 在 templates 白名单内。
+ */
+export function canUseTemplate(
+  ent: Entitlements,
+  tpl: { id: string; category: string },
+): boolean {
   if (ent.templates === "*") return true;
-  return ent.templates.includes(templateId);
+  if (ent.templateCategories.includes(tpl.category)) return true;
+  return ent.templates.includes(tpl.id);
 }
 
 /**
@@ -64,5 +75,5 @@ export function canInsertTemplate(
   ent: Entitlements,
   tpl: { id: string; category: string },
 ): boolean {
-  return canSeeTemplate(ent, tpl) && canUseTemplate(ent, tpl.id);
+  return canSeeTemplate(ent, tpl) && canUseTemplate(ent, tpl);
 }
