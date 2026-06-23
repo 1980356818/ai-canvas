@@ -18,17 +18,13 @@ import copy
 import json
 import os
 
-from promptcloak import cloak, is_cloaked
+from promptcloak import cloak_template, handle_chat_result
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 SEED = os.path.join(_HERE, "templates-seed.json")
 FALLBACK = os.path.join(_HERE, "..", "src", "config", "templatesFallback.json")
 
 TRIAL_SUFFIX = "-trial"
-# 提示词在 data.content 的 AI 生成卡(与客户端 build*Request 解码钩子覆盖范围一致)。
-TRIAL_CARD_TYPES = {"ai_image", "ai_chat", "ai_video", "ai_tryon", "ai_multiangle"}
-# 可能藏提示词的字段(逐一 cloak)。
-PROMPT_FIELDS = ("content", "_systemPrompt", "_promptTemplate")
 TRIAL_TPL_DESC = "试用版：提示词已封装，升级正式版后可查看与编辑"
 CARD_LOCK_DESC = "试用模板：提示词已封装，升级正式版后可查看与编辑"
 
@@ -39,99 +35,6 @@ EXCLUDE_FLAT = EXCLUDE_SRC  # 向后兼容(legacy 脚本仍 import 此名)
 
 # 允许派生 trial 的源类别。detail(详情页)与 flat 共享同一套客户端解码钩子,可一并派生。
 ALLOWED_SOURCE_CATEGORIES = {"flat", "detail"}
-
-
-def cloak_card_prompts(card) -> int:
-    """对一张 AI 卡的提示词字段就地 cloak + 上锁。返回封装的字段数(0=该卡无提示词,不动)。"""
-    if card.get("type") not in TRIAL_CARD_TYPES:
-        return 0
-    data = card.get("data")
-    if not isinstance(data, dict):
-        return 0
-    n = 0
-    for field in PROMPT_FIELDS:
-        v = data.get(field)
-        if isinstance(v, str) and v.strip() and not is_cloaked(v):
-            data[field] = cloak(v)
-            n += 1
-    if n:
-        data["_locked"] = True
-        if not data.get("_label"):
-            data["_label"] = card.get("title") or "模板节点"
-        if not data.get("_description"):
-            data["_description"] = CARD_LOCK_DESC
-    return n
-
-
-def _downstream_targets(tpl, src_idx):
-    """返回 [(target_idx, target_card), ...](按 connections sourceIndex/targetIndex 解析,过滤越界)。"""
-    cards = tpl.get("cards", [])
-    out = []
-    for conn in tpl.get("connections", []) or []:
-        if conn.get("sourceIndex") == src_idx:
-            ti = conn.get("targetIndex")
-            if isinstance(ti, int) and 0 <= ti < len(cards):
-                out.append((ti, cards[ti]))
-    return out
-
-
-def handle_chat_result(tpl) -> tuple[int, int, int]:
-    """处理 ai_chat 卡的 result 字段(试用版语义清场)。**必须在 cloak_template 之前调用**。
-
-    - BOTH(content+result 都非空):清空 result(content 走 cloak 钩子封装)。
-    - RESULT_ONLY(content 空、result 非空):
-        * 下游含 ai_chat → 把 result 明文前置拼到下游 ai_chat 的 content,
-          然后清空本卡 result(下游 content 后续 cloak 会一并封装)。
-        * 下游不含 ai_chat(空 / 仅 ai_image):保留 result 原样(用户向导/说明文,
-          非提示词;拼到 ai_image 会污染图像 prompt)。
-
-    返回 (cleared_count, injected_count, preserved_count)。
-    """
-    cleared = injected = preserved = 0
-    cards = tpl.get("cards", [])
-    for idx, card in enumerate(cards):
-        if card.get("type") != "ai_chat":
-            continue
-        data = card.get("data")
-        if not isinstance(data, dict):
-            continue
-        content_v = data.get("content")
-        result_v = data.get("result")
-        content_s = content_v.strip() if isinstance(content_v, str) else ""
-        result_s = result_v.strip() if isinstance(result_v, str) else ""
-        if not result_s:
-            continue
-        if content_s:
-            # Case 1 BOTH:清空 result(content 由 cloak 钩子处理)
-            data["result"] = ""
-            cleared += 1
-            continue
-        # Case 2 RESULT_ONLY:看下游
-        targets = _downstream_targets(tpl, idx)
-        chat_targets = [(ti, tc) for ti, tc in targets if tc.get("type") == "ai_chat"]
-        if not chat_targets:
-            preserved += 1
-            continue
-        for _, tc in chat_targets:
-            tdata = tc.get("data")
-            if not isinstance(tdata, dict):
-                tdata = {}
-                tc["data"] = tdata
-            existing = tdata.get("content")
-            existing_s = existing if isinstance(existing, str) else ""
-            if is_cloaked(existing_s):
-                # 下游 content 已被封装(异常路径) → 跳过避免破坏解码
-                continue
-            merged = (result_v + "\n\n" + existing_s) if existing_s else result_v
-            tdata["content"] = merged
-            injected += 1
-        data["result"] = ""
-    return cleared, injected, preserved
-
-
-def cloak_template(tpl) -> int:
-    """对一个模板的所有卡就地封装提示词。返回封装字段总数。"""
-    return sum(cloak_card_prompts(c) for c in tpl.get("cards", []))
 
 
 def make_trial_twin(src, min_app_version):
@@ -147,7 +50,7 @@ def make_trial_twin(src, min_app_version):
         twin["min_app_version"] = min_app_version
     # 顺序固定:先 result 处理(可能改下游 content),再 cloak(把新 content 一并封装)
     handle_chat_result(twin)
-    locked = cloak_template(twin)
+    locked = cloak_template(twin, lock_description=CARD_LOCK_DESC)
     return twin, locked
 
 
@@ -205,7 +108,7 @@ def main():
     kept_cloaked = 0
     for t in merged:
         if t.get("category") == "trial":
-            c = cloak_template(t)
+            c = cloak_template(t, lock_description=CARD_LOCK_DESC)
             kept_cloaked += c
             if c and args.min_app_version and not t.get("min_app_version"):
                 t["min_app_version"] = args.min_app_version
