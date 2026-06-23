@@ -39,7 +39,7 @@ import { buildChatRequest } from "@/services/generation/buildChatRequest";
 import { streamChatToCard } from "@/services/generation/streamChatToResult";
 import { runFrameExtraction } from "@/lib/frameExtraction";
 import { hasApiKey } from "@/platform";
-import { scheduleBackgroundSave } from "@/lib/media";
+import { scheduleCardMediaLocalization } from "@/lib/mediaLocalize";
 import { autoSave } from "@/lib/autoSave";
 import type { CanvasCard } from "@/types";
 import type { ImageGenResponse } from "@/providers/types";
@@ -56,11 +56,14 @@ export interface RunCardOptions {
   /** 图片批量张数(仅 ai_image)。缺省 1;>1 走 legacy 逐张直连。 */
   count?: number;
   /**
-   * 取消信号(组运行 controller.signal)。abort 时:
+   * 中止信号(组运行 GroupRunControl.signal)。abort 时:
    *   - 已排到但未开跑 → 直接跳过;
    *   - image/video 在途 → 取消本卡活跃 TaskManager 任务(经 tasksStore.getActiveByCard);
    *   - chat 在途 → 经 request.signal 中断 provider.chat。
-   * 使 cancelGroup 能真正停掉在途生成,而非只停层间调度。
+   *
+   * ⚠️ 仅**强制中止**(forceAbortGroup)会 abort 此信号;默认的**排空式停止**(stopGroup)
+   * 不碰它 —— 排空式停止靠 executor 的派发闸门「不再发新卡」,在途的(已扣费)放它跑完。
+   * 故组运行常态下此信号永不 abort;它只是 forceAbort 救场(如任务卡死)的逃生通道。
    */
   signal?: AbortSignal;
 }
@@ -108,11 +111,9 @@ async function runImageCard(card: CanvasCard, count = 1): Promise<RunCardResult>
     imageUrl: results[0]!.url, results, selectedIndex: 0,
   });
   autoSave.markDirty(card.id);
-  for (let i = 0; i < results.length; i++) {
-    if (results[i]!.url.startsWith("http")) {
-      scheduleBackgroundSave(card.id, results[i]!.url, i === 0 ? "imageUrl" : undefined, card.projectId);
-    }
-  }
+  // 批量结果可能残留远端 URL(saveMedia 当时失败)——整卡交给统一收敛模块,
+  // imageUrl 与 results[].url 一起补,无远端时是 no-op。
+  scheduleCardMediaLocalization(card.id);
   return { outcome: "ok" };
 }
 
@@ -225,8 +226,8 @@ export async function runCard(
   // 让所有读 generatingCards 的 UI(卡片进度条 / 拖拽拦截 / 数据流 watcher)
   // 一致地知道这张卡在生成中。task 路径下 taskBridge 会接管并覆盖进度;
   // 非 task 路径(ai_chat / frame_extractor)靠这里点亮、靠 finally 清。
-  // P3.2: 在途取消 —— abort 时取消本卡活跃的 TaskManager 任务(image/video 走 task 路径),
-  // 使 cancelGroup 能真正停掉在途生成,而非只停层间调度。chat 经 request.signal 中断(见 runChatCard)。
+  // 强制中止 —— signal abort 时取消本卡活跃的 TaskManager 任务(image/video 走 task 路径),
+  // chat 经 request.signal 中断(见 runChatCard)。仅 forceAbortGroup 触发,排空式停止不走这里。
   const onAbort = () => {
     const active = useTasksStore.getState().getActiveByCard(card.id);
     if (active) void taskManager.cancel(active.id);

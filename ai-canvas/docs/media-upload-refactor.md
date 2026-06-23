@@ -25,7 +25,7 @@
 |---|---|---|---|
 | Tauri IPC 单次字符串 | ~3 MB | WebView2 原生限制 | `ERR_CONNECTION_REFUSED` / WebView2 闪退 |
 | Rust `inline_local_files` 累计 | 64 MB (base64) | `src-tauri/src/commands/ipc_limits.rs:65` | 报错 "请求体引用的本地文件累计超过 64MB 上限" |
-| nginx `client_max_body_size` | 100 MB | `ai.snoworangekeji.cn_nginx:162` | HTTP 413 |
+| nginx `client_max_body_size` | 100 MB | `www.jjowo.com_nginx:162` | HTTP 413 |
 | Spring `max-request-size` | 100 MB | `application.yml:34` | 413 |
 | MySQL `request_params` | 隐性 | `media_task` 表 | `Out of sort memory`（2026-04 P0） |
 | 上游 provider body | provider-specific | 各家不同 | 503 / token 上限报错 |
@@ -313,7 +313,7 @@ CREATE TABLE uploaded_files (
 
 ### 4.3 速率限制
 
-nginx 层加 `limit_req zone=files_upload_ip burst=20 nodelay`，每 IP 每秒不超过 10 次上传。配置写到 `ai.snoworangekeji.cn_nginx`。
+nginx 层加 `limit_req zone=files_upload_ip burst=20 nodelay`，每 IP 每秒不超过 10 次上传。配置写到 `www.jjowo.com_nginx`。
 
 ### 4.4 nginx 路径放行
 

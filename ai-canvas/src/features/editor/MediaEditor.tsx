@@ -10,7 +10,7 @@ import { modelService } from "@/services/models";
 import { resolveDefaultModelForCardType } from "@/services/modelDefaults";
 import { buildImageRequest } from "@/services/generation/buildImageRequest";
 import { runEditorGeneration } from "@/services/generation/runEditorGeneration";
-import { scheduleBackgroundSave } from "@/lib/media";
+import { scheduleCardMediaLocalization } from "@/lib/mediaLocalize";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug";
 import {
@@ -30,6 +30,7 @@ import {
   getAllowedSizesForModel,
   coerceToAllowedSize,
   normalizeResolution,
+  getImageResolutionOptions,
   DEFAULT_IMAGE_QUALITY,
   supportsImageQuality,
 } from "@/shared/constants";
@@ -173,6 +174,11 @@ export default function MediaEditor({ card }: MediaEditorProps) {
   );
 
   const allowedSizes = useMemo(() => getAllowedSizesForModel(currentModel), [currentModel]);
+  // 分辨率档位按模型给 (1K 仅 gpt-image-2 系;nano-banana 系只有 2K/4K)。
+  const resolutionOptions = useMemo(
+    () => getImageResolutionOptions(currentModel).map((r) => ({ value: r, label: r })),
+    [currentModel],
+  );
 
   const handleModelChange = useCallback(
     (modelId: string, providerId: string) => {
@@ -426,8 +432,6 @@ export default function MediaEditor({ card }: MediaEditorProps) {
           if (count !== requestedCount) {
             log.warn(`batchSize ${requestedCount} clamped to ${count} (max 4 to avoid GPU pressure)`);
           }
-          // 把卡片自身的 projectId 作为本次任务的归属,整个异步链都用这个快照(请求体里已由 build 快照)。
-          const ownerProjectId = card.projectId;
           let results: ImageResult[];
 
           if (count === 1) {
@@ -500,11 +504,9 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             (r) => r.url.startsWith("http://") || r.url.startsWith("https://"),
           );
           if (hasRemote) {
-            for (let i = 0; i < results.length; i++) {
-              if (results[i]!.url.startsWith("http")) {
-                scheduleBackgroundSave(card.id, results[i]!.url, i === 0 ? "imageUrl" : undefined, ownerProjectId);
-              }
-            }
+            // 整卡交给统一收敛模块:imageUrl 与 results[].url 一起补
+            // (旧逐 URL 入队按 cardId 单飞,批量第 2..N 张永远救不回)。
+            scheduleCardMediaLocalization(card.id);
             useUIStore.getState().addToast({
               type: "warning",
               title: `${results.length} 张图片已生成，部分保存到本地失败`,
@@ -660,7 +662,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
                 <ArrowDownLeft className="h-3 w-3" />
                 上游文字 · 自动拼接到提示词前
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex max-h-[88px] flex-wrap gap-1.5 overflow-y-auto">
                 {upstreamEntries.map(([cardId, text]) => (
                   <span
                     key={cardId}
@@ -722,6 +724,7 @@ export default function MediaEditor({ card }: MediaEditorProps) {
             resolution={supportsResolution ? currentResolution : undefined}
             onChange={handleSizeChange}
             onResolutionChange={supportsResolution ? handleResolutionChange : undefined}
+            resolutionOptions={supportsResolution ? resolutionOptions : undefined}
             quality={qualitySupported ? currentQuality : undefined}
             onQualityChange={qualitySupported ? handleQualityChange : undefined}
             disabled={generating}

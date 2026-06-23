@@ -197,6 +197,22 @@ pub async fn upload_to_server(
     }
 
     let content_type = super::ai::mime_from_path(&abs_path).to_string();
+
+    // >10MB 的静态图片先压到 ~9.75MB 以内再进上传管线(文本/图片节点参考图直传
+    // 上游会撞服务端 inliner 20MB cap / 上游拉不动国内 COS 大图)。best-effort:
+    // 压不了(ffmpeg 缺失 / 解码失败)原样上传,绝不因压缩挡住上传。
+    // 压缩产物按源 sha 落 media/compressed/ 缓存;后续 sha256 / uploaded_files
+    // 缓存 / in-flight 单飞 / presign 全部基于压缩后的文件,预热与主路径自然命中
+    // 同一份。卡片 data 与本地显示不受影响,只有送上游的字节被压。
+    let (abs_path, size, content_type) = match super::image_shrink::shrink_image_for_upload(
+        &data_dir, &abs_path, size, &content_type,
+    )
+    .await
+    {
+        Some((shrunk_path, shrunk_size)) => (shrunk_path, shrunk_size, "image/jpeg".to_string()),
+        None => (abs_path, size, content_type),
+    };
+
     enforce_upload_size_limit(size, &content_type)?;
 
     // 流式 sha256 — 64KB chunk, 500MB 视频也只占 64KB 内存
@@ -1020,7 +1036,7 @@ mod tests {
     /// - 服务端额外的 `id` / `purpose` / `success` 顶级字段不破坏解析
     #[test]
     fn parses_real_production_upload_response() {
-        let body = r#"{"code":200,"message":"操作成功","data":{"id":"file-2058649766147788801","url":"https://ai.snoworangekeji.cn/uploads/media/input/1/20260525/c8c1fd40eb4843938736d24a803f54e8.mp4","sha256":"59c8411ae005d4f13877dce5365950f11b30e9a68085983ca86e8c8a029ad159","contentType":"video/mp4","size":"2050933","purpose":"media-input","cached":false},"success":true}"#;
+        let body = r#"{"code":200,"message":"操作成功","data":{"id":"file-2058649766147788801","url":"https://www.jjowo.com/uploads/media/input/1/20260525/c8c1fd40eb4843938736d24a803f54e8.mp4","sha256":"59c8411ae005d4f13877dce5365950f11b30e9a68085983ca86e8c8a029ad159","contentType":"video/mp4","size":"2050933","purpose":"media-input","cached":false},"success":true}"#;
         let env: ServerEnvelope<ServerFileUploadResponse> = serde_json::from_str(body).unwrap();
         assert_eq!(env.code, 200);
         let data = env.data.expect("data 存在");

@@ -9,7 +9,7 @@
  * 契约与 buildVideoRequest 对齐:
  *  - 违例返回 `{ ok:false, outcome, reason, toast? }`;调用方决定呈现(编辑器弹 toast,cardRunner 用 outcome+reason)。
  *  - 上传失败直接 throw,由调用方 try/catch。
- *  - 几何 resize(pendingGeometry)/ 批量循环 / 逐张 scheduleBackgroundSave 等"善后"留在编辑器,本函数不碰。
+ *  - 几何 resize(pendingGeometry)/ 批量循环 / 媒体本地化补救(mediaLocalize)等"善后"留在编辑器,本函数不碰。
  *  - **batchSize 不进本函数**:本函数只产出"一张图"的请求;批量是 `runCard(cardId, { count })` opt / 编辑器循环的事。
  *  - provider 解析留给调用方,本函数返回 `modelId` / `providerId` 供其反查。
  *
@@ -207,4 +207,34 @@ export async function buildImageRequest(
   };
 
   return { ok: true, request, modelId, providerId };
+}
+
+/**
+ * 采集 ai_image / ai_multiangle 的运行输入切片(同步,供 runInputFingerprint)。
+ * 与上方 buildImageRequest 读的 ImageCardData 一一对应 —— 改 builder 输入字段必同步改这里
+ * (runInputs.test.ts 的敏感性/不敏感性断言会卡住漂移)。排除几何/title/产物字段。
+ */
+export function collectImageInputs(card: CanvasCard): Record<string, unknown> {
+  const data = card.data as ImageCardData;
+  const modelId = (data.model ?? "").trim();
+  // prompt 复用 builder 同款合成:multiangle 走角度编码,其余走上游+content(含 uncloak/inlineRefs/upstreamTexts)。
+  const prompt =
+    card.type === "ai_multiangle" ? buildAnglePrompt(data) : buildFinalPrompt(data);
+  // 参考图按模型 slot 收集 url(role=slotKey),与请求体顺序一致;不含 width/height/sourceCardId。
+  const refs = getRefSlotsForModel(modelId)
+    .map((slot) => {
+      const e = data.refImages?.[slot.key];
+      return e ? { role: slot.key, url: e.url } : null;
+    })
+    .filter((r): r is { role: string; url: string } => Boolean(r));
+  return {
+    kind: card.type,
+    model: modelId,
+    provider: data.provider ?? "",
+    prompt,
+    size: normalizeImageSize(data.size) || "",
+    resolution: normalizeResolution(data.resolution) || "",
+    quality: data.quality || DEFAULT_IMAGE_QUALITY,
+    refs,
+  };
 }

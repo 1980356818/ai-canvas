@@ -20,12 +20,13 @@ import {
 } from "@/lib/groupActions";
 import { GROUP_PALETTE } from "@/types/group";
 import { pruneGroupsForRemovedCards } from "@/lib/groupConsistency";
-import { runGroup, cancelGroup } from "@/services/groupRunner";
+import { runGroup, stopGroup } from "@/services/groupRun";
 import { useGroupRunStatusStore } from "@/stores/groupRunStatusStore";
 import { CARD_DEFAULTS } from "@/shared/constants";
 import { useTemplateStore } from "@/stores/templateStore";
 import { useAuthStore } from "@/stores/authStore";
 import { canInsertTemplate, canUseTemplate, entitlementsFromUser } from "@/lib/entitlements";
+import { lockedTemplateMsg } from "@/config/membershipCopy";
 import { useCategoryStore } from "@/stores/categoryStore";
 import { categoryLabelMap, categoryOrderMap } from "@/config/templateCategories";
 import { extractCardMedia } from "@/config/model-ref-images";
@@ -460,10 +461,10 @@ function ContextMenuPanel({
                 onSelect: () => {
                   if (!projectId) return;
                   // 防御性二次校验:列表已过滤,这里对付费墙再确认一次,杜绝任何绕过。
-                  if (!canUseTemplate(ent, wf.id)) {
+                  if (!canUseTemplate(ent, wf)) {
                     useUIStore
                       .getState()
-                      .openUpgrade(`「${wf.name}」是正式版模板,升级会员后即可使用`);
+                      .openUpgrade(lockedTemplateMsg(wf.name));
                     hide();
                     return;
                   }
@@ -721,32 +722,48 @@ function ContextMenuPanel({
   } else if (contextMenu.target === "group") {
     const groupId = contextMenu.targetId;
     const group = groupId ? useGroupStore.getState().getGroup(groupId) : undefined;
-    // F10: 失败态显示"只重跑失败节点";若组当前在跑显示"停止运行"
+    // 运行项三态:running→「停止运行」/ stopping→「正在收尾」(禁用)/ stopped→「继续(补跑)」/
+    // failed→「继续(重跑失败及其后继)」/ idle→「运行此组」。跑过之后(停止/失败/完成)
+    // 再额外给「重新运行整组」(rerun,无视新鲜度全跑)。
     const groupRunStatus = groupId
       ? useGroupRunStatusStore.getState().runningGroups.get(groupId)
       : undefined;
-    const isGroupRunning = groupRunStatus?.phase === "running";
-    const isGroupFailed = groupRunStatus?.phase === "failed";
+    const phase = groupRunStatus?.phase;
+    const isGroupRunning = phase === "running";
+    const isGroupStopping = phase === "stopping";
+    const isGroupStopped = phase === "stopped";
+    const isGroupFailed = phase === "failed";
+    const ranBefore = isGroupStopped || isGroupFailed || phase === "completed";
     entries = [
       {
         type: "item",
-        label: isGroupRunning ? "停止运行" : "运行此组",
-        disabled: !group || group.cardIds.length === 0,
+        label: isGroupRunning
+          ? "停止运行"
+          : isGroupStopping
+            ? "正在收尾…"
+            : isGroupStopped
+              ? "继续(补跑未运行的节点)"
+              : isGroupFailed
+                ? "继续(重跑失败节点及其后继)"
+                : "运行此组",
+        disabled: !group || group.cardIds.length === 0 || isGroupStopping,
         onSelect: () => {
           if (!groupId) return;
-          if (isGroupRunning) cancelGroup(groupId);
+          if (isGroupRunning) stopGroup(groupId);
+          else if (isGroupStopped) void runGroup(groupId, { mode: "resume" });
+          else if (isGroupFailed) void runGroup(groupId, { onlyFailed: true });
           else void runGroup(groupId);
           hide();
         },
       },
-      ...(isGroupFailed
+      ...(ranBefore
         ? [
             {
               type: "item" as const,
-              label: "只重跑失败节点",
+              label: "重新运行整组",
               disabled: false,
               onSelect: () => {
-                if (groupId) void runGroup(groupId, { onlyFailed: true });
+                if (groupId) void runGroup(groupId, { mode: "rerun" });
                 hide();
               },
             },

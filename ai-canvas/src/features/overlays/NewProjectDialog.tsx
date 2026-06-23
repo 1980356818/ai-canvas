@@ -14,6 +14,8 @@ import { scheduleFitCardsToViewport } from "@/lib/viewport";
 import { cn } from "@/lib/utils";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { canUseTemplate, canSeeTemplate } from "@/lib/entitlements";
+import { lockedTemplateMsg, BLANK_LOCK_MSG, IMPORT_LOCK_MSG, LOCK_BADGE_LABEL } from "@/config/membershipCopy";
+import { TemplateLockedCover } from "@/shared/TemplateLockedCover";
 import { useCategoryStore } from "@/stores/categoryStore";
 import { categoryLabelMap, categoryOrderMap } from "@/config/templateCategories";
 
@@ -261,7 +263,7 @@ export function NewProjectDialog({
   const handleImport = useCallback(async () => {
     if (loading) return;
     if (!ent.allowImport) {
-      openUpgrade("导入项目为正式版功能，升级会员后解锁");
+      openUpgrade(IMPORT_LOCK_MSG);
       return;
     }
     setLoading(true);
@@ -340,7 +342,7 @@ export function NewProjectDialog({
             disabled={loading}
             onClick={() => {
               if (!ent.allowBlank) {
-                openUpgrade("空白创作为正式版功能，升级会员后解锁");
+                openUpgrade(BLANK_LOCK_MSG);
                 return;
               }
               setShowNameDialog(true);
@@ -356,7 +358,7 @@ export function NewProjectDialog({
             </div>
             {!ent.allowBlank && (
               <span className="ml-auto flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[9px] text-muted-foreground">
-                <Lock className="h-2.5 w-2.5" /> 正式版
+                <Lock className="h-2.5 w-2.5" /> {LOCK_BADGE_LABEL}
               </span>
             )}
           </button>
@@ -386,7 +388,7 @@ export function NewProjectDialog({
           {/* 当前分类网格(可滚动) */}
           <div className="grid grid-cols-5 gap-2 overflow-y-auto">
             {activeGroup?.list.map((wf) => {
-              const locked = !canUseTemplate(ent, wf.id);
+              const locked = !canUseTemplate(ent, wf);
               // 公网 URL → 本地缓存副本显示(命中则离线/秒开,未命中透传走网络)。
               const cover = wf.coverImage ? getDisplayUrl(wf.coverImage) : undefined;
               const isVideo = wf.category === "video";
@@ -397,7 +399,7 @@ export function NewProjectDialog({
                   disabled={loading}
                   onClick={() => {
                     if (locked) {
-                      openUpgrade(`「${wf.name}」是正式版模板，升级会员后解锁`);
+                      openUpgrade(lockedTemplateMsg(wf.name));
                       return;
                     }
                     void handleCreateFromTemplate(wf.id);
@@ -423,13 +425,7 @@ export function NewProjectDialog({
                         <Play className="h-2.5 w-2.5 fill-white text-white" />
                       </div>
                     )}
-                    {locked && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                        <div className="flex items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[9px] font-medium text-white/90">
-                          <Lock className="h-2.5 w-2.5" /> 正式版
-                        </div>
-                      </div>
-                    )}
+                    {locked && <TemplateLockedCover />}
                   </div>
                   <div className="flex flex-1 flex-col gap-0.5 px-2 py-1.5">
                     <p className="truncate text-[13px] font-semibold text-foreground">

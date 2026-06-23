@@ -1,5 +1,5 @@
 import { useMemo, memo, useRef, useEffect } from "react";
-import { Play, AlertCircle, CheckCircle2, Square, RotateCw } from "lucide-react";
+import { Play, AlertCircle, CheckCircle2, Square, RotateCw, Loader2 } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import { useGroupStore } from "@/stores/groupStore";
@@ -13,10 +13,23 @@ import type { CardGroup } from "@/types";
 import { GROUP_TITLE_HEIGHT } from "@/types/group";
 import { hexAlpha } from "@/lib/utils";
 import { useGroupTitleDrag } from "./hooks/useGroupDrag";
-import { runGroup, cancelGroup } from "@/services/groupRunner";
+import { useGroupResize, type ResizeDir } from "./hooks/useGroupResize";
+import { runGroup, stopGroup } from "@/services/groupRun";
 import { computeGroupBounds, type GroupBounds } from "@/lib/groupBounds";
 import { renameGroup } from "@/lib/groupActions";
 import { focusOnCard } from "@/lib/viewport";
+
+/** Frame 8 向缩放手柄的位置与光标(容器化:拖手柄改框自己的存储边界)。 */
+const RESIZE_HANDLES: { dir: ResizeDir; cursor: string; style: React.CSSProperties }[] = [
+  { dir: "nw", cursor: "nwse-resize", style: { left: -6, top: -6 } },
+  { dir: "n", cursor: "ns-resize", style: { left: "calc(50% - 6px)", top: -6 } },
+  { dir: "ne", cursor: "nesw-resize", style: { right: -6, top: -6 } },
+  { dir: "e", cursor: "ew-resize", style: { right: -6, top: "calc(50% - 6px)" } },
+  { dir: "se", cursor: "nwse-resize", style: { right: -6, bottom: -6 } },
+  { dir: "s", cursor: "ns-resize", style: { left: "calc(50% - 6px)", bottom: -6 } },
+  { dir: "sw", cursor: "nesw-resize", style: { left: -6, bottom: -6 } },
+  { dir: "w", cursor: "ew-resize", style: { left: -6, top: "calc(50% - 6px)" } },
+];
 
 /**
  * 标题栏内联编辑。统一入口:
@@ -104,8 +117,12 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
   const setEditingGroupId = useUIStore((s) => s.setEditingGroupId);
   const isEditing = editingGroupId === group.id;
   const onTitleDrag = useGroupTitleDrag(group.id);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const onResizeStart = useGroupResize(group.id, shellRef);
   const runStatus = useGroupRunStatusStore(selectGroupRunStatus(group.id));
   const isRunning = runStatus?.phase === "running";
+  const isStopping = runStatus?.phase === "stopping";
+  const isStopped = runStatus?.phase === "stopped";
   const isFailed = runStatus?.phase === "failed";
   const isCompleted = runStatus?.phase === "completed";
 
@@ -126,16 +143,18 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
     if (isFailed && runStatus.failedCardId) {
       return `失败: ${labelOf(runStatus.failedCardId)}`;
     }
-    if (isRunning) {
+    if (isRunning || isStopping) {
       const ids = Array.from(runStatus.currentCardIds);
-      if (ids.length === 0) return null;
+      if (ids.length === 0) return isStopping ? "收尾中…" : null;
       const head = labelOf(ids[0]!);
+      // stopping:在途卡跑完即停,文案体现「收尾」而非「正在排队跑」
+      const verb = isStopping ? "收尾" : "正在";
       return ids.length > 1
-        ? `正在: ${head} +${ids.length - 1}`
-        : `正在: ${head}`;
+        ? `${verb}: ${head} +${ids.length - 1}`
+        : `${verb}: ${head}`;
     }
     return null;
-  }, [runStatus, isRunning, isFailed]);
+  }, [runStatus, isRunning, isStopping, isFailed]);
 
   const handleTitleBarPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -169,22 +188,34 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
     showContextMenu(e.clientX, e.clientY, "group", group.id);
   };
 
-  // 运行按钮的多语义:
-  //   - running:点击 = 取消(F11)
-  //   - failed:点击 = 跳到失败节点并选中(F8) — 避免误点重跑,重跑走右键菜单
-  //   - idle/completed:点击 = 运行整组
+  // 运行按钮的多语义(主按钮):
+  //   - running:   点击 = 停止(排空式:在途跑完,后续不再执行)
+  //   - stopping:  收尾中,点击忽略(等在途任务落地)
+  //   - stopped:   点击 = 继续(resume,补跑未运行的节点)
+  //   - failed:    点击 = 跳到失败节点并选中(避免误点重跑,重跑走次级按钮/右键)
+  //   - idle:      点击 = 运行整组(默认 resume)
+  //   - completed: 点击 = 重新运行整组(rerun)
   const handleRunClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
     if (isRunning) {
-      // F11: 取消运行;按钮在运行态已切换为 Square(停止)图标
-      cancelGroup(group.id);
+      stopGroup(group.id);
       return;
     }
+    if (isStopping) return; // 收尾中,不接受新指令
     if (isFailed && runStatus?.failedCardId) {
       const failedId = runStatus.failedCardId;
       useCanvasStore.getState().setSelectedCardIds([failedId]);
       focusOnCard(failedId);
+      return;
+    }
+    if (isStopped) {
+      void runGroup(group.id, { mode: "resume" });
+      return;
+    }
+    if (isCompleted) {
+      // 「再次运行」= 重新运行整组(rerun),无视新鲜度
+      void runGroup(group.id, { mode: "rerun" });
       return;
     }
     void runGroup(group.id);
@@ -221,6 +252,7 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
 
   return (
     <div
+      ref={shellRef}
       data-group-id={group.id}
       className="absolute pointer-events-none"
       style={{
@@ -251,8 +283,8 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
       <div
         className="absolute left-0 top-0 flex items-center gap-2 px-4 cursor-pointer pointer-events-auto select-none"
         style={{
-          width: collapsed ? "auto" : bounds.width,
-          maxWidth: bounds.width,
+          width: collapsed ? "auto" : "100%",
+          maxWidth: "100%",
           height: GROUP_TITLE_HEIGHT,
           background: titleBg,
           // 折叠态四角全圆;展开态只圆顶部
@@ -291,36 +323,44 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
           style={{
             background: hexAlpha(effectiveColor, 0.9),
             color: "#fff",
-            cursor: "pointer",
+            cursor: isStopping ? "default" : "pointer",
+            opacity: isStopping ? 0.8 : 1,
           }}
           title={
             isRunning
-              ? "停止运行(点击中止)"
-              : isFailed
-                ? "跳到失败节点 (定位卡片)"
-                : isCompleted
-                  ? "运行完成 · 再次运行"
-                  : "运行此组"
+              ? "停止(在途任务跑完,后续不再执行)"
+              : isStopping
+                ? "正在收尾在途任务…"
+                : isStopped
+                  ? "继续(补跑未运行的节点)"
+                  : isFailed
+                    ? "跳到失败节点 (定位卡片)"
+                    : isCompleted
+                      ? "运行完成 · 再次运行"
+                      : "运行此组"
           }
         >
           {isRunning ? (
             <Square className="h-4 w-4" fill="currentColor" />
+          ) : isStopping ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
           ) : isFailed ? (
             <AlertCircle className="h-4 w-4" />
           ) : isCompleted ? (
             <CheckCircle2 className="h-4 w-4" />
           ) : (
+            // idle / stopped 都用 Play(stopped = 继续)
             <Play className="h-4 w-4" fill="currentColor" />
           )}
         </button>
 
-        {isFailed && (
+        {(isFailed || isStopped) && (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
-              void runGroup(group.id);
+              void runGroup(group.id, { mode: "rerun" });
             }}
             onPointerDown={(e) => e.stopPropagation()}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-opacity"
@@ -330,7 +370,7 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
               border: `1px solid ${hexAlpha(effectiveColor, 0.5)}`,
               cursor: "pointer",
             }}
-            title="重新运行整组"
+            title="重新运行整组(无视已完成,全部重跑)"
           >
             <RotateCw className="h-3.5 w-3.5" />
           </button>
@@ -367,7 +407,15 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
           )}
           <span className="shrink-0 tabular-nums">
             {runStatus
-              ? `${runStatus.doneCount}/${runStatus.totalCount}${isFailed && !currentNodeLabel ? " · 已停止" : ""}`
+              ? `${runStatus.doneCount}/${runStatus.totalCount}${
+                  !currentNodeLabel
+                    ? isStopped
+                      ? " · 已停止"
+                      : isFailed
+                        ? " · 失败"
+                        : ""
+                    : ""
+                }`
               : `${group.cardIds.length} 个节点`}
           </span>
         </span>
@@ -387,7 +435,9 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
                 ? "#EF4444"
                 : isCompleted
                   ? "#22C55E"
-                  : effectiveColor,
+                  : isStopped
+                    ? "#F59E0B"
+                    : effectiveColor,
               opacity: 0.85,
               transition: "width 200ms ease",
             }}
@@ -417,30 +467,52 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
               ? "#EF4444"
               : isCompleted
                 ? "#22C55E"
-                : effectiveColor,
+                : isStopped
+                  ? "#F59E0B"
+                  : effectiveColor,
             color: "#fff",
             fontSize: 13,
             fontWeight: 600,
             boxShadow: `0 2px 8px ${hexAlpha(
-              isFailed ? "#EF4444" : isCompleted ? "#22C55E" : effectiveColor,
+              isFailed
+                ? "#EF4444"
+                : isCompleted
+                  ? "#22C55E"
+                  : isStopped
+                    ? "#F59E0B"
+                    : effectiveColor,
               0.45,
             )}`,
             cursor: "pointer",
           }}
           title={
             isRunning
-              ? "停止运行"
-              : isFailed
-                ? "跳到失败节点"
-                : isCompleted
-                  ? "再次运行"
-                  : "运行此组"
+              ? "停止(在途任务跑完,后续不再执行)"
+              : isStopping
+                ? "正在收尾在途任务…"
+                : isStopped
+                  ? "继续(补跑未运行的节点)"
+                  : isFailed
+                    ? "跳到失败节点"
+                    : isCompleted
+                      ? "再次运行"
+                      : "运行此组"
           }
         >
           {isRunning ? (
             <>
               <Square className="h-4 w-4" fill="currentColor" />
               <span>停止</span>
+            </>
+          ) : isStopping ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>收尾中</span>
+            </>
+          ) : isStopped ? (
+            <>
+              <Play className="h-4 w-4" fill="currentColor" />
+              <span>继续</span>
             </>
           ) : isFailed ? (
             <>
@@ -460,9 +532,42 @@ const GroupShell = memo(function GroupShell({ group, bounds, selected, hovered }
           )}
         </button>
       )}
+
+      {/* 8 向缩放手柄 — 选中且展开时显示;拖拽改的是 Frame 自己的存储边界(容器化),
+          松手后按新矩形重算成员(纳入/排除卡)。 */}
+      {selected &&
+        !collapsed &&
+        RESIZE_HANDLES.map((h) => (
+          <div
+            key={h.dir}
+            onPointerDown={onResizeStart(h.dir)}
+            className="absolute pointer-events-auto"
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: 3,
+              background: "#fff",
+              border: `1.5px solid ${effectiveColor}`,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+              cursor: h.cursor,
+              zIndex: 5,
+              ...h.style,
+            }}
+          />
+        ))}
     </div>
   );
-});
+}, (prev, next) =>
+  // bounds 每帧是新对象,但拖一张卡时只有「含被拖卡的组」bounds 真的变;按值比较
+  // 让其余组 memo 命中,避免所有组的图标/按钮每帧重渲(O(组数) 重渲被消掉)。
+  prev.group === next.group &&
+  prev.selected === next.selected &&
+  prev.hovered === next.hovered &&
+  prev.bounds.x === next.bounds.x &&
+  prev.bounds.y === next.bounds.y &&
+  prev.bounds.width === next.bounds.width &&
+  prev.bounds.height === next.bounds.height,
+);
 
 interface GroupLayerProps {
   projectId: string | null;

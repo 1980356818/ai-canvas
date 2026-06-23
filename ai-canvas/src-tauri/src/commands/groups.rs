@@ -6,7 +6,9 @@
 //!   • 删除单条按 id。
 //!
 //! card_ids 列在 DB 端是 JSON 字符串,前端拼好再发过来,Rust 不解析。
-//! 几何信息(bounds)不持久化 —— 详见 db::migrations::migrate_v9 注释。
+//! Frame 容器化后:边界 x/y/width/height 已持久化(组拥有自己的矩形),
+//! card_ids 降级为「派生缓存」(成员 = 落在边界内的卡片,前端校准后写回)。
+//! 详见 db::migrations::migrate_v12 与 docs/Frame容器化-架构与施工图.md。
 
 use crate::AppState;
 use serde::{Deserialize, Serialize};
@@ -20,6 +22,16 @@ pub struct CardGroupRow {
     pub title: String,
     pub color: String,
     pub collapsed: bool,
+    // Frame 容器化:存储边界(world 坐标)。成员 = 落在该矩形内的卡片。
+    // serde(default) 让旧导出(无 bounds 字段)能反序列化为 0,随后由前端回填。
+    #[serde(default)]
+    pub x: f64,
+    #[serde(default)]
+    pub y: f64,
+    #[serde(default)]
+    pub width: f64,
+    #[serde(default)]
+    pub height: f64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -30,8 +42,8 @@ pub(crate) fn upsert_group(
 ) -> Result<(), rusqlite::Error> {
     conn.execute(
         "INSERT OR REPLACE INTO card_groups
-            (id, project_id, card_ids, title, color, collapsed, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
+            (id, project_id, card_ids, title, color, collapsed, x, y, width, height, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, datetime('now'))",
         rusqlite::params![
             group.id,
             group.project_id,
@@ -39,6 +51,10 @@ pub(crate) fn upsert_group(
             group.title,
             group.color,
             if group.collapsed { 1i64 } else { 0 },
+            group.x,
+            group.y,
+            group.width,
+            group.height,
             group.created_at,
         ],
     )?;
@@ -57,7 +73,7 @@ pub(crate) fn query_groups(
     project_id: &str,
 ) -> Result<Vec<CardGroupRow>, rusqlite::Error> {
     let mut stmt = conn.prepare(
-        "SELECT id, project_id, card_ids, title, color, collapsed, created_at, updated_at
+        "SELECT id, project_id, card_ids, title, color, collapsed, x, y, width, height, created_at, updated_at
          FROM card_groups WHERE project_id = ?1 ORDER BY created_at",
     )?;
 
@@ -70,8 +86,12 @@ pub(crate) fn query_groups(
             title: row.get(3)?,
             color: row.get(4)?,
             collapsed: collapsed_i != 0,
-            created_at: row.get(6)?,
-            updated_at: row.get(7)?,
+            x: row.get(6)?,
+            y: row.get(7)?,
+            width: row.get(8)?,
+            height: row.get(9)?,
+            created_at: row.get(10)?,
+            updated_at: row.get(11)?,
         })
     })?;
     rows.collect()

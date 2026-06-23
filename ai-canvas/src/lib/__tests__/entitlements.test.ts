@@ -73,19 +73,42 @@ describe("entitlementsFromUser", () => {
     expect(ent.allowImport).toBe(true);
     expect(ent.isOfficial).toBe(true);
   });
+
+  it("templateCategories → 归一化为数组(缺省 → 空数组)", () => {
+    const ent = entitlementsFromUser(
+      makeUser("trial-video", { templateCategories: ["video"], allowBlank: true }),
+    );
+    expect(ent.templateCategories).toEqual(["video"]);
+    // VIP_FEATURES 无该字段 → 兜底空数组
+    expect(entitlementsFromUser(makeUser("vip1", VIP_FEATURES)).templateCategories).toEqual([]);
+  });
 });
 
 describe("canUseTemplate", () => {
   it('"*" 放行任意模板', () => {
     const ent = entitlementsFromUser(makeUser("vip1", VIP_FEATURES));
-    expect(canUseTemplate(ent, "wf-anything")).toBe(true);
+    expect(canUseTemplate(ent, { id: "wf-anything", category: "flat" })).toBe(true);
   });
 
-  it("白名单只放行列表内模板", () => {
+  it("id 白名单只放行列表内模板", () => {
     const ent = entitlementsFromUser(makeUser("trial", TRIAL_FEATURES));
-    expect(canUseTemplate(ent, "wf-white-bg")).toBe(true);
-    expect(canUseTemplate(ent, "wf-tryon")).toBe(true);
-    expect(canUseTemplate(ent, "wf-pose-fission")).toBe(false);
+    expect(canUseTemplate(ent, { id: "wf-white-bg", category: "flat" })).toBe(true);
+    expect(canUseTemplate(ent, { id: "wf-tryon", category: "flat" })).toBe(true);
+    expect(canUseTemplate(ent, { id: "wf-pose-fission", category: "flat" })).toBe(false);
+  });
+
+  it("templateCategories grant 放行整类(不在 id 白名单也可用)", () => {
+    const ent = entitlementsFromUser(
+      makeUser("trial-video", {
+        templateCategories: ["trial", "video"],
+        allowBlank: true,
+        allowImport: false,
+      }),
+    );
+    expect(canUseTemplate(ent, { id: "wf-x-video", category: "video" })).toBe(true);
+    expect(canUseTemplate(ent, { id: "wf-white-bg-trial", category: "trial" })).toBe(true);
+    expect(canUseTemplate(ent, { id: "wf-detail-cn", category: "detail" })).toBe(false);
+    expect(canUseTemplate(ent, { id: "wf-pose-fission", category: "flat" })).toBe(false);
   });
 });
 

@@ -15,7 +15,7 @@
  *  - 约束校验**不弹 toast**,违例返回 `{ ok:false, outcome, reason, toast? }`;
  *    由调用方决定呈现 —— 编辑器弹 `toast.{title,description}`,cardRunner 用 `outcome`+`reason`。
  *  - 上传失败(网络/鉴权)直接 throw,由调用方 try/catch(编辑器 setError;cardRunner 兜成 failed)。
- *  - 几何 resize / scheduleBackgroundSave / 成功 toast 等"善后"留在编辑器,本函数不碰。
+ *  - 几何 resize / 媒体本地化补救(mediaLocalize)/ 成功 toast 等"善后"留在编辑器,本函数不碰。
  *  - provider 解析留给调用方(编辑器 `resolveProvider` 会抛、cardRunner `tryResolveProvider` 返 undefined),
  *    本函数把解析后的 `modelId` / `providerId` 一并返回供其反查。
  *
@@ -365,4 +365,39 @@ export async function buildVideoRequest(
   };
 
   return { ok: true, request, modelId, providerId };
+}
+
+/**
+ * 采集 ai_video 的运行输入切片(同步,供 runInputFingerprint)。
+ * 规范化超集:读全 VideoCardData,五族 tier 用 builder 同款缺省归一(未设置==显式缺省→同 fp),
+ * 素材只取 url(不含 sourceCardId)。宁可对无关 tier 略过敏(多跑,安全方向)也不漏字段。
+ */
+export function collectVideoInputs(card: CanvasCard): Record<string, unknown> {
+  const data = card.data as VideoCardData;
+  return {
+    kind: "ai_video",
+    model: (data.model ?? "").trim(),
+    provider: data.provider ?? "",
+    prompt: buildFinalPrompt(data),
+    size: normalizeVideoSize(data.size) || "",
+    imageMode: resolveVideoImageMode(data.imageMode),
+    duration: data.duration ?? 5,
+    generateAudio: data.generateAudio ?? true,
+    veoTier: VEO_TIERS.some((t) => t.value === data.veoTier) ? data.veoTier : "fast-720p",
+    seedanceTier: data.seedanceTier ?? "standard",
+    seedanceVipResolution: data.seedanceVipResolution ?? "720p",
+    seedanceV2Version: data.seedanceV2Version ?? "standard",
+    seedanceV2Resolution: clampSeedanceV2Resolution(
+      data.seedanceV2Version ?? "standard",
+      data.seedanceV2Resolution ?? "720p",
+    ),
+    grokTier: data.grokTier ?? "12s",
+    // 素材只取 url(含顺序);resolveFrames 已合并 refFrames + legacy upstreamImageUrl。
+    frames: resolveFrames(data).map((f) => f.url),
+    refImages: Object.fromEntries(
+      Object.entries(data.refImages ?? {}).map(([k, e]) => [k, e.url]),
+    ),
+    refAudios: (data.refAudios ?? []).map((a) => a.url),
+    refVideos: (data.refVideos ?? []).map((v) => v.url),
+  };
 }

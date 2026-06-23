@@ -1,8 +1,8 @@
 """
 把 ai-canvas 智能关键帧需要的 ffmpeg 二进制部署到 JiJing 服务器
-(192.168.31.244 → NAS /mnt/nas/ec_system/aicanvas-static/),
+(111.170.157.39 → NAS /www/aicanvas-static/),
 让客户端 `frame_extract.rs::download_from_server` 走
-`https://ai.snoworangekeji.cn/aicanvas-static/ffmpeg-<ver>-<triple>[ext]` 拉。
+`https://www.jjowo.com/aicanvas-static/ffmpeg-<ver>-<triple>[ext]` 拉。
 
 服务器侧已配 nginx `^~ /aicanvas-static/` location 反代到 NAS 目录,
 本脚本只管「文件部署 + SHA 校验」,不动 nginx。
@@ -21,8 +21,8 @@
   4. 改 `scripts/fetch-ffmpeg.mjs` 里的版本号(dev 本地 binaries 用)
 
 环境变量:
-  AICAT_SSH_PASSWORD   — root@192.168.31.244 的 SSH 密码 (必需)
-  AICAT_SSH_HOST       — 默认 192.168.31.244
+  AICAT_SSH_PASSWORD   — root@111.170.157.39 的 SSH 密码 (必需)
+  AICAT_SSH_HOST       — 默认 111.170.157.39
   AICAT_SSH_USER       — 默认 root
 
 CLI 选项:
@@ -39,12 +39,12 @@ import paramiko
 
 
 # ── 配置 ───────────────────────────────────────────────────────────────
-SERVER = os.environ.get("AICAT_SSH_HOST", "192.168.31.244")
+SERVER = os.environ.get("AICAT_SSH_HOST", "111.170.157.39")
 USER = os.environ.get("AICAT_SSH_USER", "root")
 PASSWORD = os.environ.get("AICAT_SSH_PASSWORD")
 
-REMOTE_STATIC_DIR = "/mnt/nas/ec_system/aicanvas-static"
-REMOTE_OWNER = "www:www"
+REMOTE_STATIC_DIR = "/www/aicanvas-static"
+REMOTE_OWNER = "www-data:www-data"
 
 
 @dataclass(frozen=True)
@@ -249,7 +249,7 @@ def main():
             b = BUNDLES[triple]
             code, out, _ = run(
                 c,
-                f'curl -ksI -H "Host: ai.snoworangekeji.cn" '
+                f'curl -ksI -H "Host: www.jjowo.com" '
                 f'https://127.0.0.1/aicanvas-static/{b.remote_name} '
                 f'| head -1',
                 check=False,
@@ -266,7 +266,7 @@ def main():
         for triple, r in results.items():
             info(f"  {triple}: {r}")
         info("")
-        info(f"客户端 URL 模板: https://ai.snoworangekeji.cn/aicanvas-static/ffmpeg-<ver>-<triple>[ext]")
+        info(f"客户端 URL 模板: https://www.jjowo.com/aicanvas-static/ffmpeg-<ver>-<triple>[ext]")
 
     finally:
         c.close()

@@ -576,6 +576,10 @@ mod tests {
                 title: "组".into(),
                 color: "#7C3AED".into(),
                 collapsed: false,
+                x: 100.0,
+                y: 200.0,
+                width: 300.0,
+                height: 400.0,
                 created_at: "2024-01-01 00:00:00".into(),
                 updated_at: "2024-01-01 00:00:00".into(),
             },
@@ -642,5 +646,17 @@ mod tests {
         let gids: Vec<String> = serde_json::from_str(&new_groups[0].card_ids).unwrap();
         assert!(gids.contains(&new_a.id) && gids.contains(&new_b.id));
         assert!(!new_groups[0].card_ids.contains("card-a"));
+
+        // Frame 容器化:存储边界(组矩形=真相源)应原样随导入保留。
+        assert_eq!(
+            (
+                new_groups[0].x,
+                new_groups[0].y,
+                new_groups[0].width,
+                new_groups[0].height,
+            ),
+            (100.0, 200.0, 300.0, 400.0),
+            "导入应保留组的存储边界"
+        );
     }
 }

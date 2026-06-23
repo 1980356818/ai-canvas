@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS `tier_def` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会员等级定义';
 
 INSERT IGNORE INTO `tier_def` (tier_key,name,tier_rank,is_official,features,sort) VALUES
-('trial','试用版', 0, 0, '{"templates":["wf-white-bg","wf-tryon"],"allowBlank":false,"allowImport":false,"maxProjects":2}', 0),
+('trial','试用版', 0, 0, '{"templates":["wf-white-bg","wf-tryon"],"allowBlank":true,"allowImport":false,"maxProjects":2}', 0),
 ('vip1', 'VIP1',   10,1, '{"templates":"*","allowBlank":true,"allowImport":true}', 1),
 ('vip2', 'VIP2',   20,1, '{"templates":"*","allowBlank":true,"allowImport":true}', 2),
 ('vip3', 'VIP3',   30,1, '{"templates":"*","allowBlank":true,"allowImport":true}', 3);

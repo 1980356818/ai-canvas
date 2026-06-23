@@ -1,10 +1,16 @@
 import { aiProxy, saveMedia } from "@/platform";
 import { waitForTask } from "@/services/tasks";
 import { throwIfError } from "../errors";
+import {
+  splitModelFallbacks,
+  isRouteUnconfiguredResponse,
+  applyModelFallback,
+} from "./modelFallback";
 import { makeSmoothProgressTracker } from "./progress";
 import type { GenerationProgress } from "../types";
 import { getComflyKeyTag } from "../comfly/models";
 import { taskManager } from "@/services/taskManager";
+import { NO_RESULT_URL_MESSAGE } from "@/services/taskOutcome";
 import type { AsyncTask } from "@/types";
 
 /**
@@ -160,7 +166,7 @@ function extractMediaResult(
     const r = finalTask.result;
     const url = typeof r.url === "string" ? r.url : "";
     if (!url) {
-      throw new Error(req.failedFallbackMessage ?? "任务完成但未返回结果地址");
+      throw new Error(req.failedFallbackMessage ?? NO_RESULT_URL_MESSAGE);
     }
     return {
       url,
@@ -193,7 +199,13 @@ async function executeLegacyDirectly(
 
   emit?.({ percent: 0, phase: "submitting", label: submittingLabel });
 
-  const raw = await aiProxy(req.providerId, req.submitEndpoint, req.body);
+  const { body, fallbacks } = splitModelFallbacks(req.body);
+  let raw = await aiProxy(req.providerId, req.submitEndpoint, body);
+  // 「模型未配置路由」(SKU 被关停)→ 静默降级重发,与 TaskManager 路径(mediaHandler)同款。
+  for (const fb of fallbacks) {
+    if (!isRouteUnconfiguredResponse(raw)) break;
+    raw = await aiProxy(req.providerId, req.submitEndpoint, applyModelFallback(body, fb));
+  }
   throwIfError(raw.status, raw.body);
 
   const data = JSON.parse(raw.body) as unknown;
@@ -233,7 +245,7 @@ async function executeLegacyDirectly(
   if (status === "failed" || status === "error" || status === "cancelled" || status === "expired") {
     throw new Error(result.errorMessage || failedFallback);
   }
-  if (!result.resultUrl) throw new Error("任务完成但未返回结果地址");
+  if (!result.resultUrl) throw new Error(NO_RESULT_URL_MESSAGE);
 
   emit?.({ percent: 92, phase: "saving", label: savingLabel });
   return await saveAndReturn(result.resultUrl, req.projectId, req.title, emit);

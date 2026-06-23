@@ -2,12 +2,7 @@ import { useState, useCallback, useEffect, useRef, type FormEvent } from "react"
 import { Loader2, Eye, EyeOff, UserPlus, LogIn, X, Minus, KeyRound, User, Lock, Mail, ShieldCheck, Monitor } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAuthStore } from "@/stores/authStore";
-import {
-  getSavedCredentials,
-  saveCredentials,
-  getAutoLogin,
-  setAutoLogin as persistAutoLogin,
-} from "@/platform/auth.api";
+import { getSavedCredentials, getAutoLogin } from "@/platform/auth.api";
 import { isTauri } from "@/platform/runtime";
 import { cn } from "@/lib/utils";
 import loginBrand from "@/assets/login-brand.jpg";
@@ -131,8 +126,7 @@ export default function LoginWindow() {
         return;
       }
       await login(username, password, mc, true);
-      saveCredentials(username, password);
-      persistAutoLogin(true);
+      // 凭据持久化 + 自动登录由 authStore.login 统一处理（见其注释）。
     } catch {
       // error already set by authStore.login
     } finally {
@@ -186,8 +180,7 @@ export default function LoginWindow() {
           return;
         }
         await login(username, password, mc);
-        saveCredentials(username, password);
-        persistAutoLogin(true);
+        // 凭据持久化 + 自动登录由 authStore.login 统一处理（见其注释）。
       } else {
         await register(username, password, email || undefined);
       }
@@ -291,6 +284,8 @@ export default function LoginWindow() {
                       <User className={INPUT_ICON_CLASS} />
                       <input
                         type="text"
+                        name="username"
+                        autoComplete="username"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         placeholder="请输入用户名"
@@ -310,6 +305,8 @@ export default function LoginWindow() {
                         <Mail className={INPUT_ICON_CLASS} />
                         <input
                           type="email"
+                          name="email"
+                          autoComplete="email"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder={isReset ? "输入注册时的邮箱" : "用于找回密码"}
@@ -328,6 +325,8 @@ export default function LoginWindow() {
                       <Lock className={INPUT_ICON_CLASS} />
                       <input
                         type={showPwd ? "text" : "password"}
+                        name="password"
+                        autoComplete={isLogin ? "current-password" : "new-password"}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder={isReset ? "请输入新密码" : "请输入密码"}
@@ -352,6 +351,8 @@ export default function LoginWindow() {
                         <ShieldCheck className={INPUT_ICON_CLASS} />
                         <input
                           type="password"
+                          name="confirmPassword"
+                          autoComplete="new-password"
                           value={confirmPwd}
                           onChange={(e) => setConfirmPwd(e.target.value)}
                           placeholder="再次输入密码"

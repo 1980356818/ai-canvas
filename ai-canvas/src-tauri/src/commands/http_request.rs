@@ -20,7 +20,7 @@
 //!
 //! 历史教训 (2026-05-30 CORS 事件):
 //!   `media.ts::uploadViaFetch` 在 Tauri **dev** 模式下用浏览器原生 `fetch`
-//!   调 `https://api.snoworangekeji.cn/v1/files/upload`。WebView origin 是
+//!   调 `https://api.jjowo.com/v1/files/upload`。WebView origin 是
 //!   `http://127.0.0.1:1620` (vite), 服务端 CORS allowlist 不包含这个 origin
 //!   → preflight 失败, 上传全挂。生产用 `tauri://localhost` 凑巧匹配, 所以 prod
 //!   不复现, dev 一跑就炸。

@@ -5,6 +5,9 @@ import { useGroupStore } from "@/stores/groupStore";
 import type { CanvasCard } from "@/types";
 import { autoSave } from "@/lib/autoSave";
 import { recordUpdate } from "@/lib/history";
+import { reconcileFrameMembership } from "@/lib/frameMembership";
+import { saveGroupsBatch } from "@/platform";
+import { groupToRow } from "@/lib/mappers";
 
 /**
  * 拖拽组的标题栏移动整组。
@@ -62,6 +65,9 @@ export function useGroupTitleDrag(groupId: string) {
       const startMy = e.clientY;
       const zoom = useCanvasStore.getState().viewport.zoom;
       let didDrag = false;
+      // 拖整组期间同样挂 .canvas-interacting 暂停变换层动画(同 CardShell 拖卡)
+      const canvasRoot = document.querySelector("[data-canvas-viewport]");
+      let interacting = false;
 
       // 跟 CardShell 一样用 rAF 合并 dragOffsets 写入,稳定 ≤ 60fps
       let pendingFrame = 0;
@@ -80,13 +86,22 @@ export function useGroupTitleDrag(groupId: string) {
         const dy = (ev.clientY - startMy) / zoom;
         const screenDx = ev.clientX - startMx;
         const screenDy = ev.clientY - startMy;
-        if (Math.abs(screenDx) > 5 || Math.abs(screenDy) > 5) didDrag = true;
+        if (Math.abs(screenDx) > 5 || Math.abs(screenDy) > 5) {
+          didDrag = true;
+          if (!interacting) {
+            interacting = true;
+            canvasRoot?.classList.add("canvas-interacting");
+          }
+        }
 
         const offsets = new Map<string, { dx: number; dy: number }>();
         for (const [cid, peer] of startCards) {
           if (peer.el) peer.el.style.transform = `translate(${dx}px, ${dy}px)`;
           offsets.set(cid, { dx, dy });
         }
+        // Frame 容器化:以「组 id」为 key 额外写入位移,让框的存储边界在拖拽中跟手平移
+        // (computeGroupBounds 读 dragOffsets.get(group.id))。
+        offsets.set(groupId, { dx, dy });
         latestOffsets = offsets;
         if (!pendingFrame) {
           pendingFrame = requestAnimationFrame(flushOffsets);
@@ -102,12 +117,16 @@ export function useGroupTitleDrag(groupId: string) {
           cancelAnimationFrame(pendingFrame);
           pendingFrame = 0;
         }
+        if (interacting) {
+          interacting = false;
+          canvasRoot?.classList.remove("canvas-interacting");
+        }
 
         const dx = (ev.clientX - startMx) / zoom;
         const dy = (ev.clientY - startMy) / zoom;
 
         // 即使没真正拖动(微小抖动),也把 offsets 清掉,避免残留视觉偏移
-        const movedIds = [...startCards.keys()];
+        const movedIds = [...startCards.keys(), groupId];
         useCanvasStore.getState().clearDragOffsets(movedIds);
         for (const peer of startCards.values()) {
           if (peer.el) peer.el.style.transform = "";
@@ -115,16 +134,27 @@ export function useGroupTitleDrag(groupId: string) {
 
         if (!didDrag) return;
 
-        // 提交到 store + history + autoSave
+        // 提交到 store + history + autoSave —— 批量一次 bump layoutVersion,
+        // 空间索引单次增量 diff(替代 N 次 updateCard 的 O(N×总数))。
+        const updates: Array<{ id: string; partial: Partial<CanvasCard> }> = [];
         for (const [cid, peer] of startCards) {
           const card = cardStore.getCard(cid);
           if (!card) continue;
-          const prev: Partial<CanvasCard> = { x: peer.cx, y: peer.cy };
-          const after: Partial<CanvasCard> = { x: peer.cx + dx, y: peer.cy + dy };
-          recordUpdate(cid, prev);
-          cardStore.updateCard(cid, after);
+          recordUpdate(cid, { x: peer.cx, y: peer.cy });
+          updates.push({ id: cid, partial: { x: peer.cx + dx, y: peer.cy + dy } });
           autoSave.markDirty(cid);
         }
+        if (updates.length > 0) useCardStore.getState().updateCards(updates);
+
+        // Frame 容器化:整框移动 = 同步平移框的存储边界(成员卡已随之移动,仍在框内),
+        // 再按新边界重算成员(吸收目的地新覆盖到的卡),最后落库(边界 + 可能的成员变化)。
+        const gs = useGroupStore.getState();
+        gs.updateGroup(groupId, { x: group.x + dx, y: group.y + dy });
+        reconcileFrameMembership(group.projectId);
+        const allGroups = gs.getGroupsByProject(group.projectId);
+        void saveGroupsBatch(allGroups.map(groupToRow)).catch((err) =>
+          console.warn("[useGroupTitleDrag] persist frame bounds failed:", err),
+        );
       };
 
       window.addEventListener("pointermove", onMove);

@@ -19,7 +19,7 @@
 // ## 2026-05-30 根治: 砍掉 Web 模式,统一走 httpAdapter
 //
 // 历史 `uploadViaFetch` 在 Tauri dev 模式下用浏览器原生 fetch 调
-// `https://api.snoworangekeji.cn/v1/files/upload`, dev 模式 origin 是 vite
+// `https://api.jjowo.com/v1/files/upload`, dev 模式 origin 是 vite
 // 的 `http://127.0.0.1:1620` → 服务端 CORS allowlist 不放行 → preflight 失败,
 // 上传全挂。根治结论: WebView 永远不直接发上行请求, 一切走 Rust HTTP 客户端。
 //

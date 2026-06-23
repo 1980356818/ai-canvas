@@ -65,6 +65,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "./ConfirmDialog";
 import UpdatesTab from "./UpdatesTab";
+import { AutomationSettings } from "./AutomationSettings";
 
 type SettingsTab = "platforms" | "general" | "backup" | "updates" | "account";
 type ConnStatus = "idle" | "testing" | "ok" | "error";
@@ -162,8 +163,8 @@ const ALL_PLATFORMS: { id: string; name: string; apiBaseUrl: string; homepageUrl
   {
     id: "jijing",
     name: "极境",
-    apiBaseUrl: "https://api.snoworangekeji.cn",
-    homepageUrl: "https://api.snoworangekeji.cn",
+    apiBaseUrl: "https://api.jjowo.com",
+    homepageUrl: "https://api.jjowo.com",
   },
 ];
 
@@ -477,6 +478,7 @@ export default function SettingsDialog() {
                 onPick={handlePickExportPath}
                 onClear={() => setExportPath("")}
               />
+              <AutomationSettings />
             </div>
           )}
 

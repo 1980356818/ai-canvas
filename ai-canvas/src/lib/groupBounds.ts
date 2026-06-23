@@ -30,16 +30,20 @@ export interface GroupBounds {
 const COLLAPSED_PILL_WIDTH = 180;
 
 /**
- * 根据 group + 卡片快照算出 bounds。子卡全不存在 → null。
+ * 【外接框】根据 group 成员卡片快照算出 min/max 外接框。子卡全不存在 → null。
+ *
+ * Frame 容器化后这不再是组的「真相边界」,仅用于:
+ *   - 打开项目时回填存储边界(老行 width===0);
+ *   - 新建框 / 粘贴 / 导入时给框一个初始矩形。
+ * 运行期组矩形一律走 computeGroupBounds(读存储边界)。
  *
  * 参数:
  *   - cards 可选,默认从 store 拿当前快照。
- *   - dragOffsets 可选:拖拽期间(整组拖、单卡多选拖等)子卡的 DOM 已被 transform,
- *     但 store 几何还没提交。传入 offsets 让 bounds 跟手不"飘"。GroupLayer 订阅
- *     dragOffsets 触发重算,渲染层 (this 也是 hover 命中) 都用同一份计算。
+ *   - dragOffsets 可选:拖拽期间子卡 DOM 已被 transform 但 store 几何未提交,
+ *     传入 offsets 让外接框跟手不"飘"。
  */
-export function computeGroupBounds(
-  group: CardGroup,
+export function computeEnvelopeBounds(
+  group: Pick<CardGroup, "cardIds">,
   cards?: Map<string, CanvasCard>,
   dragOffsets?: Map<string, DragOffset>,
 ): GroupBounds | null {
@@ -76,6 +80,36 @@ export function computeGroupBounds(
     width: maxX - minX + GROUP_PADDING * 2,
     height:
       maxY - minY + GROUP_PADDING * 2 + GROUP_LABEL_RESERVE + GROUP_TITLE_HEIGHT,
+  };
+}
+
+/**
+ * 【组运行期边界】返回组的 Frame 矩形(渲染 / 命中 / 鸟瞰 / 成员校准共用唯一入口)。
+ *
+ * Frame 容器化:读「存储边界」(group.x/y/width/height) —— 这是组的真相源,
+ * 与成员无关,空框也有合法 rect、**不再返回 null**。
+ *
+ * 两种 offset 适配拖拽跟手(都来自 canvasStore.dragOffsets,GroupLayer 已订阅):
+ *   - 整框拖动:useGroupTitleDrag 在 dragOffsets 里以「**组 id**」为 key 写入位移,
+ *     这里据此平移 rect(成员卡也各自带同位移一起动)。
+ *   - 单卡拖动:dragOffsets 只含被拖卡的 key,不含组 id → 框不动(卡在框内/外移动)。
+ *
+ * 兜底:width/height 为 0(未回填的老行/异常)→ 退回成员外接框,绝不渲染成 0 尺寸框。
+ */
+export function computeGroupBounds(
+  group: CardGroup,
+  cards?: Map<string, CanvasCard>,
+  dragOffsets?: Map<string, DragOffset>,
+): GroupBounds | null {
+  if (!group.width || !group.height) {
+    return computeEnvelopeBounds(group, cards, dragOffsets);
+  }
+  const go = dragOffsets?.get(group.id);
+  return {
+    x: group.x + (go?.dx ?? 0),
+    y: group.y + (go?.dy ?? 0),
+    width: group.width,
+    height: group.height,
   };
 }
 

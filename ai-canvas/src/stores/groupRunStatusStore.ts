@@ -10,13 +10,23 @@ import { create } from "zustand";
  *    "组级"调度态(哪个组在跑、跑到第几个、是否有失败)。
  *
  * ─── 状态机 ────────────────────────────────────────────────────
- *   idle  —— 未在跑(默认,不在 Map 里就是 idle)
- *   running —— 组运行中,doneCount / totalCount 反映进度
- *   failed  —— 至少一个子卡失败,后续中止;failedCardId 指出哪个
- *   completed —— 全部完成(短暂态,2 秒后由 groupRunner 自动调 finish 清除)
+ *   idle      —— 未在跑(默认,不在 Map 里就是 idle)
+ *   running   —— 组运行中,doneCount / totalCount 反映进度
+ *   stopping  —— 用户已点「停止」,在途卡仍在跑(currentCardIds 保留),不再派发新卡
+ *   stopped   —— 在途卡收尾完毕,运行已排空式停止(短暂态,稍后自动清)
+ *   failed    —— 至少一个子卡失败,后续中止;failedCardId 指出哪个
+ *   completed —— 全部完成(短暂态,稍后由门面自动 clear)
+ *
+ *   stopping/stopped 与 failed 的区别:前者是**用户主动**排空式停止(在途已付费的
+ *   结果会落卡 + 盖溯源戳,「继续」时跳过它们只补未派发的),不是错误,不染红。
  */
 
-export type GroupRunPhase = "running" | "failed" | "completed";
+export type GroupRunPhase =
+  | "running"
+  | "stopping"
+  | "stopped"
+  | "failed"
+  | "completed";
 
 export interface GroupRunStatus {
   groupId: string;
@@ -46,6 +56,10 @@ interface GroupRunStatusState {
    * 标记单张卡完成。`cardId` 加入 doneCardIds、doneCount + 1,并从 currentCardIds 移除。
    */
   incrementDone(groupId: string, cardId: string): void;
+  /** 用户点「停止」:转 stopping,保留 currentCardIds(在途卡仍在跑、仍显示)。 */
+  markStopping(groupId: string): void;
+  /** 在途收尾完毕:转 stopped,清 currentCardIds,doneCount 保留(已完成进度)。 */
+  markStopped(groupId: string): void;
   fail(groupId: string, failedCardId: string, reason: string): void;
   complete(groupId: string): void;
   /** 清除运行态(成功 / 失败 / 用户手动清):不再显示徽章。 */
@@ -97,6 +111,27 @@ export const useGroupRunStatusStore = create<GroupRunStatusState>((set, get) => 
         doneCardIds,
         currentCardIds,
       });
+      return { runningGroups: next };
+    });
+  },
+
+  markStopping(groupId) {
+    const cur = get().runningGroups.get(groupId);
+    if (!cur) return;
+    set((s) => {
+      const next = new Map(s.runningGroups);
+      // 保留 currentCardIds —— 在途卡还在跑,徽章/卡片高亮继续显示
+      next.set(groupId, { ...cur, phase: "stopping" });
+      return { runningGroups: next };
+    });
+  },
+
+  markStopped(groupId) {
+    const cur = get().runningGroups.get(groupId);
+    if (!cur) return;
+    set((s) => {
+      const next = new Map(s.runningGroups);
+      next.set(groupId, { ...cur, phase: "stopped", currentCardIds: new Set() });
       return { runningGroups: next };
     });
   },

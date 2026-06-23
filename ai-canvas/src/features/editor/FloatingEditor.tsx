@@ -1,13 +1,14 @@
 import { useRef, useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { useCanvasStore, liveViewport, subscribeViewport } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
-import { useUIStore } from "@/stores/uiStore";
-import { isEnhancerModel } from "@/config/model-ref-images";
 import EditorSwitch from "./EditorSwitch";
 
 const GAP = 12;
 const MIN_EDITOR_WIDTH = 360;
 const MIN_EDITOR_HEIGHT = 90;
+// 自适应高度上限:面板最多占视口高度的这个比例,超出由内容区自身滚动
+// (内容极多时面板不会高过屏幕)。
+const MAX_EDITOR_HEIGHT_RATIO = 0.72;
 
 const EDITOR_SIZES: Record<string, { height: number; minWidth: number }> = {
   ai_chat: { height: 140, minWidth: 560 },
@@ -29,12 +30,16 @@ export default function FloatingEditor() {
     editingCardId ? s.cards.get(editingCardId) : undefined,
   );
   const panelRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [userSize, setUserSize] = useState<{ w: number; h: number } | null>(null);
+  // 测得的内容自然高度(null=尚未测量,先用基础估算值避免首帧跳动)。
+  const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
   const prevCardId = useRef<string | null>(null);
 
   if (editingCardId !== prevCardId.current) {
     prevCardId.current = editingCardId;
     setUserSize(editingCardId ? sizeMemory.get(editingCardId) ?? null : null);
+    setMeasuredHeight(null);
   }
 
   const close = useCallback(() => {
@@ -90,8 +95,6 @@ export default function FloatingEditor() {
     },
     [],
   );
-
-  const hasError = useUIStore((s) => editingCardId ? s.cardErrors.has(editingCardId) : false);
 
   // imperative 跟随：viewport / dragOffsets 高频变化时通过 ref 直接同步
   // left / top / transform，避免重渲染整个编辑器面板。
@@ -161,44 +164,58 @@ export default function FloatingEditor() {
     };
   }, [editingCardId, userSize]);
 
+  // 面板高度自适应内容(规范化:取代过去按"有无参考图/上游/视频…"逐项 += 魔法数的脆弱估算
+  // —— 每多一种内容、或参考图多到换行,旧估算就会偏小,把输入框/生成按钮挤出可视区)。
+  // 改为直接测量编辑器内容的自然高度,面板据此自适应;手动拖拽改过尺寸(userSize)后不再自适应。
+  // 内容区(下方 overflow-auto)在未手动调整时为内容驱动高度,因此 scrollHeight 即为自然高度,
+  // 内容增减都能即时反映(增长会撑高面板、减少会收回);超过上限则由内容区自身滚动。
+  useLayoutEffect(() => {
+    if (!editingCardId || userSize) return;
+    const el = contentRef.current;
+    if (!el) return;
+    const measure = () => {
+      const next = el.scrollHeight;
+      setMeasuredHeight((prev) =>
+        prev != null && Math.abs(prev - next) <= 1 ? prev : next,
+      );
+    };
+    measure();
+    // 观察内容根节点 + 容器本身:参考图换行、上游增减、报错出现等任何重排都会触发重新测量。
+    const ro = new ResizeObserver(measure);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [editingCardId, userSize]);
+
   if (!card) return null;
 
   // 拖帧焦点模式: VideoToolbar 进入挑帧时把卡下方空间让给时间轴 + FrameChip,
   // 此时不渲染编辑器。退出拖帧后 (scrubberActiveCardId 清空) 自动恢复。
   if (scrubberActiveCardId === card.id) return null;
 
-  const { height: baseHeight, minWidth } = EDITOR_SIZES[card.type] ?? DEFAULT_SIZE;
-
-  const data = card.data as Record<string, unknown> | undefined;
-  const modelId = (data?.model as string) || "";
-  const isEnhancer = isEnhancerModel(modelId);
-  const refImages = data?.refImages as Record<string, unknown> | undefined;
-  const hasRefImages = refImages && Object.keys(refImages).length > 0;
-  const upstreamTexts = data?.upstreamTexts as Record<string, unknown> | undefined;
-  const hasUpstream = upstreamTexts && Object.keys(upstreamTexts).length > 0;
-  const refFrames = data?.refFrames as unknown[] | undefined;
-  const hasRefFrames = refFrames && refFrames.length > 0;
-  const refAudios = data?.refAudios as unknown[] | undefined;
-  const hasRefAudios = refAudios && refAudios.length > 0;
-  const refVideos = data?.refVideos as unknown[] | undefined;
-  const hasRefVideos = refVideos && refVideos.length > 0;
-  const isLocked = !!(data?._locked);
-  let autoHeight = isEnhancer ? 70 : baseHeight;
-  if (card.type === "ai_multiangle" || card.type === "ai_tryon") {
-    if (hasError) autoHeight += 48;
-  } else {
-    if (card.type === "ai_video") autoHeight += 40;
-    if (hasRefImages) autoHeight += isEnhancer ? 80 : 112;
-    else if (isEnhancer) autoHeight += 60;
-    if (!isLocked && hasUpstream) autoHeight += 64;
-    if (hasRefFrames) autoHeight += 90;
-    if (hasRefAudios) autoHeight += 120;
-    if (hasRefVideos) autoHeight += 120;
-    if (hasError) autoHeight += 48;
-  }
+  const { height: baseInitialHeight, minWidth } = EDITOR_SIZES[card.type] ?? DEFAULT_SIZE;
+  const maxAutoHeight = Math.max(
+    320,
+    Math.round((typeof window !== "undefined" ? window.innerHeight : 900) * MAX_EDITOR_HEIGHT_RATIO),
+  );
+  // 自适应高度时给提示词框封顶(PromptTextarea 读 --prompt-max-h 内部滚动),
+  // 留出"生成"按钮 + 模型行 + 内边距(~140px)的空间,提示词再长也不会把按钮挤出可视区。
+  // 上限 240px 让输入框保持紧凑;手动拉伸(userSize)时不设此变量 → 提示词框照常填满。
+  const promptMaxH = Math.max(110, Math.min(240, maxAutoHeight - 140));
 
   const width = userSize ? userSize.w : Math.max(minWidth, card.width);
+  // 自适应高度:测得自然高度则用之(夹在 [MIN, maxAuto] 内),尚未测量时退回基础估算值。
+  const autoHeight =
+    measuredHeight != null
+      ? Math.min(Math.max(measuredHeight, MIN_EDITOR_HEIGHT), maxAutoHeight)
+      : baseInitialHeight;
   const height = userSize ? userSize.h : autoHeight;
+
+  // 仅自适应高度时下发提示词封顶变量;手动拉伸时不设,后代 PromptTextarea 回退 none(不封顶)。
+  const panelStyle: React.CSSProperties = { width, height };
+  if (!userSize) {
+    (panelStyle as Record<string, string | number>)["--prompt-max-h"] = `${promptMaxH}px`;
+  }
 
   return (
     <div
@@ -207,10 +224,7 @@ export default function FloatingEditor() {
       data-floating-editor
       data-editor-zoom="1"
       // left / top / transform 由上方 useLayoutEffect 通过 ref imperative 设置
-      style={{
-        width,
-        height,
-      }}
+      style={panelStyle}
       onWheel={(e) => e.stopPropagation()}
       onPointerDown={(e) => {
         e.stopPropagation();
@@ -226,7 +240,13 @@ export default function FloatingEditor() {
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.stopPropagation()}
     >
-      <div className="h-full overflow-auto">
+      {/* 未手动调整尺寸时,内容区为内容驱动高度(配合上方测量做自适应);手动调整后铺满面板
+          (h-full),让文本框等 flex-1 区域填充用户拉出的空间。两种情况都在超高时内部滚动。 */}
+      <div
+        ref={contentRef}
+        className={userSize ? "h-full overflow-auto" : "overflow-auto"}
+        style={userSize ? undefined : { maxHeight: maxAutoHeight }}
+      >
         <EditorSwitch card={card} />
       </div>
 

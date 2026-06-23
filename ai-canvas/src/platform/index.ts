@@ -100,3 +100,14 @@ export {
   cleanupTerminalTasks,
   listTasksByProject,
 } from "./tasks.api";
+
+// automation: 本地自动化桥的 Rust 命令桥接 (start/stop/status/respond/...)。
+export {
+  automationStatus,
+  automationStart,
+  automationStop,
+  automationRespond,
+  automationSetDescriptor,
+  automationLogTail,
+} from "./automation.api";
+export type { AutomationStatus } from "./automation.api";

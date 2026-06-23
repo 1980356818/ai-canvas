@@ -12,6 +12,7 @@ import { listProjects, deleteProject, loadCards, createProject } from "@/platfor
 import { getDisplayUrl } from "@/lib/media";
 import { importProjectFromFile } from "@/lib/projectTransfer";
 import { useEntitlements } from "@/hooks/useEntitlements";
+import { BLANK_LOCK_MSG, IMPORT_LOCK_MSG, LOCK_BADGE_LABEL } from "@/config/membershipCopy";
 import catPawImg from "@/assets/cat-paw.png";
 
 
@@ -237,7 +238,7 @@ function RecentProjects() {
 
   const handleImport = useCallback(async () => {
     if (!ent.allowImport) {
-      openUpgrade("导入项目为正式版功能，升级会员后解锁");
+      openUpgrade(IMPORT_LOCK_MSG);
       return;
     }
     const project = await importProjectFromFile();
@@ -267,7 +268,7 @@ function RecentProjects() {
         <button
           onClick={() => {
             if (!ent.allowBlank) {
-              openUpgrade("空白创作为正式版功能，升级会员后解锁");
+              openUpgrade(BLANK_LOCK_MSG);
               return;
             }
             setShowNameDialog(true);
@@ -278,7 +279,7 @@ function RecentProjects() {
             <Plus className="h-6 w-6 text-muted-foreground/30 transition-colors group-hover:text-primary/50" />
             {!ent.allowBlank && (
               <div className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-full bg-black/65 px-1.5 py-0.5 text-[9px] font-medium text-white/90">
-                <Lock className="h-2.5 w-2.5" /> 正式版
+                <Lock className="h-2.5 w-2.5" /> {LOCK_BADGE_LABEL}
               </div>
             )}
           </div>

@@ -105,3 +105,21 @@ export async function buildTryonRequest(
 
   return { ok: true, request, modelId, providerId };
 }
+
+/**
+ * 采集 ai_tryon 的运行输入切片(同步,供 runInputFingerprint)。
+ * prompt 用 builder 同款「模特换装: 指令」合成 —— uncloak + 空 content 归一到默认句(空与默认句同 fp);
+ * person/garment 用 builder 同款回退(refImages 具名槽 ?? 旧 url 字段)。size/quality 固定不入 fp。
+ */
+export function collectTryonInputs(card: CanvasCard): Record<string, unknown> {
+  const data = card.data as TryonCardData;
+  const instruction = uncloakPrompt(data.content).trim() || TRYON_DEFAULT_INSTRUCTION;
+  return {
+    kind: "ai_tryon",
+    model: (data.model ?? "").trim(),
+    provider: data.provider ?? "",
+    prompt: `模特换装: ${instruction}`,
+    person: data.refImages?.person?.url ?? data.personImageUrl ?? "",
+    garment: data.refImages?.garment?.url ?? data.garmentImageUrl ?? "",
+  };
+}

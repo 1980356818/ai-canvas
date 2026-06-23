@@ -21,6 +21,7 @@ import {
 import { aiProxy, aiProxyStream, isTauri, listModels as platformListModels } from "@/platform";
 import { uploadMediaBatch } from "@/platform/media";
 import { executeAsyncMediaTask } from "../shared/asyncMediaTask";
+import { MODEL_FALLBACKS_FIELD } from "../shared/modelFallback";
 import { PROGRESS_EXPECTED_SEC } from "../shared/progress";
 import { normalizeResolution } from "@/shared/constants";
 import { diagInfo } from "@/lib/diag";
@@ -42,7 +43,17 @@ function toAspectRatio(size: string): string {
 
 // gpt-image-2 后端约束: 单边 832-3840、整除 16、比例 ≤ 3:1、总像素 ≤ 8.29MP
 // 每条尺寸均经过约束校验，比例误差 0%
+// 1K 档:长边压到 ~1024-1536,短边受 832 下限托底 (÷16、比例精确),像素量约为 2K 的 1/3~1/4。
 const GPT_IMAGE_2_SIZE_MAP: Record<string, Record<string, string>> = {
+  "1K": {
+    "1:1": "1024x1024",
+    "3:2": "1248x832",
+    "2:3": "832x1248",
+    "4:3": "1152x864",
+    "3:4": "864x1152",
+    "16:9": "1536x864",
+    "9:16": "864x1536",
+  },
   "2K": {
     "1:1": "2048x2048",
     "3:2": "1920x1280",
@@ -67,6 +78,14 @@ function toGptImage2Size(size: string, resolution: string): string | undefined {
   const ratio = toAspectRatio(size);
   return GPT_IMAGE_2_SIZE_MAP[resolution]?.[ratio];
 }
+
+// 极境分档 SKU 被关停时,网关提交会报「模型[xxx]未配置路由」。给会被关的档位挂一条
+// 静默降级候选(同画质、低一档分辨率):提交层(mediaHandler / asyncMediaTask)遇到
+// 路由未配置时自动改用,任务不进 failed、不弹提示。
+// 范围刻意最小 —— 只覆盖 medium-2K→1K(用户决策);需要扩展(high / 4K 链)按此格式加条目即可。
+const GPT_IMAGE_2_ROUTE_FALLBACK: Record<string, { model: string; resolution: string }> = {
+  "gpt-image-2-medium-2k": { model: "gpt-image-2-medium-1k", resolution: "1K" },
+};
 
 function makeRequestId(): string {
   return globalThis.crypto?.randomUUID?.().slice(0, 8)
@@ -255,6 +274,16 @@ export abstract class OpenAICompatProvider implements AIProvider {
       } else {
         body.quality = req.quality || "standard";
       }
+    }
+
+    // 极境分档模型被关停(网关「未配置路由」)→ 给可降级的档位挂静默降级候选,
+    // 提交层遇到路由未配置时自动改用(详见 GPT_IMAGE_2_ROUTE_FALLBACK)。
+    const routeFallback = isGptImage2 ? GPT_IMAGE_2_ROUTE_FALLBACK[modelId] : undefined;
+    if (routeFallback && req.prompt) {
+      const fbSize = toGptImage2Size(req.size || "1024x1024", routeFallback.resolution);
+      body[MODEL_FALLBACKS_FIELD] = [
+        { model: routeFallback.model, ...(fbSize ? { size: fbSize } : {}) },
+      ];
     }
 
     if (req.referenceImages?.length) {

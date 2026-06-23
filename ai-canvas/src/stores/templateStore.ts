@@ -42,7 +42,7 @@ interface TemplateState {
 
 /**
  * 模板来源(服务端化)。定义在画布 server `aicat.template`;图在极境 NAS
- * (`ai.snoworangekeji.cn/aicanvas-static/templates/`,**内容哈希命名**)。
+ * (`www.jjowo.com/aicanvas-static/templates/`,**内容哈希命名**)。
  *
  *   初始 = 本地缓存(上次拉的定义,公网 URL) → 没有就内置 fallback
  *   load() = 拉定义 → Rust `sync_template_assets` 把图下到 `{data_dir}/template-assets/`

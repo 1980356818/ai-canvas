@@ -5,7 +5,7 @@
  *
  * gpt-5.5 等推理模型单次响应常要 90–140s(实测 app.log:vision「反推」+ 重推理普遍
  * 90s 起步,见过 140s)。非流式 `provider.chat` 走一条长连接干等整段响应,而
- * api.snoworangekeji.cn 在 Cloudflare/反代后面,对「源站迟迟不吐字节」的连接有
+ * api.jjowo.com 在 Cloudflare/反代后面,对「源站迟迟不吐字节」的连接有
  * ~130s 超时 —— 超时即给客户端 **524**,但**源站已把对话生成完并计费**。表现正是
  * 用户报的「后台对话任务已完成,但前端不显示」:客户端这边读取(524/断连)失败,
  * 答案永远落不进卡片(实测 debug dump 已抓到 chat 的 524@130s 与多次网关 5xx)。
@@ -23,6 +23,11 @@
 import type { AIProvider, ChatRequest } from "@/providers/types";
 import { useUIStore } from "@/stores/uiStore";
 import { diagInfo, diagError } from "@/lib/diag";
+import {
+  beginGeneration,
+  confirmGeneration,
+  failGeneration,
+} from "./runProvenance";
 
 export interface ChatStreamResult {
   /** 累积的答案文本(不含 reasoning)。空串表示模型没吐任何答案。 */
@@ -169,6 +174,9 @@ export function streamChatToCard(
   let lastReasoningLen = 0;
   let lastTextLen = 0;
 
+  // chat 不走 TaskManager/taskBridge,溯源就近挂这里:提交前盖 pending 戳,成功确认、失败清。
+  // streamChatToCard 是 ChatEditor 手点 / cardRunner 组运行共用的唯一对话咽喉,两路统一覆盖。
+  beginGeneration(cardId);
   return streamChatToResult(provider, req, {
     signal: opts?.signal,
     onReasoning: (delta) => {
@@ -188,5 +196,14 @@ export function streamChatToCard(
         streamText: full,
       });
     },
-  });
+  }).then(
+    (result) => {
+      confirmGeneration(cardId); // 答案收齐(调用方随后写 data.result)→ 确认溯源戳
+      return result;
+    },
+    (err: unknown) => {
+      failGeneration(cardId); // 流式失败 / 被 abort → 清戳,断点续跑重跑
+      throw err;
+    },
+  );
 }

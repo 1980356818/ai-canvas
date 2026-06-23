@@ -17,6 +17,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useUIStore } from "@/stores/uiStore";
 import type { CardGroup, CardType, CanvasCard } from "@/types";
 import { DEFAULT_GROUP_COLOR } from "@/types/group";
+import { computeEnvelopeBounds } from "@/lib/groupBounds";
 import { saveGroupsBatch, deleteGroup, updateProjectMeta } from "@/platform";
 import { groupToRow } from "@/lib/mappers";
 import { autoSave } from "@/lib/autoSave";
@@ -163,6 +164,8 @@ export function groupCards(cardIds: string[]): GroupCardsResult | null {
       title: autoTitleFor(validIds),
       color: DEFAULT_GROUP_COLOR,
       collapsed: false,
+      // Frame 边界 = 选中卡片外接框(新框初始矩形;此后由成员校准/缩放维护)
+      ...(computeEnvelopeBounds({ cardIds: validIds }) ?? { x: 0, y: 0, width: 0, height: 0 }),
       createdAt: now,
       updatedAt: now,
     };
@@ -189,6 +192,8 @@ export function groupCards(cardIds: string[]): GroupCardsResult | null {
     title: autoTitleFor(validIds),
     color: DEFAULT_GROUP_COLOR,
     collapsed: false,
+    // Frame 边界 = 选中卡片外接框(新框初始矩形;此后由成员校准/缩放维护)
+    ...(computeEnvelopeBounds({ cardIds: validIds }) ?? { x: 0, y: 0, width: 0, height: 0 }),
     createdAt: now,
     updatedAt: now,
   };

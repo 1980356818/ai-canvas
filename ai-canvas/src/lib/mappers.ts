@@ -76,6 +76,10 @@ export function groupToRow(group: CardGroup): CardGroupRow {
     title: group.title,
     color: group.color,
     collapsed: group.collapsed,
+    x: group.x,
+    y: group.y,
+    width: group.width,
+    height: group.height,
     created_at: group.createdAt,
     updated_at: group.updatedAt,
   };
@@ -99,6 +103,10 @@ export function rowToGroup(row: CardGroupRow): CardGroup {
     title: row.title,
     color: row.color,
     collapsed: row.collapsed,
+    x: row.x ?? 0,
+    y: row.y ?? 0,
+    width: row.width ?? 0,
+    height: row.height ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

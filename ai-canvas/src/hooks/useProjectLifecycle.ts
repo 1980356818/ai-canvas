@@ -22,10 +22,14 @@ import {
 import { rebuildMissingConnections } from "@/lib/connectionRecovery";
 import { cleanupDanglingReferencesInCards } from "@/lib/referenceConsistency";
 import { sanitizeGroupsAgainstCards } from "@/lib/groupConsistency";
+import { computeEnvelopeBounds } from "@/lib/groupBounds";
+import { reconcileFrameMembership } from "@/lib/frameMembership";
 import { autoSave } from "@/lib/autoSave";
 import { history } from "@/lib/history";
 import { startDataFlowWatcher } from "@/lib/dataFlow";
+import { installFrameMembershipAutoReconcile } from "@/lib/frameMembership";
 import { initMediaService } from "@/lib/media";
+import { sweepProjectMediaLocalization } from "@/lib/mediaLocalize";
 import {
   cardToRow,
   rowToCard,
@@ -96,6 +100,8 @@ export function useProjectLifecycle() {
     prevProjectIdRef.current = currentProjectId;
 
     useCanvasStore.getState().setEditingCardId(null);
+    // 切项目即清就绪信号;加载完成后由下方 IIFE 末尾重新点亮(automation project.open 依赖)。
+    useProjectStore.getState().setHydratedProjectId(null);
 
     if (!currentProjectId) {
       useCardStore.getState().clear();
@@ -139,7 +145,25 @@ export function useProjectLifecycle() {
         changedIds: changedGroupIds,
         droppedIds: droppedGroupIds,
       } = sanitizeGroupsAgainstCards(loadedGroups);
+
+      // Frame 容器化:回填存储边界(老行 width===0 → 当前成员外接框,视觉零变化),
+      // setGroups 后按边界重算成员 —— 导入掉组 / 框内非成员卡一次性归位(空间即真相)。
+      const cardsSnapshot = useCardStore.getState().cards;
+      const backfilledGroupIds: string[] = [];
+      for (const g of validGroups) {
+        if (g.width === 0) {
+          const env = computeEnvelopeBounds(g, cardsSnapshot);
+          if (env) {
+            g.x = env.x;
+            g.y = env.y;
+            g.width = env.width;
+            g.height = env.height;
+            backfilledGroupIds.push(g.id);
+          }
+        }
+      }
       useGroupStore.getState().setGroups(validGroups);
+      reconcileFrameMembership(currentProjectId);
 
       const persistenceTasks: Promise<unknown>[] = [];
       if (validConnections.length !== persistedConnections.length) {
@@ -149,8 +173,9 @@ export function useProjectLifecycle() {
         const changedCards = cards.filter((card) => changedCardIds.includes(card.id));
         persistenceTasks.push(saveCardsBatch(changedCards.map(cardToRow)));
       }
-      if (changedGroupIds.length > 0) {
-        const changedGroups = validGroups.filter((g) => changedGroupIds.includes(g.id));
+      const groupIdsToPersist = new Set([...changedGroupIds, ...backfilledGroupIds]);
+      if (groupIdsToPersist.size > 0) {
+        const changedGroups = validGroups.filter((g) => groupIdsToPersist.has(g.id));
         persistenceTasks.push(saveGroupsBatch(changedGroups.map(groupToRow)));
       }
       for (const gid of droppedGroupIds) {
@@ -163,6 +188,10 @@ export function useProjectLifecycle() {
       dataFlowCleanup.current?.();
       dataFlowCleanup.current = startDataFlowWatcher();
 
+      // 成员归属自动校准:订阅 cardStore.layoutVersion,卡侧任何几何/增删改动后自动
+      // 重算框成员(幂等,全局一次)。卡侧路径从此无需手动 reconcile。见 frameMembership 头部契约。
+      installFrameMembershipAutoReconcile();
+
       // 关键恢复点：任何在上一次会话被中断的"活动中"任务（queued/submitting/
       // polling），TaskManager 会在这里从 SQLite 一次性捞回来继续轮询。
       // 用户体验：打开应用后失败的视频卡会自动复活，不需要任何操作。
@@ -173,6 +202,19 @@ export function useProjectLifecycle() {
         }
       } catch (err) {
         console.warn("[生命周期诊断] resumeAll failed:", err);
+      }
+
+      // 就绪信号:卡片/连线/组已水合到 store。守卫 currentProjectId 未在加载期间被切走,
+      // 避免快速切项目时把就绪 id 错置成上一个项目。
+      if (useProjectStore.getState().currentProjectId === currentProjectId) {
+        useProjectStore.getState().setHydratedProjectId(currentProjectId);
+
+        // 补救扫描:上一会话没本地化成功的生成结果(卡片里残留远端 http URL,
+        // 远端地址可能带时效签名,越早抢救越好)统一错峰入队后台落地。
+        const swept = sweepProjectMediaLocalization(currentProjectId);
+        if (swept > 0) {
+          console.log(`[生命周期诊断] ${swept} 张卡片存在未本地化的远端媒体,已入队后台保存`);
+        }
       }
     })().catch(console.error);
 

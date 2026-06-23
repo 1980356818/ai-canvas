@@ -13,6 +13,9 @@ const FIXTURE: RawPriceModel[] = [
   { id: "gemini-3.1-pro-preview", capability: "CHAT", cost_per_request: 0.06,
     lines: [{ tag: "auto" }, { tag: "g", cost_type: "PER_REQUEST" }] },
   // image 分档
+  { id: "gpt-image-2-low-1k", capability: "IMAGE", cost_per_request: 0.084, lines: [{ tag: "oc", cost_type: "PER_REQUEST" }] },
+  { id: "gpt-image-2-medium-1k", capability: "IMAGE", cost_per_request: 0.084, lines: [{ tag: "oc", cost_type: "PER_REQUEST" }] },
+  { id: "gpt-image-2-high-1k", capability: "IMAGE", cost_per_request: 0.112, lines: [{ tag: "oc", cost_type: "PER_REQUEST" }] },
   { id: "gpt-image-2-low-2k", capability: "IMAGE", cost_per_request: 0.112, lines: [{ tag: "oc", cost_type: "PER_REQUEST" }] },
   { id: "gpt-image-2-medium-2k", capability: "IMAGE", cost_per_request: 0.112, lines: [{ tag: "oc", cost_type: "PER_REQUEST" }] },
   { id: "gpt-image-2-high-2k", capability: "IMAGE", cost_per_request: 0.168, lines: [{ tag: "oc", cost_type: "PER_REQUEST" }] },
@@ -67,13 +70,15 @@ describe("lookupPrice", () => {
 });
 
 describe("buildPriceCatalog", () => {
-  it("expands gpt-image-2 into 6 resolution×quality rows with correct prices", () => {
+  it("expands gpt-image-2 into 9 resolution×quality rows with correct prices", () => {
+    expect(bySku("gpt-image-2-low-1k", "低 · 1K")?.price?.perRequest).toBe(0.084);
+    expect(bySku("gpt-image-2-high-1k", "高 · 1K")?.price?.perRequest).toBe(0.112);
     expect(bySku("gpt-image-2-low-2k", "低 · 2K")?.price?.perRequest).toBe(0.112);
     expect(bySku("gpt-image-2-high-2k", "高 · 2K")?.price?.perRequest).toBe(0.168);
     expect(bySku("gpt-image-2-low-4k", "低 · 4K")?.price?.perRequest).toBe(0.14);
     expect(bySku("gpt-image-2-high-4k", "高 · 4K")?.price?.perRequest).toBe(0.21);
     const gptImageRows = rows.filter((r) => r.modelName === "GPT Image 2");
-    expect(gptImageRows).toHaveLength(6);
+    expect(gptImageRows).toHaveLength(9);
   });
 
   it("carries quality/resolution axes for matrix rendering", () => {
@@ -92,10 +97,13 @@ describe("buildPriceCatalog", () => {
     expect(officialRows[0]!.price?.costType).toBe("PER_TOKEN_PREPAID");
   });
 
-  it("expands nano-banana by resolution only", () => {
+  it("expands nano-banana by resolution only (2K/4K, no phantom 1K)", () => {
     expect(bySku("nano-banana-2-2k", "2K")?.price?.perRequest).toBe(0.21);
     expect(bySku("nano-banana-2-4k", "4K")?.price?.perRequest).toBe(0.224);
     expect(bySku("nano-banana-pro-4k", "4K")?.price?.perRequest).toBe(0.364);
+    // 1K 仅 gpt-image-2 系;nano-banana 不得枚举出 -1k SKU 或 "1K" 档行(防 getImageResolutionOptions 回归)。
+    expect(rows.some((r) => r.sku === "nano-banana-2-1k")).toBe(false);
+    expect(rows.filter((r) => r.modelName === "Nanobanana 2")).toHaveLength(2);
   });
 
   it("hides utility models (super-res / upscaler / multi-angle) from the table", () => {

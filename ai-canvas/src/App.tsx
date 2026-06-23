@@ -9,6 +9,7 @@ import { useAutoSaveViewport } from "@/hooks/useAutoSaveViewport";
 import { useBeforeUnload } from "@/hooks/useBeforeUnload";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { useKeyboardShortcuts } from "@/features/canvas/hooks/useKeyboardShortcuts";
+import { useAutomationHost } from "@/hooks/useAutomationHost";
 import "@/providers";
 
 import TitleBar from "@/app/TitleBar";
@@ -61,6 +62,7 @@ function AuthenticatedApp() {
   useBeforeUnload();
   useGlobalShortcuts();
   useKeyboardShortcuts();
+  useAutomationHost();
 
   useEffect(() => {
     const handler = (e: Event) => {

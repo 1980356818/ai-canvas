@@ -13,6 +13,7 @@ import { recordBatchCreate, recordMove } from "@/lib/history";
 import { injectOnConnect } from "@/lib/dataFlow";
 import { groupToRow } from "@/lib/mappers";
 import { DEFAULT_GROUP_COLOR } from "@/types/group";
+import { computeEnvelopeBounds } from "@/lib/groupBounds";
 import type { CardGroup } from "@/types";
 import {
   cleanupDanglingReferencesInCards,
@@ -477,6 +478,8 @@ function materialize(
         title: sg.title ?? "新建组",
         color: sg.color ?? DEFAULT_GROUP_COLOR,
         collapsed: !!sg.collapsed,
+        // Frame 边界 = 粘贴后卡片外接框(cards 已先于 group 加入 store)
+        ...(computeEnvelopeBounds({ cardIds: mapped }) ?? { x: 0, y: 0, width: 0, height: 0 }),
         createdAt: now,
         updatedAt: now,
       };

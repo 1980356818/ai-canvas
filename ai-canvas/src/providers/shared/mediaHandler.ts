@@ -24,6 +24,17 @@ import {
   type PollOutcome,
   type TaskCtx,
 } from "@/services/taskManager";
+import {
+  classifyTaskInfo,
+  MAX_EMPTY_SUCCESS_POLLS,
+  NO_RESULT_URL_MESSAGE,
+} from "@/services/taskOutcome";
+import {
+  splitModelFallbacks,
+  isRouteUnconfiguredResponse,
+  applyModelFallback,
+} from "./modelFallback";
+import type { AiProxyResponse, AsyncTask } from "@/types";
 
 export interface MediaHandlerOptions {
   /**
@@ -70,14 +81,36 @@ async function submitMedia(
   opts: MediaHandlerOptions,
 ): Promise<SubmitOutcome> {
   const task = ctx.task;
+  const { body, fallbacks } = splitModelFallbacks(request);
 
-  let raw;
+  let raw = await submitOnce(task, body);
+  // 「模型未配置路由」(SKU 被极境关停)→ 依次换降级候选重发,任务**不进 failed**,
+  // 也不弹提示(静默降级)。其它错误(限流/余额/内容拦截…)不命中,照常 throw。
+  for (const fb of fallbacks) {
+    if (!isRouteUnconfiguredResponse(raw)) break;
+    raw = await submitOnce(task, applyModelFallback(body, fb));
+  }
+
+  return parseSubmitOutcome(raw, opts);
+}
+
+/** 发一次提交请求;裸 native 错误翻成 TaskError(transient/permanent 判定交给上层)。 */
+async function submitOnce(
+  task: AsyncTask,
+  body: Record<string, unknown>,
+): Promise<AiProxyResponse> {
   try {
-    raw = await aiProxy(task.provider, task.submitEndpoint, request);
+    return await aiProxy(task.provider, task.submitEndpoint, body);
   } catch (err) {
     throw classifyNative(err);
   }
+}
 
+/** 把提交响应解析成 SubmitOutcome(5xx/4xx 抛错 → 同步快路径 → 提取 task_id)。 */
+function parseSubmitOutcome(
+  raw: AiProxyResponse,
+  opts: MediaHandlerOptions,
+): SubmitOutcome {
   if (raw.status >= 500) {
     throw new TaskError("server_5xx", `HTTP ${raw.status}: ${truncate(raw.body, 200)}`, {
       status: raw.status,
@@ -143,8 +176,11 @@ function extractTaskId(rawBody: string, data: unknown): string | null {
 // poll：用 external_id 查询状态
 // ────────────────────────────────────────────────────────────────
 
-const POLL_SUCCESS = new Set(["completed", "success", "succeeded"]);
-const POLL_FAILED = new Set(["failed", "error", "cancelled", "canceled", "expired"]);
+/**
+ * 每个任务「成功态但 URL 未就绪」已连续轮询的次数(按 externalId 计),用作 awaiting_url
+ * 的宽限上限计数。状态集 / 上限 / 文案的唯一真相源在 `@/services/taskOutcome`。
+ */
+const emptySuccessPolls = new Map<string, number>();
 
 async function pollMedia(
   externalId: string,
@@ -165,26 +201,34 @@ async function pollMedia(
     throw classifyPollError(err);
   }
 
-  const status = (info.status || "").toLowerCase();
+  const cls = classifyTaskInfo(info);
+  switch (cls.kind) {
+    case "success":
+      emptySuccessPolls.delete(externalId);
+      return {
+        status: "success",
+        result: { url: cls.url, thumbnailUrl: cls.thumbnailUrl },
+      };
 
-  if (POLL_SUCCESS.has(status)) {
-    if (!info.resultUrl) {
-      return { status: "failed", message: "任务完成但未返回结果地址" };
+    case "failed":
+      emptySuccessPolls.delete(externalId);
+      return { status: "failed", message: cls.message };
+
+    case "awaiting_url": {
+      // 成功态但 URL 未就绪(服务端落库 / 转存 CDN 的毫秒级窗口)。绝不当永久失败 ——
+      // 当作仍在收尾继续轮询,URL 一就绪下次 poll 即拿到;仅超过宽限才沿用兜底文案。
+      const n = (emptySuccessPolls.get(externalId) ?? 0) + 1;
+      if (n <= MAX_EMPTY_SUCCESS_POLLS) {
+        emptySuccessPolls.set(externalId, n);
+        return { status: "pending", progress: Math.min(info.progress ?? 99, 99) };
+      }
+      emptySuccessPolls.delete(externalId);
+      return { status: "failed", message: NO_RESULT_URL_MESSAGE };
     }
-    return {
-      status: "success",
-      result: {
-        url: info.resultUrl,
-        thumbnailUrl: info.thumbnailUrl,
-      },
-    };
-  }
 
-  if (POLL_FAILED.has(status)) {
-    return { status: "failed", message: info.errorMessage || "任务失败" };
+    case "pending":
+      return { status: "pending", progress: info.progress };
   }
-
-  return { status: "pending", progress: info.progress };
 }
 
 // ────────────────────────────────────────────────────────────────

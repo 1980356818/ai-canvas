@@ -1,3 +1,4 @@
+mod automation;
 mod backup;
 mod commands;
 mod db;
@@ -620,6 +621,63 @@ fn check_webview2_version() -> bool {
     }
 }
 
+/// 关闭 WebView2 自带的「密码自动保存」+「通用表单自动填充」。
+///
+/// 为什么要关:本应用**自己**管理登录凭据(见 `src/platform/auth.api.ts` 的
+/// saved_credentials + 自动登录)。内置 Edge/WebView2 的密码管理器是登录框的
+/// 第二个"填表的人",会和应用抢着填 —— 典型症状是它认出 `type=password` 字段
+/// 把密码自动回填、却填不了缺少 autocomplete 标记的用户名框,于是出现
+/// 「密码还在、用户名却空着」的半填状态(用户实测反馈)。
+///
+/// 关掉这两个开关后,登录框只由应用自己的凭据存储驱动(要么都填、要么都不填),
+/// 行为完全确定;且不再有新的浏览器侧密码被悄悄存下。配合前端给输入框补齐的
+/// `autocomplete`(username / current-password)语义,即使某些旧档里浏览器还
+/// 留着**整对**凭据,也只会成对回填、绝不再半填。
+///
+/// 注意:`IsPasswordAutosaveEnabled=false` 只阻止**新**密码被保存/弹"保存密码"
+/// 气泡,对已存在的旧密码仍会回填 —— 但因为表单现在带了正确的 autocomplete,
+/// 旧密码会连同用户名成对回填,不破坏一致性。
+#[cfg(target_os = "windows")]
+fn disable_webview2_autofill(win: &tauri::WebviewWindow) {
+    let res = win.with_webview(|webview| unsafe {
+        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings4;
+        use windows::core::Interface;
+
+        let core = match webview.controller().CoreWebView2() {
+            Ok(c) => c,
+            Err(e) => {
+                boot_log(&format!("disable_webview2_autofill: CoreWebView2() failed: {}", e));
+                return;
+            }
+        };
+        let settings = match core.Settings() {
+            Ok(s) => s,
+            Err(e) => {
+                boot_log(&format!("disable_webview2_autofill: Settings() failed: {}", e));
+                return;
+            }
+        };
+        match settings.cast::<ICoreWebView2Settings4>() {
+            Ok(s4) => {
+                if let Err(e) = s4.SetIsPasswordAutosaveEnabled(false) {
+                    boot_log(&format!("disable_webview2_autofill: SetIsPasswordAutosaveEnabled failed: {}", e));
+                }
+                if let Err(e) = s4.SetIsGeneralAutofillEnabled(false) {
+                    boot_log(&format!("disable_webview2_autofill: SetIsGeneralAutofillEnabled failed: {}", e));
+                }
+                boot_log("webview2 autofill disabled (password autosave + general autofill)");
+            }
+            Err(e) => boot_log(&format!(
+                "disable_webview2_autofill: cast to ICoreWebView2Settings4 failed: {}",
+                e
+            )),
+        }
+    });
+    if let Err(e) = res {
+        boot_log(&format!("disable_webview2_autofill: with_webview failed: {}", e));
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Panic hook：把 panic 现场连同 backtrace、平台、版本一起落到 startup.log，
@@ -845,6 +903,9 @@ pub fn run() {
                 data_dir: data_dir.clone(),
                 backup_dir: backup_dir.clone(),
             });
+            // 自动化桥运行态。server 默认不起;前端 host 装好 listener 后按设置决定是否
+            // invoke automation_start。详见 src/automation/mod.rs。
+            app.manage(automation::AutomationState::new());
             boot_log("state managed (http clients deferred)");
 
             // 定时备份：每 30 分钟一份，跟随保留策略自动清理旧份。
@@ -882,6 +943,10 @@ pub fn run() {
                     let _ = win.set_title_bar_style(TitleBarStyle::Overlay);
                     boot_log("macOS window configured");
                 }
+                // 让应用成为登录框唯一的"填表人":关掉 WebView2 自带的密码/表单自动填充,
+                // 根治"用户名空着、密码还在"的半填 bug。详见 disable_webview2_autofill。
+                #[cfg(target_os = "windows")]
+                disable_webview2_autofill(&win);
                 let _ = win.show();
                 boot_log("window shown");
             }
@@ -892,6 +957,8 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // 退出前清掉 automation bridge.json,避免遗留陈旧端口/token。
+                automation::cleanup_on_exit(window.app_handle());
                 window.app_handle().exit(0);
             }
         })
@@ -975,6 +1042,14 @@ pub fn run() {
             commands::update::install_latest_update,
             commands::update::switch_to_version,
             commands::update::get_runtime_info,
+            // automation: 本地自动化桥 (127.0.0.1 HTTP/MCP),外部 AI 工具 / 应用内对话面板
+            // 操控画布。详见 src/automation/mod.rs + docs/automation/。
+            automation::automation_status,
+            automation::automation_start,
+            automation::automation_stop,
+            automation::automation_respond,
+            automation::automation_set_descriptor,
+            automation::automation_log_tail,
         ])
         .run(tauri::generate_context!());
 

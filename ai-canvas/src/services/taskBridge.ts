@@ -24,6 +24,12 @@ import { useTasksStore } from "@/stores/tasksStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useCardStore } from "@/stores/cardStore";
 import { autoSave } from "@/lib/autoSave";
+import { scheduleCardMediaLocalization } from "@/lib/mediaLocalize";
+import {
+  beginGeneration,
+  confirmGeneration,
+  failGeneration,
+} from "@/services/generation/runProvenance";
 import type { AsyncTask, CanvasCard, TaskStatus } from "@/types";
 import type { CardGenProgress } from "@/types/ui";
 
@@ -33,6 +39,12 @@ import type { CardGenProgress } from "@/types/ui";
 
 /** 终态消费过的任务 id（避免重复写 card.data）。 */
 const consumedTerminal = new Set<string>();
+/**
+ * 已盖过 begin 溯源戳的任务 id（每个任务只在首次非终态出现时盖一次 pending 戳）。
+ * 媒体任务(图/视频/试衣/多角度)的溯源 begin/confirm/fail 统一收敛在本桥接器 —— 它是
+ * 编辑器手点 / 组运行 / 崩溃恢复 resumed 任务**唯一**都经过的路径(见文件头注释)。
+ */
+const provenancedTasks = new Set<string>();
 /** 上次写到 UI 的 (percent, label) 组合，用于订阅去重避免无意义 setCardProgress。 */
 const lastUIWrite = new Map<string, string>();
 
@@ -58,6 +70,7 @@ export function uninstallTaskBridge(): void {
   storeUnsubscribe = null;
   consumedTerminal.clear();
   lastUIWrite.clear();
+  provenancedTasks.clear();
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -80,6 +93,9 @@ function flushAll(tasks: ReadonlyMap<string, AsyncTask>): void {
   for (const id of lastUIWrite.keys()) {
     if (!seen.has(id)) lastUIWrite.delete(id);
   }
+  for (const id of provenancedTasks) {
+    if (!seen.has(id)) provenancedTasks.delete(id);
+  }
 }
 
 function handleTask(task: AsyncTask, ui: ReturnType<typeof useUIStore.getState>): void {
@@ -87,6 +103,13 @@ function handleTask(task: AsyncTask, ui: ReturnType<typeof useUIStore.getState>)
     case "queued":
     case "submitting":
     case "polling": {
+      // 首次非终态出现 → 盖 pending 溯源戳(捕获提交时的输入指纹)。捕获在任务入队这一刻,
+      // 此时 card.data 还是提交态(build*Request 已归一好 model);crash 后 resumed 任务
+      // 首次以 polling 出现也会补盖,fp 与提交时一致(data 已持久化)。
+      if (!provenancedTasks.has(task.id)) {
+        provenancedTasks.add(task.id);
+        beginGeneration(task.cardId);
+      }
       const progress = computeUIProgress(task);
       writeIfChanged(ui, task.id, task.cardId, progress);
       return;
@@ -96,6 +119,8 @@ function handleTask(task: AsyncTask, ui: ReturnType<typeof useUIStore.getState>)
       consumedTerminal.add(task.id);
       lastUIWrite.delete(task.id);
       applyResultToCard(task);
+      // 结果已落卡 → 确认溯源戳(pending→false,fp 不重算)。断点续跑据此跳过本卡。
+      confirmGeneration(task.cardId);
       ui.setCardProgress(task.cardId, null);
       ui.setCardError(task.cardId, null);
       return;
@@ -104,6 +129,8 @@ function handleTask(task: AsyncTask, ui: ReturnType<typeof useUIStore.getState>)
       if (consumedTerminal.has(task.id)) return;
       consumedTerminal.add(task.id);
       lastUIWrite.delete(task.id);
+      // 失败 → 清溯源戳(回到「无戳」→ 断点续跑必重跑本卡)。
+      failGeneration(task.cardId);
       ui.setCardProgress(task.cardId, null);
       ui.setCardError(task.cardId, task.errorMessage ?? "任务失败");
       return;
@@ -113,6 +140,8 @@ function handleTask(task: AsyncTask, ui: ReturnType<typeof useUIStore.getState>)
       if (consumedTerminal.has(task.id)) return;
       consumedTerminal.add(task.id);
       lastUIWrite.delete(task.id);
+      // 取消(强制中止)/ 被重试替换 → 清溯源戳(无确认结果,断点续跑应重跑)。
+      failGeneration(task.cardId);
       ui.setCardProgress(task.cardId, null);
       // canceled / orphaned 不显示错误（用户主动取消 / 被重试替换）
       return;
@@ -177,6 +206,10 @@ function applyResultToCard(task: AsyncTask): void {
 
   cardStore.updateCardData(task.cardId, patch);
   autoSave.markDirty(task.cardId);
+
+  // finalize(saveMedia)失败时 url 仍是远端 http(s) —— 远端地址不可靠(时效签名 /
+  // 境外站国内不可达),交给统一收敛模块退避补救。本地路径时这里是 no-op。
+  scheduleCardMediaLocalization(task.cardId);
 }
 
 /**

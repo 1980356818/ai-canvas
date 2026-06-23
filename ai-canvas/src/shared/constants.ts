@@ -61,12 +61,16 @@ export function supportsImageQuality(modelId: string, providerId?: string): bool
 
 // ── Image resolution (画质档) ────────────────────────────────
 //
-// 项目里唯一合法的分辨率档位 = "2K" | "4K" (与 SizeCombo RESOLUTION_OPTIONS 一致)。
+// 项目里合法的分辨率档位 = "1K" | "2K" | "4K"。
 // 任何入口 (chat 工具调用 / agent 工具 / 卡片旧数据 / UI 选择) 拿到的 resolution
-// 字符串都应该过 `normalizeResolution()`,统一收敛到这两个值之一;
+// 字符串都应该过 `normalizeResolution()`,统一收敛到这三个值之一;
 // 缺省 / 不识别一律走 `DEFAULT_IMAGE_RESOLUTION` (2K),与 GPT_IMAGE_2_SIZE_MAP
 // 默认档、resolveJiJingImageModelId 默认分支保持对齐。
-export const SUPPORTED_RESOLUTIONS = ["2K", "4K"] as const;
+//
+// 注意:1K 仅 gpt-image-2 系开放 (后端有 -1k 分档路由 / official 按 size 走);
+// nano-banana 系上游只有 2K/4K。各模型实际可选档位走 `getImageResolutionOptions()`,
+// 不要直接拿 SUPPORTED_RESOLUTIONS 当 UI/价表的全集 (会给 nano-banana 冒出幻影 1K)。
+export const SUPPORTED_RESOLUTIONS = ["1K", "2K", "4K"] as const;
 export type ImageResolution = (typeof SUPPORTED_RESOLUTIONS)[number];
 export const DEFAULT_IMAGE_RESOLUTION: ImageResolution = "2K";
 
@@ -74,7 +78,16 @@ export function normalizeResolution(raw: string | undefined | null): ImageResolu
   if (raw == null) return DEFAULT_IMAGE_RESOLUTION;
   const s = String(raw).trim().toUpperCase().replace(/\s+/g, "");
   if (s === "4K" || s === "4096" || s === "3840") return "4K";
+  if (s === "1K" || s === "1024" || s === "1080") return "1K";
   return DEFAULT_IMAGE_RESOLUTION;
+}
+
+// 某图片模型在 UI/价表里实际可选的分辨率档位 (单一真相,MediaEditor 与 priceCatalog 共用)。
+// 1K 仅 gpt-image-2 系 (分档版后端有 -1k 路由;official 按 size 像素计费) — 其余模型只有 2K/4K。
+export function getImageResolutionOptions(modelId: string): ImageResolution[] {
+  return modelId.toLowerCase().startsWith("gpt-image-2")
+    ? ["1K", "2K", "4K"]
+    : ["2K", "4K"];
 }
 
 const LEGACY_SIZE_MAP: Record<string, string> = {

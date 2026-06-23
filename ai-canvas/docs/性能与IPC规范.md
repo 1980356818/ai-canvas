@@ -640,7 +640,7 @@ ESLint 规则只拦截绝对 URL，不影响这条合规路径。
 `/v1/files/upload` 调用全部失败：
 
 ```
-Access to fetch at 'https://api.snoworangekeji.cn/v1/files/upload'
+Access to fetch at 'https://api.jjowo.com/v1/files/upload'
 from origin 'http://127.0.0.1:1620' has been blocked by CORS policy:
 Response to preflight request doesn't pass access control check:
 No 'Access-Control-Allow-Origin' header is present on the requested resource.

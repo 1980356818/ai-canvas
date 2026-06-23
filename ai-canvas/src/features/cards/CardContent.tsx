@@ -1,9 +1,10 @@
 import { memo, useState, useEffect, useCallback, useRef } from "react";
-import { ImageIcon, Loader2, Shirt, Video, RotateCw, Cloud, Music, Timer } from "lucide-react";
+import { ImageIcon, ImageOff, Loader2, Shirt, Video, RotateCw, Cloud, Music, Timer } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { getDisplayUrl } from "@/lib/media";
+import { scheduleCardMediaLocalization } from "@/lib/mediaLocalize";
 import { ensureVideoPoster } from "@/lib/videoPoster";
 import { isPreloaded } from "@/lib/imagePreloader";
 import { autoSave } from "@/lib/autoSave";
@@ -15,6 +16,42 @@ import FrameExtractorCard from "./FrameExtractorCard";
 import { CardErrorWithRetry } from "./CardErrorWithRetry";
 
 const IMG_DEFER_MS = 50;
+
+/**
+ * 媒体加载失败兜底面板(图片/换装共用)。远端 URL 取不到时 <img> 静默失败,
+ * 没有这层用户只会看到空白卡 + "远程"徽标,完全不知道发生了什么。
+ * 远端场景同时把卡片排进 mediaLocalize 后台收敛(下载成功后 displayUrl 变本地,
+ * 外层 useEffect 复位 failed 状态,图自动顶上来)。
+ */
+function MediaLoadError({
+  isRemote,
+  onRetry,
+}: {
+  isRemote: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-muted-foreground">
+      <ImageOff className="h-10 w-10 opacity-40" />
+      <span className="text-sm font-medium opacity-70">图片加载失败</span>
+      <span className="text-[11px] opacity-50">
+        {isRemote
+          ? "远程图片不可达，已安排后台保存到本地"
+          : "本地文件缺失或已损坏"}
+      </span>
+      <button
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onRetry();
+        }}
+        className="rounded border border-border bg-background/80 px-2.5 py-1 text-[11px] text-foreground/80 transition-colors hover:bg-muted"
+      >
+        重试
+      </button>
+    </div>
+  );
+}
 
 export function ElapsedTimer() {
   // v5：共享全局 tick；这里"挂载即开始"的语义改成：第一次 render 拿到 mount 时刻，
@@ -65,6 +102,13 @@ function ImagePreview({ card }: { card: CanvasCard }) {
   const placeholderLabel = isMultiangle ? "多角度" : "AI 图片";
   const alreadyCached = displayUrl ? isPreloaded(displayUrl) : false;
   const imgReady = useDeferredMount(IMG_DEFER_MS, alreadyCached);
+
+  // 远端 URL 取不到时 <img> 静默失败 → 必须显式兜底,否则就是"空白卡 + 远程徽标"。
+  // displayUrl 变化(典型:后台收敛成功换成本地路径)自动复位。
+  const [loadFailed, setLoadFailed] = useState(false);
+  useEffect(() => {
+    setLoadFailed(false);
+  }, [displayUrl]);
 
   const handleSelect = useCallback(
     (idx: number) => {
@@ -131,6 +175,24 @@ function ImagePreview({ card }: { card: CanvasCard }) {
   if (displayUrl) {
     if (!imgReady) return <div className="h-full w-full bg-muted/20" />;
     const isRemote = activeUrl!.startsWith("http://") || activeUrl!.startsWith("https://");
+
+    if (loadFailed) {
+      return (
+        <div className="relative h-full w-full">
+          <MediaLoadError
+            isRemote={isRemote}
+            onRetry={() => {
+              if (isRemote) scheduleCardMediaLocalization(card.id, { firstDelayMs: 0 });
+              setLoadFailed(false);
+            }}
+          />
+          {cardError && (
+            <CardErrorWithRetry cardId={card.id} message={cardError} variant="ribbon" />
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="relative h-full w-full">
         {/* 画布上同屏可能有多张主图，必须 lazy + async 解码：
@@ -140,10 +202,17 @@ function ImagePreview({ card }: { card: CanvasCard }) {
           alt=""
           loading="lazy"
           decoding="async"
+          onError={() => {
+            setLoadFailed(true);
+            if (isRemote) scheduleCardMediaLocalization(card.id);
+          }}
           className="h-full w-full object-cover"
         />
         {isRemote && (
-          <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-amber-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm">
+          <span
+            title="生成结果尚未保存到本地（远程地址），将自动重试下载"
+            className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-amber-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm"
+          >
             <Cloud className="h-3 w-3" />
             远程
           </span>
@@ -200,6 +269,11 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
   const alreadyCached = displayUrl ? isPreloaded(displayUrl) : false;
   const imgReady = useDeferredMount(IMG_DEFER_MS, alreadyCached);
 
+  const [loadFailed, setLoadFailed] = useState(false);
+  useEffect(() => {
+    setLoadFailed(false);
+  }, [displayUrl]);
+
   if (genProgress) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-4">
@@ -230,6 +304,25 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
 
   if (displayUrl) {
     if (!imgReady) return <div className="h-full w-full bg-muted/20" />;
+    const isRemote = rawUrl!.startsWith("http://") || rawUrl!.startsWith("https://");
+
+    if (loadFailed) {
+      return (
+        <div className="relative h-full w-full">
+          <MediaLoadError
+            isRemote={isRemote}
+            onRetry={() => {
+              if (isRemote) scheduleCardMediaLocalization(card.id, { firstDelayMs: 0 });
+              setLoadFailed(false);
+            }}
+          />
+          {cardError && (
+            <CardErrorWithRetry cardId={card.id} message={cardError} variant="ribbon" />
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="relative h-full w-full">
         <img
@@ -237,6 +330,10 @@ function TryOnPreview({ card }: { card: CanvasCard }) {
           alt=""
           loading="lazy"
           decoding="async"
+          onError={() => {
+            setLoadFailed(true);
+            if (isRemote) scheduleCardMediaLocalization(card.id);
+          }}
           className="h-full w-full object-cover"
         />
         {data.resultImageUrl && (
@@ -318,13 +415,22 @@ function VideoPreview({ card }: { card: CanvasCard }) {
   }
 
   if (displayUrl && decodeFailed) {
+    // 远程地址的 onError 多半是"取不到"而非"解不动"——文案分开,别误导用户去转码。
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-muted-foreground">
         <Video className="h-10 w-10 opacity-40" />
-        <span className="text-sm font-medium opacity-70">视频无法解码</span>
+        <span className="text-sm font-medium opacity-70">
+          {isRemote ? "视频加载失败" : "视频无法解码"}
+        </span>
         <span className="text-[11px] opacity-50">
-          浏览器不支持该编码（如 HEVC/H.265）。<br />
-          请改用 H.264 编码的 MP4。
+          {isRemote ? (
+            <>远程视频不可达或格式不支持，已安排后台保存到本地。</>
+          ) : (
+            <>
+              浏览器不支持该编码（如 HEVC/H.265）。<br />
+              请改用 H.264 编码的 MP4。
+            </>
+          )}
         </span>
       </div>
     );
@@ -347,7 +453,10 @@ function VideoPreview({ card }: { card: CanvasCard }) {
           controls
           muted
           preload="none"
-          onError={() => setDecodeFailed(true)}
+          onError={() => {
+            setDecodeFailed(true);
+            if (isRemote) scheduleCardMediaLocalization(card.id);
+          }}
           onEnded={(e) => {
             const v = e.currentTarget;
             v.pause();
@@ -355,7 +464,10 @@ function VideoPreview({ card }: { card: CanvasCard }) {
           }}
         />
         {isRemote && (
-          <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-amber-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm">
+          <span
+            title="生成结果尚未保存到本地（远程地址），将自动重试下载"
+            className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-amber-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm"
+          >
             <Cloud className="h-3 w-3" />
             远程
           </span>

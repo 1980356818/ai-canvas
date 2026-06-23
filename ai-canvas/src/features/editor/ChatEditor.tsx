@@ -597,33 +597,37 @@ export default function ChatEditor({ card }: { card: CanvasCard }) {
 
       {data.upstreamTexts && Object.keys(data.upstreamTexts).length > 0 && (
         <div className="flex shrink-0 flex-col gap-1 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-2">
-          <div className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+          <div className="flex shrink-0 items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
             <Paperclip className="h-3 w-3" />
             <span>引用 {Object.keys(data.upstreamTexts).length} 个上游输出</span>
           </div>
-          {Object.entries(data.upstreamTexts).map(([srcId, txt]) => {
-            const srcCard = useCardStore.getState().getCard(srcId);
-            const label = srcCard?.title || "上游节点";
-            return (
-              <div
-                key={srcId}
-                className="flex items-center gap-1.5 rounded-md bg-background/60 px-2 py-1 text-[11px]"
-              >
-                <span className="min-w-0 flex-1 truncate text-foreground/80">
-                  <span className="font-medium text-foreground">{label}</span>
-                  {" · "}
-                  {txt.length > 60 ? txt.slice(0, 60) + "…" : txt}
-                  {` (${txt.length}字)`}
-                </span>
-                <button
-                  onClick={() => disconnectCardPairAndCleanup(srcId, card.id)}
-                  className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          {/* 上游列表自身限高 + 内部滚动:上游节点多时不会无限撑高、挤掉下方输入框和生成按钮
+              (面板高度由 FloatingEditor 测量内容后自适应,超出此上限则在本区滚动)。 */}
+          <div className="flex max-h-[120px] flex-col gap-1 overflow-y-auto">
+            {Object.entries(data.upstreamTexts).map(([srcId, txt]) => {
+              const srcCard = useCardStore.getState().getCard(srcId);
+              const label = srcCard?.title || "上游节点";
+              return (
+                <div
+                  key={srcId}
+                  className="flex items-center gap-1.5 rounded-md bg-background/60 px-2 py-1 text-[11px]"
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            );
-          })}
+                  <span className="min-w-0 flex-1 truncate text-foreground/80">
+                    <span className="font-medium text-foreground">{label}</span>
+                    {" · "}
+                    {txt.length > 60 ? txt.slice(0, 60) + "…" : txt}
+                    {` (${txt.length}字)`}
+                  </span>
+                  <button
+                    onClick={() => disconnectCardPairAndCleanup(srcId, card.id)}
+                    className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

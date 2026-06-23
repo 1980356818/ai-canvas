@@ -2,8 +2,8 @@
  * 极境 (JiJing) provider 的「国内 / 海外线路」单一真相源。
  *
  * 背景:
- *   极境后端在国内走 api.snoworangekeji.cn (SakuraFrp 国内节点 dx.frp-try.com),
- *   国外用户访问会很慢甚至不通。为此独立开了 global.snoworangekeji.cn 走
+ *   极境后端在国内走 api.jjowo.com (SakuraFrp 国内节点 dx.frp-try.com),
+ *   国外用户访问会很慢甚至不通。为此独立开了 global.jjowo.com 走
  *   SakuraFrp 香港节点 frp-fit.com。「AI 平台 → 极境 → 海外用户」开关用来
  *   控制本端走哪条线路。
  *
@@ -24,8 +24,8 @@
 
 export const JIJING_OVERSEAS_SETTING_KEY = "jijing_overseas";
 
-export const JIJING_API_CN = "https://api.snoworangekeji.cn";
-export const JIJING_API_GLOBAL = "https://global.snoworangekeji.cn";
+export const JIJING_API_CN = "https://api.jjowo.com";
+export const JIJING_API_GLOBAL = "https://global.jjowo.com";
 
 /**
  * 同步读取「海外用户」开关状态, 基于浏览器 localStorage。

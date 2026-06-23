@@ -14,10 +14,17 @@ interface ProjectState {
   deletedProjects: ProjectInfo[];
   currentProjectId: string | null;
   openProjectIds: string[];
+  /**
+   * 「该项目的卡片/连线/组已全部加载进 store」的就绪信号,由 useProjectLifecycle 在
+   * 加载完成时置为该项目 id、切换项目时清空。自动化桥的 `project.open` 动词 await 它,
+   * 确保后续 card.create / canvas.snapshot 读到的是已水合的 store(而非加载中途的空集)。
+   */
+  hydratedProjectId: string | null;
 
   setProjects: (projects: ProjectInfo[]) => void;
   setDeletedProjects: (projects: ProjectInfo[]) => void;
   setCurrentProjectId: (id: string | null) => void;
+  setHydratedProjectId: (id: string | null) => void;
   addProject: (project: ProjectInfo) => void;
   removeProject: (id: string) => void;
   restoreProject: (id: string) => void;
@@ -33,12 +40,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   deletedProjects: [],
   currentProjectId: null,
   openProjectIds: [],
+  hydratedProjectId: null,
 
   setProjects: (projects) => set({ projects: sortByUpdatedDesc(projects) }),
 
   setDeletedProjects: (deletedProjects) => set({ deletedProjects }),
 
   setCurrentProjectId: (id) => set({ currentProjectId: id }),
+
+  setHydratedProjectId: (id) => set({ hydratedProjectId: id }),
 
   addProject: (project) =>
     set((s) => ({ projects: sortByUpdatedDesc([project, ...s.projects]) })),

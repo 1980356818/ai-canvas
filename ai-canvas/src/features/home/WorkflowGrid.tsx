@@ -6,11 +6,13 @@ import { scheduleFitCardsToViewport } from "@/lib/viewport";
 import { useTemplateStore } from "@/stores/templateStore";
 import { useEffect, useMemo, useState } from "react";
 import type { WorkflowTemplate } from "@/shared/constants";
-import { Lock, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDisplayUrl } from "@/lib/media";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { canUseTemplate, canSeeTemplate } from "@/lib/entitlements";
+import { lockedTemplateMsg } from "@/config/membershipCopy";
+import { TemplateLockedCover } from "@/shared/TemplateLockedCover";
 import { useCategoryStore } from "@/stores/categoryStore";
 import { categoryLabelMap, categoryOrderMap } from "@/config/templateCategories";
 
@@ -18,7 +20,7 @@ function FeatureCard({ workflow, locked }: { workflow: WorkflowTemplate; locked:
   const isVideo = workflow.category === "video";
   const handleClick = async () => {
     if (locked) {
-      useUIStore.getState().openUpgrade(`「${workflow.name}」是正式版模板，升级会员后即可使用`);
+      useUIStore.getState().openUpgrade(lockedTemplateMsg(workflow.name));
       return;
     }
     try {
@@ -76,13 +78,7 @@ function FeatureCard({ workflow, locked }: { workflow: WorkflowTemplate; locked:
             <Play className="h-2.5 w-2.5 fill-white text-white" />
           </div>
         )}
-        {locked && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-            <div className="flex items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[9px] font-medium text-white/90">
-              <Lock className="h-2.5 w-2.5" /> 正式版
-            </div>
-          </div>
-        )}
+        {locked && <TemplateLockedCover />}
       </div>
 
       <div className="flex flex-1 flex-col gap-0.5 px-2 py-1.5">
@@ -161,7 +157,7 @@ export default function WorkflowGrid() {
       {/* 当前分类网格 */}
       <div className="grid grid-cols-5 gap-2">
         {activeGroup?.list.map((wf) => (
-          <FeatureCard key={wf.id} workflow={wf} locked={!canUseTemplate(ent, wf.id)} />
+          <FeatureCard key={wf.id} workflow={wf} locked={!canUseTemplate(ent, wf)} />
         ))}
       </div>
     </div>

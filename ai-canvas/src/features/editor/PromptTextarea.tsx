@@ -14,8 +14,7 @@ import {
 } from "@/lib/promptSerializer";
 import AtMentionPopover from "./AtMentionPopover";
 import { cn } from "@/lib/utils";
-
-const REF_ATTR = "data-ref-id";
+import { REF_ATTR, resolveAtomicChip } from "./chipDelete";
 
 const CHIP_CLS =
   "inline-flex items-center gap-0.5 rounded-sm bg-primary/15 px-1 py-px text-xs text-primary align-middle cursor-default select-none whitespace-nowrap";
@@ -248,40 +247,33 @@ const PromptTextarea = forwardRef<PromptTextareaHandle, PromptTextareaProps>(fun
         const el = editorRef.current;
         if (!el) return;
         const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return;
-
+        if (!sel || sel.rangeCount === 0) return;
         const range = sel.getRangeAt(0);
-        const { startContainer: node, startOffset: offset } = range;
+        // 选区必须在本编辑器内(防御:理论上 onKeyDown 只在聚焦本框时触发)。
+        if (!el.contains(range.startContainer)) return;
 
-        let chip: Element | null = null;
+        // 把「点中 chip / 对象选中 / 光标相邻」等各种形状统一解析成要删的那个 chip。
+        const chip = resolveAtomicChip(el, range, e.key);
+        if (!chip) return; // 与 chip 无关 → 走浏览器默认删字,onInput 收敛
 
-        if (e.key === "Backspace") {
-          if (node.nodeType === Node.TEXT_NODE && offset === 0) {
-            const prev = node.previousSibling;
-            if (prev instanceof HTMLElement && prev.hasAttribute(REF_ATTR))
-              chip = prev;
-          } else if (node.nodeType === Node.ELEMENT_NODE && offset > 0) {
-            const child = node.childNodes[offset - 1];
-            if (child instanceof HTMLElement && child.hasAttribute(REF_ATTR))
-              chip = child;
+        e.preventDefault();
+        // 删除后把光标放回 chip 原位,继续输入不跳位。
+        const anchor = chip.nextSibling;
+        const parent = chip.parentNode;
+        chip.remove();
+        if (parent) {
+          const caret = document.createRange();
+          if (anchor) {
+            caret.setStartBefore(anchor);
+            caret.collapse(true);
+          } else {
+            caret.selectNodeContents(parent);
+            caret.collapse(false);
           }
-        } else {
-          if (node.nodeType === Node.TEXT_NODE && offset === (node.textContent?.length ?? 0)) {
-            const next = node.nextSibling;
-            if (next instanceof HTMLElement && next.hasAttribute(REF_ATTR))
-              chip = next;
-          } else if (node.nodeType === Node.ELEMENT_NODE) {
-            const child = node.childNodes[offset];
-            if (child instanceof HTMLElement && child.hasAttribute(REF_ATTR))
-              chip = child;
-          }
+          sel.removeAllRanges();
+          sel.addRange(caret);
         }
-
-        if (chip) {
-          e.preventDefault();
-          chip.remove();
-          emitChange(el, inlineRefs);
-        }
+        emitChange(el, inlineRefs);
       }
     },
     [mentionOpen, inlineRefs, emitChange],
@@ -502,7 +494,10 @@ const PromptTextarea = forwardRef<PromptTextareaHandle, PromptTextareaProps>(fun
           dragOver && "ring-1 ring-primary border-primary/60",
           disabled && "cursor-not-allowed opacity-50",
         )}
-        style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+        // 提示词过长时不无限撑高把"生成"按钮挤出可视区:面板自适应高度时(非手动拉伸),
+        // FloatingEditor 会在祖先节点设 --prompt-max-h,本框据此封顶并内部滚动(只滑提示词)。
+        // 手动拉伸编辑器时该变量不设(回退 none),flex-1 + h-full 照常填满用户拉出的高度。
+        style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: "var(--prompt-max-h, none)" }}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}

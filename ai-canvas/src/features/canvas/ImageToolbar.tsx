@@ -8,6 +8,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { persistImage, getDisplayUrl, exportFile } from "@/lib/media";
+import { localizeCardMedia, hasLocalizableMedia, cancelCardMediaLocalization } from "@/lib/mediaLocalize";
 import { cropImageCell } from "@/lib/cropImage";
 import { autoSave } from "@/lib/autoSave";
 import { sizeFromRatio } from "@/shared/constants";
@@ -466,35 +467,28 @@ export default function ImageToolbar() {
 
   const [saving, setSaving] = useState(false);
 
-  const isRemoteUrl = useCallback((url?: string) => {
-    return !!url && (url.startsWith("http://") || url.startsWith("https://"));
-  }, []);
-
   const handleSaveLocal = useCallback(async () => {
     if (!card || saving) return;
-    const data = card.data as { imageUrl?: string };
-    if (!data.imageUrl || !isRemoteUrl(data.imageUrl)) return;
-
     setSaving(true);
     try {
-      const projectId = card.projectId;
-      const { localPath } = await persistImage(data.imageUrl, card.title || undefined, projectId);
-      useCardStore.getState().updateCard(card.id, {
-        data: { ...card.data, imageUrl: localPath },
-      });
-      autoSave.markDirty(card.id);
-      useUIStore.getState().addToast({ type: "success", title: "图片已保存到本地", duration: 2500 });
-    } catch (err) {
-      useUIStore.getState().addToast({
-        type: "error",
-        title: "保存失败",
-        description: String(err),
-        duration: 5000,
-      });
+      // 统一收敛入口:imageUrl + results[].url 一起补(旧实现只补 imageUrl,
+      // 显示层优先读 results,出现过"保存成功但徽标/远端图还在")。
+      const r = await localizeCardMedia(card.id);
+      if (r.failed > 0) {
+        useUIStore.getState().addToast({
+          type: "error",
+          title: "保存失败",
+          description: `${r.failed} 个文件下载失败，后台将继续重试`,
+          duration: 5000,
+        });
+      } else if (r.saved > 0 || r.repaired > 0) {
+        cancelCardMediaLocalization(card.id);
+        useUIStore.getState().addToast({ type: "success", title: "图片已保存到本地", duration: 2500 });
+      }
     } finally {
       setSaving(false);
     }
-  }, [card, saving, isRemoteUrl]);
+  }, [card, saving]);
 
   const handleUpscale = useCallback(() => {
     if (!card) return;
@@ -606,7 +600,7 @@ export default function ImageToolbar() {
   const imgData = card.data as { imageUrl?: string };
   if (!imgData.imageUrl) return null;
 
-  const showSaveLocal = isRemoteUrl(imgData.imageUrl);
+  const showSaveLocal = hasLocalizableMedia(card.data);
   const showSplitComposite = isCompositeImage(card);
   const splitPending = showSplitComposite ? pendingSplitCount(card) : 0;
 

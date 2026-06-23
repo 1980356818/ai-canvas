@@ -6,7 +6,7 @@
 
   字段说明：
   - NSAppTransportSecurity / NSAllowsArbitraryLoads：放行 HTTP 与不在系统信任链的 HTTPS。
-    上游 provider 站点（api.snoworangekeji.cn / comfly / dale 等）走 reqwest（不受 ATS 影响），
+    上游 provider 站点（api.jjowo.com / comfly / dale 等）走 reqwest（不受 ATS 影响），
     但 WKWebView 内的 <img>/<video>/fetch 受 ATS 管控；ATS 默认阻断会让媒体预览空白。
   - LSMinimumSystemVersion：与 tauri.conf.json bundle.macOS.minimumSystemVersion 对齐。
   - NSHumanReadableCopyright / CFBundleDisplayName / CFBundleName：原生工具显示。

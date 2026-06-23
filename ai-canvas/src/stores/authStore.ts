@@ -9,6 +9,8 @@ import {
   getStoredUser,
   clearAuth,
   setAutoLogin,
+  saveCredentials,
+  clearSavedCredentials,
   BizError,
   type AuthUser,
 } from "@/platform/auth.api";
@@ -72,6 +74,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true, error: null, errorCode: null });
     try {
       const result = await apiLogin(username, password, machineCode, forceRebind);
+      // 登录成功 → 应用自己持久化凭据并打开自动登录。
+      // 这是凭据记忆的**唯一**出口（以前分散在 LoginWindow 的两个提交处，
+      // 漏一处就会出现"记住了 token 却没记住账号密码"的不一致）。所有登录路径
+      // （手动登录 / 解绑重试 / 自动登录复用）都经过这里，行为统一。
+      saveCredentials(username, password);
+      setAutoLogin(true);
       set({
         authenticated: true,
         restricted: result.restricted,
@@ -151,7 +159,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
+    // 显式登出 = "忘记我"：清 token + 清记住的账号密码 + 关自动登录，三者一起，
+    // 不留任何会在下次启动自动回填登录框的残留。
     clearAuth();
+    clearSavedCredentials();
     setAutoLogin(false);
     set({
       authenticated: false,

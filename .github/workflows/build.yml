@@ -196,17 +196,26 @@ jobs:
 
           ls -lh "$PKG"
 
-      - name: Sign and upload to release
+      - name: Sign pkg for updater
+        continue-on-error: true
         working-directory: ai-canvas
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APP_VERSION: ${{ steps.version.outputs.value }}
         run: |
+          PKG="${{ env.APP_NAME }}_${APP_VERSION}_universal.pkg"
+          npx tauri signer sign --private-key "$TAURI_SIGNING_PRIVATE_KEY" --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$PKG"
+          ls -lh "$PKG" "$PKG.sig"
+
+      - name: Upload to release
+        working-directory: ai-canvas
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_VERSION: ${{ steps.version.outputs.value }}
+        run: |
           TAG="v${APP_VERSION}"
           PKG="${{ env.APP_NAME }}_${APP_VERSION}_universal.pkg"
-          npx tauri signer sign --private-key "$TAURI_SIGNING_PRIVATE_KEY" --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$PKG" || echo "Signing skipped (no key configured)"
           gh release create "$TAG" --draft --title "${{ env.APP_NAME }} $TAG" --notes "See the assets below to download the installer." 2>/dev/null || true
           gh release upload "$TAG" "$PKG" --clobber
           [ -f "$PKG.sig" ] && gh release upload "$TAG" "$PKG.sig" --clobber || true

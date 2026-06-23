@@ -9,7 +9,8 @@ import { modelService } from "@/services/models";
 import { resolveDefaultModelForCardType } from "@/services/modelDefaults";
 import { buildVideoRequest } from "@/services/generation/buildVideoRequest";
 import { runEditorGeneration } from "@/services/generation/runEditorGeneration";
-import { scheduleBackgroundSave, getDisplayUrl } from "@/lib/media";
+import { getDisplayUrl } from "@/lib/media";
+import { scheduleCardMediaLocalization } from "@/lib/mediaLocalize";
 import { cn } from "@/lib/utils";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
 import { type InlineImageRef, toDisplayText } from "@/lib/promptSerializer";
@@ -774,10 +775,6 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
           throw new Error("当前 Provider 不支持视频生成");
         }
 
-        // 几何善后(scheduleBackgroundSave)用的项目归属快照,整个异步链都用这个
-        // (防生成期间用户切项目把结果存错目录)。请求体里的 projectId 已由 buildVideoRequest 快照。
-        const ownerProjectId = card.projectId;
-
         const result = await provider.generateVideo({
           ...built.request,
           onProgress: (p) => {
@@ -793,7 +790,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
 
         const isRemote = result.url.startsWith("http://") || result.url.startsWith("https://");
         if (isRemote) {
-          scheduleBackgroundSave(card.id, result.url, "videoUrl", ownerProjectId);
+          scheduleCardMediaLocalization(card.id);
           useUIStore.getState().addToast({
             type: "warning",
             title: "视频已生成，保存到本地失败",
@@ -1004,7 +1001,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
                 <ArrowDownLeft className="h-3 w-3" />
                 上游文字 · 自动拼接到提示词前
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex max-h-[88px] flex-wrap gap-1.5 overflow-y-auto">
                 {upstreamEntries.map(([cardId, text]) => (
                   <span
                     key={cardId}

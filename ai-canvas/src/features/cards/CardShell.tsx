@@ -25,7 +25,7 @@ import {
 } from "@/lib/dataFlow";
 import { hitGroupAt } from "@/lib/groupBounds";
 import { useGroupStore } from "@/stores/groupStore";
-import { addCardsToGroup, removeCardsFromGroup } from "@/lib/groupActions";
+import { reconcileFrameMembership } from "@/lib/frameMembership";
 import CardLabel from "./CardLabel";
 
 function findInputPortAt(
@@ -268,6 +268,11 @@ export default memo(
         el.style.willChange = "transform";
         el.style.cursor = "move";
 
+        // 拖拽手势期间给画布根挂 .canvas-interacting:暂停变换层内一切动画
+        // (连线流光 / spinner 等),让纹理可缓存、不与拖拽重绘叠加(同缩放/平移)。
+        const canvasRoot = document.querySelector("[data-canvas-viewport]");
+        let interacting = false;
+
         dragging.current = true;
         didDrag.current = false;
         const zoom = useCanvasStore.getState().viewport.zoom;
@@ -354,53 +359,35 @@ export default memo(
           }
         }
 
-        // 拖动期间 store 写入用 rAF 合并：原生 pointermove 在高刷屏可达 120fps，
-        // 每次都直接 setDragOffsets 会推动 ConnectionLayer / CanvasBirdView 重渲染。
-        // 用一个 pendingFrame 把同帧多次更新合并成一次提交，稳定 ≤60fps。
+        // 拖动期间的「重活」全部 rAF 合并到每帧一次:store 提交(驱动 ConnectionLayer /
+        // GroupLayer 跟手)+ 入组命中 + 图片落点命中(elementFromPoint 会强制同步布局)。
+        // 原生 pointermove 在高刷鼠标上远超 60fps,这些活若每次都跑会戳穿主线程 ——
+        // 卡片本身的 transform 仍在 onMove 里即时更新,跟手手感不受影响。
         let pendingFrame = 0;
-        let latestGroupOffsets: Map<string, { dx: number; dy: number }> | null = null;
-        let latestSingleOffset: { dx: number; dy: number } | null = null;
-        const flushDragOffsets = () => {
+        let latestMove: {
+          clientX: number;
+          clientY: number;
+          dx: number;
+          dy: number;
+        } | null = null;
+        const flushDrag = () => {
           pendingFrame = 0;
+          const m = latestMove;
+          if (!m) return;
+          const { clientX, clientY, dx, dy } = m;
+
+          // 1) store 提交(每帧一次)
           const store = useCanvasStore.getState();
-          if (latestGroupOffsets) {
-            store.setDragOffsets(latestGroupOffsets);
-            latestGroupOffsets = null;
-          } else if (latestSingleOffset) {
-            store.setDragOffset(card.id, latestSingleOffset);
-            latestSingleOffset = null;
-          }
-        };
-
-        const onMove = (ev: PointerEvent) => {
-          if (ev.pointerId !== pid || !dragging.current) return;
-          const dx = (ev.clientX - dragStart.current.mx) / zoom;
-          const dy = (ev.clientY - dragStart.current.my) / zoom;
-          const screenDx = ev.clientX - dragStart.current.mx;
-          const screenDy = ev.clientY - dragStart.current.my;
-          if (Math.abs(screenDx) > 5 || Math.abs(screenDy) > 5) didDrag.current = true;
-          // DOM transform 立刻 imperative 更新，跟手手感不受 rAF 节流影响
-          el.style.transform = `translate(${dx}px, ${dy}px)`;
-
           if (isGroupDrag) {
             const offsets = new Map<string, { dx: number; dy: number }>();
             offsets.set(card.id, { dx, dy });
-            for (const [sid, peer] of peerStarts) {
-              if (peer.el) peer.el.style.transform = `translate(${dx}px, ${dy}px)`;
-              offsets.set(sid, { dx, dy });
-            }
-            latestGroupOffsets = offsets;
-            latestSingleOffset = null;
+            for (const sid of peerStarts.keys()) offsets.set(sid, { dx, dy });
+            store.setDragOffsets(offsets);
           } else {
-            latestSingleOffset = { dx, dy };
-            latestGroupOffsets = null;
-          }
-          if (!pendingFrame) {
-            pendingFrame = requestAnimationFrame(flushDragOffsets);
+            store.setDragOffset(card.id, { dx, dy });
           }
 
-          // 拖卡入组高亮:用卡的中心点(而非指针)做命中,体验更稳定。
-          // 排除自己当前所属组,避免在原组内拖动也常亮提示。
+          // 2) 拖卡入组高亮:用卡的中心点(而非指针)做命中,排除自身所属组
           if (enableGroupHitTest && card.projectId) {
             const centerX = card.x + card.width / 2 + dx;
             const centerY = card.y + card.height / 2 + dy;
@@ -416,7 +403,8 @@ export default memo(
             }
           }
 
-          const slotEl = findSlotBelow(ev.clientX, ev.clientY);
+          // 3) 图片卡落点高亮(elementFromPoint 强制同步布局:每帧一次,绝不每个 pointermove)
+          const slotEl = findSlotBelow(clientX, clientY);
           if (slotEl !== lastHoveredSlot) {
             lastHoveredSlot?.dispatchEvent(
               new CustomEvent("canvas-card-hover", { detail: { active: false } }),
@@ -427,7 +415,7 @@ export default memo(
             lastHoveredSlot = slotEl;
           }
 
-          const acceptCardEl = findAcceptingCardBelow(ev.clientX, ev.clientY);
+          const acceptCardEl = findAcceptingCardBelow(clientX, clientY);
           if (acceptCardEl !== lastHoveredCardEl) {
             if (lastHoveredCardEl) {
               lastHoveredCardEl.classList.remove(
@@ -454,12 +442,44 @@ export default memo(
           }
         };
 
+        const onMove = (ev: PointerEvent) => {
+          if (ev.pointerId !== pid || !dragging.current) return;
+          const dx = (ev.clientX - dragStart.current.mx) / zoom;
+          const dy = (ev.clientY - dragStart.current.my) / zoom;
+          const screenDx = ev.clientX - dragStart.current.mx;
+          const screenDy = ev.clientY - dragStart.current.my;
+          if (Math.abs(screenDx) > 5 || Math.abs(screenDy) > 5) {
+            didDrag.current = true;
+            // 真正开始拖动才挂 interacting(纯点击不触发动画暂停)
+            if (!interacting) {
+              interacting = true;
+              canvasRoot?.classList.add("canvas-interacting");
+            }
+          }
+          // DOM transform 立刻 imperative 更新:被拖卡 + 多选同伴卡都即时跟手,不受
+          // rAF 节流影响。其余重活(store 提交 / 命中测试)收进 flushDrag 每帧一次。
+          el.style.transform = `translate(${dx}px, ${dy}px)`;
+          if (isGroupDrag) {
+            for (const peer of peerStarts.values()) {
+              if (peer.el) peer.el.style.transform = `translate(${dx}px, ${dy}px)`;
+            }
+          }
+          latestMove = { clientX: ev.clientX, clientY: ev.clientY, dx, dy };
+          if (!pendingFrame) {
+            pendingFrame = requestAnimationFrame(flushDrag);
+          }
+        };
+
         const onUp = (ev: PointerEvent) => {
           if (ev.pointerId !== pid || !dragging.current) return;
           dragging.current = false;
           el.style.transform = "";
           el.style.willChange = "";
           el.style.cursor = "";
+          if (interacting) {
+            interacting = false;
+            canvasRoot?.classList.remove("canvas-interacting");
+          }
           el.removeEventListener("pointermove", onMove);
           el.removeEventListener("pointerup", onUp);
           el.removeEventListener("lostpointercapture", onUp);
@@ -469,8 +489,7 @@ export default memo(
             cancelAnimationFrame(pendingFrame);
             pendingFrame = 0;
           }
-          latestGroupOffsets = null;
-          latestSingleOffset = null;
+          latestMove = null;
 
           if (isGroupDrag) {
             for (const [, peer] of peerStarts) {
@@ -569,41 +588,40 @@ export default memo(
               x: dragStart.current.cx,
               y: dragStart.current.cy,
             });
-            updateCard(card.id, {
-              x: dragStart.current.cx + dx,
-              y: dragStart.current.cy + dy,
-            });
+            const dragUpdates: Array<{ id: string; partial: Partial<CanvasCard> }> = [
+              {
+                id: card.id,
+                partial: {
+                  x: dragStart.current.cx + dx,
+                  y: dragStart.current.cy + dy,
+                },
+              },
+            ];
             autoSave.markDirty(card.id);
 
             if (isGroupDrag) {
               for (const [sid, peer] of peerStarts) {
                 recordUpdate(sid, { x: peer.cx, y: peer.cy });
-                updateCard(sid, { x: peer.cx + dx, y: peer.cy + dy });
+                dragUpdates.push({
+                  id: sid,
+                  partial: { x: peer.cx + dx, y: peer.cy + dy },
+                });
                 autoSave.markDirty(sid);
               }
             }
+            // 批量一次提交:只 bump 一次 layoutVersion → 空间索引单次增量 diff
+            // (替代 N 次 updateCard 的 O(N×总数) 重建,上千卡多选移动时关键)。
+            useCardStore.getState().updateCards(dragUpdates);
 
             if (!ev.ctrlKey && !ev.metaKey && !isGroupDrag) {
               useCanvasStore.getState().setSelectedCardIds([card.id]);
             }
 
-            // 入组 / 出组结算(仅单卡拖)。落点用卡片新中心,而非指针,
-            // 与 onMove 高亮逻辑保持一致;否则会出现"明明高亮了 A 组,松手却没加入"的错位。
+            // Frame 容器化:落手后按存储边界重算成员归属 —— 单卡进框 / 出框 / 被新位置
+            // 覆盖,全部由校准权威统一处理(替代旧的 hitGroupAt + add/remove 二元逻辑,
+            // 同时消除原 excludeGroupIds 的怪异分支)。
             if (enableGroupHitTest && card.projectId) {
-              const newCenterX = dragStart.current.cx + dx + card.width / 2;
-              const newCenterY = dragStart.current.cy + dy + card.height / 2;
-              const hit = hitGroupAt(card.projectId, newCenterX, newCenterY, {
-                excludeGroupIds: currentGroupId
-                  ? new Set([currentGroupId])
-                  : undefined,
-              });
-              if (hit) {
-                // 加入命中组(若属于另一组,addCardsToGroup → groupStore 的 maintainSingleMembership 自动挤出)
-                addCardsToGroup(hit.group.id, [card.id]);
-              } else if (currentGroupId) {
-                // 落点在所有组外,而原本属于某组 → 出组
-                removeCardsFromGroup([card.id]);
-              }
+              reconcileFrameMembership(card.projectId);
             }
           } else {
             const pm = useCanvasStore.getState().pickMode;
