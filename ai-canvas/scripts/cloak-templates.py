@@ -93,11 +93,13 @@ def main():
         for line in o.strip().split("\n"):
             if not line.strip():
                 continue
-            parts = line.split("\t")
-            if len(parts) < 4:
+            parts = line.split("\t", 3)
+            if len(parts) < 3:
                 print(f"  ⚠ 跳过异常行: {line[:80]}...")
                 continue
-            tid, cat, hex_defn, mav = parts[0], parts[1], parts[2], parts[3]
+            tid, cat = parts[0], parts[1]
+            hex_defn = parts[2] if len(parts) == 3 else parts[2]
+            mav = parts[3] if len(parts) > 3 else ""
             try:
                 defn = bytes.fromhex(hex_defn).decode("utf-8")
                 tpl = json.loads(defn)
@@ -163,7 +165,7 @@ def main():
             else:
                 mav_clause = ", min_app_version=NULL"
             stmts.append(
-                f"UPDATE `template` SET definition=UNHEX('{hex_defn}'){mav_clause} "
+                f"UPDATE `template` SET definition=CONVERT(UNHEX('{hex_defn}') USING utf8mb4){mav_clause} "
                 f"WHERE id={esc(u['id'])};\n"
             )
         sql = "".join(stmts)
