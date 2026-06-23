@@ -5,7 +5,7 @@
     "description": "上传商品图，一键生成白底精修与多角度图",
     "icon": "ImageIcon",
     "category": "flat",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b36c310dd4e5e43f.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/b36c310dd4e5e43f.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -19,7 +19,7 @@
           "size": "16:9",
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/df2ee721169394c6.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/df2ee721169394c6.jpg",
           "quality": "low",
           "resolution": "4K"
         }
@@ -36,7 +36,7 @@
           "size": "1:1",
           "model": "nano-banana-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/ee636bc1315be712.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ee636bc1315be712.jpg"
         }
       },
       {
@@ -80,7 +80,7 @@
           "size": "1:1",
           "model": "nano-banana-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/ee636bc1315be712.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ee636bc1315be712.jpg"
         }
       },
       {
@@ -95,7 +95,7 @@
           "size": "1:1",
           "model": "nano-banana-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/4d3be7e18d38617b.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/4d3be7e18d38617b.jpg"
         }
       },
       {
@@ -151,7 +151,7 @@
     "description": "上传人物图，生成正/侧/背三视图",
     "icon": "ImageIcon",
     "category": "flat",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/63725bde51614ee2.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/63725bde51614ee2.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -161,7 +161,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/622c3a65ed8eaf4e.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/622c3a65ed8eaf4e.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "comfly"
@@ -175,7 +175,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/58acd8d85f46a133.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/58acd8d85f46a133.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "comfly"
@@ -194,7 +194,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3a84e7be929a3f7f.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3a84e7be929a3f7f.jpg"
         }
       }
     ],
@@ -215,7 +215,7 @@
     "description": "上传人物与目标脸，一键换脸",
     "icon": "ImageIcon",
     "category": "flat",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6646c08bcbd3a754.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/6646c08bcbd3a754.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -225,7 +225,7 @@
         "width": 253.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/ca2db7e2bb7c6c0f.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ca2db7e2bb7c6c0f.jpg",
           "content": ""
         }
       },
@@ -237,7 +237,7 @@
         "width": 340.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/214067cb9507d108.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/214067cb9507d108.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -256,7 +256,7 @@
           "model": "gpt-image-2",
           "provider": "jijing",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/d5f2de5c63297a4f.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/d5f2de5c63297a4f.jpg",
           "quality": "low"
         }
       }
@@ -278,7 +278,7 @@
     "description": "模特+服装+场景多模态融合，生成商业大片",
     "icon": "ImageIcon",
     "category": "flat",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/88144266d9e7fa95.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/88144266d9e7fa95.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -291,7 +291,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b663d3b3a7195c2c.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b663d3b3a7195c2c.jpg"
         }
       },
       {
@@ -305,7 +305,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b663d3b3a7195c2c.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b663d3b3a7195c2c.jpg"
         }
       },
       {
@@ -319,7 +319,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/214067cb9507d108.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/214067cb9507d108.jpg",
           "model": "gpt-image-2",
           "provider": "jijing"
         }
@@ -335,7 +335,7 @@
           "_showLabel": true,
           "content": "",
           "size": "1:1",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/1e537dc5a0bd88cb.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/1e537dc5a0bd88cb.jpg",
           "model": "gpt-image-2",
           "provider": "jijing"
         }
@@ -351,7 +351,7 @@
           "_showLabel": true,
           "content": "效果图4 正向：{{inspirations[3].nanobanana_prompt}}\n效果图4 负向：{{inspirations[3].negative_prompt}}\n4k画质",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/15be57cff6cf8994.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/15be57cff6cf8994.jpg",
           "model": "gpt-image-2",
           "provider": "jijing",
           "resolution": "4K",
@@ -369,7 +369,7 @@
           "_showLabel": true,
           "content": "效果图5 正向：{{inspirations[4].nanobanana_prompt}}\n效果图5 负向：{{inspirations[4].negative_prompt}}\n4k画质",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b37a51df89f4c09d.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b37a51df89f4c09d.jpg",
           "model": "gpt-image-2",
           "provider": "jijing",
           "quality": "low",
@@ -387,7 +387,7 @@
           "_showLabel": true,
           "content": "效果图2 正向：{{inspirations[1].nanobanana_prompt}}\n效果图2 负向：{{inspirations[1].negative_prompt}}\n4k画质",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b1ac62d637bb90df.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b1ac62d637bb90df.jpg",
           "model": "gpt-image-2",
           "provider": "jijing",
           "quality": "low"
@@ -404,7 +404,7 @@
           "_showLabel": true,
           "content": "效果图3 正向：{{inspirations[2].nanobanana_prompt}}\n效果图3 负向：{{inspirations[2].negative_prompt}}\n4k画质",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/34c907cd20d3ecf3.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/34c907cd20d3ecf3.jpg",
           "model": "gpt-image-2",
           "provider": "jijing"
         }
@@ -420,7 +420,7 @@
           "_showLabel": true,
           "content": "效果图1 正向：{{inspirations[0].nanobanana_prompt}}\n效果图1 负向：{{inspirations[0].negative_prompt}}\n4k画质",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/978f66f52b6147d0.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/978f66f52b6147d0.jpg",
           "model": "gpt-image-2",
           "provider": "jijing",
           "quality": "low"
@@ -568,7 +568,7 @@
     "description": "上传双人模特、双套服装与场景图，AI 生成一组连续一致的双人服装场景大片",
     "icon": "ImageIcon",
     "category": "flat",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/762e725e5d34727e.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/762e725e5d34727e.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -584,7 +584,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/7065190abc48ec84.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/7065190abc48ec84.jpg"
         }
       },
       {
@@ -601,7 +601,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/19b86d10a72d530a.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/19b86d10a72d530a.jpg"
         }
       },
       {
@@ -618,7 +618,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/05a73322eb27f428.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/05a73322eb27f428.jpg"
         }
       },
       {
@@ -629,7 +629,7 @@
         "width": 340.0,
         "height": 227.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/db24b411e1624db6.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/db24b411e1624db6.jpg",
           "content": ""
         }
       },
@@ -641,7 +641,7 @@
         "width": 340.0,
         "height": 240.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/896ab98cf2aea3e7.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/896ab98cf2aea3e7.jpg",
           "content": ""
         }
       },
@@ -653,7 +653,7 @@
         "width": 271.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/37372e8b832ec94c.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/37372e8b832ec94c.jpg",
           "content": ""
         }
       },
@@ -685,7 +685,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/37372e8b832ec94c.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/37372e8b832ec94c.jpg"
         }
       },
       {
@@ -702,7 +702,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e14d32889d628395.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e14d32889d628395.jpg"
         }
       }
     ],
@@ -807,7 +807,7 @@
     "description": "真人服装上身到数字模特，自然换装",
     "icon": "ImageIcon",
     "category": "flat",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9ab9fc247660f874.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/9ab9fc247660f874.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -822,7 +822,7 @@
           "model": "nano-banana-2",
           "provider": "jijing",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/7e86141d3ddfaa1b.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/7e86141d3ddfaa1b.jpg"
         }
       },
       {
@@ -833,7 +833,7 @@
         "width": 340.0,
         "height": 282.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f3e469866e79ef07.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f3e469866e79ef07.jpg",
           "content": ""
         }
       },
@@ -845,7 +845,7 @@
         "width": 340.0,
         "height": 316.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/75bd418ee1e47b94.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/75bd418ee1e47b94.jpg",
           "content": ""
         }
       },
@@ -890,7 +890,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8a784dc8056c5cf5.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8a784dc8056c5cf5.jpg"
         }
       }
     ],
@@ -935,7 +935,7 @@
     "description": "数字模特服装融合，多角度成片",
     "icon": "ImageIcon",
     "category": "flat",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/03fa14437f92610e.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/03fa14437f92610e.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -945,7 +945,7 @@
         "width": 340.0,
         "height": 282.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f3e469866e79ef07.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f3e469866e79ef07.jpg",
           "content": ""
         }
       },
@@ -957,7 +957,7 @@
         "width": 340.0,
         "height": 316.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/75bd418ee1e47b94.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/75bd418ee1e47b94.jpg",
           "content": ""
         }
       },
@@ -983,7 +983,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/a901e16e2961b2d1.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a901e16e2961b2d1.jpg",
           "content": ""
         }
       },
@@ -1009,7 +1009,7 @@
         "width": 340.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8b2d84eee4c6c2ae.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8b2d84eee4c6c2ae.jpg",
           "content": ""
         }
       }
@@ -1055,7 +1055,7 @@
     "description": "服装手机随手拍风格，真实生活感成片",
     "icon": "ImageIcon",
     "category": "flat",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/79e8808f94130526.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/79e8808f94130526.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -1065,7 +1065,7 @@
         "width": 254.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/dc05afbc8a093f6f.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/dc05afbc8a093f6f.jpg",
           "content": ""
         }
       },
@@ -1077,7 +1077,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/0be4c8096d7def0b.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/0be4c8096d7def0b.jpg",
           "content": ""
         }
       },
@@ -1089,7 +1089,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/dcd5fd8403f7641e.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/dcd5fd8403f7641e.jpg",
           "content": ""
         }
       },
@@ -1101,7 +1101,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9da025b62719b486.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9da025b62719b486.jpg",
           "content": ""
         }
       },
@@ -1119,7 +1119,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/56960411903c302e.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/56960411903c302e.jpg",
           "_resultStale": false
         }
       },
@@ -1137,7 +1137,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/d4874906f06ae83a.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/d4874906f06ae83a.jpg",
           "_resultStale": false
         }
       },
@@ -1155,7 +1155,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/4abb10b5dabc1423.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/4abb10b5dabc1423.jpg",
           "_resultStale": false
         }
       },
@@ -1173,7 +1173,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/d63aad5330f541c3.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/d63aad5330f541c3.jpg",
           "_resultStale": false
         }
       },
@@ -1206,7 +1206,7 @@
           "provider": "comfly",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/df045626957cfdd8.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/df045626957cfdd8.jpg",
           "_resultStale": false
         }
       },
@@ -1224,7 +1224,7 @@
           "provider": "comfly",
           "quality": "low",
           "resolution": "2K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e1aaa1a3b08bbb1d.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e1aaa1a3b08bbb1d.jpg",
           "_resultStale": false
         }
       },
@@ -1236,7 +1236,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/c41ec50eddc7f5e3.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/c41ec50eddc7f5e3.jpg",
           "content": "生成方案6",
           "model": "gpt-image-2",
           "provider": "comfly",
@@ -1365,7 +1365,7 @@
     "description": "箱包+模特融合，生成商业展示图",
     "icon": "ImageIcon",
     "category": "flat",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/db6e2f718d0b614f.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/db6e2f718d0b614f.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -1381,7 +1381,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/a51f6a6f3c46edc6.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a51f6a6f3c46edc6.jpg"
         }
       },
       {
@@ -1398,7 +1398,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/bbdc2bc5ec6055d8.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/bbdc2bc5ec6055d8.jpg"
         }
       },
       {
@@ -1415,7 +1415,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/06512813628981c7.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/06512813628981c7.jpg"
         }
       },
       {
@@ -1432,7 +1432,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/201abb3d435ec4b0.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/201abb3d435ec4b0.jpg"
         }
       },
       {
@@ -1449,7 +1449,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3d6c576088153899.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3d6c576088153899.jpg"
         }
       },
       {
@@ -1460,7 +1460,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/c82115ff380f4f6c.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/c82115ff380f4f6c.jpg",
           "content": ""
         }
       },
@@ -1472,7 +1472,7 @@
         "width": 272.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9b2b1ef946647539.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9b2b1ef946647539.jpg",
           "content": ""
         }
       },
@@ -1484,7 +1484,7 @@
         "width": 271.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/5d08b5e0bb8f149b.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/5d08b5e0bb8f149b.jpg",
           "content": ""
         }
       },
@@ -1501,7 +1501,7 @@
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/cd18d78002093686.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/cd18d78002093686.jpg"
         }
       },
       {
@@ -1533,7 +1533,7 @@
           "provider": "comfly",
           "quality": "low",
           "resolution": "2K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9ca56d9c67efbabb.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9ca56d9c67efbabb.jpg"
         }
       },
       {
@@ -1549,7 +1549,7 @@
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/15db645e65d358ff.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/15db645e65d358ff.jpg"
         }
       },
       {
@@ -1560,7 +1560,7 @@
         "width": 254.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/ecc4e2a9774c38f1.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ecc4e2a9774c38f1.jpg",
           "content": ""
         }
       },
@@ -1579,7 +1579,7 @@
           "quality": "low",
           "batchSize": 1,
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b7d76dd61f1ad99a.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b7d76dd61f1ad99a.jpg"
         }
       }
     ],
@@ -1688,7 +1688,7 @@
     "description": "裤装上身，模特多姿态展示成片",
     "icon": "ImageIcon",
     "category": "flat",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8e514a5009d4fb44.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/8e514a5009d4fb44.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -1698,7 +1698,7 @@
         "width": 174.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9f44bc39b6773865.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9f44bc39b6773865.jpg",
           "content": ""
         }
       },
@@ -1710,7 +1710,7 @@
         "width": 254.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f65b1533508d1a24.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f65b1533508d1a24.jpg",
           "content": ""
         }
       },
@@ -1722,7 +1722,7 @@
         "width": 226.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/fce768289da33070.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/fce768289da33070.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -1736,7 +1736,7 @@
         "width": 226.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/fce768289da33070.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/fce768289da33070.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -1756,7 +1756,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e416f63c76706374.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e416f63c76706374.jpg",
           "_resultStale": false
         }
       },
@@ -1774,7 +1774,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/72891bd11042f53f.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/72891bd11042f53f.jpg"
         }
       },
       {
@@ -1790,7 +1790,7 @@
           "model": "gpt-image-2",
           "provider": "jijing",
           "quality": "low",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/fe9f44dcb6215f71.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/fe9f44dcb6215f71.jpg"
         }
       },
       {
@@ -1807,7 +1807,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/725aef258f7d8c1a.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/725aef258f7d8c1a.jpg"
         }
       },
       {
@@ -1822,7 +1822,7 @@
           "size": "3:4",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/cd789d11eff65233.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/cd789d11eff65233.jpg"
         }
       },
       {
@@ -1837,7 +1837,7 @@
           "size": "3:4",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/52eb3e45deeb5e16.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/52eb3e45deeb5e16.jpg"
         }
       },
       {
@@ -1957,7 +1957,7 @@
     "description": "裙装平面图融合，生成模特上身效果",
     "icon": "ImageIcon",
     "category": "flat",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/467df5d536cc3653.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/467df5d536cc3653.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -1970,7 +1970,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/46a586b6d7edd533.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/46a586b6d7edd533.jpg"
         }
       },
       {
@@ -1984,7 +1984,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/46a586b6d7edd533.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/46a586b6d7edd533.jpg"
         }
       },
       {
@@ -1998,7 +1998,7 @@
           "_showLabel": true,
           "content": "效果图3 正向：{{inspirations[2].nanobanana_prompt}}\n效果图3 负向：{{inspirations[2].negative_prompt}}\n4k画质",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/939f392eec241c60.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/939f392eec241c60.jpg",
           "model": "nano-banana-2",
           "provider": "jijing"
         }
@@ -2014,7 +2014,7 @@
           "_showLabel": true,
           "content": "效果图5 正向：{{inspirations[4].nanobanana_prompt}}\n效果图5 负向：{{inspirations[4].negative_prompt}}\n4k画质",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/cbb350cfcfb6569e.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/cbb350cfcfb6569e.jpg",
           "model": "nano-banana-2",
           "provider": "jijing",
           "_resultStale": false
@@ -2031,7 +2031,7 @@
           "_showLabel": true,
           "content": "效果图4 正向：{{inspirations[3].nanobanana_prompt}}\n效果图4 负向：{{inspirations[3].negative_prompt}}\n4k画质",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/02ddc309ec42aaf9.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/02ddc309ec42aaf9.jpg",
           "model": "nano-banana-2",
           "provider": "jijing"
         }
@@ -2047,7 +2047,7 @@
           "_showLabel": true,
           "content": "效果图2 正向：{{inspirations[1].nanobanana_prompt}}\n效果图2 负向：{{inspirations[1].negative_prompt}}\n4k画质",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8fac67484d512130.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8fac67484d512130.jpg",
           "model": "nano-banana-2",
           "provider": "jijing"
         }
@@ -2063,7 +2063,7 @@
           "_showLabel": true,
           "content": "效果图1 正向：{{inspirations[0].nanobanana_prompt}}\n效果图1 负向：{{inspirations[0].negative_prompt}}\n4k画质",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/fd737dff2754cd53.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/fd737dff2754cd53.jpg",
           "model": "nano-banana-2",
           "provider": "jijing",
           "resolution": "4K"
@@ -2096,7 +2096,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/09269c1a7e39a45b.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/09269c1a7e39a45b.jpg"
         }
       },
       {
@@ -2110,7 +2110,7 @@
           "_showLabel": true,
           "content": "",
           "size": "1:1",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3328c7b73f852aa8.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3328c7b73f852aa8.jpg"
         }
       }
     ],
@@ -2239,7 +2239,7 @@
     "description": "运动风服饰，单人/双人场景成片",
     "icon": "ImageIcon",
     "category": "flat",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/37f291c15d74a9ec.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/37f291c15d74a9ec.jpg",
     "cards": [
       {
         "type": "ai_chat",
@@ -2270,7 +2270,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/5c293254de0aef25.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/5c293254de0aef25.jpg"
         }
       },
       {
@@ -2281,7 +2281,7 @@
         "width": 340.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/d6cd22c10b79e2fa.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/d6cd22c10b79e2fa.jpg",
           "content": ""
         }
       },
@@ -2293,7 +2293,7 @@
         "width": 210.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/05c624cda8486fdc.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/05c624cda8486fdc.jpg",
           "content": ""
         }
       },
@@ -2305,7 +2305,7 @@
         "width": 199.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/0d07fa57c1aaa1f9.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/0d07fa57c1aaa1f9.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -2325,7 +2325,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/11bf9399dd33dbef.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/11bf9399dd33dbef.jpg"
         }
       },
       {
@@ -2342,7 +2342,7 @@
           "provider": "jijing",
           "quality": "medium",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/1a90858bac752692.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/1a90858bac752692.jpg"
         }
       },
       {
@@ -2359,7 +2359,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6ef13c2ca2988c39.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6ef13c2ca2988c39.jpg",
           "_resultStale": false
         }
       },
@@ -2377,7 +2377,7 @@
           "provider": "jijing",
           "quality": "medium",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/970dc3016bb555af.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/970dc3016bb555af.jpg"
         }
       }
     ],
@@ -2482,7 +2482,7 @@
     "description": "产品图一键生成带货种草短视频",
     "icon": "Video",
     "category": "video",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3f177e05dd9dbb82.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/3f177e05dd9dbb82.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -2492,7 +2492,7 @@
         "width": 340.0,
         "height": 139.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6bca30326591063e.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6bca30326591063e.jpg",
           "content": "",
           "model": "gpt-image-2-official",
           "provider": "jijing"
@@ -2506,7 +2506,7 @@
         "width": 313.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b2b911e7bedf88c3.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b2b911e7bedf88c3.jpg",
           "content": "",
           "model": "gpt-image-2-official",
           "provider": "jijing"
@@ -2570,8 +2570,8 @@
           "size": "9:16",
           "imageMode": "reference",
           "duration": 15,
-          "videoUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/24b5288a48a5492e.mp4",
-          "posterUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3e635fbd5533c084.jpg"
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/24b5288a48a5492e.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/584c151d7646e676.jpg"
         }
       }
     ],
@@ -2624,7 +2624,7 @@
     "description": "服装口播讲解视频，模特出镜解说",
     "icon": "Video",
     "category": "video",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/7b4682950cc900e5.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/7b4682950cc900e5.jpg",
     "cards": [
       {
         "type": "ai_chat",
@@ -2649,7 +2649,7 @@
         "width": 313.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b2b911e7bedf88c3.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b2b911e7bedf88c3.jpg",
           "content": "",
           "model": "gpt-image-2-official",
           "provider": "jijing"
@@ -2677,7 +2677,7 @@
         "width": 340.0,
         "height": 139.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6bca30326591063e.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6bca30326591063e.jpg",
           "content": "",
           "model": "gpt-image-2-official",
           "provider": "jijing"
@@ -2701,7 +2701,7 @@
           "_label": "人脸合成",
           "_description": "选择生成性别，提示词会自动封装到该图片节点中",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/1902b37dc94c23d9.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/1902b37dc94c23d9.jpg",
           "model": "gpt-image-2",
           "provider": "comfly"
         }
@@ -2718,7 +2718,7 @@
           "size": "9:16",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/16e639b6ee429437.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/16e639b6ee429437.jpg"
         }
       },
       {
@@ -2733,7 +2733,7 @@
           "size": "16:9",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8f6c57fb130d24c1.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8f6c57fb130d24c1.jpg"
         }
       },
       {
@@ -2750,8 +2750,8 @@
           "size": "9:16",
           "duration": 15,
           "imageMode": "reference",
-          "videoUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b0a9625a5c092996.mp4",
-          "posterUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3e635fbd5533c084.jpg"
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b0a9625a5c092996.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/bff0e49c147609fc.jpg"
         }
       }
     ],
@@ -2824,7 +2824,7 @@
     "description": "上传参考视频，单人动作复刻成片",
     "icon": "Video",
     "category": "video",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/33b33e031b839f84.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/33b33e031b839f84.jpg",
     "cards": [
       {
         "type": "ai_video",
@@ -2841,9 +2841,9 @@
           "imageMode": "reference",
           "size": "9:16",
           "duration": 8,
-          "videoUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6633cbfda57ebf4f.mp4",
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6633cbfda57ebf4f.mp4",
           "seedanceVipResolution": "720p",
-          "posterUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e81a6a5139e0a39e.jpg"
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/534456780a2aa212.jpg"
         }
       },
       {
@@ -2858,7 +2858,7 @@
           "size": "3:4",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9be8f6a252a43bf2.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9be8f6a252a43bf2.jpg"
         }
       },
       {
@@ -2874,7 +2874,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f67df82cb2381d91.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f67df82cb2381d91.jpg"
         }
       },
       {
@@ -2890,7 +2890,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/ad735b04a01af021.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ad735b04a01af021.jpg",
           "_showLabel": true
         }
       },
@@ -2902,7 +2902,7 @@
         "width": 340.0,
         "height": 191.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/92ea43f815ee44b5.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/92ea43f815ee44b5.jpg",
           "content": ""
         }
       },
@@ -2919,7 +2919,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/ac46913b276c4f0c.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ac46913b276c4f0c.jpg",
           "quality": "low"
         }
       },
@@ -2936,7 +2936,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f67df82cb2381d91.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f67df82cb2381d91.jpg"
         }
       },
       {
@@ -2966,7 +2966,7 @@
           "size": "3:4",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9be8f6a252a43bf2.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9be8f6a252a43bf2.jpg"
         }
       },
       {
@@ -2998,7 +2998,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f67df82cb2381d91.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f67df82cb2381d91.jpg"
         }
       },
       {
@@ -3016,9 +3016,9 @@
           "imageMode": "reference",
           "size": "9:16",
           "duration": 8,
-          "videoUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8ebfd06442248dc0.mp4",
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8ebfd06442248dc0.mp4",
           "seedanceVipResolution": "720p",
-          "posterUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e81a6a5139e0a39e.jpg",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ddd5f3dcd051f242.jpg",
           "seedanceV2Version": "standard"
         }
       },
@@ -3035,7 +3035,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/ac46913b276c4f0c.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ac46913b276c4f0c.jpg",
           "quality": "low"
         }
       },
@@ -3047,8 +3047,8 @@
         "width": 191.0,
         "height": 340.0,
         "data": {
-          "videoUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8519aef86af9abea.mp4",
-          "posterUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e81a6a5139e0a39e.jpg",
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8519aef86af9abea.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3dab023e56467578.jpg",
           "content": "",
           "seedanceTier": "standard",
           "provider": "jijing",
@@ -3156,7 +3156,7 @@
     "description": "口播带货视频，模特讲解上身效果",
     "icon": "Video",
     "category": "video",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/979bb37fdf9ec9e4.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/979bb37fdf9ec9e4.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -3166,7 +3166,7 @@
         "width": 254.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/20c768ccd90d7cc5.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/20c768ccd90d7cc5.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -3180,7 +3180,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/c459ac61602a3f4a.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/c459ac61602a3f4a.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -3202,8 +3202,8 @@
           "seedanceV2Version": "standard",
           "size": "9:16",
           "imageMode": "reference",
-          "videoUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/59fb5e51562848f9.mp4",
-          "posterUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e81a6a5139e0a39e.jpg"
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/59fb5e51562848f9.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/c8a0a6197fc2ce76.jpg"
         }
       },
       {
@@ -3233,7 +3233,7 @@
           "size": "9:16",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/664061d4da153c30.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/664061d4da153c30.jpg"
         }
       }
     ],
@@ -3282,7 +3282,7 @@
     "description": "开车变装创意短视频一键生成",
     "icon": "Video",
     "category": "video",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/bf3b744da029c4b8.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/bf3b744da029c4b8.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -3292,7 +3292,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/fe158a0f0ae8e677.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/fe158a0f0ae8e677.jpg",
           "content": ""
         }
       },
@@ -3304,7 +3304,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/136a8d80507e1820.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/136a8d80507e1820.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "comfly"
@@ -3323,7 +3323,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e587aece28c02a3b.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e587aece28c02a3b.jpg",
           "_resultStale": false
         }
       },
@@ -3340,7 +3340,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/a474d8c8f2e93521.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a474d8c8f2e93521.jpg"
         }
       },
       {
@@ -3356,7 +3356,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3a84e7be929a3f7f.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3a84e7be929a3f7f.jpg"
         }
       },
       {
@@ -3372,7 +3372,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/a474d8c8f2e93521.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a474d8c8f2e93521.jpg"
         }
       },
       {
@@ -3388,7 +3388,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3f99aeffd1225713.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3f99aeffd1225713.jpg"
         }
       },
       {
@@ -3404,7 +3404,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6ee432aaaeed3390.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6ee432aaaeed3390.jpg"
         }
       },
       {
@@ -3415,7 +3415,7 @@
         "width": 340.0,
         "height": 191.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e8bb09b8d5e28d17.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e8bb09b8d5e28d17.jpg",
           "content": ""
         }
       },
@@ -3432,7 +3432,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6ee432aaaeed3390.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6ee432aaaeed3390.jpg"
         }
       },
       {
@@ -3448,7 +3448,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3f99aeffd1225713.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3f99aeffd1225713.jpg"
         }
       },
       {
@@ -3464,7 +3464,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3a84e7be929a3f7f.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3a84e7be929a3f7f.jpg"
         }
       },
       {
@@ -3480,7 +3480,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e587aece28c02a3b.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e587aece28c02a3b.jpg",
           "_resultStale": false
         }
       },
@@ -3497,7 +3497,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/a474d8c8f2e93521.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a474d8c8f2e93521.jpg"
         }
       },
       {
@@ -3508,7 +3508,7 @@
         "width": 340.0,
         "height": 191.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/a1ebe0b26d652ce0.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a1ebe0b26d652ce0.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "comfly"
@@ -3522,7 +3522,7 @@
         "width": 340.0,
         "height": 191.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/de382e81988acdbc.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/de382e81988acdbc.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "comfly"
@@ -3536,7 +3536,7 @@
         "width": 340.0,
         "height": 191.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/4abf8702be0dd2e8.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/4abf8702be0dd2e8.jpg",
           "content": ""
         }
       },
@@ -3548,7 +3548,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/2b39d64bc9976fc2.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2b39d64bc9976fc2.jpg",
           "content": ""
         }
       },
@@ -3560,7 +3560,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b74546ae7e74645f.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b74546ae7e74645f.jpg",
           "content": ""
         }
       },
@@ -3572,7 +3572,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/936b1d5d061b679b.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/936b1d5d061b679b.jpg",
           "content": ""
         }
       },
@@ -3584,7 +3584,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/2cdbf4624fb60ac9.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2cdbf4624fb60ac9.jpg",
           "content": ""
         }
       },
@@ -3599,7 +3599,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/c799f4c8eade95bc.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/c799f4c8eade95bc.jpg",
           "model": "nano-banana-2",
           "provider": "jijing"
         }
@@ -3615,7 +3615,7 @@
           "_showLabel": true,
           "content": "",
           "size": "9:16",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9d95d349277afa12.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9d95d349277afa12.jpg"
         }
       },
       {
@@ -3626,7 +3626,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/58acd8d85f46a133.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/58acd8d85f46a133.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "comfly"
@@ -3645,7 +3645,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3a84e7be929a3f7f.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3a84e7be929a3f7f.jpg"
         }
       },
       {
@@ -3656,7 +3656,7 @@
         "width": 227.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/7e9d200221e35ff1.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/7e9d200221e35ff1.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "comfly"
@@ -3675,7 +3675,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3f99aeffd1225713.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3f99aeffd1225713.jpg"
         }
       },
       {
@@ -3691,7 +3691,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6ee432aaaeed3390.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6ee432aaaeed3390.jpg"
         }
       },
       {
@@ -3707,7 +3707,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6ee432aaaeed3390.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6ee432aaaeed3390.jpg",
           "_resultStale": false
         }
       },
@@ -3719,7 +3719,7 @@
         "width": 340.0,
         "height": 191.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/eccec15363e08b81.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/eccec15363e08b81.jpg",
           "content": ""
         }
       },
@@ -3751,7 +3751,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/a474d8c8f2e93521.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a474d8c8f2e93521.jpg"
         }
       },
       {
@@ -3782,7 +3782,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/44e916ba69622aa0.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/44e916ba69622aa0.jpg"
         }
       },
       {
@@ -3799,9 +3799,9 @@
           "size": "9:16",
           "imageMode": "reference",
           "duration": 15,
-          "videoUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/31a838b0ad0fdcf7.mp4",
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/31a838b0ad0fdcf7.mp4",
           "_resultStale": false,
-          "posterUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e81a6a5139e0a39e.jpg"
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/5bc524535f69b882.jpg"
         }
       },
       {
@@ -3816,7 +3816,7 @@
           "size": "1:1",
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/936b1d5d061b679b.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/936b1d5d061b679b.jpg"
         }
       },
       {
@@ -3827,7 +3827,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/2b39d64bc9976fc2.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2b39d64bc9976fc2.jpg",
           "content": "将发型换成蓬松蛋卷长发，人脸不变",
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly"
@@ -3851,7 +3851,7 @@
           "_label": "人脸合成",
           "_description": "选择生成性别，提示词会自动封装到该图片节点中",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/58acd8d85f46a133.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/58acd8d85f46a133.jpg",
           "model": "nano-banana-2",
           "provider": "jijing"
         }
@@ -3864,7 +3864,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b74546ae7e74645f.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b74546ae7e74645f.jpg",
           "content": "将发型换成蓬松长直发，人脸不变",
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly"
@@ -3878,7 +3878,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/2cdbf4624fb60ac9.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2cdbf4624fb60ac9.jpg",
           "content": "",
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly"
@@ -3892,7 +3892,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/228fda2cf3258dd5.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/228fda2cf3258dd5.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -3906,7 +3906,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/622c3a65ed8eaf4e.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/622c3a65ed8eaf4e.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "comfly"
@@ -3925,7 +3925,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/44e916ba69622aa0.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/44e916ba69622aa0.jpg"
         }
       },
       {
@@ -3951,8 +3951,8 @@
         "width": 188.0,
         "height": 340.0,
         "data": {
-          "videoUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/667d849403848995.mp4",
-          "posterUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/2f90e5d117527d0e.jpg",
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/667d849403848995.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2f90e5d117527d0e.jpg",
           "content": "",
           "seedanceTier": "standard",
           "provider": "jijing",
@@ -3973,11 +3973,11 @@
           "size": "9:16",
           "imageMode": "reference",
           "duration": 15,
-          "videoUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/31a838b0ad0fdcf7.mp4",
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/31a838b0ad0fdcf7.mp4",
           "_resultStale": false,
           "model": "seedance-2-0",
           "seedanceVipResolution": "720p",
-          "posterUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e81a6a5139e0a39e.jpg"
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/5bc524535f69b882.jpg"
         }
       }
     ],
@@ -4134,7 +4134,7 @@
     "description": "服装固定机位展示视频",
     "icon": "Video",
     "category": "video",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/ba2788d87ee7130c.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/ba2788d87ee7130c.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -4144,7 +4144,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/073441c62a356301.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/073441c62a356301.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "comfly"
@@ -4158,7 +4158,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/bf5f2ed455597b74.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/bf5f2ed455597b74.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -4172,7 +4172,7 @@
         "width": 190.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f215ea6f99382fbb.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f215ea6f99382fbb.jpg",
           "content": "图1的模特穿上图2的服装，生成白底角色三视图。",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -4219,7 +4219,7 @@
           "size": "9:16",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/16e639b6ee429437.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/16e639b6ee429437.jpg"
         }
       },
       {
@@ -4230,7 +4230,7 @@
         "width": 139.0,
         "height": 240.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f6cef7f9ec8dc263.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f6cef7f9ec8dc263.jpg",
           "content": "",
           "sourceCompositeCardId": "a483197a-07cb-4d72-a878-e409b273c8af",
           "sourceFrameIndex": 15,
@@ -4245,7 +4245,7 @@
         "width": 190.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f215ea6f99382fbb.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f215ea6f99382fbb.jpg",
           "content": "的模特穿上的服装生成白底角色三视图",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -4259,8 +4259,8 @@
         "width": 195.0,
         "height": 340.0,
         "data": {
-          "videoUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/01c58f143acb0dce.mp4",
-          "posterUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8fa95b2f30822dfb.jpg",
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/01c58f143acb0dce.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8fa95b2f30822dfb.jpg",
           "content": "\n",
           "provider": "jijing",
           "imageMode": "reference"
@@ -4278,7 +4278,7 @@
           "size": "16:9",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/df5888889ab375f2.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/df5888889ab375f2.jpg",
           "_resultStale": false
         }
       },
@@ -4290,7 +4290,7 @@
         "width": 340.0,
         "height": 191.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/df5888889ab375f2.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/df5888889ab375f2.jpg",
           "content": "的模特穿上的服装生成白底角色三视图",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -4304,7 +4304,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/bf5f2ed455597b74.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/bf5f2ed455597b74.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -4368,7 +4368,7 @@
     "description": "服装动态展示视频成片",
     "icon": "Video",
     "category": "video",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/d6587f3956a25f9e.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/d6587f3956a25f9e.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -4378,7 +4378,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e93bf6f3a88833dc.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e93bf6f3a88833dc.jpg",
           "content": ""
         }
       },
@@ -4396,7 +4396,7 @@
           "provider": "jijing",
           "resolution": "4K",
           "quality": "low",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/81b56caab8aa4d12.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/81b56caab8aa4d12.jpg"
         }
       },
       {
@@ -4430,8 +4430,8 @@
           "seedanceVipResolution": "720p",
           "duration": 15,
           "seedanceV2Version": "standard",
-          "videoUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/c278b8bc0cc2b54b.mp4",
-          "posterUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e81a6a5139e0a39e.jpg"
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/c278b8bc0cc2b54b.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/d88f33a996bf3f01.jpg"
         }
       }
     ],
@@ -4468,7 +4468,7 @@
     "description": "替换视频画面内容/主体",
     "icon": "Video",
     "category": "video",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/4ea2ebaf9cc1e23e.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/4ea2ebaf9cc1e23e.jpg",
     "cards": [
       {
         "type": "ai_video",
@@ -4478,8 +4478,8 @@
         "width": 191.0,
         "height": 340.0,
         "data": {
-          "videoUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/7aaa8caa5c3ab655.mp4",
-          "posterUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/636e16e69295e8f9.jpg",
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/7aaa8caa5c3ab655.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/636e16e69295e8f9.jpg",
           "content": ""
         }
       },
@@ -4491,7 +4491,7 @@
         "width": 313.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b2b911e7bedf88c3.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b2b911e7bedf88c3.jpg",
           "content": "",
           "model": "gpt-image-2-official",
           "provider": "jijing"
@@ -4505,7 +4505,7 @@
         "width": 340.0,
         "height": 139.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6bca30326591063e.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6bca30326591063e.jpg",
           "content": ""
         }
       },
@@ -4525,8 +4525,8 @@
           "model": "seedance-v2",
           "generateAudio": false,
           "seedanceV2Resolution": "480p",
-          "videoUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/bd928444d1ef7c1d.mp4",
-          "posterUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3e635fbd5533c084.jpg"
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/bd928444d1ef7c1d.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/dd2fcdda9adbfa73.jpg"
         }
       }
     ],
@@ -4551,7 +4551,7 @@
     "description": "一键生成 KV 主视觉海报",
     "icon": "ImageIcon",
     "category": "detail",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/bf430d7a2603c3e6.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/bf430d7a2603c3e6.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -4561,7 +4561,7 @@
         "width": 340.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9b76284a6ff558d9.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9b76284a6ff558d9.jpg",
           "content": ""
         }
       },
@@ -4573,7 +4573,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e749867fce7f0537.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e749867fce7f0537.jpg",
           "content": ""
         }
       },
@@ -4613,7 +4613,7 @@
     "description": "一键生成国内电商详情页长图",
     "icon": "ImageIcon",
     "category": "detail",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/572e415b2573e796.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/572e415b2573e796.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -4628,7 +4628,7 @@
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly",
           "_showLabel": true,
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/abcfb29cb52cecc3.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/abcfb29cb52cecc3.jpg"
         }
       },
       {
@@ -4643,7 +4643,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/75effe51c5c74266.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/75effe51c5c74266.jpg",
           "_resultStale": false,
           "resolution": "4K"
         }
@@ -4660,7 +4660,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/a7892dc1b1a0b649.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a7892dc1b1a0b649.jpg",
           "_resultStale": false,
           "resolution": "4K"
         }
@@ -4677,7 +4677,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8512bda452f9311c.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8512bda452f9311c.jpg",
           "resolution": "4K"
         }
       },
@@ -4693,7 +4693,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/86f2afa87ac3fd9f.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/86f2afa87ac3fd9f.jpg",
           "resolution": "4K",
           "quality": "low"
         }
@@ -4710,7 +4710,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/2865367b11e7648a.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2865367b11e7648a.jpg"
         }
       },
       {
@@ -4725,7 +4725,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/5887785792e8d44c.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/5887785792e8d44c.jpg",
           "resolution": "4K",
           "_resultStale": false
         }
@@ -4742,7 +4742,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9e7bdedd6faa31b2.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9e7bdedd6faa31b2.jpg"
         }
       },
       {
@@ -4757,7 +4757,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/2af52bbc78d0e2cc.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2af52bbc78d0e2cc.jpg"
         }
       },
       {
@@ -4772,7 +4772,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e1c3a104a57fd732.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e1c3a104a57fd732.jpg"
         }
       },
       {
@@ -4787,7 +4787,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6beb813f001fc8da.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6beb813f001fc8da.jpg",
           "quality": "low",
           "_resultStale": false
         }
@@ -4804,7 +4804,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b12d371e83df60be.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b12d371e83df60be.jpg",
           "_resultStale": false
         }
       },
@@ -4820,7 +4820,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/cb710c4d2c732174.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/cb710c4d2c732174.jpg",
           "_resultStale": false
         }
       },
@@ -4836,7 +4836,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/be9436e79f110c13.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/be9436e79f110c13.jpg"
         }
       },
       {
@@ -4851,7 +4851,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3564b2538970e873.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3564b2538970e873.jpg",
           "quality": "low",
           "resolution": "4K"
         }
@@ -5060,7 +5060,7 @@
     "description": "一键生成海外电商详情页长图",
     "icon": "ImageIcon",
     "category": "detail",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/4af266f3637b376e.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/4af266f3637b376e.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -5074,7 +5074,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/05fad67d70f4ee3c.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/05fad67d70f4ee3c.jpg"
         }
       },
       {
@@ -5089,7 +5089,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/aad226f4fda3deca.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/aad226f4fda3deca.jpg"
         }
       },
       {
@@ -5104,7 +5104,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/d1805e01b8c1f414.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/d1805e01b8c1f414.jpg"
         }
       },
       {
@@ -5119,7 +5119,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/ce5b4fee467d2c9b.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ce5b4fee467d2c9b.jpg"
         }
       },
       {
@@ -5134,7 +5134,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/321f03112a5cab44.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/321f03112a5cab44.jpg"
         }
       },
       {
@@ -5149,7 +5149,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/118e68632ba459dd.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/118e68632ba459dd.jpg"
         }
       },
       {
@@ -5164,7 +5164,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3c406ed0324f2dd2.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3c406ed0324f2dd2.jpg"
         }
       },
       {
@@ -5179,7 +5179,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/5cdf0c4b6699248b.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/5cdf0c4b6699248b.jpg"
         }
       },
       {
@@ -5194,7 +5194,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6e1fadc036d2b999.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6e1fadc036d2b999.jpg"
         }
       },
       {
@@ -5209,7 +5209,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/db9e66c18b4ae0a3.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/db9e66c18b4ae0a3.jpg"
         }
       },
       {
@@ -5225,7 +5225,7 @@
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly",
           "_showLabel": true,
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e97572bf6578c3de.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e97572bf6578c3de.jpg"
         }
       },
       {
@@ -5356,7 +5356,7 @@
     "description": "复刻爆款主图风格，生成商品主图",
     "icon": "ImageIcon",
     "category": "detail",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/d2fe81797d42b3e8.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/d2fe81797d42b3e8.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -5371,7 +5371,7 @@
           "model": "nano-banana-2",
           "provider": "jijing",
           "quality": "low",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f5023aafd2274eac.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f5023aafd2274eac.jpg"
         }
       },
       {
@@ -5382,7 +5382,7 @@
         "width": 303.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3a7dba51488177b0.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3a7dba51488177b0.jpg",
           "content": ""
         }
       },
@@ -5394,7 +5394,7 @@
         "width": 340.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/0c0c8d9005a9be80.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/0c0c8d9005a9be80.jpg",
           "content": ""
         }
       },
@@ -5443,7 +5443,7 @@
     "description": "试用：两张人像融合生成新面孔（可选性别）",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/covers/face-merge.80f5ca558bdb4a89.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/covers/face-merge.80f5ca558bdb4a89.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -5456,7 +5456,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/0c4d492bdc3cffd0.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/0c4d492bdc3cffd0.jpg",
           "model": "gpt-image-2",
           "provider": "comfly"
         }
@@ -5472,7 +5472,7 @@
           "_showLabel": true,
           "content": "",
           "size": "9:16",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/1fc67780dbb08ac9.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/1fc67780dbb08ac9.jpg",
           "model": "gpt-image-2",
           "provider": "comfly"
         }
@@ -5495,7 +5495,7 @@
           "_label": "人脸合成",
           "_description": "选择生成性别，提示词会自动封装到该图片节点中",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f65b1533508d1a24.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f65b1533508d1a24.jpg",
           "model": "gpt-image-2",
           "provider": "comfly"
         }
@@ -5519,7 +5519,7 @@
     "description": "上传原图、套装、人脸与服装细节，一键换脸换装，生成真实感融合大片",
     "icon": "ImageIcon",
     "category": "flat",
-    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/0ca0e7b255ba855d.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/b58557a6909b61d1.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -5611,7 +5611,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b36c310dd4e5e43f.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/b36c310dd4e5e43f.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -5625,7 +5625,7 @@
           "size": "16:9",
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/df2ee721169394c6.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/df2ee721169394c6.jpg",
           "quality": "low",
           "resolution": "4K",
           "_locked": true,
@@ -5645,7 +5645,7 @@
           "size": "1:1",
           "model": "nano-banana-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/ee636bc1315be712.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ee636bc1315be712.jpg"
         }
       },
       {
@@ -5692,7 +5692,7 @@
           "size": "1:1",
           "model": "nano-banana-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/ee636bc1315be712.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ee636bc1315be712.jpg"
         }
       },
       {
@@ -5707,7 +5707,7 @@
           "size": "1:1",
           "model": "nano-banana-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/4d3be7e18d38617b.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/4d3be7e18d38617b.jpg"
         }
       },
       {
@@ -5764,7 +5764,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/63725bde51614ee2.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/63725bde51614ee2.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -5774,7 +5774,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/622c3a65ed8eaf4e.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/622c3a65ed8eaf4e.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "comfly"
@@ -5788,7 +5788,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/58acd8d85f46a133.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/58acd8d85f46a133.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "comfly"
@@ -5807,7 +5807,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3a84e7be929a3f7f.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3a84e7be929a3f7f.jpg",
           "_locked": true,
           "_label": "效果图1",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -5832,7 +5832,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/88144266d9e7fa95.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/88144266d9e7fa95.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -5845,7 +5845,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b663d3b3a7195c2c.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b663d3b3a7195c2c.jpg"
         }
       },
       {
@@ -5859,7 +5859,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b663d3b3a7195c2c.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b663d3b3a7195c2c.jpg"
         }
       },
       {
@@ -5873,7 +5873,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/214067cb9507d108.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/214067cb9507d108.jpg",
           "model": "gpt-image-2",
           "provider": "jijing"
         }
@@ -5889,7 +5889,7 @@
           "_showLabel": true,
           "content": "",
           "size": "1:1",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/1e537dc5a0bd88cb.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/1e537dc5a0bd88cb.jpg",
           "model": "gpt-image-2",
           "provider": "jijing"
         }
@@ -5905,7 +5905,7 @@
           "_showLabel": true,
           "content": "ENC1::h/alkuz1hPeTV0yJzMjIoqHdivsYVh0cGhEFXwIYBg4FXmkDbxgPAkMbEAgPDUMCMx8TBEBCRE9La4W4/JT3/Ym23VhPid+y16Cj2d35Vg8bBxIcRBENGwgEQ0FrAWtPDUgTEx0IGkg8HB0OBl1GTU88VQjK4MmB1cQ=",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/15be57cff6cf8994.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/15be57cff6cf8994.jpg",
           "model": "gpt-image-2",
           "provider": "jijing",
           "resolution": "4K",
@@ -5926,7 +5926,7 @@
           "_showLabel": true,
           "content": "ENC1::h/alkuz1hPeTVkyJzMjIoqHdivsYVh0cGhEFXwIYBg4FXmkEbxgPAkMbEAgPDUMCMx8TBEBCRE9La4W4/JT3/Ym23VlPid+y16Cj2d35Vg8bBxIcRBENGwgEQ0FrBmtPDUgTEx0IGkg8HB0OBl1GTU88VQjK4MmB1cQ=",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b37a51df89f4c09d.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b37a51df89f4c09d.jpg",
           "model": "gpt-image-2",
           "provider": "jijing",
           "quality": "low",
@@ -5947,7 +5947,7 @@
           "_showLabel": true,
           "content": "ENC1::h/alkuz1hPeTUUyJzMjIoqHdivsYVh0cGhEFXwIYBg4FXmkBbxgPAkMbEAgPDUMCMx8TBEBCRE9La4W4/JT3/Ym23V5Pid+y16Cj2d35Vg8bBxIcRBENGwgEQ0FrA2tPDUgTEx0IGkg8HB0OBl1GTU88VQjK4MmB1cQ=",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b1ac62d637bb90df.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b1ac62d637bb90df.jpg",
           "model": "gpt-image-2",
           "provider": "jijing",
           "quality": "low",
@@ -5967,7 +5967,7 @@
           "_showLabel": true,
           "content": "ENC1::h/alkuz1hPeTUEyJzMjIoqHdivsYVh0cGhEFXwIYBg4FXmkCbxgPAkMbEAgPDUMCMx8TBEBCRE9La4W4/JT3/Ym23V9Pid+y16Cj2d35Vg8bBxIcRBENGwgEQ0FrAGtPDUgTEx0IGkg8HB0OBl1GTU88VQjK4MmB1cQ=",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/34c907cd20d3ecf3.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/34c907cd20d3ecf3.jpg",
           "model": "gpt-image-2",
           "provider": "jijing",
           "_locked": true,
@@ -5986,7 +5986,7 @@
           "_showLabel": true,
           "content": "ENC1::h/alkuz1hPeTUkyJzMjIoqHdivsYVh0cGhEFXwIYBg4FXmkAbxgPAkMbEAgPDUMCMx8TBEBCRE9La4W4/JT3/Ym23V1Pid+y16Cj2d35Vg8bBxIcRBENGwgEQ0FrAmtPDUgTEx0IGkg8HB0OBl1GTU88VQjK4MmB1cQ=",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/978f66f52b6147d0.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/978f66f52b6147d0.jpg",
           "model": "gpt-image-2",
           "provider": "jijing",
           "quality": "low",
@@ -6141,7 +6141,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/762e725e5d34727e.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/762e725e5d34727e.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -6157,7 +6157,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/7065190abc48ec84.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/7065190abc48ec84.jpg",
           "_locked": true,
           "_label": "效果图1",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -6177,7 +6177,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/19b86d10a72d530a.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/19b86d10a72d530a.jpg",
           "_locked": true,
           "_label": "效果图2",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -6197,7 +6197,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/05a73322eb27f428.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/05a73322eb27f428.jpg",
           "_locked": true,
           "_label": "效果图3",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -6211,7 +6211,7 @@
         "width": 340.0,
         "height": 227.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/db24b411e1624db6.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/db24b411e1624db6.jpg",
           "content": ""
         }
       },
@@ -6223,7 +6223,7 @@
         "width": 340.0,
         "height": 240.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/896ab98cf2aea3e7.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/896ab98cf2aea3e7.jpg",
           "content": ""
         }
       },
@@ -6235,7 +6235,7 @@
         "width": 271.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/37372e8b832ec94c.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/37372e8b832ec94c.jpg",
           "content": ""
         }
       },
@@ -6270,7 +6270,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/37372e8b832ec94c.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/37372e8b832ec94c.jpg",
           "_locked": true,
           "_label": "效果图4",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -6290,7 +6290,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e14d32889d628395.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e14d32889d628395.jpg",
           "_locked": true,
           "_label": "效果图5",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -6399,7 +6399,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9ab9fc247660f874.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/9ab9fc247660f874.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -6414,7 +6414,7 @@
           "model": "nano-banana-2",
           "provider": "jijing",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/7e86141d3ddfaa1b.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/7e86141d3ddfaa1b.jpg"
         }
       },
       {
@@ -6425,7 +6425,7 @@
         "width": 340.0,
         "height": 282.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f3e469866e79ef07.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f3e469866e79ef07.jpg",
           "content": ""
         }
       },
@@ -6437,7 +6437,7 @@
         "width": 340.0,
         "height": 316.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/75bd418ee1e47b94.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/75bd418ee1e47b94.jpg",
           "content": ""
         }
       },
@@ -6482,7 +6482,7 @@
           "model": "gpt-image-2",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8a784dc8056c5cf5.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8a784dc8056c5cf5.jpg"
         }
       }
     ],
@@ -6528,7 +6528,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/03fa14437f92610e.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/03fa14437f92610e.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -6538,7 +6538,7 @@
         "width": 340.0,
         "height": 282.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f3e469866e79ef07.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f3e469866e79ef07.jpg",
           "content": ""
         }
       },
@@ -6550,7 +6550,7 @@
         "width": 340.0,
         "height": 316.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/75bd418ee1e47b94.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/75bd418ee1e47b94.jpg",
           "content": ""
         }
       },
@@ -6576,7 +6576,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/a901e16e2961b2d1.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a901e16e2961b2d1.jpg",
           "content": ""
         }
       },
@@ -6602,7 +6602,7 @@
         "width": 340.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8b2d84eee4c6c2ae.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8b2d84eee4c6c2ae.jpg",
           "content": ""
         }
       }
@@ -6649,7 +6649,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/79e8808f94130526.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/79e8808f94130526.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -6659,7 +6659,7 @@
         "width": 254.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/dc05afbc8a093f6f.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/dc05afbc8a093f6f.jpg",
           "content": ""
         }
       },
@@ -6671,7 +6671,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/0be4c8096d7def0b.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/0be4c8096d7def0b.jpg",
           "content": ""
         }
       },
@@ -6683,7 +6683,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/dcd5fd8403f7641e.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/dcd5fd8403f7641e.jpg",
           "content": ""
         }
       },
@@ -6695,7 +6695,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9da025b62719b486.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9da025b62719b486.jpg",
           "content": ""
         }
       },
@@ -6713,7 +6713,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/56960411903c302e.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/56960411903c302e.jpg",
           "_resultStale": false,
           "_locked": true,
           "_label": "效果图1",
@@ -6734,7 +6734,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/d4874906f06ae83a.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/d4874906f06ae83a.jpg",
           "_resultStale": false,
           "_locked": true,
           "_label": "效果图2",
@@ -6755,7 +6755,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/4abb10b5dabc1423.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/4abb10b5dabc1423.jpg",
           "_resultStale": false,
           "_locked": true,
           "_label": "效果图3",
@@ -6776,7 +6776,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/d63aad5330f541c3.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/d63aad5330f541c3.jpg",
           "_resultStale": false,
           "_locked": true,
           "_label": "效果图4",
@@ -6815,7 +6815,7 @@
           "provider": "comfly",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/df045626957cfdd8.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/df045626957cfdd8.jpg",
           "_resultStale": false,
           "_locked": true,
           "_label": "效果图5",
@@ -6836,7 +6836,7 @@
           "provider": "comfly",
           "quality": "low",
           "resolution": "2K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e1aaa1a3b08bbb1d.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e1aaa1a3b08bbb1d.jpg",
           "_resultStale": false,
           "_locked": true,
           "_label": "效果图6",
@@ -6851,7 +6851,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/c41ec50eddc7f5e3.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/c41ec50eddc7f5e3.jpg",
           "content": "ENC1::hveykvr5h/qUhc3nVw==",
           "model": "gpt-image-2",
           "provider": "comfly",
@@ -6984,7 +6984,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/db6e2f718d0b614f.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/db6e2f718d0b614f.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -7000,7 +7000,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/a51f6a6f3c46edc6.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a51f6a6f3c46edc6.jpg",
           "_locked": true,
           "_label": "效果图1",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7020,7 +7020,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/bbdc2bc5ec6055d8.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/bbdc2bc5ec6055d8.jpg",
           "_locked": true,
           "_label": "效果图2",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7040,7 +7040,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/06512813628981c7.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/06512813628981c7.jpg",
           "_locked": true,
           "_label": "效果图3",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7060,7 +7060,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/201abb3d435ec4b0.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/201abb3d435ec4b0.jpg",
           "_locked": true,
           "_label": "效果图4",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7080,7 +7080,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3d6c576088153899.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3d6c576088153899.jpg",
           "_locked": true,
           "_label": "效果图5",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7094,7 +7094,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/c82115ff380f4f6c.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/c82115ff380f4f6c.jpg",
           "content": ""
         }
       },
@@ -7106,7 +7106,7 @@
         "width": 272.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9b2b1ef946647539.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9b2b1ef946647539.jpg",
           "content": ""
         }
       },
@@ -7118,7 +7118,7 @@
         "width": 271.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/5d08b5e0bb8f149b.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/5d08b5e0bb8f149b.jpg",
           "content": ""
         }
       },
@@ -7135,7 +7135,7 @@
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/cd18d78002093686.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/cd18d78002093686.jpg",
           "_locked": true,
           "_label": "人物搭配三视图",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7173,7 +7173,7 @@
           "provider": "comfly",
           "quality": "low",
           "resolution": "2K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9ca56d9c67efbabb.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9ca56d9c67efbabb.jpg",
           "_locked": true,
           "_label": "效果图6",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7192,7 +7192,7 @@
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/15db645e65d358ff.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/15db645e65d358ff.jpg",
           "_locked": true,
           "_label": "效果图7",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7206,7 +7206,7 @@
         "width": 254.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/ecc4e2a9774c38f1.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ecc4e2a9774c38f1.jpg",
           "content": ""
         }
       },
@@ -7225,7 +7225,7 @@
           "quality": "low",
           "batchSize": 1,
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b7d76dd61f1ad99a.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b7d76dd61f1ad99a.jpg",
           "_locked": true,
           "_label": "服装搭配图",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7338,7 +7338,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8e514a5009d4fb44.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/8e514a5009d4fb44.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -7348,7 +7348,7 @@
         "width": 174.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9f44bc39b6773865.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9f44bc39b6773865.jpg",
           "content": ""
         }
       },
@@ -7360,7 +7360,7 @@
         "width": 254.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f65b1533508d1a24.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f65b1533508d1a24.jpg",
           "content": ""
         }
       },
@@ -7372,7 +7372,7 @@
         "width": 226.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/fce768289da33070.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/fce768289da33070.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -7386,7 +7386,7 @@
         "width": 226.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/fce768289da33070.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/fce768289da33070.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -7406,7 +7406,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e416f63c76706374.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e416f63c76706374.jpg",
           "_resultStale": false,
           "_locked": true,
           "_label": "效果图1",
@@ -7427,7 +7427,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/72891bd11042f53f.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/72891bd11042f53f.jpg",
           "_locked": true,
           "_label": "效果图2",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7446,7 +7446,7 @@
           "model": "gpt-image-2",
           "provider": "jijing",
           "quality": "low",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/fe9f44dcb6215f71.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/fe9f44dcb6215f71.jpg",
           "_locked": true,
           "_label": "效果图3",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7466,7 +7466,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/725aef258f7d8c1a.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/725aef258f7d8c1a.jpg",
           "_locked": true,
           "_label": "效果图4",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7484,7 +7484,7 @@
           "size": "3:4",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/cd789d11eff65233.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/cd789d11eff65233.jpg",
           "_locked": true,
           "_label": "效果图5",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7502,7 +7502,7 @@
           "size": "3:4",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/52eb3e45deeb5e16.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/52eb3e45deeb5e16.jpg",
           "_locked": true,
           "_label": "效果图6",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7629,7 +7629,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/467df5d536cc3653.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/467df5d536cc3653.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -7642,7 +7642,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/46a586b6d7edd533.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/46a586b6d7edd533.jpg"
         }
       },
       {
@@ -7656,7 +7656,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/46a586b6d7edd533.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/46a586b6d7edd533.jpg"
         }
       },
       {
@@ -7670,7 +7670,7 @@
           "_showLabel": true,
           "content": "ENC1::h/alkuz1hPeTUEyJzMjIoqHdivsYVh0cGhEFXwIYBg4FXmkCbxgPAkMbEAgPDUMCMx8TBEBCRE9La4W4/JT3/Ym23V9Pid+y16Cj2d35Vg8bBxIcRBENGwgEQ0FrAGtPDUgTEx0IGkg8HB0OBl1GTU88VQjK4MmB1cQ=",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/939f392eec241c60.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/939f392eec241c60.jpg",
           "model": "nano-banana-2",
           "provider": "jijing",
           "_locked": true,
@@ -7689,7 +7689,7 @@
           "_showLabel": true,
           "content": "ENC1::h/alkuz1hPeTVkyJzMjIoqHdivsYVh0cGhEFXwIYBg4FXmkEbxgPAkMbEAgPDUMCMx8TBEBCRE9La4W4/JT3/Ym23VlPid+y16Cj2d35Vg8bBxIcRBENGwgEQ0FrBmtPDUgTEx0IGkg8HB0OBl1GTU88VQjK4MmB1cQ=",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/cbb350cfcfb6569e.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/cbb350cfcfb6569e.jpg",
           "model": "nano-banana-2",
           "provider": "jijing",
           "_resultStale": false,
@@ -7709,7 +7709,7 @@
           "_showLabel": true,
           "content": "ENC1::h/alkuz1hPeTV0yJzMjIoqHdivsYVh0cGhEFXwIYBg4FXmkDbxgPAkMbEAgPDUMCMx8TBEBCRE9La4W4/JT3/Ym23VhPid+y16Cj2d35Vg8bBxIcRBENGwgEQ0FrAWtPDUgTEx0IGkg8HB0OBl1GTU88VQjK4MmB1cQ=",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/02ddc309ec42aaf9.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/02ddc309ec42aaf9.jpg",
           "model": "nano-banana-2",
           "provider": "jijing",
           "_locked": true,
@@ -7728,7 +7728,7 @@
           "_showLabel": true,
           "content": "ENC1::h/alkuz1hPeTUUyJzMjIoqHdivsYVh0cGhEFXwIYBg4FXmkBbxgPAkMbEAgPDUMCMx8TBEBCRE9La4W4/JT3/Ym23V5Pid+y16Cj2d35Vg8bBxIcRBENGwgEQ0FrA2tPDUgTEx0IGkg8HB0OBl1GTU88VQjK4MmB1cQ=",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8fac67484d512130.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8fac67484d512130.jpg",
           "model": "nano-banana-2",
           "provider": "jijing",
           "_locked": true,
@@ -7747,7 +7747,7 @@
           "_showLabel": true,
           "content": "ENC1::h/alkuz1hPeTUkyJzMjIoqHdivsYVh0cGhEFXwIYBg4FXmkAbxgPAkMbEAgPDUMCMx8TBEBCRE9La4W4/JT3/Ym23V1Pid+y16Cj2d35Vg8bBxIcRBENGwgEQ0FrAmtPDUgTEx0IGkg8HB0OBl1GTU88VQjK4MmB1cQ=",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/fd737dff2754cd53.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/fd737dff2754cd53.jpg",
           "model": "nano-banana-2",
           "provider": "jijing",
           "resolution": "4K",
@@ -7786,7 +7786,7 @@
           "_showLabel": true,
           "content": "",
           "size": "3:4",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/09269c1a7e39a45b.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/09269c1a7e39a45b.jpg"
         }
       },
       {
@@ -7800,7 +7800,7 @@
           "_showLabel": true,
           "content": "",
           "size": "1:1",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3328c7b73f852aa8.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3328c7b73f852aa8.jpg"
         }
       }
     ],
@@ -7930,7 +7930,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/37f291c15d74a9ec.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/37f291c15d74a9ec.jpg",
     "cards": [
       {
         "type": "ai_chat",
@@ -7964,7 +7964,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/5c293254de0aef25.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/5c293254de0aef25.jpg",
           "_locked": true,
           "_label": "效果图1",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -7978,7 +7978,7 @@
         "width": 340.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/d6cd22c10b79e2fa.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/d6cd22c10b79e2fa.jpg",
           "content": ""
         }
       },
@@ -7990,7 +7990,7 @@
         "width": 210.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/05c624cda8486fdc.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/05c624cda8486fdc.jpg",
           "content": ""
         }
       },
@@ -8002,7 +8002,7 @@
         "width": 199.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/0d07fa57c1aaa1f9.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/0d07fa57c1aaa1f9.jpg",
           "content": "",
           "model": "gpt-image-2",
           "provider": "jijing"
@@ -8022,7 +8022,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/11bf9399dd33dbef.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/11bf9399dd33dbef.jpg",
           "_locked": true,
           "_label": "效果图2",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8042,7 +8042,7 @@
           "provider": "jijing",
           "quality": "medium",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/1a90858bac752692.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/1a90858bac752692.jpg",
           "_locked": true,
           "_label": "效果图3",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8062,7 +8062,7 @@
           "provider": "jijing",
           "quality": "low",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6ef13c2ca2988c39.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6ef13c2ca2988c39.jpg",
           "_resultStale": false,
           "_locked": true,
           "_label": "效果图4",
@@ -8083,7 +8083,7 @@
           "provider": "jijing",
           "quality": "medium",
           "resolution": "4K",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/970dc3016bb555af.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/970dc3016bb555af.jpg",
           "_locked": true,
           "_label": "效果图5",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8192,7 +8192,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/bf430d7a2603c3e6.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/bf430d7a2603c3e6.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -8202,7 +8202,7 @@
         "width": 340.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9b76284a6ff558d9.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9b76284a6ff558d9.jpg",
           "content": ""
         }
       },
@@ -8214,7 +8214,7 @@
         "width": 255.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e749867fce7f0537.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e749867fce7f0537.jpg",
           "content": ""
         }
       },
@@ -8258,7 +8258,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/572e415b2573e796.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/572e415b2573e796.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -8273,7 +8273,7 @@
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly",
           "_showLabel": true,
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/abcfb29cb52cecc3.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/abcfb29cb52cecc3.jpg"
         }
       },
       {
@@ -8288,7 +8288,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/75effe51c5c74266.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/75effe51c5c74266.jpg",
           "_resultStale": false,
           "resolution": "4K",
           "_locked": true,
@@ -8308,7 +8308,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/a7892dc1b1a0b649.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a7892dc1b1a0b649.jpg",
           "_resultStale": false,
           "resolution": "4K",
           "_locked": true,
@@ -8328,7 +8328,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/8512bda452f9311c.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8512bda452f9311c.jpg",
           "resolution": "4K",
           "_locked": true,
           "_label": "效果图3",
@@ -8347,7 +8347,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/86f2afa87ac3fd9f.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/86f2afa87ac3fd9f.jpg",
           "resolution": "4K",
           "quality": "low",
           "_locked": true,
@@ -8367,7 +8367,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/2865367b11e7648a.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2865367b11e7648a.jpg",
           "_locked": true,
           "_label": "效果图5",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8385,7 +8385,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/5887785792e8d44c.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/5887785792e8d44c.jpg",
           "resolution": "4K",
           "_resultStale": false,
           "_locked": true,
@@ -8405,7 +8405,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/9e7bdedd6faa31b2.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9e7bdedd6faa31b2.jpg",
           "_locked": true,
           "_label": "效果图7",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8423,7 +8423,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/2af52bbc78d0e2cc.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2af52bbc78d0e2cc.jpg",
           "_locked": true,
           "_label": "效果图8",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8441,7 +8441,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e1c3a104a57fd732.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e1c3a104a57fd732.jpg",
           "_locked": true,
           "_label": "效果图9",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8459,7 +8459,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6beb813f001fc8da.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6beb813f001fc8da.jpg",
           "quality": "low",
           "_resultStale": false,
           "_locked": true,
@@ -8479,7 +8479,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/b12d371e83df60be.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b12d371e83df60be.jpg",
           "_resultStale": false,
           "_locked": true,
           "_label": "效果图11",
@@ -8498,7 +8498,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/cb710c4d2c732174.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/cb710c4d2c732174.jpg",
           "_resultStale": false,
           "_locked": true,
           "_label": "效果图12",
@@ -8517,7 +8517,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/be9436e79f110c13.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/be9436e79f110c13.jpg",
           "_locked": true,
           "_label": "效果图13",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8535,7 +8535,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "jijing",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3564b2538970e873.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3564b2538970e873.jpg",
           "quality": "low",
           "resolution": "4K",
           "_locked": true,
@@ -8757,7 +8757,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/4af266f3637b376e.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/4af266f3637b376e.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -8771,7 +8771,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/05fad67d70f4ee3c.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/05fad67d70f4ee3c.jpg",
           "_locked": true,
           "_label": "效果图1",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8789,7 +8789,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/aad226f4fda3deca.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/aad226f4fda3deca.jpg",
           "_locked": true,
           "_label": "效果图2",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8807,7 +8807,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/d1805e01b8c1f414.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/d1805e01b8c1f414.jpg",
           "_locked": true,
           "_label": "效果图3",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8825,7 +8825,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/ce5b4fee467d2c9b.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ce5b4fee467d2c9b.jpg",
           "_locked": true,
           "_label": "效果图4",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8843,7 +8843,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/321f03112a5cab44.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/321f03112a5cab44.jpg",
           "_locked": true,
           "_label": "效果图5",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8861,7 +8861,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/118e68632ba459dd.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/118e68632ba459dd.jpg",
           "_locked": true,
           "_label": "效果图6",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8879,7 +8879,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3c406ed0324f2dd2.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3c406ed0324f2dd2.jpg",
           "_locked": true,
           "_label": "效果图7",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8897,7 +8897,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/5cdf0c4b6699248b.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/5cdf0c4b6699248b.jpg",
           "_locked": true,
           "_label": "效果图8",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8915,7 +8915,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/6e1fadc036d2b999.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6e1fadc036d2b999.jpg",
           "_locked": true,
           "_label": "效果图9",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8933,7 +8933,7 @@
           "size": "2:3",
           "model": "gpt-image-2",
           "provider": "comfly",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/db9e66c18b4ae0a3.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/db9e66c18b4ae0a3.jpg",
           "_locked": true,
           "_label": "效果图10",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -8952,7 +8952,7 @@
           "model": "gemini-3.1-flash-image-preview",
           "provider": "comfly",
           "_showLabel": true,
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/e97572bf6578c3de.jpg"
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e97572bf6578c3de.jpg"
         }
       },
       {
@@ -9090,7 +9090,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/d2fe81797d42b3e8.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/d2fe81797d42b3e8.jpg",
     "cards": [
       {
         "type": "ai_image",
@@ -9105,7 +9105,7 @@
           "model": "nano-banana-2",
           "provider": "jijing",
           "quality": "low",
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/f5023aafd2274eac.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f5023aafd2274eac.jpg",
           "_locked": true,
           "_label": "效果图1",
           "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
@@ -9119,7 +9119,7 @@
         "width": 303.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/3a7dba51488177b0.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3a7dba51488177b0.jpg",
           "content": ""
         }
       },
@@ -9131,7 +9131,7 @@
         "width": 340.0,
         "height": 340.0,
         "data": {
-          "imageUrl": "https://ai.snoworangekeji.cn/aicanvas-static/templates/imported/0c0c8d9005a9be80.jpg",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/0c0c8d9005a9be80.jpg",
           "content": ""
         }
       },
@@ -9184,7 +9184,7 @@
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
     "category": "trial",
-    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/0ca0e7b255ba855d.jpg",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/b58557a6909b61d1.jpg",
     "cards": [
       {
         "type": "ai_image",

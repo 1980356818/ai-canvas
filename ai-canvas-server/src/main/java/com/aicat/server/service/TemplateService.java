@@ -13,8 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;;
 
 /**
  * 模板查询/管理。复用 AppReleaseService.encodeVersion 做版本守卫。
@@ -26,24 +25,26 @@ public class TemplateService {
 
     private final TemplateMapper mapper;
     private final ObjectMapper objectMapper;
+    private final TierService tierService;
 
     /**
      * 客户端:全部上架模板按 sort 升序,返回解析后的 definition(整个 WorkflowTemplate JSON)。
      * appVersion 非空时,过滤掉 min_app_version 高于客户端的模板(版本守卫)。
-     * 不按 tier 过滤 —— 全量下发,桌面端用 features.templates + canUseTemplate 自己上锁,
-     * 一份列表给所有人可缓存。
+     * tier 非空时,按该等级的 templateCategories 过滤(只下发有权分类);
+     * tier 为 null(匿名 / 旧客户端)或 templates="*" 的 VIP → 全量下发。
      */
-    public List<JsonNode> listForClient(String appVersion) {
+    public List<JsonNode> listForClient(String appVersion, String tier) {
+        Set<String> allowedCategories = resolveAllowedCategories(tier);
+
         List<Template> rows = mapper.selectList(new LambdaQueryWrapper<Template>()
                 .eq(Template::getIsActive, 1)
                 .orderByAsc(Template::getSort));
         List<JsonNode> out = new ArrayList<>(rows.size());
         for (Template t : rows) {
             if (!versionAllows(appVersion, t.getMinAppVersion())) continue;
+            if (allowedCategories != null && !allowedCategories.contains(t.getCategory())) continue;
             try {
                 JsonNode node = objectMapper.readTree(t.getDefinition());
-                // category 以「列」为权威:admin 改派分类(只写 category 列)即对客户端生效;
-                // re-seed 重写 definition 也不会冲掉运营改过的分类(列与 definition 解耦)。
                 if (node.isObject() && t.getCategory() != null && !t.getCategory().isBlank()) {
                     ((ObjectNode) node).put("category", t.getCategory());
                 }
@@ -53,6 +54,28 @@ public class TemplateService {
             }
         }
         return out;
+    }
+
+    /**
+     * 解析等级允许的模板分类。null = 全量(不过滤)。
+     * templates="*" 或无 templateCategories → null(全量);
+     * 有 templateCategories → 返回允许的分类集合。
+     */
+    @SuppressWarnings("unchecked")
+    private Set<String> resolveAllowedCategories(String tier) {
+        if (tier == null || tier.isBlank()) return null;
+        Object features = tierService.featuresObject(tier);
+        if (!(features instanceof Map)) return null;
+        Map<String, Object> map = (Map<String, Object>) features;
+        Object templates = map.get("templates");
+        if ("*".equals(templates)) return null;
+        Object cats = map.get("templateCategories");
+        if (cats instanceof List<?> list && !list.isEmpty()) {
+            Set<String> set = new HashSet<>(list.size());
+            for (Object c : list) set.add(String.valueOf(c));
+            return set;
+        }
+        return null;
     }
 
     /**
