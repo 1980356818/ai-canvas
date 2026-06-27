@@ -41,6 +41,7 @@ import {
   isEnhancerModel,
   type RefImageEntry,
 } from "@/config/model-ref-images";
+import { listRefSlots } from "@/lib/refImageSlots";
 
 /** buildImageRequest 读取的 card.data 字段子集(与 MediaEditor.MediaData / MultiangleEditor.MultiangleData 对齐)。 */
 interface ImageCardData {
@@ -159,12 +160,8 @@ export async function buildImageRequest(
   }
 
   // 参考图按 slot 顺序收集(role = slot.key),保持与编辑器一致的顺序与角色。
-  const rawRefImages = refSlots
-    .map((slot) => {
-      const entry = data.refImages?.[slot.key];
-      return entry ? { url: entry.url, role: slot.key } : null;
-    })
-    .filter((r): r is { url: string; role: string } => Boolean(r));
+  // 走 refImageSlots.listRefSlots 这唯一读序入口,与展示/注入口径一致。
+  const rawRefImages = listRefSlots(data.refImages, refSlots).map((x) => ({ url: x.entry.url, role: x.slotKey }));
 
   const reportUpload = (
     kind: string,
@@ -221,12 +218,7 @@ export function collectImageInputs(card: CanvasCard): Record<string, unknown> {
   const prompt =
     card.type === "ai_multiangle" ? buildAnglePrompt(data) : buildFinalPrompt(data);
   // 参考图按模型 slot 收集 url(role=slotKey),与请求体顺序一致;不含 width/height/sourceCardId。
-  const refs = getRefSlotsForModel(modelId)
-    .map((slot) => {
-      const e = data.refImages?.[slot.key];
-      return e ? { role: slot.key, url: e.url } : null;
-    })
-    .filter((r): r is { role: string; url: string } => Boolean(r));
+  const refs = listRefSlots(data.refImages, getRefSlotsForModel(modelId)).map((x) => ({ role: x.slotKey, url: x.entry.url }));
   return {
     kind: card.type,
     model: modelId,

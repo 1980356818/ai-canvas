@@ -11,9 +11,9 @@ import { runEditorGeneration } from "@/services/generation/runEditorGeneration";
 import { modelService } from "@/services/models";
 import { cn } from "@/lib/utils";
 import {
-  compactRefImages,
   type RefImageEntry,
 } from "@/config/model-ref-images";
+import { setAt, removeAt, type RefImages } from "@/lib/refImageSlots";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { disconnectCardPairAndCleanup } from "@/lib/referenceConsistency";
 import { IMAGE_SIZE_OPTIONS, sizeFromRatio, normalizeImageSize } from "@/shared/constants";
@@ -112,8 +112,8 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
   const setRefImage = useCallback(
     (slotKey: string, entry: RefImageEntry) => {
       const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
-      const refImages = { ...(latest.refImages as Record<string, RefImageEntry> | undefined), [slotKey]: entry };
-      updateCardData(card.id, { refImages, model: MULTIANGLE_MODEL_ID });
+      const m = setAt(latest.refImages as RefImages | undefined, REF_SLOTS, slotKey, entry);
+      updateCardData(card.id, { refImages: m.refImages, model: MULTIANGLE_MODEL_ID });
       autoSave.markDirty(card.id);
 
       if (entry.sourceCardId) {
@@ -138,18 +138,14 @@ export default function MultiangleEditor({ card }: { card: CanvasCard }) {
     (slotKey: string) => {
       const entry = data.refImages?.[slotKey];
       if (entry?.sourceCardId) {
-        // The lifecycle hook strips the slot synchronously when the
-        // connection is removed. We then read the latest data and compact.
-        disconnectCardPairAndCleanup(entry.sourceCardId, card.id, { markDirty: false });
+        // 源自上游:断开连线即可,referenceConsistency 同步删槽 + compact + markDirty。
+        disconnectCardPairAndCleanup(entry.sourceCardId, card.id);
+      } else {
+        const latest = useCardStore.getState().getCard(card.id)?.data as MultiangleData | undefined;
+        const m = removeAt(latest?.refImages, REF_SLOTS, slotKey);
+        updateCardData(card.id, { refImages: m.refImages });
+        autoSave.markDirty(card.id);
       }
-      const latest = useCardStore.getState().getCard(card.id)?.data as MultiangleData | undefined;
-      const refImages = { ...(latest?.refImages ?? {}) };
-      delete refImages[slotKey];
-      const compacted = compactRefImages(refImages, REF_SLOTS);
-      updateCardData(card.id, {
-        refImages: Object.keys(compacted).length > 0 ? compacted : undefined,
-      });
-      autoSave.markDirty(card.id);
     },
     [card.id, data.refImages, updateCardData],
   );

@@ -3,13 +3,12 @@ import type { CanvasCard } from "@/types";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
-import { getRefSlotsForModel, getRefSlotsForChatModel, getRefSlotsForVideoModel, compactRefImages, resolveVideoImageMode, type RefImageEntry } from "@/config/model-ref-images";
+import { getRefSlotsForModel, getRefSlotsForChatModel, getRefSlotsForVideoModel, resolveVideoImageMode, type RefImageEntry } from "@/config/model-ref-images";
+import { upsertBySource, type RefImages } from "@/lib/refImageSlots";
 import { isSeedanceModel, isOmniModel } from "@/providers/shared/video";
 import { createLogger } from "@/lib/debug";
 
 const log = createLogger("DataFlow");
-
-const REF_IMAGE_TARGETS = new Set(["ai_image", "ai_multiangle", "ai_chat"]);
 
 // ─── Connection compatibility: single source of truth ───
 // outputKindOf 和 canKindFlowInto 是验证(canAcceptConnection)与注入(injectIntoCard)的
@@ -21,7 +20,7 @@ function outputKindOf(sourceType: string): PayloadKind | null {
   switch (sourceType) {
     case "ai_video": return "video";
     case "ai_image": case "ai_multiangle": case "ai_tryon": return "image";
-    case "text": case "sticky_note": case "ai_chat": return "text";
+    case "text": case "sticky_note": case "ai_chat": case "ai_script": return "text";
     case "audio": return "audio";
     // frame_extractor 通过 ctx.createCard 派生独立的 ai_image 卡片,自身不向下游推送 payload。
     case "frame_extractor": return null;
@@ -32,7 +31,7 @@ function outputKindOf(sourceType: string): PayloadKind | null {
 function canKindFlowInto(kind: PayloadKind, targetType: string): boolean {
   switch (targetType) {
     case "text": case "sticky_note": return kind === "text";
-    case "ai_chat": return kind === "text" || kind === "image" || kind === "video";
+    case "ai_chat": case "ai_script": return kind === "text" || kind === "image" || kind === "video";
     case "ai_image": case "ai_multiangle": return kind === "text" || kind === "image";
     case "ai_video": return true;
     case "ai_tryon": return kind === "image";
@@ -46,6 +45,7 @@ function targetTypeLabel(type: string): string {
   switch (type) {
     case "text": case "sticky_note": return "文本节点";
     case "ai_chat": return "对话节点";
+    case "ai_script": return "帮我写节点";
     case "ai_image": return "图片节点";
     case "ai_multiangle": return "多角度节点";
     case "ai_video": return "视频节点";
@@ -57,7 +57,7 @@ function targetTypeLabel(type: string): string {
 
 function getRefSlots(target: { type: string; data: Record<string, unknown> }) {
   const model = (target.data.model as string) || "";
-  return target.type === "ai_chat"
+  return target.type === "ai_chat" || target.type === "ai_script"
     ? getRefSlotsForChatModel(model)
     : getRefSlotsForModel(model);
 }
@@ -143,8 +143,8 @@ export function canAcceptConnection(
     return { title: "参考帧已满", description: "最多 2 帧，请先断开已有连线" };
   }
 
-  // video → ai_chat
-  if (target.type === "ai_chat" && kind === "video") {
+  // video → ai_chat / ai_script
+  if ((target.type === "ai_chat" || target.type === "ai_script") && kind === "video") {
     type VideoRef = { sourceCardId: string };
     const videos = (td.refVideos as VideoRef[]) || [];
     if (videos.some((v) => v.sourceCardId === sourceCardId)) return true;
@@ -172,57 +172,10 @@ export function canAcceptConnection(
     : { title: "参考图已满", description: "请先移除已有参考图或断开连线" };
 }
 
-function hasRefImages(target: { type: string; data: Record<string, unknown> }): boolean {
-  if (REF_IMAGE_TARGETS.has(target.type)) return true;
-  if (target.type === "ai_tryon") return true;
-  const videoMode = target.type === "ai_video" ? resolveVideoImageMode(target.data.imageMode as string | undefined) : null;
-  if (videoMode === "reference") return true;
-  return false;
-}
-
-function getRefSlotsAny(target: { type: string; data: Record<string, unknown> }) {
-  if (target.type === "ai_video") {
-    return getRefSlotsForVideoModel((target.data.model as string) || "", target.data.imageMode as string);
-  }
-  return getRefSlots(target);
-}
-
-export function removeRefImageForSource(
-  targetCardId: string,
-  sourceCardId: string,
-): void {
-  const cardStore = useCardStore.getState();
-  const target = cardStore.getCard(targetCardId);
-  if (!target || !hasRefImages({ type: target.type, data: target.data as Record<string, unknown> })) return;
-
-  const d = { ...(target.data as Record<string, unknown>) };
-  const refImages = { ...((d.refImages || {}) as Record<string, RefImageEntry>) };
-
-  let changed = false;
-  const removedKeys: string[] = [];
-  for (const key of Object.keys(refImages)) {
-    if (refImages[key]?.sourceCardId === sourceCardId) {
-      removedKeys.push(key);
-      delete refImages[key];
-      changed = true;
-    }
-  }
-
-  if (changed) {
-    if (target.type === "ai_tryon") {
-      for (const key of removedKeys) {
-        if (key === "person") d.personImageUrl = undefined;
-        if (key === "garment") d.garmentImageUrl = undefined;
-      }
-      d.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
-    } else {
-      const slots = getRefSlotsAny({ type: target.type, data: d });
-      d.refImages = compactRefImages(refImages, slots);
-    }
-    cardStore.updateCard(targetCardId, { data: d });
-    autoSave.markDirty(targetCardId);
-  }
-}
+// removeRefImageForSource / hasRefImages / getRefSlotsAny 已移除:
+// 参考图删除统一走 refImageSlots.removeSources(连线断开时由 referenceConsistency 调用)。
+// 「连线仍在、上游产物暂态为空」的情形**不删**参考图(见下方 propagateFromCard 的 none 分支),
+// 否则重跑/报错会冲掉用户手动拖的顺序。
 
 export function removeUpstreamTextForSource(
   targetCardId: string,
@@ -304,7 +257,7 @@ export function removeVideoRefForSource(
 ): void {
   const cardStore = useCardStore.getState();
   const target = cardStore.getCard(targetCardId);
-  if (!target || (target.type !== "ai_video" && target.type !== "ai_chat")) return;
+  if (!target || (target.type !== "ai_video" && target.type !== "ai_chat" && target.type !== "ai_script")) return;
 
   const d = { ...(target.data as Record<string, unknown>) };
   let changed = false;
@@ -345,7 +298,8 @@ export function extractOutput(card: CanvasCard): OutputPayload {
   const d = card.data as Record<string, unknown>;
 
   switch (card.type) {
-    case "ai_chat": {
+    case "ai_chat":
+    case "ai_script": {
       const result = d.result as string | undefined;
       if (result && !result.startsWith("错误:"))
         return { kind: "text", text: result };
@@ -425,7 +379,8 @@ function injectIntoCard(
       break;
     }
 
-    case "ai_chat": {
+    case "ai_chat":
+    case "ai_script": {
       if (payload.kind === "text") {
         const upstreamTexts = {
           ...((d.upstreamTexts as Record<string, string>) || {}),
@@ -436,35 +391,16 @@ function injectIntoCard(
           changed = true;
         }
       } else if (payload.kind === "image") {
-        const slots = getRefSlotsForChatModel((d.model as string) || "");
-        const refImages = {
-          ...((d.refImages || {}) as Record<string, RefImageEntry>),
-        };
-
-        let found = false;
-        for (const slot of slots) {
-          if (refImages[slot.key]?.sourceCardId === sourceCardId) {
-            if (refImages[slot.key]!.url !== payload.url) {
-              refImages[slot.key] = { url: payload.url, sourceCardId, sourceType: "card" };
-              d.refImages = refImages;
-              d.upstreamCardId = sourceCardId;
-              changed = true;
-            }
-            found = true;
-            break;
-          }
-        }
-
-        if (!found) {
-          for (const slot of slots) {
-            if (!refImages[slot.key]) {
-              refImages[slot.key] = { url: payload.url, sourceCardId, sourceType: "card" };
-              d.refImages = refImages;
-              d.upstreamCardId = sourceCardId;
-              changed = true;
-              break;
-            }
-          }
+        const m = upsertBySource(
+          d.refImages as RefImages | undefined,
+          getRefSlotsForChatModel((d.model as string) || ""),
+          sourceCardId,
+          payload.url,
+        );
+        if (m.changed) {
+          d.refImages = m.refImages;
+          d.upstreamCardId = sourceCardId;
+          changed = true;
         }
       } else if (payload.kind === "video") {
         const MAX_VIDEOS = 3;
@@ -506,61 +442,18 @@ function injectIntoCard(
           textPreview: payload.text.slice(0, 100),
         });
       } else if (payload.kind === "image") {
-        const model = (d.model as string) || "";
-        const slots = getRefSlotsForModel(model);
-        const refImages = {
-          ...((d.refImages || {}) as Record<string, RefImageEntry>),
-        };
-
-        log.log("ai_image 注入图片 - 开始", {
+        const m = upsertBySource(
+          d.refImages as RefImages | undefined,
+          getRefSlotsForModel((d.model as string) || ""),
           sourceCardId,
-          targetId: target.id,
-          model,
-          slotsCount: slots.length,
-          existingRefKeys: Object.keys(refImages),
-        });
-
-        let found = false;
-        for (const slot of slots) {
-          if (refImages[slot.key]?.sourceCardId === sourceCardId) {
-            if (refImages[slot.key]!.url !== payload.url) {
-              refImages[slot.key] = {
-                url: payload.url,
-                sourceCardId,
-                sourceType: "card",
-              };
-              d.refImages = refImages;
-              d.upstreamCardId = sourceCardId;
-              changed = true;
-            }
-            found = true;
-            log.log("ai_image 图片更新已有槽位", { slotKey: slot.key });
-            break;
-          }
-        }
-
-        if (!found) {
-          let assigned = false;
-          for (const slot of slots) {
-            if (!refImages[slot.key]) {
-              refImages[slot.key] = {
-                url: payload.url,
-                sourceCardId,
-                sourceType: "card",
-              };
-              d.refImages = refImages;
-              d.upstreamCardId = sourceCardId;
-              changed = true;
-              assigned = true;
-              log.log("ai_image 图片分配到空槽位", { slotKey: slot.key });
-              break;
-            }
-          }
-          if (!assigned) {
-            log.warn("ai_image 图片注入失败: 所有槽位已满", {
-              occupiedSlots: Object.keys(refImages),
-            });
-          }
+          payload.url,
+        );
+        if (m.changed) {
+          d.refImages = m.refImages;
+          d.upstreamCardId = sourceCardId;
+          changed = true;
+        } else if (!m.refImages || Object.keys(m.refImages).length >= getRefSlotsForModel((d.model as string) || "").length) {
+          log.warn("ai_image 图片注入失败: 所有槽位已满", { sourceCardId, targetId: target.id });
         }
       }
       break;
@@ -581,32 +474,15 @@ function injectIntoCard(
         const imageMode = resolveVideoImageMode(d.imageMode as string);
 
         if (imageMode === "reference") {
-          const slots = getRefSlotsForVideoModel((d.model as string) || "", "reference");
-          const refImages = {
-            ...((d.refImages || {}) as Record<string, RefImageEntry>),
-          };
-
-          let found = false;
-          for (const slot of slots) {
-            if (refImages[slot.key]?.sourceCardId === sourceCardId) {
-              if (refImages[slot.key]!.url !== payload.url) {
-                refImages[slot.key] = { url: payload.url, sourceCardId, sourceType: "card" };
-                d.refImages = refImages;
-                changed = true;
-              }
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            for (const slot of slots) {
-              if (!refImages[slot.key]) {
-                refImages[slot.key] = { url: payload.url, sourceCardId, sourceType: "card" };
-                d.refImages = refImages;
-                changed = true;
-                break;
-              }
-            }
+          const m = upsertBySource(
+            d.refImages as RefImages | undefined,
+            getRefSlotsForVideoModel((d.model as string) || "", "reference"),
+            sourceCardId,
+            payload.url,
+          );
+          if (m.changed) {
+            d.refImages = m.refImages;
+            changed = true;
           }
         } else {
           const maxFrames = 2;
@@ -781,7 +657,14 @@ export function propagateFromCard(sourceCardId: string): number {
 
   if (output.kind === "none") {
     for (const { targetCard } of downstream) {
-      removeRefImageForSource(targetCard.id, sourceCardId);
+      // 参考图(refImages)**不在这里删**:downstream 全部来自现存连线,output=none
+      // 几乎只发生在「上游正在重跑 / 报错」这类**暂态**(rerun 先 clearRunnableOutput 清产物
+      // → dataVersion 变 → 本函数被 watcher 调到、此刻 output=none)。若此时把下游参考图删掉
+      // 再 compact,等上游新产物落卡时 injectIntoCard 会把它塞进**第一个空槽**(队尾)——
+      // 用户手动拖动的参考图顺序就被冲掉了(整组「重新生成」后顺序自己变)。
+      // 参考图是「连线」语义,真正该删的时机是**连线被断开**——那条路由
+      // referenceConsistency 的 onConnectionsRemoved 钩子兜底(权威删除路径)。
+      // 这里保留旧图(下个产物到来时 injectIntoCard 原位更新),顺序与槽位都稳定。
       removeUpstreamTextForSource(targetCard.id, sourceCardId);
       removeVideoFrameForSource(targetCard.id, sourceCardId);
       removeAudioForSource(targetCard.id, sourceCardId);

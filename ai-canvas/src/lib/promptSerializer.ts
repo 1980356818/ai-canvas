@@ -198,103 +198,55 @@ export function pruneOrphanedRefs(
 }
 
 /**
- * Reorder ref-image slots: move the entry at fromIdx to toIdx,
- * shifting items in between. Prompt text tokens and inlineRefs are
- * updated so references follow their images.
+ * 把参考图槽变更(来自 refImageSlots 的 SlotMutation:keyMap + removed)对齐到提示词里的内联 @ 引用。
+ * 这是「槽顺序 ↔ 提示词 {{ref:slot:refImageN}} token」同步的【唯一入口】,取代了
+ * reorderInlineRefs / remapInlineRefs 两套手搓逻辑。
  *
- * @param occupiedKeys  Slot keys that currently have images, in order
- *                      (e.g. ["refImage0", "refImage1", "refImage2"])
- * @param fromIdx       Source index within occupiedKeys
- * @param toIdx         Target index within occupiedKeys
+ * @param keyMap    旧槽 key → 新槽 key(仅移动过的;支持互换等成环情形,两遍 temp token 防撞)
+ * @param removedSlotKeys 被整条删除的槽 key(其 token 与内联引用一并删掉)
  */
-export function reorderInlineRefs(
-  content: string,
-  inlineRefs: InlineImageRef[],
-  occupiedKeys: string[],
-  fromIdx: number,
-  toIdx: number,
-): { content: string; inlineRefs: InlineImageRef[] } {
-  if (fromIdx === toIdx || occupiedKeys.length <= 1) {
-    return { content, inlineRefs };
-  }
-
-  const entryOrder = Array.from({ length: occupiedKeys.length }, (_, i) => i);
-  const [movedPos] = entryOrder.splice(fromIdx, 1);
-  entryOrder.splice(toIdx, 0, movedPos!);
-
-  const keyMap = new Map<string, string>();
-  for (let newPos = 0; newPos < entryOrder.length; newPos++) {
-    const origPos = entryOrder[newPos]!;
-    if (origPos !== newPos) {
-      keyMap.set(occupiedKeys[origPos]!, occupiedKeys[newPos]!);
-    }
-  }
-  if (keyMap.size === 0) return { content, inlineRefs };
-
-  let newContent = content;
-  for (const [oldKey] of keyMap) {
-    newContent = newContent.replaceAll(
-      `{{ref:slot:${oldKey}}}`,
-      `{{ref:__REORDER_${oldKey}__}}`,
-    );
-  }
-  for (const [oldKey, newKey] of keyMap) {
-    newContent = newContent.replaceAll(
-      `{{ref:__REORDER_${oldKey}__}}`,
-      `{{ref:slot:${newKey}}}`,
-    );
-  }
-
-  const newRefs = inlineRefs.map((ref) => {
-    if (ref.source.type !== "refSlot") return ref;
-    const newKey = keyMap.get(ref.source.slotKey);
-    if (!newKey) return ref;
-    const newIdx = parseInt(newKey.replace("refImage", ""), 10);
-    return {
-      ...ref,
-      id: `slot:${newKey}`,
-      displayLabel: `图${newIdx + 1}`,
-      source: { type: "refSlot" as const, slotKey: newKey },
-    };
-  });
-
-  return { content: newContent, inlineRefs: newRefs };
-}
-
-/**
- * After compactRefImages reindexes slots, update inline refs and prompt text
- * so tokens like {{ref:slot:refImage2}} become {{ref:slot:refImage1}}.
- */
-export function remapInlineRefs(
+export function applySlotKeyMap(
   content: string,
   inlineRefs: InlineImageRef[],
   keyMap: Map<string, string>,
-  deletedSlotKey: string,
+  removedSlotKeys: Iterable<string> = [],
 ): { content: string; inlineRefs: InlineImageRef[] } {
-  const deletedId = `slot:${deletedSlotKey}`;
-  let newContent = removeRefToken(content, deletedId);
+  const removed = removedSlotKeys instanceof Set ? removedSlotKeys : new Set(removedSlotKeys);
+  let newContent = content;
+
+  // 1) 删除被移除槽的 token。
+  for (const key of removed) {
+    newContent = removeRefToken(newContent, `slot:${key}`);
+  }
+
+  // 2) 重命名移动过的槽 token(两遍 temp,防 refImage0↔refImage1 互换时互相覆盖)。
+  const moves = [...keyMap].filter(([oldKey, newKey]) => oldKey !== newKey && !removed.has(oldKey));
+  for (const [oldKey] of moves) {
+    newContent = newContent.replaceAll(`{{ref:slot:${oldKey}}}`, `{{ref:slot:__SLOTMAP_${oldKey}__}}`);
+  }
+  for (const [oldKey, newKey] of moves) {
+    newContent = newContent.replaceAll(`{{ref:slot:__SLOTMAP_${oldKey}__}}`, `{{ref:slot:${newKey}}}`);
+  }
+
+  // 3) 重建 inlineRefs:删掉移除槽的引用,移动过的更新 id/slotKey/displayLabel(图N)。
   const newRefs: InlineImageRef[] = [];
-
   for (const ref of inlineRefs) {
-    if (ref.id === deletedId) continue;
-
-    if (ref.source.type === "refSlot" && keyMap.has(ref.source.slotKey)) {
-      const newSlotKey = keyMap.get(ref.source.slotKey)!;
-      const newId = `slot:${newSlotKey}`;
-      const oldToken = `{{ref:${ref.id}}}`;
-      const newToken = `{{ref:${newId}}}`;
-      newContent = newContent.replaceAll(oldToken, newToken);
-
-      const newIdx = parseInt(newSlotKey.replace("refImage", ""), 10);
-      newRefs.push({
-        ...ref,
-        id: newId,
-        displayLabel: `图${newIdx + 1}`,
-        source: { type: "refSlot", slotKey: newSlotKey },
-      });
-    } else {
-      newRefs.push(ref);
+    if (ref.source.type === "refSlot") {
+      const key = ref.source.slotKey;
+      if (removed.has(key)) continue;
+      const newKey = keyMap.get(key);
+      if (newKey && newKey !== key) {
+        const idx = parseInt(newKey.replace("refImage", ""), 10);
+        newRefs.push({
+          ...ref,
+          id: `slot:${newKey}`,
+          displayLabel: Number.isFinite(idx) ? `图${idx + 1}` : ref.displayLabel,
+          source: { type: "refSlot", slotKey: newKey },
+        });
+        continue;
+      }
     }
+    newRefs.push(ref);
   }
 
   return { content: newContent, inlineRefs: newRefs };

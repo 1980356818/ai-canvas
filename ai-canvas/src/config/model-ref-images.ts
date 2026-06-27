@@ -192,43 +192,8 @@ export interface RefImageEntry {
   height?: number;
 }
 
-/**
- * Compact ref images so there are no gaps between slots.
- * e.g. if refImage0 and refImage2 exist, refImage2 becomes refImage1.
- */
-export function compactRefImages(
-  refImages: Record<string, RefImageEntry>,
-  slots: RefImageSlot[],
-): Record<string, RefImageEntry> {
-  const entries = slots
-    .map((s) => refImages[s.key])
-    .filter((e): e is RefImageEntry => !!e);
-  const result: Record<string, RefImageEntry> = {};
-  entries.forEach((entry, i) => {
-    if (slots[i]) result[slots[i].key] = entry;
-  });
-  return result;
-}
-
-/**
- * Build a mapping from old slot keys to new slot keys after compaction.
- * Returns a Map where key = old slotKey, value = new slotKey.
- * Only includes entries whose key actually changed.
- */
-export function buildCompactKeyMap(
-  refImages: Record<string, RefImageEntry>,
-  slots: RefImageSlot[],
-): Map<string, string> {
-  const occupied = slots.filter((s) => refImages[s.key]);
-  const map = new Map<string, string>();
-  occupied.forEach((slot, i) => {
-    const newKey = slots[i]!.key;
-    if (slot.key !== newKey) {
-      map.set(slot.key, newKey);
-    }
-  });
-  return map;
-}
+// 参考图槽的增删改/compact/重排/keyMap 统一收口到 @/lib/refImageSlots(单一真相)。
+// 旧的 compactRefImages / buildCompactKeyMap 已并入该模块,这里不再单独导出。
 
 export function extractCardImage(card: CanvasCard): string | null {
   const d = card.data as Record<string, unknown>;

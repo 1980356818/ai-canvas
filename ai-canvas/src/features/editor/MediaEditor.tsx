@@ -17,8 +17,6 @@ import {
   getRefSlotsForModel,
   isEnhancerModel,
   isStandardImageModel,
-  compactRefImages,
-  buildCompactKeyMap,
   type RefImageEntry,
 } from "@/config/model-ref-images";
 import { useConnectionStore } from "@/stores/connectionStore";
@@ -35,7 +33,8 @@ import {
   supportsImageQuality,
 } from "@/shared/constants";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
-import { type InlineImageRef, toDisplayText, remapInlineRefs, reorderInlineRefs } from "@/lib/promptSerializer";
+import { type InlineImageRef, toDisplayText } from "@/lib/promptSerializer";
+import { editRefImages, setAt, removeAt, reorder } from "@/lib/refImageSlots";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
 import SizeCombo from "./SizeCombo";
@@ -264,10 +263,8 @@ export default function MediaEditor({ card }: MediaEditorProps) {
 
   const setRefImage = useCallback(
     (slotKey: string, entry: RefImageEntry) => {
-      const current = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
-      const refImages = { ...(current.refImages as Record<string, unknown> | undefined), [slotKey]: entry };
-      updateCardData(card.id, { refImages });
-      autoSave.markDirty(card.id);
+      // 统一走 refImageSlots:在该槽原位写入(位置不变)+ compact 兜底 + 对齐提示词内联引用。
+      editRefImages(card.id, refSlots, (ri, slots) => setAt(ri, slots, slotKey, entry));
 
       if (entry.sourceCardId) {
         const connStore = useConnectionStore.getState();
@@ -284,72 +281,28 @@ export default function MediaEditor({ card }: MediaEditorProps) {
         }
       }
     },
-    [card.id, card.projectId, updateCardData],
+    [card.id, card.projectId, refSlots],
   );
 
   const clearRefImage = useCallback(
     (slotKey: string) => {
       const entry = data.refImages?.[slotKey];
       if (entry?.sourceCardId) {
-        // Lifecycle hook strips the slot synchronously when the connection
-        // disappears, so any subsequent reads see consistent state.
-        disconnectCardPairAndCleanup(entry.sourceCardId, card.id, { markDirty: false });
+        // 源自上游:断开连线即可——referenceConsistency 会同步删该槽 + compact + 对齐内联引用 + markDirty。
+        disconnectCardPairAndCleanup(entry.sourceCardId, card.id);
+      } else {
+        // 文件型(无连线):删该槽 + compact + 对齐内联引用。
+        editRefImages(card.id, refSlots, (ri, slots) => removeAt(ri, slots, slotKey));
       }
-      const latest = useCardStore.getState().getCard(card.id)?.data as MediaData | undefined;
-      const refImages = { ...(latest?.refImages ?? {}) };
-      delete refImages[slotKey];
-      const keyMap = buildCompactKeyMap(refImages, refSlots);
-      const compacted = compactRefImages(refImages, refSlots);
-
-      const { content: newContent, inlineRefs: newInlineRefs } = remapInlineRefs(
-        latest?.content ?? "",
-        latest?.inlineRefs ?? [],
-        keyMap,
-        slotKey,
-      );
-
-      updateCardData(card.id, {
-        refImages: Object.keys(compacted).length > 0 ? compacted : undefined,
-        content: newContent,
-        inlineRefs: newInlineRefs.length > 0 ? newInlineRefs : undefined,
-      });
-      autoSave.markDirty(card.id);
     },
-    [card.id, data.refImages, updateCardData, refSlots],
+    [card.id, data.refImages, refSlots],
   );
 
   const handleReorder = useCallback(
     (fromSlotKey: string, toSlotKey: string) => {
-      if (!data.refImages?.[fromSlotKey] || !data.refImages?.[toSlotKey]) return;
-      if (fromSlotKey === toSlotKey) return;
-
-      const occupiedKeys = refSlots
-        .map((s) => s.key)
-        .filter((key) => data.refImages![key]);
-      const fromIdx = occupiedKeys.indexOf(fromSlotKey);
-      const toIdx = occupiedKeys.indexOf(toSlotKey);
-      if (fromIdx === -1 || toIdx === -1) return;
-
-      const entries = occupiedKeys.map((k) => data.refImages![k]!);
-      const [moved] = entries.splice(fromIdx, 1);
-      entries.splice(toIdx, 0, moved!);
-
-      const refImages: Record<string, RefImageEntry> = {};
-      entries.forEach((entry, i) => {
-        refImages[occupiedKeys[i]!] = entry;
-      });
-
-      const { content: newContent, inlineRefs: newInlineRefs } = reorderInlineRefs(
-        data.content ?? "",
-        data.inlineRefs ?? [],
-        occupiedKeys,
-        fromIdx,
-        toIdx,
-      );
-      updateCardData(card.id, { refImages, content: newContent, inlineRefs: newInlineRefs });
-      autoSave.markDirty(card.id);
+      editRefImages(card.id, refSlots, (ri, slots) => reorder(ri, slots, fromSlotKey, toSlotKey));
     },
-    [card.id, data, updateCardData, refSlots],
+    [card.id, refSlots],
   );
 
   const handleGenerate = useCallback(async () => {

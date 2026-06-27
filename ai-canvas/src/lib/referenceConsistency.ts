@@ -1,6 +1,7 @@
 import type { CanvasCard, Connection } from "@/types";
 import type { RefImageEntry } from "@/config/model-ref-images";
-import type { InlineImageRef } from "@/lib/promptSerializer";
+import { applySlotKeyMap, type InlineImageRef } from "@/lib/promptSerializer";
+import { removeSources, resolveRefSlots, type RefImages } from "@/lib/refImageSlots";
 import { useCardStore } from "@/stores/cardStore";
 import { useConnectionStore, setConnectionLifecycleHooks } from "@/stores/connectionStore";
 import { autoSave } from "@/lib/autoSave";
@@ -146,23 +147,38 @@ export function cleanupDanglingReferencesForCard(
   let changed = false;
 
   if (isPlainObject(data.refImages)) {
-    const refImages = { ...(data.refImages as Record<string, RefImageEntry>) };
-    const removedKeys: string[] = [];
-
-    for (const [slotKey, entry] of Object.entries(refImages)) {
+    const slots = resolveRefSlots({ type: card.type, data });
+    const refImages = data.refImages as RefImages;
+    const danglingIds = new Set<string>();
+    for (const entry of Object.values(refImages)) {
       if (entry?.sourceCardId && !hasValidConnection(validConnectionKeys, entry.sourceCardId, card.id)) {
-        delete refImages[slotKey];
-        removedKeys.push(slotKey);
+        danglingIds.add(entry.sourceCardId);
       }
     }
 
-    if (removedKeys.length > 0) {
-      data.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
-      for (const key of removedKeys) {
-        if (key === "person") data.personImageUrl = undefined;
-        if (key === "garment") data.garmentImageUrl = undefined;
+    if (danglingIds.size > 0) {
+      // 删除统一走 refImageSlots.removeSources:定位型删后 compact(无空洞),
+      // 具名型(试衣 person/garment)原位删。这让「断连/删卡」与「清除按钮」的删除口径完全一致。
+      const m = removeSources(refImages, slots, danglingIds);
+      if (m.changed) {
+        data.refImages = m.refImages;
+        for (const key of m.removed) {
+          if (key === "person") data.personImageUrl = undefined;
+          if (key === "garment") data.garmentImageUrl = undefined;
+        }
+        // compact 引起的槽重命名 / 删除 → 同步提示词内联 @ 引用(唯一入口)。
+        if (m.keyMap.size > 0 || m.removed.length > 0) {
+          const remapped = applySlotKeyMap(
+            (data.content as string) ?? "",
+            (data.inlineRefs as InlineImageRef[]) ?? [],
+            m.keyMap,
+            m.removed,
+          );
+          data.content = remapped.content;
+          data.inlineRefs = remapped.inlineRefs.length > 0 ? remapped.inlineRefs : undefined;
+        }
+        changed = true;
       }
-      changed = true;
     }
   }
 

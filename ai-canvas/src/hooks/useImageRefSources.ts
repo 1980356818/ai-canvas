@@ -6,6 +6,7 @@ import {
   type RefImageSlot,
   type RefImageEntry,
 } from "@/config/model-ref-images";
+import { listRefSlots } from "@/lib/refImageSlots";
 import { getDisplayUrl } from "@/lib/media";
 
 export interface ImageRefOption {
@@ -56,20 +57,19 @@ export function computeImageRefSources(
   const seenUrls = new Set<string>();
 
   let slotIdx = 0;
-  for (const slot of refSlots) {
-    const entry = refImages?.[slot.key];
-    if (!entry?.url) continue;
+  for (const { slotKey, entry } of listRefSlots(refImages, refSlots)) {
+    if (!entry.url) continue;
     if (seenUrls.has(entry.url)) continue;
     seenUrls.add(entry.url);
     slotIdx++;
 
     options.push({
-      id: `slot:${slot.key}`,
+      id: `slot:${slotKey}`,
       label: `图${slotIdx}`,
       category: "slot",
       thumbnailUrl: getDisplayUrl(entry.url),
       resolvedUrl: entry.url,
-      source: { type: "refSlot", slotKey: slot.key },
+      source: { type: "refSlot", slotKey },
       cardTitle: entry.sourceCardId
         ? cards.get(entry.sourceCardId)?.title ?? undefined
         : undefined,

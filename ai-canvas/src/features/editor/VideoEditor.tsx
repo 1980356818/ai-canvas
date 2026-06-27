@@ -14,7 +14,8 @@ import { scheduleCardMediaLocalization } from "@/lib/mediaLocalize";
 import { cn } from "@/lib/utils";
 import { useImageRefSources } from "@/hooks/useImageRefSources";
 import { type InlineImageRef, toDisplayText } from "@/lib/promptSerializer";
-import { getRefSlotsForVideoModel, compactRefImages, resolveVideoImageMode, type VideoImageMode, type RefImageEntry } from "@/config/model-ref-images";
+import { getRefSlotsForVideoModel, resolveVideoImageMode, type VideoImageMode, type RefImageEntry } from "@/config/model-ref-images";
+import { editRefImages, setAt, removeAt, clampTo } from "@/lib/refImageSlots";
 import { disconnectCardPairAndCleanup } from "@/lib/referenceConsistency";
 import ModelSelector from "./ModelSelector";
 import RefImageSlot from "./RefImageSlot";
@@ -131,7 +132,7 @@ interface VideoData {
   /** Seedance 2.0 火山原生 (V161) 画质档: standard / fast. 仅 alias 项 `seedance-v2` 用,
    *  跟 seedanceTier (老 Dale 路) 区分; resolveSeedanceV2ModelId 按 (version × hasVideos) 4 路分发. */
   seedanceV2Version?: SeedanceV2Version;
-  /** Seedance 2.0 火山原生 (V161) 分辨率档: 480p/720p/1080p. 仅 alias `seedance-v2` 用; fast 不支持 1080p。 */
+  /** Seedance 2.0 火山原生分辨率档: 480p/720p/1080p/4k. 仅 alias `seedance-v2` 用; 1080p/4k 仅 standard。 */
   seedanceV2Resolution?: SeedanceV2Resolution;
   /** Grok Video 时长档:12s / 16s / 20s。 */
   grokTier?: GrokDurationTier;
@@ -387,32 +388,22 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
 
   const setRefImage = useCallback(
     (slotKey: string, entry: RefImageEntry) => {
-      const latest = (useCardStore.getState().getCard(card.id)?.data ?? {}) as Record<string, unknown>;
-      const refImages = { ...(latest.refImages as Record<string, RefImageEntry> | undefined), [slotKey]: entry };
-      updateCardData(card.id, { refImages });
-      autoSave.markDirty(card.id);
+      editRefImages(card.id, refSlots, (ri, slots) => setAt(ri, slots, slotKey, entry));
     },
-    [card.id, updateCardData],
+    [card.id, refSlots],
   );
 
   const clearRefImage = useCallback(
     (slotKey: string) => {
       const entry = data.refImages?.[slotKey];
       if (entry?.sourceCardId) {
-        // The lifecycle hook removes refImages[slotKey] from the store
-        // synchronously as soon as the connection is gone.
-        disconnectCardPairAndCleanup(entry.sourceCardId, card.id, { markDirty: false });
+        // 源自上游:断开连线即可,referenceConsistency 同步删槽 + compact + markDirty。
+        disconnectCardPairAndCleanup(entry.sourceCardId, card.id);
+      } else {
+        editRefImages(card.id, refSlots, (ri, slots) => removeAt(ri, slots, slotKey));
       }
-      const latest = useCardStore.getState().getCard(card.id)?.data as VideoData | undefined;
-      const refImages = { ...(latest?.refImages ?? {}) };
-      delete refImages[slotKey];
-      const compacted = compactRefImages(refImages, refSlots);
-      updateCardData(card.id, {
-        refImages: Object.keys(compacted).length > 0 ? compacted : undefined,
-      });
-      autoSave.markDirty(card.id);
     },
-    [card.id, data.refImages, refSlots, updateCardData],
+    [card.id, data.refImages, refSlots],
   );
 
   const disconnectCards = useCallback(
@@ -521,15 +512,8 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       // Veo 参考模式: Cat 上游硬约束 fast 1-2 张, std/pro 1-3 张. 按当前 tier 算上限截断.
       if (newIsVeo && imageMode === "reference" && latest.refImages) {
         const safeTier = VEO_TIERS.some((t) => t.value === currentTier) ? currentTier : "fast-720p";
-        const maxCount = veoRefImageMaxCount(safeTier);
         const oldSlots = getRefSlotsForVideoModel(currentModel, "reference");
-        const entries = oldSlots
-          .map((s) => latest.refImages?.[s.key])
-          .filter((e): e is RefImageEntry => !!e)
-          .slice(0, maxCount);
-        const refImages: Record<string, RefImageEntry> = {};
-        entries.forEach((e, i) => { refImages[`refImage${i}`] = e; });
-        dataPatch.refImages = Object.keys(refImages).length > 0 ? refImages : undefined;
+        dataPatch.refImages = clampTo(latest.refImages, oldSlots, veoRefImageMaxCount(safeTier)).refImages;
       }
 
       // 切换模型时, 把比例/分辨率收敛到新模型支持的集合, 避免发送不支持的值。
@@ -648,7 +632,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const handleSeedanceV2VersionChange = useCallback(
     (version: SeedanceV2Version) => {
       setCurrentSeedanceV2Version(version);
-      // fast 不支持 1080p — 切到 fast 时若当前是 1080p 自动回落 720p。
+      // 1080p/4k 仅 standard — 切到 fast/mini 时若当前选了 1080p/4k 自动回落 720p。
       const clampedRes = clampSeedanceV2Resolution(version, currentSeedanceV2Resolution);
       const patch: Partial<VideoData> = { seedanceV2Version: version };
       if (clampedRes !== currentSeedanceV2Resolution) {
@@ -1119,7 +1103,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
                         disabled: !isSeedanceV2ResolutionAllowed(currentSeedanceV2Version, t.value),
                         title: isSeedanceV2ResolutionAllowed(currentSeedanceV2Version, t.value)
                           ? undefined
-                          : "快速模式不支持 1080P",
+                          : "1080P / 4K 仅 standard 模式支持",
                       }))
                     : isSeedance
                       ? SEEDANCE_TIERS.map((t) => ({ value: t.value, label: t.label }))
