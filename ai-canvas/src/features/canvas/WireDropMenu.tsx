@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
-import { MessageSquare, ImageIcon, Video } from "lucide-react";
+import { MessageSquare, ImageIcon, Video, Clapperboard } from "lucide-react";
 import { useConnectionStore } from "@/stores/connectionStore";
 import type { CardType, Connection } from "@/types";
 import { useCardStore } from "@/stores/cardStore";
@@ -13,6 +13,7 @@ const MENU_ITEMS: Array<{ type: CardType; icon: typeof MessageSquare; label: str
   { type: "ai_chat", icon: MessageSquare, label: "文本" },
   { type: "ai_image", icon: ImageIcon, label: "图片" },
   { type: "ai_video", icon: Video, label: "视频" },
+  { type: "ai_script", icon: Clapperboard, label: "帮我写" },
 ];
 
 export default function WireDropMenu() {

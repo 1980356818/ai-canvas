@@ -1021,6 +1021,7 @@ pub fn run() {
             commands::backup::cancel_pending_restore,
             commands::backup::get_pending_restore,
             commands::tasks::tasks_upsert,
+            commands::tasks::tasks_begin_attempt,
             commands::tasks::tasks_get,
             commands::tasks::tasks_list_pending,
             commands::tasks::tasks_list_by_card,

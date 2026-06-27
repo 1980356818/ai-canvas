@@ -5755,8 +5755,7 @@
         "sourceIndex": 5,
         "targetIndex": 4
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-three-view-trial",
@@ -5823,8 +5822,7 @@
         "sourceIndex": 0,
         "targetIndex": 2
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-outfit-fusion-trial",
@@ -6132,8 +6130,7 @@
         "sourceIndex": 9,
         "targetIndex": 5
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-duo-outfit-fusion-trial",
@@ -6390,8 +6387,7 @@
         "sourceIndex": 5,
         "targetIndex": 8
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-digital-model-1-trial",
@@ -6519,8 +6515,7 @@
         "sourceIndex": 0,
         "targetIndex": 5
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-digital-model-2-trial",
@@ -6640,8 +6635,7 @@
         "sourceIndex": 3,
         "targetIndex": 5
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-phone-shoot-trial",
@@ -6975,8 +6969,7 @@
         "sourceIndex": 2,
         "targetIndex": 11
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-model-bag-trial",
@@ -7329,8 +7322,7 @@
         "sourceIndex": 5,
         "targetIndex": 10
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-model-pants-trial",
@@ -7620,8 +7612,7 @@
         "sourceIndex": 2,
         "targetIndex": 6
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-skirt-flat-trial",
@@ -7921,8 +7912,7 @@
         "sourceIndex": 7,
         "targetIndex": 3
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-sport-duo-solo-trial",
@@ -8183,15 +8173,2260 @@
         "sourceIndex": 3,
         "targetIndex": 1
       }
+    ]
+  },
+  {
+    "id": "wf-product-seeding-video-trial",
+    "name": "产品带货种草视频模板（试用）",
+    "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
+    "icon": "Video",
+    "category": "trial-video",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/3f177e05dd9dbb82.jpg",
+    "cards": [
+      {
+        "type": "ai_image",
+        "title": "参考图1",
+        "relativeX": 170,
+        "relativeY": 0,
+        "width": 340.0,
+        "height": 139.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6bca30326591063e.jpg",
+          "content": "",
+          "model": "gpt-image-2-official",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图2",
+        "relativeX": 184,
+        "relativeY": 376,
+        "width": 313.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b2b911e7bedf88c3.jpg",
+          "content": "",
+          "model": "gpt-image-2-official",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词",
+        "relativeX": 0,
+        "relativeY": 812,
+        "width": 680.0,
+        "height": 420.0,
+        "data": {
+          "content": "",
+          "result": "",
+          "model": "gemini-3.1-pro-preview",
+          "provider": "comfly"
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词2",
+        "relativeX": 830,
+        "relativeY": 336,
+        "width": 680.0,
+        "height": 420.0,
+        "data": {
+          "content": "ENC1::hO67k/DQjtC3iuzgh9u53Yy+0PbVyMToht3gyM3RifzVwo681K7fhLXSeGOF0Y2F9MCF063XoL/R9dbI4fSM9OrI8O2Hzu3IupvXp/mArfaaxtaJpeWK8fGOg5DWuoGF26eQzsmG9qmG+emE+KzXq4zR6OTCyP6M2NrK2P+K8ePInJLUvtaGjN+X7/iLt+eEzsSOqLfYh7KH9bSbzuWJ0r6G69WE5ILWjqnTz8HL/MWN3sLL99WI++/Ip7bXpeCGpfKU9/GPreFmZYnEq9e4mdPn5sjay4bd9idSQk+E/qvXo7PT8e7K08KK4e3J2+yI28zKg4vVrc+HlfqX7NaIkPCJ/OCMnInTsrRrUQNUm8v9hKTRj+/gjpCQ17iAguOskcLThMOVhejwguus1Yuh0P/nzvTzgOLEydjajOHqyL612pXkhr/4lPHvirXdis/mg4K007K0a1ADVJfy34uk5IjXzIOuj9aquIbCg5Pu4oTknYT264f2vdqEmtPF9cXT8Irh7cjp84fi1sqJo9So5YCt9ZXnyIqe9orn94+Qjdemnof1lJHO5oLsr2lYQUGNsbLZsrSE86WR7sGG84CLy+mIybzWiJ/T0PbK0MiO++gNUUFcQY+VmNaSjoTcrpH//4bulIDs7WteAxLUio2JxayT6ceHzKqH1tWG1YnRsLPS3NzK4NqM/dbL+sOK8+fEkb7Ult2LnfeU6caPreFmWU9Ly6WQ1IX0h5b6l/Lfi6Tki87Pg4OW07K3iP+tnNTohMKPheTYicqI17W30fvnycvTj+DDzuPuZWuOqLrVupKH9YCR5++E/6yE3dSG8IPdjL7T5+7FxPGO9cTIzNWK2//IurbUqPGElsCX08eDkflmQkGMo5vVt4GO37ed8uuG+IWG1duI1anRsLPR78rLx+eK4e3J2f6K68PLpInXiu6ArfWby/2EpNGF78GOs7nTsreH15aR+MGI74WH19mC66zWjY3R9cvK3ciA9tjO4+2J+cTIopbbquGLi/WU4fGIl9mF9suOvb7TsrRrTg2S7uSJz6iM0PWE5rjXo7PR0NjI6vmK4e3EwfCH6NnOsrHVv+mGs/+R6eCFuNyL8MyIrbPZr5SH9bSR1v+Jy6+A7O6JxZPanpPR2uXF/vCK4e3E4+6K8ePFiJvUq/GGv/iVwN6LsOOJ89uNtJ3TsrRrTg2d7OKE4KiM0PWHx5PXjL3V4eLI2suA5uPO4+2K3evIorjRtuCLrviU2vSKpfWLxt6NnqfTsreE5aid8cGG176F8uuC66zWiqbf5vLI5v6N3NPK98SK/dHLq5/RtuNpAFSV1++Ji+WD0/uOvrPXg42C46yR/uyJz6iA7O6J34XXrILTxfXF0/CK4e3J3tOI9cPEsZjWi+yArfWXz+eKuOuK5/ePkI3Xpp6Hzoid2M2C7K9pQU+IyLLXo7PZ3fnI5/OO0NfO4+2K7e7FkbXRtuCLivCUyd2PreKJ4MKOvIHUjZeH4oKX8uiIz7KE+MeH/ZTXjL3T8+/E1+2O9cTL9NqK6dDOsrI4G0GGg8KX2OSDkfmJ39uOgorWtqmC46yTyfqH8qmA7O6H/5vVioHQ6fXLzPeP1e3L9dWK3eTOsrHbtuOEudyVwNuFuteJ/e2PkI3Xpp6E6YWQz/WC7K9pQU+H/p3VkLPZ3fnJztWM8u3K0teK/+DOsrHUuMSGoteR6eCKoeqF+8+IrbPVg7mE2riX8uiI6aCH19mC66zUkIrT3uDL5/+N3PDI8eCL3NTKppjXqtuFtNuR6eNmAEOJ6tePlqTVp7CE8KybzvOJw6uG5MSEz7val7DV4eLKz+GP/+jO4+2I9cPEsqTRtuCFvvmW1P2Ku9qJ0+6IrbPYlZWE5Z6T6O2I+4OKzveE+aHbsLDR9cvI6MiP+MPO4+5la4+Sk9azmYnEqZH68I7Qt2lBT4TFj9S4hdPAyMjy64776Mj26ory6sWHtNSg+IeR7Jfs6Y+t4WZCQY6imNa9uYncnZHp14blqofUwonokNSovNHAzcro+YHG7cr56Irn7sicidG242kAVJbR7ImT9IjU5I6qn9WWoInEr5LkxITCt4bp2IXWvtStot7Vy8v84ozp6s7j7Yrd0si4q9G24Iqt+5TZ9Y+t4oX3042dhtOyt4jjspHL24LsrIr03Yfyv9Gws9Pn08vw7Yrh7cnb4YfU3Mqis9Wb6Ian65rq3I+t4WZCQYyjm9W3gYXboJHM/oXXqIbrwoTwk9W5tdD3zsja6IDh7sr3xIrY38SMtNG24IaD/ZfsyYuA6ovVxoits9a7iYjkoJfy6IjPsob/7ofliNqXlNPP6sjx2orh7cv0zInO+cuvoNqCyYWl4prHxYSC4ojQwI2sndOytGtODZ3R9oT/rIDs7obVo9eWtNXh4svb/4zI2Mjx4In028qSsdej54a+9ZbR7ImT9IT2+42ztta6poTrq5fy6ITmsoX554LrrNqelt7O4s70843e8cXXxIn99M6ysdeY2Iqq+5Hp4Iu51orewY6isNanhoTxoZH31YTClIvg7ITwmdGwsDxMQ8nM/4zf+8X69on/78ihsdW/7YCt9ZbS1oqN34/v4IK5stm1uYLjrJHI+oTBtYDs7oTbl9WQs9Pz78vAyYzrxM7j7mVMS8ipjtW/5oW61JTa9IuMzYTBxYy3ttW0s4TNlJLm14nTtoHs84XUjNSxndHd2cj70Yvh8cLf4IvZ5sWUsdW6/YWY/5Hp42YAQ4rP2Y6SsdW/oIbhlJHN7IjNlovv0onWgdS9kNDp88Th7ozF2MjpxIvc986ystaI6oaL9p3V+4ujyonq1oyjm9aBo4TMlJHI/Yf/oIfR84T5odaKoNPry8LI/o/12srZ34rr9MWxjdeZ2IaX4JT934moxovmyI6+s9+Ouof/oJzR7IfmkITX3ITElNeKptDq6srA1YzrxMne8Izh6Sc41IqTh8ORkv7ghumKh9fKhdOm1JCO093sxcrhjObWwt/2ZWuIraLXhpaH/r2R+u+H8r2A7P5rjLmaEAMbU0PI+9eBzvHIzc6HxunLvb/aidGGuPKX+uCDke+I1+yOq6vVnJWF342c3cSC7K9pZozh+8inttel4IWZ6pfG/o+t8maK9O3IobHXpuyEisSd1ftmyPbqivLqyoOL1a3PjJHueIzF+sXE7ojo0siMsd2K+2nKz+GP/+jJ2+KG4sPJiYbdivtpy+nigdXExcTqh8biyruJ14jgjJHueIzuw8XE7Yrr9MWxjdS+94Sj3ZTa9IOR+WaHxu/LkozWicCFrNud1ftmy8PUit7oyL+m1bTYjJHueI76wsvD64vb0cqMlN2K+2nJyc2O9cTI/9aJ+MTCjqo438Lty9TOgdHvy+PLgN3xJ9aPk9DgzMrIyIzuz8Lf9g==",
+          "result": "",
+          "model": "gemini-3.1-pro-preview",
+          "provider": "comfly",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "提示词2",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词3",
+        "relativeX": 1660,
+        "relativeY": 336,
+        "width": 680.0,
+        "height": 420.0,
+        "data": {
+          "content": "ENC1::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s5DP1ob4hYbw1YfygtGwsDxQUABFR0mGy7+M0PWF0YrXo7PS2e3Kz+GP//DI8+CJwO3LpobXht+ArfZ4Y4TKr4Xy84baltWrnNLZ7sjo2o3aycnb5oft6MiphN2K7YeQy5X9yYOR+WaG9sXEkKjUvveGqMCa38KFv8qJwvFLz7SiEtP05cjn84zm1srt3E+D7b8S1qG7hd6xkvr/icOsheHBQYmroBDXqtuFtNuV0vKKs/9Mjef5Ddq3mNHl1cvgxIzR0s7j7mVrjouw1qyqhdunkM7JhdarhuPtieuu2pe038PywsjoY0xMyd/0iuTjy4CP1aLJhqL2munihIrlhc3wjLe21qWAiPSZkfrvh8KYgOzuiP6x15SG3uvhyNH9iuHtxd7Aiv3Ry6SJ14ruhr/4l+b4iJfohc7bjpe907K0a04NkefvhP+shurqhMWU14+338DYy+/Nj+zOydvWif3Hy56R16Pnhr71lfPli7H8icH/j5KT1rOZguOvfl9JhdSghOnIh+Gp17+w3uHgxdP0gMP9yOzPifPGzrKyODyExa+S7PWH3oyF8OaE5K/asLHexuXE1uOG3fYnTkyJ7eLFnZXXo+eGvvWV2NqLts2JwNiOl6bXqLKF2bmS3NyG176F8uuG/7LUuKLV4eEnfpHp8Ymny4jS/Y+VvNW/oIbhlJHd0ITWuYDs/mtGDdW+m9Pk1Mr624/S+cLf9ont4si8u9G24IWj3JfjyY+t4or46oOQntOyt4fokZzR7ILsrIrG/onKodGws97G8cX9wI3b/sjpxInp/cmIgteb8Yqo+Zf56Y+t4WZCQY6indW4nobYvpLs7Y7Qt4T4x4fipteerN/45svn/43c8MTgxIva3cKOvNaO7Iai3pTi7IWw+orv4Iyki9W0r4Ljr35fSYf4m4TW3ITFlNu3vdnd+cvgzIzkycr/84rP9cq7mdel4IyR+Jfv7Imc9ovL246ipNamiIncqpPa4oLsr2lBT4TXrdegut7P3cXa04bd9svq/4rd686ysdez0oq62ZHp4IW54ormwo2lpNa4roTsjZfy62tBDYXw4onIqNSEidPry8nJ64Dm48Lf9obK88u4nNqz3oCt9ZreyYqAxo/v4I2ag9iLhILjrJHv+YXUpovZ2InRhtGwsDxMQ8Tp0I/39cvr+on8+8WGmNWM2IS98p3V+4qk6Irj5oOKlNajjoLjrJL94ITmhYDs7onWltS7u9Dp9cjF8oDixMjdwofW9s6ysjgbQYST+pfP54SZy4nz0YSRqNW9oIb3hZfy6IfihYbQ74LrrNSGsNDr2sjm/ozQ7MTgxIn048usrNG242kAVJvK/om+4ongwo2prd+OrITrqpHO6YLsrIbI1onemtGws9Dx5sv//orh7cjj/orm0cu6ptezxIai15fm7ImX94/v42EAEtanhobDrJH49onvkIzQ9YnUs9S+l97P3cjQ9Yrh7crh1Yrm0Mu+uduiz4Ct9ZTS8Imny4v67YKwkNa6oIb/spHc94f/oIfR84Lrrzg617nLhbH9lPXhi5brifrnjr6z1pOVh8Klkurnhs2DheP/hdW217qt3uLeycvTj+DDy/TagN3ny7u92rXci4PKmsfAi7bbidX1g4Kz1qq4hOmFkM/1guyvh9TihNW61aSa0PjNxPToj+rly+rDiuvDyY+s2pnghbX6m/HTip3Xj+/ggq2t1YuEguOskfXgh+iyheT5hO6a1o2h0PzzxcDaj+n8yOvqjOHpJzjTsqaE/5eS68aE4JSK6eKC67w41a6Mh/qCnNToh/CghubOhdGj16W00/LixNf8j8HQyPHgiuvDyY+s3Yrth5X5murciaLJiNL9j5WI2JGziMadl/Lra2bO4/yK7sjLoJ3akeWGpe2R6fBmAEOKwO6NsJPYtqyH/4GT6O2E6YWK78eE5I7Uop/T8evF2tOP78vI69qK/cMNAwACFoXbh5DKxIf6qobB+ILrrzgdEtLc3Mrg2o3b3sjr64zh6sW1mtaJwICt9Zruy4up1Yv15Y6UhtiPjYXZl5H9yoT8loDs7WtGDdSfvdDP1sj72IHO2Mnb7IvZwcS1vdW02IyR+Jfmwoq/zonQ5IKMidSKuITevpLc3Ib4lorxzYTElNeKptXh4SdZUo3Z4cjD6oru6cungN2K7YeV+ZX9yYuyxoTA54ODgNWKvonMgJLC/Y7QoYfU4oTXl9qPmd7VzsnNworh7idOTIjH6sufktaL3oS53J3V+4mX9one44KtidiMp4LjrJzczYbziIvb7InUrNGws97U6MX3z4rh7cT0wYjvxM6ysdul34ua25Hp4Iqww4ry54its9mQoYbRv5HIz4LsrIbD1ojWvdGws9Dq6sT06Irh7cvq/4nS/s6ysdWpyIq1wZHp4ISKxYTR34its9aKoYjjopfy6Ib3tYXY1ILrrNeMp9Hp5c7084zY3sXXy4naysuJkdG24IWaxZfTx4mI3or55oits9iEs4bZipfy6IbXsIfW6YLrrNWyit7C4c708GNMTMTi04rk5s+yrNqCyYWp65Ti6IqWwo7v/ImtrtmZrobZipL29ofXjIXXzoPrsNWdu9HI2cvH6YHO6MnY24Dd58umidew+IWl5Jrq3IiW7Yv72oKwkNeuvYnErJPo7YTpmofR/If+pdSurtXh4Sd+kenxi7H8icH/ja2V2JWyhOu0l/L4a0ENhsLNh+Oa1o+c0PXayOb+gcDJyObpiPvvyY2R1LfOh5Hsl+zpj63hZkJBjraM17uxhv+mkMrkhOuXhPbrh/a92oSa1eHiyP7tgeLRzuPti9rcy5KM0bbghZnPl+PJj63ihfvhgqq907K3hPCsk/vlhP6hhtzVhsus1oi/09/0xe3oj//ozuPuZUxLy7uw1Krohrjyl/rghbj/icvVjpK32ZONhdywkv7oQSzI+NKI6OwcEteosojBsZz724LsrIbRzYbhm9Gws9DO98nK+Yrh7crY/4n/786ysdu1yYeWwpHp4Imh5oTM5I27tdWfoYTxoZH9xonLrITX6Ynhr9aIst7m18708GNMTMnb4YbD9siWpteU/4an1Jfn/om23YrdwI2xu9eosoTpspzx1ILsrIrp4oXQm9Gws9/iy8nPxIrh7cXA6YbE286ysdS4xIai15Hp4Iujyorc9I2lpNW+s4nAqJDNyIftgoDs7WthzrKg15L7i6nulPXNiZrNidPjg4q21bqvguO8fpv14YSL4ov7/o2lotWWrIf+jJLl347QoYXD4If2jNePt9/A2Mvvxo/szsLf9mVMS8iOsNeS1YS675Xr2Iql9YX9yI6AotOytGtODZDK0onKrIfR0Ib/hdesiND4zM708GNMTMvD1Ire6MiDpdWS24an3JbU/Y+t4WZCQYK4rtWWgonCuZL8zIf6lIbQ4ILrrzg61o7shpPjl+bLirbciuLDjqqS1b2Ticywl/Lra2bO4/yK+tHInKraiPKGqs6Uyd2JkeyP7/BhJxETEtD32svV+klQZidAT0+JzKvbkqPQ4djF0/pjTEzL9tiL3PjEkb7Ult2GqMeb/c+Egu6D0/thABLWko6E3K6T5sGH5JqE+/SG6ZTUuKTT5NfFwtGO49XC3/ZlTEvLkojXieKGnOGVzduJoPWL7diEkag6HxaG6pSR+sKJw5mF9OGO17c4OhEVQYaxzpTwzoiV7Ynq6IyXjTofFoT/l5Lrxo7Qt2lBT4TupNWKjdnd+Sd+UUpBha3zi8jzgriu1ZaCh+irnNXKhOS6i83Ha2EOERMSBkxQXn5fSYf1gobkxE6DiqDViJCO37d+X0mJ072K+fOO17c4HRLT/dnL7d2N2eLIzNWI+NbCjqo4FkFODZPm0ojxj4zQ9WtLDR8Q1ozbhKTdl+PJiJD/g9P7YQ0SHRLT7sDL5t+G3fYnQ0xCQYKygdanvo7ft354SkJPDVBBWRJhABLWq5mE64Zbms7ziZfFg9P7YQAS2I2miPaxm87za0ENhvDVh/KC1oi8087ayu3Pht32J0NMQkGMuYnZr5SO37d+UklMTMnZ1ojowsi4mNaL/YyR7nhJQUENhuPMh/mA3YyoPEFDAFSb9tKKuOuD0/thJxETERZXThxEAWNMTMv6w4rpwALal6DT28XCyOhjTEzF3PyG9PfCjqo4G0GGsc6U8M6Ile2JwNiMtI/fjqxrQw1ZUo7118T+zoDd8ScSEBIWTEPE4e6MxdgcjND1a0sNEhAfFoj2sZHW3VODkflmT0FLDR8Q26P9honAQYbd9idDTEJBj5eI17ufhOmFkM/1jtC3aUxPTEvIvZPUpMyMke54SUFBDYrz3If+pd2MqDxrQA5XUlhRQRxQH2VMS8urn9e+ykzF0+CM28rC3/ZlTEvFjaDbo/2Mke54REGJsdmK9s6PlbzVnY+G+pCbzvNrTA1OTIj10MSvkt2K+2kNVF9JhdaXhOXGhOGF1o2u2d35J1RSREGJosCK/cyEkag6EhZMQ8TrwY/05MLf9mVrSA4REAMFTFIYB3hEQYq0zInnykTFlaLXjMeMke54REGEkvOF+v2Ekag6HxaE/5eS68aF1KOGw9aG8pDdjKg8QUMAVJX92oWwwYPT+2ENEh0S0tvZyv3bjOvEyd7wgN3xJxIQHxaE7I6S4MSO0LdpTE9MS8Stg9Sj6YyR7nhjhviyheT/hM+31K2T0PbVwsj+jtrLytjBh9/4yLWK0Lb9hbvNlMjpTB+A7O6H/ZTUkboWUoGt6Z3V7YqC7IrywIKuj9SPiYb3hZHc5Yf5mYXM04TXotGwsDxrh5X5ms/ghJPwiejbjqW01qymidyqk9riguyshuT0hdax2p+G0PntzvTzj8Lsy/zJievOyKO60bbghY3zm8v5j63iid/ggrCQ1qSxh8Klkvr/hOO8htTsh/2q1JG61eHh",
+          "result": "",
+          "model": "gemini-3.1-pro-preview",
+          "provider": "comfly",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "提示词3",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_video",
+        "title": "视频",
+        "relativeX": 2490,
+        "relativeY": 376,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::h8OUkv/Hiei3hfDDhv+y1Lii0tnjyczYjNnKxdfLiu7Iy6Cd3Yrti47Ql8TxiaLhhO/ihJG+2JGShM69k8nvieavhuPtieuu0bCw0+TLyv31jdnhxcXtif3iyJ+n14/0gK32",
+          "provider": "jijing",
+          "seedanceV2Resolution": "480p",
+          "size": "9:16",
+          "imageMode": "reference",
+          "duration": 15,
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/24b5288a48a5492e.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/584c151d7646e676.jpg",
+          "_locked": true,
+          "_label": "视频",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      }
     ],
-    "min_app_version": "1.3.8"
+    "connections": [
+      {
+        "sourceIndex": 0,
+        "targetIndex": 3
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 3
+      },
+      {
+        "sourceIndex": 2,
+        "targetIndex": 3
+      },
+      {
+        "sourceIndex": 3,
+        "targetIndex": 4
+      },
+      {
+        "sourceIndex": 0,
+        "targetIndex": 4
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 4
+      },
+      {
+        "sourceIndex": 2,
+        "targetIndex": 4
+      },
+      {
+        "sourceIndex": 4,
+        "targetIndex": 5
+      },
+      {
+        "sourceIndex": 0,
+        "targetIndex": 5
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 5
+      }
+    ]
+  },
+  {
+    "id": "wf-clothing-talk-video-trial",
+    "name": "口播服装讲解视频模板（试用）",
+    "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
+    "icon": "Video",
+    "category": "trial-video",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/7b4682950cc900e5.jpg",
+    "cards": [
+      {
+        "type": "ai_chat",
+        "title": "提示词",
+        "relativeX": 830,
+        "relativeY": 952,
+        "width": 680.0,
+        "height": 420.0,
+        "data": {
+          "content": "ENC1::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96TUqZzf4fnF19aMzPzL0c2J/eLKqLTQtv2Lg8qax8CKqfyO7/yEkb7WvaaE7qqQyM6E/6yF1s2F0JrRsLA8TEMHXpHp8YSM74nlyY6ihdW9mk6HlsOX6d2Kud2Jy8aOopffjr5QVwBFShqO0KSA7P5LQcKOqtC2/UnFwM6P9drF5tyA3efJirrajMqEseuV8+WJk+uK999FAxzfjr46hZ7cL0mE3JOK89yH94fXnr7Z3e/F0/SAw/3I3caI78TCjrkY1OH+J1RSREFGB4TB+Yb+iBga3Yr7iq3umtbmiafLiNL9hJG6AwQGhNmLkuXiidGBjNDmhPmh1LO30drJwsj6jMXLys/9gN3iyIK20Lb9hbXKlfHHj63iicrcjLG50rKricSrnNXghOC7jNDjhPeF1LO30drJy+jygMr0yuHVienwyraG2rbthYDWndXtiZH2icDdjLma1rqBhdmKk+b2g+yxheT+hdKy2rOP0cjcyPPIgd71ysThifzVyI6r1Yjvga3plfPlib3yidHhjamt07K0a2kOV1FJU0INh9bVhuKE15OC3/7QxdXaju/cJ05MRUuDgp/WgqKG6ZuS8uhLRsLf9obK88Wxjdux7oCt9ZT+wYmX/ITA/Iits9mljIn/sZHO5oTkq4fWxILrrzgdEhxLi6f2l8zuiJXtie79goyNGhjZ3fnF29+A4fPI4uOK3sDOsrLXqsmBreia3d2Ktd2E6t6CuI3fjr6E4rGd09aO0KSM0OOJ35HUqIze5NzKz/SG3e3P4/GKxe/LrrnUru+FtcqV8+WFqu6F8NKPlbzYuLSExqKd09aH4IaM0OOEybPXjIjR5N7I/tqP4cvO4+5la0gOERABGEEhajlSgP7fydr8h8/VxZyROBtBSQed7dqF1b2Kz+GHy5EYGt2K+y9CWTQAQYu51onC8Y+VvNiPjYTchlQiJjFMytj/ivHjzrKy1ITAhbH9lMTthILug9PtjqKY1q6/h9eWksHVhdS5hsPjh/ek14yL0OHEwsj6OQ0ZTggVgN3iyqi016bphaXkl/DJhbLQhObTjr++15qFhM23k+jthviYhsH/iNe+1bKL1eHhJ1lSQ0uEp+GJyu6CqL/Vor5LScLI6GNBTABDidPhjrGI1qWAiN++k/DQidO2hunKjteh15WS08/5xcnJj/zSyPzWh9HozrKyOBZBTg1ERxpMXBoQg9PpjaKi2IeBicCJkd/5jtCkh9ThUFpeHwEGRY7fpZL8+YnpnYzQ5oTPqd2Mvt/+0MnN4oHr7sjG44vZ5cmIitW/yIan3JbU/Yu354XO3o2hmdWcuobdo5HX+IT8pYzQ44TWj9S4ot7G5cjk3o7a88nb7Izh6Sc41ri8idy0kMrDiei3hfDDhvGp1Ky/3sLmyPnkjuPVy/jTiezJy7qg163fUsjm/oz60h+Lz8uExr3VqrbT7PXK9suG3eDI/9aJ+MTLvb/aidGFtsuU5MOKpfOJ9N9Yyqi01Lnui5LEndXtiJfZi+bIjLe21r25idydkunWh+GPheT/hPCTBteosoXZl5P7wIfjoovT347XodWkrdDp88nM8o3Zxsv13Ij778i9k9SkzIup7pT1zY+t4Q==",
+          "result": "",
+          "model": "gemini-3.1-pro-preview",
+          "provider": "jijing",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "提示词",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图1",
+        "relativeX": 184,
+        "relativeY": 516,
+        "width": 313.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b2b911e7bedf88c3.jpg",
+          "content": "",
+          "model": "gpt-image-2-official",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词2",
+        "relativeX": 0,
+        "relativeY": 0,
+        "width": 680.0,
+        "height": 420.0,
+        "data": {
+          "content": "",
+          "result": "",
+          "model": "gemini-3.1-pro-preview",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图2",
+        "relativeX": 170,
+        "relativeY": 1092,
+        "width": 340.0,
+        "height": 139.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6bca30326591063e.jpg",
+          "content": "",
+          "model": "gpt-image-2-official",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "人脸合成",
+        "relativeX": 212,
+        "relativeY": 1944,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "_showLabel": true,
+          "content": "ENC1::IENdHB0dDh5IAgAGEh9EURBCWRMXXxUbHUEDS0MNTwUCXkZZXFUVQ0QaFgAXBUkWDQNBHEVdEF5ZDgheVB4ACgkNFwQKQQlEXVxdUQgATBhSBgcKXhMeBg8MDV1WEkIJBg0EFwYRAEhDBQFBH0VXEEJEDhVEEBcNQR5IBQkdBAVOVxBCXg4XQgdcYzUESEMKDgIODUFYXUMNBw0WF0kATEMCGBoTCkEeEF1EBgJDHRFJAwBIDQhPDg0NRlhXFggNXQEGSQcJTBcZHQQYARJTQFMAF0QaFUkATFgNBR4UDg1cVUUWCAdIGgYAFRUNFwQOFUtPV1FARUECDQcGGw4CSkMKDgwCQUsQQFMSBkAWHggPD0hDGABBCUJGWBJfDxNYAAFJFgVZCwMaFUtPV1lcUUECDRAbGwQPWUMPABESDV1WElMIF0URAEdrL0wTGBoTDg1GWFcWEhZPAB4MQQtIDQkbCAgNRkJTXxUQDRIABgxMWQsJTxMOS1dCV1gCBl5aeGMiBEwRDQwVDl8SdFdFAhFEBAYADgIXaT8aAwFIUUQIFiANDTUBAAACDQ4NAwRLQF1UV1pBFEQAGkkHAEwUAAoSGAESQF1EBE5BEQQMDUxeCAUBQR9ISkRHRARNJzEKGRMJXhAFAA9RDXxVR0ITAkFUEwcFTE4CAgsIDwESR1tCCUNMVBoABgQAEhkODQJZSxBCXg4XQlQADAAARBABTwAOXkZYV0IIAA2W8v1BH0IFGENBCERcVV9XFQpOVB4ABgRZCgIIQR9FU0QSXggERRgbDgkYXkMKDgICTF4QUVkPF0IBABpPZnsKDgpbS2VbV1obBwJeHBsGD0ANEAMfCQJeRllRVxUGSVhSCA8IDQIZGwkOQ0ZZURhrMEgABgAPCxdDGwcIH0gSUlNVCgRfGwcHBUANBhUKTAdIRFVeFgcRQhoGSQcNTgZCZWs/SFFYXF8CAkFUMQYPH1kRDQYPH14IOn9XCA1ZFRsHQQ9CDR8GEh9IXEQSWggERQAbBwZMTAAeABIYDUZYVxYDD0gaFgwFTEsGDRsUGUhBHjh5FBddAQZJCAINVwdPEw5eXVxHQggMQ1hSGwAbDRMEABUESkBRQl4YQ14ACwUEQidpLU9TEx8SV0BfBUNOHBMbAA9ZBh5PEgNIV0QSWQdDXxEUDBMJQwAJTwgGTFVVHhYWC0QAF0kDDU4ICx0OHkNWHhJiCQYNEwAABUxeCwMYEktZWlUSRQAOSFQRAQAeTAAYChNLS0BfXxZVQ0kdFA8EHkgNGE8CCkBXQlMWAA1KGBcaW0wcTUwpEwRDRhBEXwQUAVRAR0EgSAUYTzEZQlRZXlNBFUQRBUVBXwNDPgYGA1kSZFpEBAYAJQcIExhIEUwZCA5aHhAGGEEvQgNSCA8LQQZMAw4ERlteVRYUEwNUOgwACF4LAxtBDV9TXVtYBk0NNx0HEgVeFwkBFUtLU1NbVw1DSxETHRQeSBA=",
+          "_promptTemplate": "ENC1::IENdHB0dDh5IAgAGEh9EURBCWRMXXxUbHUEDS0MNTwUCXkZZXFUVQ0QaFgAXBUkWDQNBHEVdEF5ZDgheVB4ACgkNFwQKQQlEXVxdUQgATBhSBgcKXhMeBg8MDV1WEkIJBg0EFwYRAEhDBQFBH0VXEEJEDhVEEBcNQR5IBQkdBAVOVxBCXg4XQgdcYzUESEMKDgIODUFYXUMNBw0WF0kATEMCGBoTCkEeEF1EBgJDHRFJAwBIDQhPDg0NRlhXFggNXQEGSQcJTBcZHQQYARJTQFMAF0QaFUkATFgNBR4UDg1cVUUWCAdIGgYAFRUNFwQOFUtPV1FARUECDQcGGw4CSkMKDgwCQUsQQFMSBkAWHggPD0hDGABBCUJGWBJfDxNYAAFJFgVZCwMaFUtPV1lcUUECDRAbGwQPWUMPABESDV1WElMIF0URAEdrL0wTGBoTDg1GWFcWEhZPAB4MQQtIDQkbCAgNRkJTXxUQDRIABgxMWQsJTxMOS1dCV1gCBl5aeGMiBEwRDQwVDl8SdFdFAhFEBAYADgIXaT8aAwFIUUQIFiANDTUBAAACDRgXCAQFSVdCT0tBDkIQFwVBG0QXBE8HB0xFXFdFEk8NBB0bBEFBBhoKDUteWVlcFhUGVQAHGwRCJyYUHxMOXkFZXVhbQ2MRBx0TDUFDDQEFS05TXlZfBU8NAxsdCUxMQwQGBgMAQ0VTWggXVFQCAQ4YQkMeCgAHREFdElcEEFkcFx0IDw2B7PtBGEJURB4WAgpDER8IFQVOQwAGBgNZW15VFhULTABSAQgLRQ8FCAkfXhJWU1UIAkFUEQYPGEIWHhxPYXtbUlcMQStEExpEBw1eCwUAD0cNQV9CXggQWR0RCBUJSU9MDg8PDVNFRl4EDVkdEUdrP0gXGAYPDBcSR1pfFQYNFhMKCgtfDBkBBUcNV0lXGw0GWxEeSQceQg0YTwcKTlceODw1Bk4cHAACDUFDLwAPGFlAUVtYFRAXfj8ICAJZAgUBQQhCXENbRRUGQwBSBQgLRRcFAQZLTFFCXUUSQ1kcF0kDAEgNCAoFS0tXUUZDEwZeWngmFBhdFhhPCAUNBlsSRAQQQhgHHQgDQ09MHQAcDUJYXUIOBF8VAgEYTF4XFQMERSc4cRIEGVENEwAABUxOCw0dAAhZV0ISRQkGSABSBgdMXwYKChMOQ1FVEl8MAkoRXkkWBEQXCU8DCk5ZV0BZFA1JWlI9CQkNBB4GBUteWl9FRUEXRRFSGgABSEMPBwAZTFFEV0RBBV8bH0lVTEkKCgkEGUhcRBJVAA5IBhNJAAJKDwkcW0scHBB0RA4NWVQEAAQbAUNeQUEnSFREEmYTDEsdHgxBGkQGG0NBWAMSYltRCRcNIBobBAkAMhkOEx9IQBBEXwQUAVRGR0EgQhRMDg8MQVcQXlkOCEQaFUkUHANDJAoAD15aX0YWBxFMGRsHBkINIAMBEgJeRlVcQkEFTBcbCA1MSwYNGxQZSEE=",
+          "_params": {
+            "gender": "male"
+          },
+          "_locked": true,
+          "_label": "人脸合成",
+          "_description": "选择生成性别，提示词会自动封装到该图片节点中",
+          "size": "3:4",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/1902b37dc94c23d9.jpg",
+          "model": "gpt-image-2",
+          "provider": "comfly"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "无人场景图",
+        "relativeX": 244,
+        "relativeY": 1468,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::h+mnkenXhuWqh9TChvGp1oqI0ejKyPrJj+/l",
+          "size": "9:16",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/16e639b6ee429437.jpg",
+          "_locked": true,
+          "_label": "无人场景图",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图1",
+        "relativeX": 1660,
+        "relativeY": 1264,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::h8OUkv/Hiei3hfDDjteh1aSt0OnzyczyjdnGyOzPifPGyLq226P9hrbKndXtirHuhMzkjqKw2LK1hPiTRZf77Ym23V6A3efIrorUr86Govaa6eKJtt1fgN3nyYiK1b/IhqL2muniibbdWIzh6Q==",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8f6c57fb130d24c1.jpg",
+          "_locked": true,
+          "_label": "效果图1",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_video",
+        "title": "视频",
+        "relativeX": 1734,
+        "relativeY": 794,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::h8OUkv/Hiei3hfDDhv+y1Lii0tnjyczYWFSLivGL9eWPl4jXu5+E7I6S4MSJy6uKzv6O16HXrIjQ+MzI+/CB4e/I+NJejteh1oqI0ejKyPvwgeHvyPjSXY7XodqTltPM88j78IHh78j40lyE+aHXq4wCguOvk+b2h+S9huvVh/aI1aq23sblxNbjjdnhxcXtitnNyJ+n14/0gK32",
+          "provider": "jijing",
+          "seedanceV2Resolution": "480p",
+          "size": "9:16",
+          "duration": 15,
+          "imageMode": "reference",
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b0a9625a5c092996.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/bff0e49c147609fc.jpg",
+          "_locked": true,
+          "_label": "视频",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceIndex": 2,
+        "targetIndex": 0
+      },
+      {
+        "sourceIndex": 3,
+        "targetIndex": 0
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 0
+      },
+      {
+        "sourceIndex": 5,
+        "targetIndex": 0
+      },
+      {
+        "sourceIndex": 4,
+        "targetIndex": 0
+      },
+      {
+        "sourceIndex": 0,
+        "targetIndex": 6
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 6
+      },
+      {
+        "sourceIndex": 3,
+        "targetIndex": 6
+      },
+      {
+        "sourceIndex": 5,
+        "targetIndex": 6
+      },
+      {
+        "sourceIndex": 4,
+        "targetIndex": 6
+      },
+      {
+        "sourceIndex": 0,
+        "targetIndex": 7
+      },
+      {
+        "sourceIndex": 5,
+        "targetIndex": 7
+      },
+      {
+        "sourceIndex": 4,
+        "targetIndex": 7
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 7
+      },
+      {
+        "sourceIndex": 3,
+        "targetIndex": 7
+      }
+    ]
+  },
+  {
+    "id": "wf-solo-replica-video-trial",
+    "name": "视频单人复刻模板（试用）",
+    "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
+    "icon": "Video",
+    "category": "trial-video",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/33b33e031b839f84.jpg",
+    "cards": [
+      {
+        "type": "ai_video",
+        "title": "视频",
+        "relativeX": 2918,
+        "relativeY": 396,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::h8OUkv/Hicuris7+ie+31Kye1eHiyO/MWITkq4r584Twk9WkrdDp88XT9IDD/cLf4IfH6suDstaM24Sk3Zfm44St4ITY/o62jALWjuGLqsCd1e2Kse6EzOSOorDYsrWJ1LKR6ddSiJXjhOjViK2w2JWwiMG8kMrEhsqshcHNhOyX1b6C0trYycnnjMz7yNr5jOHp",
+          "seedanceTier": "standard",
+          "provider": "comfly",
+          "model": "seedance",
+          "imageMode": "reference",
+          "size": "9:16",
+          "duration": 8,
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6633cbfda57ebf4f.mp4",
+          "seedanceVipResolution": "720p",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/534456780a2aa212.jpg",
+          "_locked": true,
+          "_label": "视频",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "服装搭配图",
+        "relativeX": 426,
+        "relativeY": 792,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::hNK4k9bThsWShfzCicWT2p6T0fvny/3yj/3lyPbqivLq",
+          "size": "3:4",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9be8f6a252a43bf2.jpg",
+          "_locked": true,
+          "_label": "服装搭配图",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图1",
+        "relativeX": 1428,
+        "relativeY": 708,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oh8SMhOXWiMC11Lyj0fvnxc7Zj/z8y8z4i9/gwo681Z/eh5X+l/LfiJfvi/Xlg4yR1q67guOvkfTwhMKzis/hh8uR25uq1eHhyuDJgPzOyNTKiuzhxLGY177nhLnrlOHxLcjO+4jK8sqZu9Ws5Yak+ZrO54m23YjX7469vNiVsIT4k5fy64b4lorxzYTknte9uN/iy8j89I7188vr/Ib8ycSxmNW/2Iar7ZTEwoWwwYn034SRvtmvlIjghZP70ITqtIfSyIj2j9erjNnd78Tp0IDixMrq1Yrn8siivturw4a2yp3V7YiWxong64+VuNW/vInZhpLfyojxj4Tl1oTttNerjNnd78nL74/t7cXg4In4xMqIn9Wv3A==",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f67df82cb2381d91.jpg",
+          "_locked": true,
+          "_label": "效果图1",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "人脸",
+        "relativeX": 426,
+        "relativeY": 396,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::hveykvr5hdSth9TFU1vIgLHXgceGoseV8+WLuf+JydiOiIHVn5+O36GSwv2J2IWF1OqG0YLXv53R6dLCyP6MxdjI7P2K6dvFsJnasOGArfY=",
+          "size": "3:4",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ad735b04a01af021.jpg",
+          "_showLabel": true,
+          "_locked": true,
+          "_label": "人脸",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图1",
+        "relativeX": 768,
+        "relativeY": 74,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/92ea43f815ee44b5.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图2",
+        "relativeX": 2258,
+        "relativeY": 708,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::h+mnkenXU4iVzov15Y+XiNe7n4XYiJH944fwoIvP6obCktSgn9D63Mv50I/p/Mj40l6F0ZfVuZvR++fIydCB0M3J2MmK7uHKm4/UpsyArfY=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ac46913b276c4f0c.jpg",
+          "quality": "low",
+          "_locked": true,
+          "_label": "效果图2",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "模特三视图",
+        "relativeX": 384,
+        "relativeY": 74,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oh8SMhOXWiMC11Lyj0fvnxc7Zj/z8y8z4i9/gwo681Z/eh5X+l/LfiJfvi/Xlg4yR1q67guOvkfTwhMKzis/hh8uR25uq1eHhyuDJgPzOyNTKiuzhxLGY177nhLnrlOHxLcjO+4jK8sqZu9Ws5Yak+ZrO54m23YjX7469vNiVsIT4k5fy64b4lorxzYTknte9uN/iy8j89I7188vr/Ib8ycSxmNW/2Iar7ZTEwoWwwYn034SRvtmvlIjghZP70ITqtIfSyIj2j9erjNnd78Tp0IDixMrq1Yrn8siivturw4a2yp3V7YiWxong64+VuNW/vInZhpLfyojxj4Tl1oTttNerjNnd78nL74/t7cXg4In4xMqIn9Wv3A==",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f67df82cb2381d91.jpg",
+          "_locked": true,
+          "_label": "模特三视图",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词",
+        "relativeX": 2088,
+        "relativeY": 118,
+        "width": 680.0,
+        "height": 420.0,
+        "data": {
+          "content": "ENC1::h+mnkuTuh/CBh9TChvGp1oqI0ejKzvTzj/3hxcDpie7kxY2A3YrthbbLlOTDiJXZifTfj5Wy1IqbhvmpkMjThuWEgOzuh/eg2pO30O7sxcvCiuHu",
+          "result": "",
+          "model": "gemini-3.1-pro-preview",
+          "provider": "jijing",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "提示词",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "服装搭配图",
+        "relativeX": 42,
+        "relativeY": 0,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::hNK4k9bThsWShfzCicWT2p6T0fvny/3yj/3lyPbqivLq",
+          "size": "3:4",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9be8f6a252a43bf2.jpg",
+          "_locked": true,
+          "_label": "服装搭配图",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "反推脚本",
+        "relativeX": 1258,
+        "relativeY": 118,
+        "width": 680.0,
+        "height": 420.0,
+        "data": {
+          "content": "ENC1::hd6NkurGhdSthvzihvSA2pe038Pyy//0gcbPyOvqif/7yIq43Yrthb7xm/zeiJbthMjngo+j1IqbhOygkvzBhOqohsLWhtC+1K621eHixOHujMXYxc3Sh8/KzrKx2pHni4r9m8rvio3fj+/gj5eV1aG3h8egkffMh/qUhtDghPmh17+d08XuyuDaj+rhy/LoiffSy4Gl0bbjaSec3d6E85eH1uGH47zWiLjS3cPK7vaBxurEwf2A3efFjaval+2Gg/iU/NWKpuWEyMKIrbDUiruJxayR9cSGxZeE0PmI643al7Tfw/LE8/6P083L/+WK5tHKvIDVrOWGq/GXx9iDkfiJyeONs67WraaF24eQzciH7YKF+8+H2LjXuJbQ987CyP6BztvI5fWN4ffLrprUru+FtcqW1PKLo9OO7/yIrbA6ON7O1Mv4+43aycnb54ja+MustNqI8oaqzp3V+2YnQE9Picyr25Kj0OHYxdP6Y0xMB0mJ6eSOg4vXg42E/aZeWIbd9sjryIn3xsWNqdSrwIuK8pvL8Imc/YjV74+WstSLvobSlpHs4o7QoYfS5ITNr9ejs9Ho78rr347o687j7YvbzMihsdWR7Iug/ZHp4ImiwIr9zIOKtNmQp4LjrJLT4YXSpobd+obPl9Gws9PoxMv3947+wcrq64zh6su8kteM9ouK8pvL8I+t4onn+o2pvdiVsInEpJPf4ILsr2lBT0tBy5KI14nih5XPm8v5RgeM0PWG/4XWiLLT7sbF2++P4dfK2P+H3vLLr5HakeeKj+WV9f6KgMCK7NKDjJrYjIiF2K2Qy+GC7K9pQU9LQcqpntSW5oeXzpXXxUYHjND1hOOJ1Kaf3t76y+nTgcbqxMH9i9nQxZSx1L3shJbtmtngi7Hog9Ptj5ak1ImahOyCnPHUh/Ckh9fvhdKl26yy0NDhzvTzjvb3yuHVien9y7G11Y3LgK32eERBRgeKz+GHy5HXtYHf9c3F2/9DS4OR+Yrg8YyvjhABG1dDyczYjOTfxPfCh87mwo681ojqhov2lfX+iYP9iuv+iK2z16aDhN6ckvb2guyshtPEieGv15W91eHiyuDtj9XXyO/6jOHqyYqj1o77hanrkengiaLuidjPjamt07K3h+Cok8nDh+iygOzuicyr2pe70+fRyPPJjszlzuPuZUxLBxjWko6E3K6R9+qG2I1JRoDd8ci6p9ex24uK8pvL8IWq74ng7I6Jv9W1jIbtnZfy6IfwrYbC1ofzvtqSmd7P08nJ/Y776Mjm74jVy8KOvNaI6oaL9pbT24ukyo/v4I+XldWht4LjrJHu04f1goDs7ojqvte1hdXh4sjZ5YzY+c7j7Yb+2MmLoNG24IqP6Jrg04+t4on84IykvteekITsmpPf4ILsr2lmTEJLyLS115jYhJbnlPflZgBDRkWE163XrIjf88rI2eJDS4OR+Ynn542zotW7u0FQDZPV+4TKr4fR+ofhvtaNvdDSy8vw/Yzr98Lf4Irt7su5nNWi2oqw1pHp4ImA9InW9Iits9WRhoj8npfy6ITmhYfR84fju9e2gNHL4sr2y4rh7idOTEVLj5Wf1pyDhdyMkvPGS0bC3/aK6e3LrKDWjsyKusCb6smJpeWJyeOPkKfVg6OE362R9OyEwpSM0OOE56jUu57S29nK/duBwODJ29aM4erJiJfXpeCGnOGVzduPreKJ89uNtJ3Vva6E77uX8uiI+4OKzveE+qXVvoLV4eLKz+GP//DI0vmIxdHLuqbUteSElt6U58mEkviP7+NhABIaGNHa8MjEzIzrxMne8EVLhJGo1bqwh/29k8n6hNyThsrthda41KSE0tzsyczJgMP0wt/giu3uy7mc16XghKT4lP/miozrj+/gj5eV1aG3hO67k/DQguyshNf8h/Wx156o0MHfzvTzgc7oxc3Wit3+yJ2M0bbghIr1ltbAiZH2icDdiK2z1IqNiMKYkc78hMORheT5h+io1YuY0PXVy+ntiuHuJ05MRUuDirDXrr2E6YWS7tNLRsLf9ofO38uqvtqR44eR45bR24iW44jW6Y+RqNeJkYbYgJPu4oXUpobi1ILrrzgdEhxLi5DYl+X3i7bNi/XlQQfdjKjT6cfL4t+B3vXL/s2Hxu3EkKHUquGElvyU6tKEg8qL+8mNpYXYnIaF3qKQyemF1aWM0OOH47vXsajT5tnJz/KN2OTI6cSL3PfOsrI4PEJADZ3y+Yj5sYbI24fgq9qXkTyJzJqS/uCJy6uKzv6ExbPbqbfT5+bI2suP6urFxM+A3efJir3XhvCHl/pSUUGIlcmF+v2OiYbTsrSExa+S7PWJy6uKzv6I/rHXlIbe3+DIxOOG3eDI7MOL2s7LvrnVotqKsNaX5vmJofWP7+COgKXVi6OE7LWR/v+C7KyG5seF1rHXv6rT7fXL/OSN3s3L4sOK7vPIvqbUq8SFpvKR6eNmJ4XD4IXTh9ulrtPF18v4+43aycnb54nB18iOv9qI8oaqzp3V+2YnTkxFS4K4rtWWgkFSB16d1ftmDUNBT0tBy6uf177KTMXT9IHG/gdJg9P7jKSL1bSvguOsnM34h/WCgOzuhdOA1Kmd1eHixcvuj/jDzuPth+nBy7m90bbgh5LblOLsj63iiubqjaGz07K3hNKikcv8hNG4huTZhsak0bCwPEFDAFRYQ4b4lorxzYTtqNeeixxLjJHul+zWiJDwiuDug5KC16aNiP6PnfXlhOuXhOLfhdGr1ouy0tjrwsj+jO3py+jAi9vRyruZ0bbgh5fTl/rgj63iieXJj5Cu07K3hP+XkuvGguyshsH4hNK40bCwPEFDAFRYQ4TPnYrz3E6OgKXVi6NLScLI6IzH7sv98In94suqvtSu34ai15T7zI+t4onC9o6Up9Oyt4j8npDL+YLsrIrz3If+pd2Mvt7O1Mra8oHH7cXN3Irc/s6ysjgWQU4NXliM6MbF3f2H6+nIl78YHI7ft5HNwoTkqoDs7ofuj9ulrtXh4sj17oDA087j7YrsysqwidG24IuQ2Jf124uA6o/v42ENEh0SHEuHkOiV/clGB4zQ9YnEmdSovN7e+snM2ID08MjH2Ir9w8WVttuU8Iqq+JXz5Ymn/ITs3ISRvtSMvYTFr5L4+offhYXo4IThttGws9Lbx8nP0Yz91sv6w4zh6siDpdWS24eX05f64I+t4onn14Ktktaxs4bYh5fy6InDrIX04Yf+pdSurtXh4sv62ozrxMvg6Yfr6c6ysdeK24ah4prH0YmS5Yvt2IitsDo4FUJDyc7VjPLty+v6ivLqyru81JLshqjRlP/YiZHsZkJBQQfWipXT8uLI88iO79zL9NqJ/dEHGN+OrIXZipHh6Ifku4b/7obiodesmtHNz8jz0o/P2cjk1ojv28KOvNSuzoaR9JfN1Ymd0ono24yjgt+OuonctZLqxoXUgIb84YfFmNq3mNHl1cjM1Izm1s7j7mVMSwcY1pa7hOaIkuTQhNCiSUaA3fHKqYTUuMSGnOGVzduPreKI1duMpJvUj4mG94WX8uiG176F8vOExJTUn6bV4eLI6MiP+MPE/96K5tHOsrHXm/aGlOGU5vGJoumP7+COobfYkbOI/5+R9dOC7KyG48yH+YDWi7nR2u7K2fuK4e4nTkxFS421ndWikIb3spPTxUtGwt/2iunPy6Sd1JLshqjRlPHOib3FhOjLjKmE3466hNqbnN3dh/SjhuLwhPCN0bCwPExDB16X5s6JgMWI1sGPlLnVlrJLScLI6I/h18rY/4fe8suvkdqR54qP5Zf1yYiXxIn84IKxgNW1jIXbp5Lu6YTskYbS+ITPoNWkmtH758viy4/S+c7j7mVrSA4S1a6Mh/qCl/LohOmkhNbQhdOj2pe03sbqxNf8j8HQJ05MRUuOsYjWq5mI46SS+cBLRsLf9orp7cusoNqR54qP5ZbU3ou5y4jV546+mNSIrYT/l5Lrxo7QoYvT9oXRttesiND4zMrP643b1snY7IvY48u2r9qR6ICt9nhEQUYHhunmhtGS1bmL0ePaB16d1fuJpeWK8fGOqLvXiImH+4Kc9cOG6JuG6eaC66zUr6bT5OrO9POA4erI5uWM4erIlqzUr86ErNuX7OiPreKJ3u6OlKfVt7+J3LWS6saF1oqG/+6JyojXtbvV4eEnWVJDS4Sk0YnSyIOdsdaykUtJwsjojOnqy/38ifTfyY+j25T9i6TGlO3+hIrqg9Ptj5O51ZS0h/m7nPvbguyshurYieKf0bCz38r7yNvLj874zuPti9zlxJeB16TtgK31l/rgi6TviNfag6SA15i3hOSXk9/gguyvaUFPS0HKpovbq8OLmdyU7f5GB4zQ9YTjidSmn9H12MTp0Izg48r/84rP9cWcgNeL9ICt9ZXb34Sq14nW3o68uNOyt4b3mJHP2IfosoDs7ofiptSsiN/77Mv//4rh7cnb/4vZ8cu5vdSn5YuS7JTxzoqa1In/6YKOvNaSioLjr35fSUtGyMDchv7YxZyO2pjASQebzvOE5KuF8v9BKWp/07K3hOyOkuDEguyshOLAhMmu15OC1eHixOvBj/TkyOvqiunAxYeH177Rh5b0ltDpiJD/i/vJiK2wOjg=",
+          "result": "",
+          "model": "gemini-3.1-pro-preview",
+          "provider": "jijing",
+          "_resultStale": false,
+          "_showLabel": true,
+          "_locked": true,
+          "_label": "反推脚本",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "模特三视图",
+        "relativeX": 170,
+        "relativeY": 1892,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oh8SMhOXWiMC11Lyj0fvnxc7Zj/z8y8z4i9/gwo681Z/eh5X+l/LfiJfvi/Xlg4yR1q67guOvkfTwhMKzis/hh8uR25uq1eHhyuDJgPzOyNTKiuzhxLGY177nhLnrlOHxLcjO+4jK8sqZu9Ws5Yak+ZrO54m23YjX7469vNiVsIT4k5fy64b4lorxzYTknte9uN/iy8j89I7188vr/Ib8ycSxmNW/2Iar7ZTEwoWwwYn034SRvtmvlIjghZP70ITqtIfSyIj2j9erjNnd78Tp0IDixMrq1Yrn8siivturw4a2yp3V7YiWxong64+VuNW/vInZhpLfyojxj4Tl1oTttNerjNnd78nL74/t7cXg4In4xMqIn9Wv3A==",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f67df82cb2381d91.jpg",
+          "_locked": true,
+          "_label": "模特三视图",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_video",
+        "title": "视频2",
+        "relativeX": 830,
+        "relativeY": 1580,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::h8OUkv/Hicuris7+ie+31Kye0fX8y/zigcbqxMH9gN3nxZSx1Ifjh5fOleDIj63iivPsg4631b20ieOunMX2hPeTUojX4YOqhtOytIXboJzU6ITrl4Ti34XQltaNp9D35MjZ5YzM+8ja+Yzh6Q==",
+          "seedanceTier": "standard",
+          "provider": "jijing",
+          "model": "seedance-v2",
+          "imageMode": "reference",
+          "size": "9:16",
+          "duration": 8,
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8ebfd06442248dc0.mp4",
+          "seedanceVipResolution": "720p",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ddd5f3dcd051f242.jpg",
+          "seedanceV2Version": "standard",
+          "_locked": true,
+          "_label": "视频2",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "分镜帧图",
+        "relativeX": 0,
+        "relativeY": 866,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::h+mnkMrEhvaph9bVhuKE1ouX0+7py+j/gcLpysrTifHGy6mP1LvDhaXkltPbi6TKi/XljpCQ2IOXhdiIkf3jhsWShfzCguuv",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/ac46913b276c4f0c.jpg",
+          "quality": "low",
+          "_locked": true,
+          "_label": "分镜帧图",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_video",
+        "title": "参考视频",
+        "relativeX": 74,
+        "relativeY": 396,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8519aef86af9abea.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3dab023e56467578.jpg",
+          "content": "",
+          "seedanceTier": "standard",
+          "provider": "jijing",
+          "_showLabel": true,
+          "seedanceVipResolution": "720p",
+          "duration": 15
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词2",
+        "relativeX": 0,
+        "relativeY": 2368,
+        "width": 680.0,
+        "height": 420.0,
+        "data": {
+          "content": "",
+          "result": "首先第一步：找参考视频\n第二步：分析参考视频的脚本\n第三步：生成参考视频关键帧图\n\n基础工作做好后\n开始做我们人物，服装的材料\n第一步：确定模特，确实服装\n第二步：给模特穿上服装，并且生成人物三视图\n\n接下来我们做替换\n第一步：把前面分析的脚本，人物的描写，服装的描写替换成我们人物，服装的描写。（提示词都写好了）\n第二步：把前面生成的关键帧图，人物，服装替换成我们的人物，服装。（提示词都写好了）\n\n最后\n把替换好的脚本，关键帧图，以及人物三视图连接视频模型（视频模型关键词已经写好），点生成。\n",
+          "model": "gpt-5.5-medium",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词3",
+        "relativeX": 0,
+        "relativeY": 1302,
+        "width": 680.0,
+        "height": 420.0,
+        "data": {
+          "content": "ENC1::h+mnkuTuh/CBh9TChvGp1oqI0ejKzvTzj/3hxcDpie7kxY2A3YrthbbLlOTDiJXZifTfj5Wy1IqbhvmpkMjThuWEgOzuh/eg2pO30O7sxcvCiuHu",
+          "result": "",
+          "model": "gemini-3.1-pro-preview",
+          "provider": "jijing",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "提示词3",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceIndex": 13,
+        "targetIndex": 9
+      },
+      {
+        "sourceIndex": 9,
+        "targetIndex": 7
+      },
+      {
+        "sourceIndex": 3,
+        "targetIndex": 2
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 2
+      },
+      {
+        "sourceIndex": 2,
+        "targetIndex": 7
+      },
+      {
+        "sourceIndex": 2,
+        "targetIndex": 5
+      },
+      {
+        "sourceIndex": 4,
+        "targetIndex": 5
+      },
+      {
+        "sourceIndex": 15,
+        "targetIndex": 11
+      },
+      {
+        "sourceIndex": 10,
+        "targetIndex": 11
+      },
+      {
+        "sourceIndex": 7,
+        "targetIndex": 0
+      },
+      {
+        "sourceIndex": 12,
+        "targetIndex": 0
+      },
+      {
+        "sourceIndex": 6,
+        "targetIndex": 0
+      },
+      {
+        "sourceIndex": 8,
+        "targetIndex": 0
+      },
+      {
+        "sourceIndex": 9,
+        "targetIndex": 15
+      },
+      {
+        "sourceIndex": 10,
+        "targetIndex": 15
+      }
+    ]
+  },
+  {
+    "id": "wf-live-selling-video-trial",
+    "name": "口播带货视频（试用）",
+    "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
+    "icon": "Video",
+    "category": "trial-video",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/979bb37fdf9ec9e4.jpg",
+    "cards": [
+      {
+        "type": "ai_image",
+        "title": "参考图1",
+        "relativeX": 0,
+        "relativeY": 396,
+        "width": 254.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/20c768ccd90d7cc5.jpg",
+          "content": "",
+          "model": "gpt-image-2",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图2",
+        "relativeX": 0,
+        "relativeY": 0,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/c459ac61602a3f4a.jpg",
+          "content": "",
+          "model": "gpt-image-2",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_video",
+        "title": "视频",
+        "relativeX": 1576,
+        "relativeY": 198,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::QYWNzZTkz4Sp+YrzzYSRvtans4XZppH674j5sYb30UFLDRLXpqmH671FR47G/sr56IrZzcWGl9qR54qP5Z3V7YSL4ore44OKtNmQp4XZipHh6InbskOI1+GDqobfjrqF2ZeT+8CE46+L7OyJ3LIS1Iq2ieSZl/LrhviyheT/hvGp2pe038Pyycz/gcftyOTWiO/byJ+n14/0gK32",
+          "seedanceVipResolution": "720p",
+          "duration": 15,
+          "provider": "jijing",
+          "model": "seedance-v2",
+          "seedanceV2Version": "standard",
+          "size": "9:16",
+          "imageMode": "reference",
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/59fb5e51562848f9.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/c8a0a6197fc2ce76.jpg",
+          "_locked": true,
+          "_label": "视频",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词",
+        "relativeX": 405,
+        "relativeY": 158,
+        "width": 680.0,
+        "height": 420.0,
+        "data": {
+          "content": "ENC1::hd6NkurGhdSth9TFh+G726+B0fXWyOH0jNnKxdfLiP7GxZW225TwhqXym/z9iYLfitP1iK2wOjjTz8HL/MWN3fbL7PyL3/DCjqo4B09Dyc7VjPLtyPjSZVNFDdaKiNHoysjvzGNSQg2H1siE+KzXoL/RxtMnQFxJhdaKhv/uhPis1YGJPFRNDZDIzoT/rIbh+YbplDgGHBaG+IOS0u6F1peE0strXAMS1I+JhveFke7Th/WCaVRBQY+WhdaSik6Fmc+X48mIksKK7s6EkbrVvZmI46SbzuBrVQNDidftjbGp1Y6MidOuk+jth/qUhvz+jtel17+d3+Hqwsj7Y2uIkMOL9eWPlonVuJeO37d+lMnYiqDNicHDjaWF2IylhOaIk+jthdaKhv/uhdSM1LGd1eHiyc7VjPLtyO76iOPSzrKx1ozGhr71l/Lfib/viNXbjKSb1amIjt+hnPXDhOaFhPjwh+O91oiy0PzCDUVHSYbLv4Xm+Yj0nteIlN7VxMXT9IDD/cjr6ob098W2qtSqzYCt9pfP44qz/4r3zo6ikdagm4nEq53Q+I7QoYbB+If+ndS+ldPp1cjo2lhRXMjO+4rWzci9g9G242knkM/JhOOCh9fKhPeF17a33+LLyPzWj/fBwt/2ZUxLyYiX16Xgiq32l/npiJbtifzLj5WY1b+ghuGUkfruhOmIaUFPhPiH1oiY0fb4yvbLj/3syM3Vifn4xZyZ1ozbhqzoltHqirDGi/PqYQAS1IiMhuqEnfLrhPylheXBh9e51oiJ0PPOzvTzgd/SydnWjOHqxbKx1KvegK31ltDRiqToj+/gjLma1rqBidy1kurGh8SMhOXWa0YN16OY0tnJyOjIj/jDy//shuHpyKK414f0hInOltPGib7iZkJBWhgS15WkiOShkcj9icOIhunnicWf1ouy0tjrzvTzjPHixc3ei9rryYu4ODyF3quS7umG16WH1OKJzazajqHT5tnI/PSP//zF3OuIyeDCjrzXucuLk+eX7tuJpeWF+v2DqajWrpqC469+eIHH7cvS7oDd8ScDHhLT7snK4O2P6fwNUkyJ/MrIurbbo/2Lqe6U9c2PreFmXU9Ly7KL1KHXirjLl/LbiYP5TF5US8qVotG242keWlKM6OENUUyIxvnIjbXbl9qFsf2b+8iJgPOP7+NhGRwQ177nirjol9bkhYzYhOzcjpWU2IaRjt+hkMrkicqshuPFhOq314Gn0cXZzvTwY1RCDYbh+YbplNqWs97O18v84oDA0sjNzofi1su2r9e59oalxJXz5YmI3onL5YitsDoEGEGHl86V4MiJtt2EyeCOorDUiriE66ud5/WO0LeH1tWG4oTXj7ffwNjI88iA9PDFzd6HxsjOsrHamfSEudyR6eCLhNyL8uGNpaTVg6OGx5eQyM6E/6yA7O1rXAMS1IiRhPCskenXicqshuPthdOj17i03/T/wsjojN7pxMLXif3iyYiX16XghoP4lPzViZz2i8vbjr++14mwiemvk/vQhOq0gOzta1MDEtW6sIj2sZ315YXUoIvK7oTsl9W+gtTh/2w9Uozp6sv9/IvZxs+yrdC2/YWA15f1yYSC5Ynnyomtr9KyqofthZLH4oPssIHs84Tkgtqzj9Th/s/07o/B1cvuwor61cq7t9SrxISx/5Dp/I+t4WZWT0vJir3akOCLk+eX7tuKjeSFzfmIrbPVgreI/o+R3/6C7KyG3eCE0rjXnaXT2PbO9POP6fzK6uuJwuvLrZXdiu2Got6a1/KJqtmJ5+eCuK7YtqyH/4GX8utrXR1NTIrH6cusrNeYw4Wlw5TbwIqx6onOyo6rq9epmIfDqpDI04bSiYXk+YXWktWkmtP92cvt3Ybd4MnezIfH6suSidS7z4eX05f64IiSworuzo6/vtW/oIbhlJz1w4TmhYbky4f9gN2MvtLZ7sXS84zu4cT0worPycu6h9G242kcRVyMx+7L/fCJ+cTIvZPUpMyMkfiXxPaKuNOJ0OSCjInYlLeE/4VFR1mEwbqH18qE7ag4OtukyIaA5Jvp6IqmyoTI5Y6lq9+OrGuHkNSb9eGEi+KI1O+PlpfUir1BVg2Tw9KI/oSGwf+F04DdjL7e5snI/tqA4eXL6MWJ/evEsrLXpumGkOeX4OyIl8SJ/OCMt7bUiraGxKCbzuWF1KCLyu6E7oXbs5rTweXFy+mM79fO4+5la1oDEtelrYbhlJ3gwITBvYzQ9WuCrbDVor6J4JCc1cqE6p6F9OGGyoPbp5zfw/vK7vaN28vI8O2M4ekn1o652d35yNLwj//wyd7Mi9j0y665SdH2+Mr2yxSO0KGG6eeG96baj6vS2cnO9PBja14DQ4ng7I6anNmgn4TOvZvO82uFreGJ/+mPlbjYiJ2C46yQz9aG+IWG/OGE5LXXvKTQ+e3L7MyO++jJ2cuK8urOsrI40t/owsjojv3nyv7sifjFxLKq3YrthLncltHriqTui/DEgqyh1YWYhOuGl/Lra2YeTUyL29HKjJTbpMiGgOSd1ftmxOPuivHjyqme1Jbmh5fOldfFhbD9idfZjbW815OYhvmpkMjOhP+sgOzta4+Tud+OrBqEttqUyeaIl9mL0cUWyL2f1o3Eiqr5levYi7HohND4j5WY07K0a2kZWlKM/dbL+sOG88LIn6DdivtpxPTwjPHkyObbi9z4yY+P1aLJhrHOlPDOirXtivffjLe21IiRhPCsl/Lra4iT6IPT+xDIrorUr84eycz/jv7JxOL/huHiyYmw1o/pjJH4l+bOiJbGi/PqjoOx07K0a2kYWlKP9OTL/fCG88LIn6DdivtpxPTwjPHky/bkif/3yqmE2pHjhLfwltPGib7ij+/jYcmMu92K+4uS7ZbRy4q464rx/YSRvtSKtob/kZHC2InvkITw5ITsl9Stl9Xh4Sd+l+Hnhbj/i9TyjbO21amMhM23kMrTjtC3aWZfTFkN1Zeg2d35J53gwITBvYDs7Yb/hdWnqdHj2s7084zu4cjUwozh6sunuNSo/YWl4pbT24uTx4nn5o6ol9+OuonNhJzV64XQuobt84XTptGwsNLb2cr924/p+snZy4ry6sunuNSo/YaS8ZvI2omo64no24yjgtOytGtpH1lHSYbLv4zQ9WuPl4jXu5+E5Jed5/WO0KGG3fqGz5fWipXT8uLCyP6BztjL++KKz+jEsrLXpumLnfWU4feEisCJ6dKPlrLUi76I9IOd0PGC7K9pZlpMUg3Vl6DZ3fknnNzbhsCBQ11PhdOH1JCK097gyPnkjuPVwt/gievhyL+m1bTYhJLPmsbwiqXzhc7fjoOQ2LGLh+eykf3+hOSdhPbrhM6Q15S21eHhJ35LRFBeDYTL/Y7XtzjYnISGz4FUQEmF1IeFzNeE1K7XvaTR49rCyP6A5OHI8+SL28zIobHVjeeLp/aU4feIkNyL+8mOsYjWq5mC469+eFhTQRxWTIjG+cKOqjjS28TI5/OMz+DL9tiK0P7KlooSHUGLkM+X1fSJgt+D0+2Og77WuqaE24ucxs6H+JuG3NGC6684OtaO7Ia9+JXY2ou2zYnL5Yy9tNakj4TfopvO82tmyMXuif/3y6qf1Krsi47xndX7ZsTk4Yjj0siDpdWS24eV/prTyoq464rx/Yits9e7voT9ppDP5IbRg4Ds7oj2j9Smq9Ha5cX+8Irh7crK04j868iuitSvzoCt9niN2eHFxe2K7sHFnYTQtv2EpPyX9+qJiN6O7/yEkb7YlLeJzJmW8vWJ6Z2L6daH96TWjavf5uzP9O+L4fDF4cWI29TJir3VgsaBremQ6f2IlemE1cqPlb/YhoKJ4aSW8vSD7LGL2d+J3ILWiL/e1dfF8c2L4fHO4+5la46LsNasqof7gp3R9oT/rIzQ9WuCqr/XsI+E0riT1tOE4KiLz+qC66zUuaHT3ePO9POM5MnI7M+M4erEka/VosmGsc6U8M6PreKJ4MKNqa3VvbuIxaWX8utriJXuhMngjqKY2J2Cg+OxkdfUhPyugezyjteh2paz3s7Xz/Tuj+HiydrkivHoz7Kt0Lb9h5b0ltDpirrVie/4jr2x0rKrg+OxnNXKhOqehv/FiMqS25Wf1OH+zvTwY2uJi+GK8f2NtZ3XjLiExaubzvNrharui+3Yjpyn15aMhdmKkeHohMi7i8vtguus2oSa0/3Tyv3LjOf1zuPti9nhy7u7HdLZ6cXwyorh7cjq4Yrx5ci9qNe694Ct9niN2eHFxe2K7sHFnYTQtv2Gi/KU/OmJiN6O7/yEkb7YlLeJzJmW8vWE4reH1OKE5bfQsK/U4f/I+dON2eHI7s2N4fbPsqzbtuOGvfyW0uGIlOuE7cWDmZrSsquC469+eIzH7sv98In5xMichteH5EzIxP2M9OrI8O2A3fEn27e/0ePayMXnjsXWyd7TiPXDyLu91bzXha31kengiJDci/vJjqea1I+qguOskM/WhviFhvzhhOS117yk1eHiyc7VjPLtytjqh+vpzrKyONLZ7sXS84zuxsXM2I3h98ukidaI3oGt6Z3V7YSL4oTA1Ymtrteut4ftpJHhw4XUrYXByojRltWzlNTh/s708GNrhJPwiejbjY2O1Y65hNyondPShdSIhczThM2v1oi52d35J36R6fFdGEOLyPOOpbTZp6qJ57eS7sWC7LxpZl9MWQ3Vl6DZ3fknk+bSiPGPjND1a4+XiNe7n4TphZDP9Y7Qt2mJ4MKNv5/fjqxrh5fTl/rgiZz2i8vbhJGoOtuj/YaJwJ3V+2YnUUFaQYyKoN+OrGuEuc+b9MODkflmi9vRyruZ17zJh5DondX7Zsjsz4nzxsKOqjjS28TI5/OM0PnKx9aA3fEn26Wu08XXwsjoY2tZAFpMiMb5wo6qONH12MTp0Ibd9ieH1tWG4oTXuprS3P/CyOhjhOOOhf7Cjte3ONSIkYTwrJHD/IbIl4zQ9WuCuK7VloKO37d+eFBMXR9Di8jzhJGoOtWi2oqw1p3V+2bJ2daI6MLIuJjWi/2Mke54jO7Py/HBgN3xJ9aKldPy4sjF547F1sLf9mWI/rHXlIbZ3fknfkNbTF0YQ4vI84SRqDrVotqKsNad1ftmydnWiOjCyLiY1ov9jJHueIzuz8vxwYDd8SfWipXT8uLIxeeOxdbC3/ZliP6x15SG2d35",
+          "result": "",
+          "model": "gemini-3.1-pro-preview",
+          "provider": "jijing",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "提示词",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图1",
+        "relativeX": 1235,
+        "relativeY": 198,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::h8OUkv/Hiei3hcHKhv+y1Lii0tnjyczYj/TpydnniuntxKes163fjJH4ms/gipzhiNXGjr6z2IWphdutnPXdjtChh9bVhuKE2oet0tnjxfPGht3g",
+          "size": "9:16",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/664061d4da153c30.jpg",
+          "_locked": true,
+          "_label": "效果图1",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceIndex": 1,
+        "targetIndex": 3
+      },
+      {
+        "sourceIndex": 0,
+        "targetIndex": 3
+      },
+      {
+        "sourceIndex": 3,
+        "targetIndex": 2
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 2
+      },
+      {
+        "sourceIndex": 0,
+        "targetIndex": 2
+      },
+      {
+        "sourceIndex": 3,
+        "targetIndex": 4
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 4
+      },
+      {
+        "sourceIndex": 0,
+        "targetIndex": 4
+      },
+      {
+        "sourceIndex": 4,
+        "targetIndex": 2
+      }
+    ]
+  },
+  {
+    "id": "wf-drive-transform-video-trial",
+    "name": "开车变装视频模板（试用）",
+    "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
+    "icon": "Video",
+    "category": "trial-video",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/bf3b744da029c4b8.jpg",
+    "cards": [
+      {
+        "type": "ai_image",
+        "title": "参考图1",
+        "relativeX": 975,
+        "relativeY": 4010,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/fe158a0f0ae8e677.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图2",
+        "relativeX": 1950,
+        "relativeY": 4010,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/136a8d80507e1820.jpg",
+          "content": "",
+          "model": "gpt-image-2",
+          "provider": "comfly"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图1",
+        "relativeX": 2355,
+        "relativeY": 3886,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYWG+4rj8Iy3ttiInYf+vZLd/YXSpozQ44bCktaIuNH758XV0Y/94c7j7orn8sicrtuV74WNyJvC+Y+t4Yv72oKwkNWFkITup53xwYTkq4T48IfjvXPVn6GGyLST2eKG9qmG5eKJzKvXq4zS2e3I5PyBxurI+NKM4enKpovbq8OGoseX5OuFrsuJ5+eMua3WuqaI/o+d8cGG5ZSG6vaHxo7brZDT+t3CyP6A/M7E4MSI6NLItKnWiMaKsNaX8t+Dke+F8sOCrprXu4+E5bSR4ueI8Y+G99GO16HWi5fT7unJzPiM7ObF2ceJzMjEr5LVv9iGq+2X8t+Dke+I0PyNobPYsbqH+oKTyMaG9ZA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e587aece28c02a3b.jpg",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "效果图1",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图2",
+        "relativeX": 1380,
+        "relativeY": 3886,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYiX2YvmyIKGqta+p4b5qZzIwofxvYXD+4XVpt2MvtHI3MnM+I776MXCz4n95s6ystew+IaD6pvK74qN34XE+YitsNemjYj+j5HFz4Thp4rvx4Tjq9WkrdDp82yR3/6Gx7SEx+SG8anXub/exuXI78yN2eLI8+KHxu3IqY7RtuOEuc+b9MOJotCJ4uuCrprVurCG97KS+vmI8Y+K78eG4pTXtqvQzMDE6dCM+tLC3+CG/MnEsZjVv9iGq+2W18aFsMGJ9N+Ekb7Zr5SI4IWT+9CE6rSG/OGI9o/Xq4zZ3e/Jz9eM7ubJ2+aK7OHFiJvUm8KKsNaV4NiJq/qJ9N+Ekb7UjauH76yc8eWH9YKE1sCG8pA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a474d8c8f2e93521.jpg",
+          "_locked": true,
+          "_label": "效果图2",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "周一造型",
+        "relativeX": 0,
+        "relativeY": 2018,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYqFwovm2IKGqta+p4b5qZzIwofxvYXD+4XVpt2MvtHI3MnM+I776MXCz4n95s6ystew+IaD6pvK74qN34XE+YitsNemjYj+j5HFz4Thp4rvx4Tjq9WkrdDp82yR3/6Gx7SEx+SG8anXub/exuXI78yN2eLI8+KHxu3IqY7RtuOEuc+b9MOJotCJ4uuCrprVurCG97KS+vmI8Y+K78eG4pTXtqvQzMDE6dCM+tLC3+CG/MnEsZjVv9iGq+2W18aFsMGJ9N+Ekb7Zr5SI4IWT+9CE6rSG/OGI9o/Xq4zZ3e/Jz9eM7ubJ2+aK7OHFiJvUm8KKsNaV4NiJq/qJ9N+Ekb7UjauH76yc8eWH9YKE1sCG8pA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3a84e7be929a3f7f.jpg",
+          "_locked": true,
+          "_label": "周一造型",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "周二造型",
+        "relativeX": 0,
+        "relativeY": 2512,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYiX2YvmyIKGqta+p4b5qZzIwofxvYXD+4XVpt2MvtHI3MnM+I776MXCz4n95s6ystew+IaD6pvK74qN34XE+YitsNemjYj+j5HFz4Thp4rvx4Tjq9WkrdDp82yR3/6Gx7SEx+SG8anXub/exuXI78yN2eLI8+KHxu3IqY7RtuOEuc+b9MOJotCJ4uuCrprVurCG97KS+vmI8Y+K78eG4pTXtqvQzMDE6dCM+tLC3+CG/MnEsZjVv9iGq+2W18aFsMGJ9N+Ekb7Zr5SI4IWT+9CE6rSG/OGI9o/Xq4zZ3e/Jz9eM7ubJ2+aK7OHFiJvUm8KKsNaV4NiJq/qJ9N+Ekb7UjauH76yc8eWH9YKE1sCG8pA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a474d8c8f2e93521.jpg",
+          "_locked": true,
+          "_label": "周二造型",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "周三造型",
+        "relativeX": 0,
+        "relativeY": 2759,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYiX2YvmyIKGqta+p4b5qZzIwofxvYXD+4XVpt2MvtHI3MnM+I776MXCz4n95s6ystew+IaD6pvK74qN34XE+YitsNemjYj+j5HFz4Thp4rvx4Tjq9WkrdDp82yR3/6Gx7SEx+SG8anXub/exuXI78yN2eLI8+KHxu3IqY7RtuOEuc+b9MOJotCJ4uuCrprVurCG97KS+vmI8Y+K78eG4pTXtqvQzMDE6dCM+tLC3+CG/MnEsZjVv9iGq+2W18aFsMGJ9N+Ekb7Zr5SI4IWT+9CE6rSG/OGI9o/Xq4zZ3e/Jz9eM7ubJ2+aK7OHFiJvUm8KKsNaV4NiJq/qJ9N+Ekb7UjauH76yc8eWH9YKE1sCG8pA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3f99aeffd1225713.jpg",
+          "_locked": true,
+          "_label": "周三造型",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "周四造型",
+        "relativeX": 0,
+        "relativeY": 3006,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYiX2YvmyIKGqta+p4b5qZzIwofxvYXD+4XVpt2MvtHI3MnM+I776MXCz4n95s6ystew+IaD6pvK74qN34XE+YitsNemjYj+j5HFz4Thp4rvx4Tjq9WkrdDp82yR3/6Gx7SEx+SG8anXub/exuXI78yN2eLI8+KHxu3IqY7RtuOEuc+b9MOJotCJ4uuCrprVurCG97KS+vmI8Y+K78eG4pTXtqvQzMDE6dCM+tLC3+CG/MnEsZjVv9iGq+2W18aFsMGJ9N+Ekb7Zr5SI4IWT+9CE6rSG/OGI9o/Xq4zZ3e/Jz9eM7ubJ2+aK7OHFiJvUm8KKsNaV4NiJq/qJ9N+Ekb7UjauH76yc8eWH9YKE1sCG8pA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6ee432aaaeed3390.jpg",
+          "_locked": true,
+          "_label": "周四造型",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图3",
+        "relativeX": 894,
+        "relativeY": 590,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e8bb09b8d5e28d17.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "周四造型",
+        "relativeX": 1618,
+        "relativeY": 1542,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYiX2YvmyIKGqta+p4b5qZzIwofxvYXD+4XVpt2MvtHI3MnM+I776MXCz4n95s6ystew+IaD6pvK74qN34XE+YitsNemjYj+j5HFz4Thp4rvx4Tjq9WkrdDp82yR3/6Gx7SEx+SG8anXub/exuXI78yN2eLI8+KHxu3IqY7RtuOEuc+b9MOJotCJ4uuCrprVurCG97KS+vmI8Y+K78eG4pTXtqvQzMDE6dCM+tLC3+CG/MnEsZjVv9iGq+2W18aFsMGJ9N+Ekb7Zr5SI4IWT+9CE6rSG/OGI9o/Xq4zZ3e/Jz9eM7ubJ2+aK7OHFiJvUm8KKsNaV4NiJq/qJ9N+Ekb7UjauH76yc8eWH9YKE1sCG8pA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6ee432aaaeed3390.jpg",
+          "_locked": true,
+          "_label": "周四造型",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "周三造型",
+        "relativeX": 1618,
+        "relativeY": 590,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYiX2YvmyIKGqta+p4b5qZzIwofxvYXD+4XVpt2MvtHI3MnM+I776MXCz4n95s6ystew+IaD6pvK74qN34XE+YitsNemjYj+j5HFz4Thp4rvx4Tjq9WkrdDp82yR3/6Gx7SEx+SG8anXub/exuXI78yN2eLI8+KHxu3IqY7RtuOEuc+b9MOJotCJ4uuCrprVurCG97KS+vmI8Y+K78eG4pTXtqvQzMDE6dCM+tLC3+CG/MnEsZjVv9iGq+2W18aFsMGJ9N+Ekb7Zr5SI4IWT+9CE6rSG/OGI9o/Xq4zZ3e/Jz9eM7ubJ2+aK7OHFiJvUm8KKsNaV4NiJq/qJ9N+Ekb7UjauH76yc8eWH9YKE1sCG8pA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3f99aeffd1225713.jpg",
+          "_locked": true,
+          "_label": "周三造型",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "周一造型",
+        "relativeX": 894,
+        "relativeY": 1542,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYqFwovm2IKGqta+p4b5qZzIwofxvYXD+4XVpt2MvtHI3MnM+I776MXCz4n95s6ystew+IaD6pvK74qN34XE+YitsNemjYj+j5HFz4Thp4rvx4Tjq9WkrdDp82yR3/6Gx7SEx+SG8anXub/exuXI78yN2eLI8+KHxu3IqY7RtuOEuc+b9MOJotCJ4uuCrprVurCG97KS+vmI8Y+K78eG4pTXtqvQzMDE6dCM+tLC3+CG/MnEsZjVv9iGq+2W18aFsMGJ9N+Ekb7Zr5SI4IWT+9CE6rSG/OGI9o/Xq4zZ3e/Jz9eM7ubJ2+aK7OHFiJvUm8KKsNaV4NiJq/qJ9N+Ekb7UjauH76yc8eWH9YKE1sCG8pA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3a84e7be929a3f7f.jpg",
+          "_locked": true,
+          "_label": "周一造型",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "周五造型",
+        "relativeX": 894,
+        "relativeY": 114,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYWG+4rj8Iy3ttiInYf+vZLd/YXSpozQ44bCktaIuNH758XV0Y/94c7j7orn8sicrtuV74WNyJvC+Y+t4Yv72oKwkNWFkITup53xwYTkq4T48IfjvXPVn6GGyLST2eKG9qmG5eKJzKvXq4zS2e3I5PyBxurI+NKM4enKpovbq8OGoseX5OuFrsuJ5+eMua3WuqaI/o+d8cGG5ZSG6vaHxo7brZDT+t3CyP6A/M7E4MSI6NLItKnWiMaKsNaX8t+Dke+F8sOCrprXu4+E5bSR4ueI8Y+G99GO16HWi5fT7unJzPiM7ObF2ceJzMjEr5LVv9iGq+2X8t+Dke+I0PyNobPYsbqH+oKTyMaG9ZA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e587aece28c02a3b.jpg",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "周五造型",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "周二造型",
+        "relativeX": 170,
+        "relativeY": 590,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYiX2YvmyIKGqta+p4b5qZzIwofxvYXD+4XVpt2MvtHI3MnM+I776MXCz4n95s6ystew+IaD6pvK74qN34XE+YitsNemjYj+j5HFz4Thp4rvx4Tjq9WkrdDp82yR3/6Gx7SEx+SG8anXub/exuXI78yN2eLI8+KHxu3IqY7RtuOEuc+b9MOJotCJ4uuCrprVurCG97KS+vmI8Y+K78eG4pTXtqvQzMDE6dCM+tLC3+CG/MnEsZjVv9iGq+2W18aFsMGJ9N+Ekb7Zr5SI4IWT+9CE6rSG/OGI9o/Xq4zZ3e/Jz9eM7ubJ2+aK7OHFiJvUm8KKsNaV4NiJq/qJ9N+Ekb7UjauH76yc8eWH9YKE1sCG8pA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a474d8c8f2e93521.jpg",
+          "_locked": true,
+          "_label": "周二造型",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图4",
+        "relativeX": 894,
+        "relativeY": 1066,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a1ebe0b26d652ce0.jpg",
+          "content": "",
+          "model": "gpt-image-2",
+          "provider": "comfly"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图5",
+        "relativeX": 1618,
+        "relativeY": 114,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/de382e81988acdbc.jpg",
+          "content": "",
+          "model": "gpt-image-2",
+          "provider": "comfly"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图6",
+        "relativeX": 1618,
+        "relativeY": 1066,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/4abf8702be0dd2e8.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图7",
+        "relativeX": 1950,
+        "relativeY": 3614,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2b39d64bc9976fc2.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图8",
+        "relativeX": 975,
+        "relativeY": 3614,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b74546ae7e74645f.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图9",
+        "relativeX": 0,
+        "relativeY": 4520,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/936b1d5d061b679b.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图10",
+        "relativeX": 975,
+        "relativeY": 4520,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2cdbf4624fb60ac9.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "人物1",
+        "relativeX": 1095,
+        "relativeY": 2216,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "_showLabel": true,
+          "content": "",
+          "size": "3:4",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/c799f4c8eade95bc.jpg",
+          "model": "nano-banana-2",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "人物2",
+        "relativeX": 1060,
+        "relativeY": 2669,
+        "width": 325.23816255380746,
+        "height": 225.18570875183585,
+        "data": {
+          "_showLabel": true,
+          "content": "",
+          "size": "9:16",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/9d95d349277afa12.jpg"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图11",
+        "relativeX": 0,
+        "relativeY": 3614,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/58acd8d85f46a133.jpg",
+          "content": "",
+          "model": "gpt-image-2",
+          "provider": "comfly"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图3",
+        "relativeX": 405,
+        "relativeY": 3886,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYqFwovm2IKGqta+p4b5qZzIwofxvYXD+4XVpt2MvtHI3MnM+I776MXCz4n95s6ystew+IaD6pvK74qN34XE+YitsNemjYj+j5HFz4Thp4rvx4Tjq9WkrdDp82yR3/6Gx7SEx+SG8anXub/exuXI78yN2eLI8+KHxu3IqY7RtuOEuc+b9MOJotCJ4uuCrprVurCG97KS+vmI8Y+K78eG4pTXtqvQzMDE6dCM+tLC3+CG/MnEsZjVv9iGq+2W18aFsMGJ9N+Ekb7Zr5SI4IWT+9CE6rSG/OGI9o/Xq4zZ3e/Jz9eM7ubJ2+aK7OHFiJvUm8KKsNaV4NiJq/qJ9N+Ekb7UjauH76yc8eWH9YKE1sCG8pA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3a84e7be929a3f7f.jpg",
+          "_locked": true,
+          "_label": "效果图3",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图12",
+        "relativeX": 14,
+        "relativeY": 4916,
+        "width": 227.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/7e9d200221e35ff1.jpg",
+          "content": "",
+          "model": "gpt-image-2",
+          "provider": "comfly"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图4",
+        "relativeX": 405,
+        "relativeY": 4792,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYiX2YvmyIKGqta+p4b5qZzIwofxvYXD+4XVpt2MvtHI3MnM+I776MXCz4n95s6ystew+IaD6pvK74qN34XE+YitsNemjYj+j5HFz4Thp4rvx4Tjq9WkrdDp82yR3/6Gx7SEx+SG8anXub/exuXI78yN2eLI8+KHxu3IqY7RtuOEuc+b9MOJotCJ4uuCrprVurCG97KS+vmI8Y+K78eG4pTXtqvQzMDE6dCM+tLC3+CG/MnEsZjVv9iGq+2W18aFsMGJ9N+Ekb7Zr5SI4IWT+9CE6rSG/OGI9o/Xq4zZ3e/Jz9eM7ubJ2+aK7OHFiJvUm8KKsNaV4NiJq/qJ9N+Ekb7UjauH76yc8eWH9YKE1sCG8pA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/3f99aeffd1225713.jpg",
+          "_locked": true,
+          "_label": "效果图4",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图5",
+        "relativeX": 1380,
+        "relativeY": 4792,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYiX2YvmyIKGqta+p4b5qZzIwofxvYXD+4XVpt2MvtHI3MnM+I776MXCz4n95s6ystew+IaD6pvK74qN34XE+YitsNemjYj+j5HFz4Thp4rvx4Tjq9WkrdDp82yR3/6Gx7SEx+SG8anXub/exuXI78yN2eLI8+KHxu3IqY7RtuOEuc+b9MOJotCJ4uuCrprVurCG97KS+vmI8Y+K78eG4pTXtqvQzMDE6dCM+tLC3+CG/MnEsZjVv9iGq+2W18aFsMGJ9N+Ekb7Zr5SI4IWT+9CE6rSG/OGI9o/Xq4zZ3e/Jz9eM7ubJ2+aK7OHFiJvUm8KKsNaV4NiJq/qJ9N+Ekb7UjauH76yc8eWH9YKE1sCG8pA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6ee432aaaeed3390.jpg",
+          "_locked": true,
+          "_label": "效果图5",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "周四造型",
+        "relativeX": 0,
+        "relativeY": 3253,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYWG+4rj8Iy3ttiInYf+vZLd/YXSpozQ44bCktaIuNH758XV0Y/94c7j7orn8sicrtuV74WNyJvC+Y+t4Yv72oKwkNWFkITup53xwYTkq4T48IfjvXPVn6GGyLST2eKG9qmG5eKJzKvXq4zS2e3I5PyBxurI+NKM4enKpovbq8OGoseX5OuFrsuJ5+eMua3WuqaI/o+d8cGG5ZSG6vaHxo7brZDT+t3CyP6A/M7E4MSI6NLItKnWiMaKsNaX8t+Dke+F8sOCrprXu4+E5bSR4ueI8Y+G99GO16HWi5fT7unJzPiM7ObF2ceJzMjEr5LVv9iGq+2X8t+Dke+I0PyNobPYsbqH+oKTyMaG9ZA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6ee432aaaeed3390.jpg",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "周四造型",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图13",
+        "relativeX": 0,
+        "relativeY": 2265,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/eccec15363e08b81.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词",
+        "relativeX": 0,
+        "relativeY": 0,
+        "width": 680.0,
+        "height": 420.0,
+        "data": {
+          "content": "ENC1::icyak8nwh+S8i9P2hdOH2pe038Pyyu72j/baxPTYgNz3yqaL26vDjJDolPDOiaXIQ4n90cmPvd2L/Yq46JfN1YSS84nlyYSQrtiVpInqn5H4wYXRsYzR84nKhdSztxmH4KiTycOO0bGG6eaG0ZLXv6rT7fXCyP6N2snI7OaH3vvEp6zRtuCEuc+b9MOJpeSK4sODp7DVl7k=",
+          "result": "",
+          "model": "gemini-3.1-pro-preview",
+          "provider": "comfly",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "提示词",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "周二造型",
+        "relativeX": 170,
+        "relativeY": 1542,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::hdywkv7oQYiX2YvmyIKGqta+p4b5qZzIwofxvYXD+4XVpt2MvtHI3MnM+I776MXCz4n95s6ystew+IaD6pvK74qN34XE+YitsNemjYj+j5HFz4Thp4rvx4Tjq9WkrdDp82yR3/6Gx7SEx+SG8anXub/exuXI78yN2eLI8+KHxu3IqY7RtuOEuc+b9MOJotCJ4uuCrprVurCG97KS+vmI8Y+K78eG4pTXtqvQzMDE6dCM+tLC3+CG/MnEsZjVv9iGq+2W18aFsMGJ9N+Ekb7Zr5SI4IWT+9CE6rSG/OGI9o/Xq4zZ3e/Jz9eM7ubJ2+aK7OHFiJvUm8KKsNaV4NiJq/qJ9N+Ekb7UjauH76yc8eWH9YKE1sCG8pA=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/a474d8c8f2e93521.jpg",
+          "_locked": true,
+          "_label": "周二造型",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词2",
+        "relativeX": 2278,
+        "relativeY": 771,
+        "width": 547.1447964813594,
+        "height": 306.89354295034656,
+        "data": {
+          "content": "ENC1::h+mnnPbzh/CBh9TChdGX1bmb1eHiy+j/gcLpyvnoie7kyLSp177nhqXflPLeiqDBiufxjraMAdG24Ia2ykCK4e3I+NJcguus16uMAoLjrJHp11SLt+eI1duMpJvVoLqH/6Cc0eyC7K8=",
+          "result": "",
+          "model": "gemini-3.1-pro-preview",
+          "provider": "comfly",
+          "_resultStale": true,
+          "_locked": true,
+          "_label": "提示词2",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "一周穿搭故事版",
+        "relativeX": 170,
+        "relativeY": 1066,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::h+mnVJv8/YmJ14jX4Y+Vn9eosoXZl5P7wILsrIXw4onIqNSrjdDswcv84o776MvD24rM+8KOvNS864q46JfN1YiX74jXzIy3ttSIjIbqhJfy6IfwoIvP6ofwktS9kNDp8w2T6O2HzJqGwf+O16HUurjf9P/I0MaN2eXJ28GI++/JiIrVv8iArfWU9eyEjuaK9N6NoJDWuqZBhLfwlMnWiYDzg9Ptjae4ENuj/YaJwJfy+oiVzov15Y+XiNe7n4LjrJLu5InPqIX30Ifmj9S4otH758vUxYzM/MLf4Inr4cSnrNeS1YeX4JbRzIu354jV24ykm9Oyt4f/oJzR7If3koXhzYfjvRLXqLKHw5qR3/k=",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/44e916ba69622aa0.jpg",
+          "_locked": true,
+          "_label": "一周穿搭故事版",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_video",
+        "title": "视频",
+        "relativeX": 2975,
+        "relativeY": 754,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::h8OUkv/Hicuris7+ie+31Kye1eHiyO/MWITkq4r584Twk9WkrdDp88XT9IDD/cLf4IfH6suDstenyYeV9JbT24ukyo/v4I2xv9iRs4Tsr5zy6onbsob30VOPlbLYtYKO36GR48GF1qGH1tWG4oTRsLPQ/e7F1/eM7u7F4++H1vTIqY4B0tnjxfPGht3gyPLEi9niyYiK1b/IgK31lPXshI7mieDjg62x2IWphPiTQJbR4YSq14PT7Y68mtWprYXZl5P7wILsrIXw4onIqNe/sN7h4MXD7Yz60hiH1O+J7JndjL7T8MvJzuaN29bK6sWM4erLrr3aleSGovaa6eKEmvyJ9N9dyYqw2rHVjJH4lf3ahbDBiNfMj5W/2JS3hOSXk/zZhdeWh9H6h/2q152l08z0yM3niuHu",
+          "seedanceTier": "standard",
+          "provider": "jijing",
+          "size": "9:16",
+          "imageMode": "reference",
+          "duration": 15,
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/31a838b0ad0fdcf7.mp4",
+          "_resultStale": false,
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/5bc524535f69b882.jpg",
+          "_locked": true,
+          "_label": "视频",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图6",
+        "relativeX": 0,
+        "relativeY": 5426,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::hNOrkf34hPKmheHNh+O91o280+7vxM7Jgevdxd3HgN3nyYiK2rLZh5X5l+b5",
+          "size": "1:1",
+          "model": "gemini-3.1-flash-image-preview",
+          "provider": "comfly",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/936b1d5d061b679b.jpg",
+          "_locked": true,
+          "_label": "效果图6",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图7",
+        "relativeX": 1940,
+        "relativeY": 2018,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2b39d64bc9976fc2.jpg",
+          "content": "ENC1::hNOrkf34hPKmheHNh+O92qOe0Pzdxe/5jOzbxPbTiu76wo681ozbi6nMltHsiaL7",
+          "model": "gemini-3.1-flash-image-preview",
+          "provider": "comfly",
+          "_locked": true,
+          "_label": "效果图7",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "人脸合成",
+        "relativeX": 1535,
+        "relativeY": 2414,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "_showLabel": true,
+          "content": "ENC1::IENdHB0dDh5IAgAGEh9EURBCWRMXXxUbHUEDS0MNTwUCXkZZXFUVQ0QaFgAXBUkWDQNBHEVdEF5ZDgheVB4ACgkNFwQKQQlEXVxdUQgATBhSBgcKXhMeBg8MDV1WEkIJBg0EFwYRAEhDBQFBH0VXEEJEDhVEEBcNQR5IBQkdBAVOVxBCXg4XQgdcYzUESEMKDgIODUFYXUMNBw0WF0kATEMCGBoTCkEeEF1EBgJDHRFJAwBIDQhPDg0NRlhXFggNXQEGSQcJTBcZHQQYARJTQFMAF0QaFUkATFgNBR4UDg1cVUUWCAdIGgYAFRUNFwQOFUtPV1FARUECDQcGGw4CSkMKDgwCQUsQQFMSBkAWHggPD0hDGABBCUJGWBJfDxNYAAFJFgVZCwMaFUtPV1lcUUECDRAbGwQPWUMPABESDV1WElMIF0URAEdrL0wTGBoTDg1GWFcWEhZPAB4MQQtIDQkbCAgNRkJTXxUQDRIABgxMWQsJTxMOS1dCV1gCBl5aeGMiBEwRDQwVDl8SdFdFAhFEBAYADgIXaT8aAwFIUUQIFiANDTUBAAACDQUJAgAHSBJdXVIEDw0DGx0JTEsPDRgNDl5BHBJGDhFIWR4MFwlBQx8ECAUNRlVKQhQRSFp4LBkcXwYfHAgEQwgQfFMUF18VHkkAAklDDw4PD0RWHBJBCBdFVBNJCQVKC0EeFApBW0RLFhELQgAdSRMJTA8FHAxLTFdDRl4EF0QXUovh+A0QAwkVRw1RWVxTDAJZHRFJDQVKCxgGDwwNRlhTQkELRBMaBQgLRRcfTwcKTltRXhYCDEMAHRwTHwNpOgYDDhcSeFtRCU5LFQEBCANDT0wcDhtFW0NGXwICWREWRUENQwdMDhQfRVdeRl8CTScnFx0VBUMEVk8WA0RGVRJUAABGEwAGFAJJT0wKGA4AXlVEUw1DSwYdBxVMSwIPCk9hJ2ZVUV4PCk4VHkkiA0MQGB0AAkNGQwg8LAJEGgYICAINAAMBEgJeRlVcQkEPRBMaHQgCSkMNDBMEXkEQRl4EQ08YFwcFCUlDCgoAH1hAVUEYayxYAAIcFUxEDUxbCktfV0NdWhQXRBscRUEeTBRMHwkEWV1XQFcRC1RUAR0YAEhNZmUgSx9KAhJREwpJVBEBAB5MABgKE0teWlVXQkEMS1QADAcJXwYCDARLRF9RVVNNQ1ocGx0ETE8CDwQGGUJHXlYYQTdFEVIOEwVJQx8HDhxeEkRaU0EQTBkXSQIETBENDBUOXxJWQFkMQxlUFgAHCkgRCQEVS05TXVdEAENMGhUFBB8XQ11BQS1fXV5GFhcKSANeSVNCDS8JCRVLfUBfVF8NBg0CGwwWQA1QQk8zAkpaRBJiCRFIEV84FA1fFwkdQR1EV0ceFlVNDTgdHkENQwQACkEHQl1bW1gGQ1gEXEkpCUwHHwcOHw1UQlNbCA1KWlIqDgJeCh8bBAVZElZTVQgCQVQUDAAYWBEJHA==",
+          "_promptTemplate": "ENC1::IENdHB0dDh5IAgAGEh9EURBCWRMXXxUbHUEDS0MNTwUCXkZZXFUVQ0QaFgAXBUkWDQNBHEVdEF5ZDgheVB4ACgkNFwQKQQlEXVxdUQgATBhSBgcKXhMeBg8MDV1WEkIJBg0EFwYRAEhDBQFBH0VXEEJEDhVEEBcNQR5IBQkdBAVOVxBCXg4XQgdcYzUESEMKDgIODUFYXUMNBw0WF0kATEMCGBoTCkEeEF1EBgJDHRFJAwBIDQhPDg0NRlhXFggNXQEGSQcJTBcZHQQYARJTQFMAF0QaFUkATFgNBR4UDg1cVUUWCAdIGgYAFRUNFwQOFUtPV1FARUECDQcGGw4CSkMKDgwCQUsQQFMSBkAWHggPD0hDGABBCUJGWBJfDxNYAAFJFgVZCwMaFUtPV1lcUUECDRAbGwQPWUMPABESDV1WElMIF0URAEdrL0wTGBoTDg1GWFcWEhZPAB4MQQtIDQkbCAgNRkJTXxUQDRIABgxMWQsJTxMOS1dCV1gCBl5aeGMiBEwRDQwVDl8SdFdFAhFEBAYADgIXaT8aAwFIUUQIFiANDTUBAAACDRgXCAQFSVdCT0tBDkIQFwVBG0QXBE8HB0xFXFdFEk8NBB0bBEFBBhoKDUteWVlcFhUGVQAHGwRCJyYUHxMOXkFZXVhbQ2MRBx0TDUFDDQEFS05TXlZfBU8NAxsdCUxMQwQGBgMAQ0VTWggXVFQCAQ4YQkMeCgAHREFdElcEEFkcFx0IDw2B7PtBGEJURB4WAgpDER8IFQVOQwAGBgNZW15VFhULTABSAQgLRQ8FCAkfXhJWU1UIAkFUEQYPGEIWHhxPYXtbUlcMQStEExpEBw1eCwUAD0cNQV9CXggQWR0RCBUJSU9MDg8PDVNFRl4EDVkdEUdrP0gXGAYPDBcSR1pfFQYNFhMKCgtfDBkBBUcNV0lXGw0GWxEeSQceQg0YTwcKTlceODw1Bk4cHAACDUFDLwAPGFlAUVtYFRAXfj8ICAJZAgUBQQhCXENbRRUGQwBSBQgLRRcFAQZLTFFCXUUSQ1kcF0kDAEgNCAoFS0tXUUZDEwZeWngmFBhdFhhPCAUNBlsSRAQQQhgHHQgDQ09MHQAcDUJYXUIOBF8VAgEYTF4XFQMERSc4cRIEGVENEwAABUxOCw0dAAhZV0ISRQkGSABSBgdMXwYKChMOQ1FVEl8MAkoRXkkWBEQXCU8DCk5ZV0BZFA1JWlI9CQkNBB4GBUteWl9FRUEXRRFSGgABSEMPBwAZTFFEV0RBBV8bH0lVTEkKCgkEGUhcRBJVAA5IBhNJAAJKDwkcW0scHBB0RA4NWVQEAAQbAUNeQUEnSFREEmYTDEsdHgxBGkQGG0NBWAMSYltRCRcNIBobBAkAMhkOEx9IQBBEXwQUAVRGR0EgQhRMDg8MQVcQXlkOCEQaFUkUHANDJAoAD15aX0YWBxFMGRsHBkINIAMBEgJeRlVcQkEFTBcbCA1MSwYNGxQZSEE=",
+          "_params": {
+            "gender": "female"
+          },
+          "_locked": true,
+          "_label": "人脸合成",
+          "_description": "选择生成性别，提示词会自动封装到该图片节点中",
+          "size": "3:4",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/58acd8d85f46a133.jpg",
+          "model": "nano-banana-2",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图8",
+        "relativeX": 1940,
+        "relativeY": 2414,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b74546ae7e74645f.jpg",
+          "content": "ENC1::hNOrkf34hPKmheHNh+O92qOe0PzdxOHNjvrYyOz9gN3nyYiK2rLZh5X5l+b5",
+          "model": "gemini-3.1-flash-image-preview",
+          "provider": "comfly",
+          "_locked": true,
+          "_label": "效果图8",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图10",
+        "relativeX": 1940,
+        "relativeY": 2810,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2cdbf4624fb60ac9.jpg",
+          "content": "",
+          "model": "gemini-3.1-flash-image-preview",
+          "provider": "comfly"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图14",
+        "relativeX": 975,
+        "relativeY": 4916,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/228fda2cf3258dd5.jpg",
+          "content": "",
+          "model": "gpt-image-2",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图15",
+        "relativeX": 0,
+        "relativeY": 4010,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/622c3a65ed8eaf4e.jpg",
+          "content": "",
+          "model": "gpt-image-2",
+          "provider": "comfly"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图9",
+        "relativeX": 490,
+        "relativeY": 2636,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::h+mnkenXUIiVzoX6/Y6JhtSKtob5qZDI04blhIDs7of3oNqTt9D63Mv50I/p/Mj40l2G8anUkIXTzPPCyP6A9PDIx9iL2+fKqLTWjNuEpN2R6eCKse6EzOSNto3Wv5SH672R6ddSi7fnis/WjoCi3466iPaxkdbdhdSkhPbrhdGX1bmb1eHiy+j/gcLpy/jTiezJy7qg163fV8ru9o/B28jO/IDd58SnrNeS1Ya275Xz5YiX2YvmyIits9auu4nAqJLp1ofhj4Xk/4TwkwfXqLKHw5qR3/mO0KGK+fOEz5nWiqbR++fJzsiO6MXO4+2J/ebFkbXUrd6FoNaU4fGJtt1aiPvvy5KH15vxjJH4l+faiqPqhfr9jomG1bebjt+hku7phtelh9Pyhv601oqm0tnJxOHujMXYzuPu",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "resolution": "4K",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/44e916ba69622aa0.jpg",
+          "_locked": true,
+          "_label": "效果图9",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词3",
+        "relativeX": 2288,
+        "relativeY": 4520,
+        "width": 368.776751413875,
+        "height": 377.77373009132975,
+        "data": {
+          "content": "ENC1::icyak8nwh+S8i9P2hdOH2pe038Pyyu72j/baxPTYgNz3yqaL26vDjJDolPDOiaXIQ4n90cmPvd2L/Yq46JfN1YSS84nlyYSQrtiVpInqn5H4wYXRsYzR84nKhdSztxmH4KiTycOO0bGG6eaG0ZLXv6rT7fXCyP6N2snI7OaH3vvEp6zRtuCEuc+b9MOJpeSK4sODp7DVl7k=",
+          "result": "",
+          "model": "gemini-3.1-pro-preview",
+          "provider": "comfly",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "提示词3",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_video",
+        "title": "参考视频",
+        "relativeX": 1950,
+        "relativeY": 4539,
+        "width": 188.0,
+        "height": 340.0,
+        "data": {
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/667d849403848995.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/2f90e5d117527d0e.jpg",
+          "content": "",
+          "seedanceTier": "standard",
+          "provider": "jijing",
+          "duration": 15
+        }
+      },
+      {
+        "type": "ai_video",
+        "title": "视频2",
+        "relativeX": 331,
+        "relativeY": 5426,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::h8OUkv/Hicuris7+ie+31Kye1eHiyPz0gPTwyPjSiPX0y7qg2pHnio/lndXthIviit7jjrya1Iq2hdmXk/vAguyshfDiicio17+w3uHgxcPtSYXUrYvr247XodehmtLb78nOyI7oxc7j7Yn95sWRtde544ut95re/oiV44To1YSRvtWjnoXbpJDI04blhIDs7of3oNqTt9Pu4cX08YHW8w2H1O+J7JndjL7T8MvI7+mN29bK6sWM4erLrr3aleSGovaa6eKEmvxMi9nrxbWE3YrthrzcltP1iJfZi+bIiK2z1q67icCokf3rieyui9vwhdOt2reG2d3vyuDJgPzOydvBi9nmxZSx17HbhKPEltLaiJD2ivnmjoCl1Z+hhNq4m87l",
+          "seedanceTier": "standard",
+          "provider": "jijing",
+          "size": "9:16",
+          "imageMode": "reference",
+          "duration": 15,
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/31a838b0ad0fdcf7.mp4",
+          "_resultStale": false,
+          "model": "seedance-2-0",
+          "seedanceVipResolution": "720p",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/5bc524535f69b882.jpg",
+          "_locked": true,
+          "_label": "视频2",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceIndex": 23,
+        "targetIndex": 24
+      },
+      {
+        "sourceIndex": 41,
+        "targetIndex": 24
+      },
+      {
+        "sourceIndex": 17,
+        "targetIndex": 2
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 2
+      },
+      {
+        "sourceIndex": 18,
+        "targetIndex": 3
+      },
+      {
+        "sourceIndex": 0,
+        "targetIndex": 3
+      },
+      {
+        "sourceIndex": 19,
+        "targetIndex": 26
+      },
+      {
+        "sourceIndex": 25,
+        "targetIndex": 26
+      },
+      {
+        "sourceIndex": 20,
+        "targetIndex": 27
+      },
+      {
+        "sourceIndex": 40,
+        "targetIndex": 27
+      },
+      {
+        "sourceIndex": 11,
+        "targetIndex": 32
+      },
+      {
+        "sourceIndex": 13,
+        "targetIndex": 32
+      },
+      {
+        "sourceIndex": 10,
+        "targetIndex": 32
+      },
+      {
+        "sourceIndex": 9,
+        "targetIndex": 32
+      },
+      {
+        "sourceIndex": 12,
+        "targetIndex": 32
+      },
+      {
+        "sourceIndex": 32,
+        "targetIndex": 34
+      },
+      {
+        "sourceIndex": 33,
+        "targetIndex": 34
+      },
+      {
+        "sourceIndex": 8,
+        "targetIndex": 34
+      },
+      {
+        "sourceIndex": 31,
+        "targetIndex": 34
+      },
+      {
+        "sourceIndex": 14,
+        "targetIndex": 34
+      },
+      {
+        "sourceIndex": 15,
+        "targetIndex": 34
+      },
+      {
+        "sourceIndex": 16,
+        "targetIndex": 34
+      },
+      {
+        "sourceIndex": 29,
+        "targetIndex": 42
+      },
+      {
+        "sourceIndex": 4,
+        "targetIndex": 42
+      },
+      {
+        "sourceIndex": 5,
+        "targetIndex": 42
+      },
+      {
+        "sourceIndex": 6,
+        "targetIndex": 42
+      },
+      {
+        "sourceIndex": 7,
+        "targetIndex": 42
+      },
+      {
+        "sourceIndex": 12,
+        "targetIndex": 42
+      },
+      {
+        "sourceIndex": 44,
+        "targetIndex": 43
+      },
+      {
+        "sourceIndex": 30,
+        "targetIndex": 32
+      },
+      {
+        "sourceIndex": 21,
+        "targetIndex": 37
+      },
+      {
+        "sourceIndex": 22,
+        "targetIndex": 37
+      },
+      {
+        "sourceIndex": 37,
+        "targetIndex": 36
+      },
+      {
+        "sourceIndex": 37,
+        "targetIndex": 38
+      },
+      {
+        "sourceIndex": 37,
+        "targetIndex": 39
+      },
+      {
+        "sourceIndex": 44,
+        "targetIndex": 30
+      }
+    ]
+  },
+  {
+    "id": "wf-clothing-fixed-video-trial",
+    "name": "服装展示模板2（试用）",
+    "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
+    "icon": "Video",
+    "category": "trial-video",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/ba2788d87ee7130c.jpg",
+    "cards": [
+      {
+        "type": "ai_image",
+        "title": "参考图1",
+        "relativeX": 0,
+        "relativeY": 2494,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/073441c62a356301.jpg",
+          "content": "",
+          "model": "gpt-image-2",
+          "provider": "comfly"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图2",
+        "relativeX": 0,
+        "relativeY": 2890,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/bf5f2ed455597b74.jpg",
+          "content": "",
+          "model": "gpt-image-2",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图1",
+        "relativeX": 405,
+        "relativeY": 2692,
+        "width": 190.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f215ea6f99382fbb.jpg",
+          "content": "ENC1::hPiTRZXz5YqFwovm2IyEjdSKvIT4k0aV8+WKse6EzOSEkb7XpqmH672T69SE1riLy/2J4p/WiLvexuXI78yK4e4=",
+          "model": "gpt-image-2",
+          "provider": "jijing",
+          "_locked": true,
+          "_label": "效果图1",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词",
+        "relativeX": 0,
+        "relativeY": 0,
+        "width": 680.0,
+        "height": 420.0,
+        "data": {
+          "content": "",
+          "result": "",
+          "model": "gpt-5.5-medium",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词2",
+        "relativeX": 1171,
+        "relativeY": 996,
+        "width": 497.243600628217,
+        "height": 332.66508348605055,
+        "data": {
+          "content": "ENC1::TEMHXpbT24ukykZFjte31JiT0ejabJvO5YTVmYvR1IXRt9SEgNPE0Mv01Ybd4MTY/Yb01Mi9od2K7YS0yZrIzYSMyEeI0NjFu4Lao9+Hlema7NGJneJHiPjWxKeP2pXFSMTP44Ho3svq54nu+8i+tTgbQUkHkuvGhOSGSUaA3fHJip3Xs8mFtNud1e1VF1JaiMr9yru43YrthpTHms7niZzmiNfMjbO21amIa04NXliM/dbL+sNFS4SRqNast4bNrZPz2YTOtIbW+Ij2j92Mvt7i78vt3Y/95cXCz4n/3cu+stWv3IuM15Hp4IWW8onz546qgTofFktJyPH7jtvTB0mD0/uNsqbVoLqH+6OQyMeEwomG6uqE7qTdjL7R/fzI2uyO9dnI9uqG++TLub3agsmFqet4REFGB4r584TPmRga3Yr7hqjclcHqibbZicH7grCr1p+Ua2kAWV9ja08OQExbiP6x15SG0MHbyMvxjO7uy/bch8DDJzgTERVBSQed5/WE45qF+9mI/pLVpInf/MHL+/2B3tzI6cSL3PfLsbXVjctJB354WE1fXoXBzIj2j9eBp9HF2cvo/4HC6cvOz4b8ycqZqdWd6oaT2pXF8ISqyYvr12EnABwARYXdipzIwoTduITI1YT7vNe/gd7cz8XO2YzQ+crH1ovfzMSvktWM3oWw1Zruy4up1WZlUkceQdixuoTenJHD/IbIl4bC44TuhdqNnt7byMX3/ozO1cjS+YjF0cWxvNu1yYaUx5v0+GYnV0BdEoOQntWpqIfOjp3vy4nRgYb38YfGjtutkNPfzcrY443b/sjpxIfmwcmNkTg8TE4AfnhKQk8NhNfwhdOt1L+i0cXZxdv/j8nNy/7TZWtGDRga1aL+hrbKWEOO0LcDN1ZbWhvWiJ/T5MvL7d2M2N/FxOoyQUANadaal4bqlDVZj/3hxcDpRITElNeKptPG3Mv08zRBRw04hOztjbSd17OGhMG0nNPKh/KbSIXU8I6xtNW1hTxDBlQpj/74yPHgifnlyYie15jFhqvxl+zoMQ1ITDSG97LXnqzR9dbI4fSA++PL6OEyAWEAEhoY3sblxNbjQ0uDkfkMNIj+sdeUht/8+svZ0DRBRw04isfAjKSL1Z2PhNm5kfjBhdGxPkxEQTDInYnXjPWFusKb/N4xTWlmievhxY2p1o7Li6nulPXNiJXOiuDug5KC1IiMhuqEl/Loh/Cgi8/qhvGp17a308/ay+/Nj+zOy+v8ivrVH9WqttLb2cr924rh7cv/4YfC7su9v9qJ0YyR+JXnzomP4Irg7oOSgtapiYfuj5L6+YT3k1KL9eWNor3YjYaC468=",
+          "result": "",
+          "model": "gpt-5.4",
+          "provider": "comfly",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "提示词2",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图2",
+        "relativeX": 830,
+        "relativeY": 992,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::h+mnkenXhuWqh9TChvGp1oqI0ejKyPrJj+/l",
+          "size": "9:16",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/16e639b6ee429437.jpg",
+          "_locked": true,
+          "_label": "效果图2",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "帧 15 · 00:07",
+        "relativeX": 270,
+        "relativeY": 566,
+        "width": 139.0,
+        "height": 240.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f6cef7f9ec8dc263.jpg",
+          "content": "",
+          "sourceCompositeCardId": "a483197a-07cb-4d72-a878-e409b273c8af",
+          "sourceFrameIndex": 15,
+          "sourceTimestamp": 7
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "模特三视图",
+        "relativeX": 245,
+        "relativeY": 992,
+        "width": 190.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/f215ea6f99382fbb.jpg",
+          "content": "ENC1::hvmpktrIhuWUhMXQhdOn1aq20P3uxdf3jvXzy+v8iPjWyIil2pHzi6TGltHohIrlifTf",
+          "model": "gpt-image-2",
+          "provider": "jijing",
+          "_locked": true,
+          "_label": "模特三视图",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_video",
+        "title": "视频",
+        "relativeX": 1891,
+        "relativeY": 1190,
+        "width": 195.0,
+        "height": 340.0,
+        "data": {
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/01c58f143acb0dce.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/8fa95b2f30822dfb.jpg",
+          "content": "\n",
+          "provider": "jijing",
+          "imageMode": "reference"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图3",
+        "relativeX": 1818,
+        "relativeY": 868,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "content": "ENC1::h8OUkv/Hiei3hfDDjteh16uMB0GEt/CW09uLpMqK8+yCiILfjrqE+JNGUo776Mj/1on4xMKOvNWi/oWl5JbR4YiVyYnn54K4rtans4XZppHp1w==",
+          "size": "16:9",
+          "model": "gpt-image-2",
+          "provider": "comfly",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/df5888889ab375f2.jpg",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "效果图3",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "场景四视图",
+        "relativeX": 170,
+        "relativeY": 1542,
+        "width": 340.0,
+        "height": 191.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/df5888889ab375f2.jpg",
+          "content": "ENC1::hvmpktrIhuWUhMXQhdOn1aq20P3uxdf3jvXzy+v8iPjWyIil2pHzi6TGltHohIrlifTf",
+          "model": "gpt-image-2",
+          "provider": "jijing",
+          "_locked": true,
+          "_label": "场景四视图",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图3",
+        "relativeX": 212,
+        "relativeY": 1944,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/bf5f2ed455597b74.jpg",
+          "content": "",
+          "model": "gpt-image-2",
+          "provider": "jijing"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceIndex": 10,
+        "targetIndex": 8
+      },
+      {
+        "sourceIndex": 11,
+        "targetIndex": 8
+      },
+      {
+        "sourceIndex": 3,
+        "targetIndex": 4
+      },
+      {
+        "sourceIndex": 0,
+        "targetIndex": 2
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 2
+      },
+      {
+        "sourceIndex": 6,
+        "targetIndex": 5
+      },
+      {
+        "sourceIndex": 5,
+        "targetIndex": 4
+      },
+      {
+        "sourceIndex": 4,
+        "targetIndex": 8
+      },
+      {
+        "sourceIndex": 4,
+        "targetIndex": 9
+      },
+      {
+        "sourceIndex": 7,
+        "targetIndex": 9
+      },
+      {
+        "sourceIndex": 5,
+        "targetIndex": 9
+      },
+      {
+        "sourceIndex": 7,
+        "targetIndex": 4
+      }
+    ]
+  },
+  {
+    "id": "wf-clothing-show-video-trial",
+    "name": "服装展示视频模板（试用）",
+    "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
+    "icon": "Video",
+    "category": "trial-video",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/d6587f3956a25f9e.jpg",
+    "cards": [
+      {
+        "type": "ai_image",
+        "title": "参考图1",
+        "relativeX": 0,
+        "relativeY": 40,
+        "width": 255.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/e93bf6f3a88833dc.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "效果图1",
+        "relativeX": 1235,
+        "relativeY": 40,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::h8OUkv/HidO0h9TFhOOr26Wu08XXxfDoj/3Ayvfzien7yYqw1o7LhoP4lPzVi7fnivrkj5e517u+hPiTm87licqshd3thdGX1bmb3tb8yt3Nj/HBydvsh+bfzrKy",
+          "size": "9:16",
+          "model": "gpt-image-2",
+          "provider": "jijing",
+          "resolution": "4K",
+          "quality": "low",
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/81b56caab8aa4d12.jpg",
+          "_locked": true,
+          "_label": "效果图1",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_chat",
+        "title": "提示词",
+        "relativeX": 405,
+        "relativeY": 0,
+        "width": 680.0,
+        "height": 420.0,
+        "data": {
+          "content": "ENC1::hd6NkurGhdSth9Hih/eg2pO30f7OxdP0gMP9yMzQid3/zrKy2pnWhrLOltPvi7nLiufWj5W41I6WhvmpkMjThuWEhvfRhPmh1Ky/3sLmyO/Mht3gyvfzien7yYqw1KvAiq32l/npTGwqTIfG7cSQodeBxIaow5bU3ou5y4v15Y2xv9iRs4TSuJPW04not4Xww4Lrrzg62pHnio/lm8rvio3fieDjg62x346sa4WF1ZbS3oiV44vI7IOqmNe2gIb3spLG0oTgu4Xw4onIqNeBp9HF2cXT9IDD/cLf9ovb0cq7mdeqyYaD0Jfv5I+t4oX4yY6jt9Oyt4nWnZHJ44LsrIvN+ITPmdGws9Pb9MTnyID2xMjsz4np/ciLgtex4YS565Td2omx2Yr2zo+Vn9+Ouonkh5P234TtsYrN0ILrrNSlhtHx5cXV0Y/94c7j7Ynqw8iWhNe58ICt9ZTi3omh5o/v4I2okNa3lInWnZH4wYLsr4bmx4XWsdStjNPd+M7084He8sXXw4zh6smKvde3+4eQ6J3V7Ymu7Ivz/o6DrNW1jIj0hZH75Ifku4vbwInUqtSnhN7DyMTu/Y/o58vo4Yrp28qotNaO4YWDwZrO54WP8o/v42En2o6h0+TGxdP2jOn1wt/2ZYTwkwPUioyF2ZeT+8CE46+L7OyO16HXv5jS3v7K4euN29bK6sWL2//InKjRtuCLqcyX9+qPreKJ4PCOs7nTsreExauR3NCC7KyL7suJ4p/RsLPe28jL6eKPzvjJ3eeM4erIi4TbiOWFqeuX++2KnfeE28mIrbA6163fUcnMyI/94cXA6Yru6cWys92K7YaS8ZvI2oiVxorP3Y+Sr9a+t4f/oJzR7IjOsYvl3YLrrNScjNPd7M7084z60svC5Izh6sq7uNeo6oCt9Zv0w4q7+o/v4IKPtNW9lYLjrJzQ/4TypoDs7onundWKjdXh4sXX64D00wKLz8uI/pLXor7Q8c7E8f+M5N/K0NeM4ekn1oi/09/0y/nQgeXUwt/gi9nmyIyn1KLYhqLsltPbi6TKidbVgpO21rapjt+hkMrkhNK6hfjWh8eT0bCz0PXaxf3AiuHty+7OivrVy5O40bbjaSec1e+IzryLyu6H2q/djKg8TEMUTkNfQYuG9Yne7mEAEtalgIj2klRDWUxdGEOLyPNhABLVorqF262QyNOG5YSA7O6E+6HWiLLQ/e7F1/eK4e3I8+CL2evIrorUr86ArfWX+e2IleOJ6uiMl406HxaF2ZeT+8CE5oWH0fOJ7IfVtITZ3e/L2/2N2cbI6cSL3PfEsY3UquiEueuU3dqLveWL+9BhABLVg6OGx5eR3OWH+ZmExdCH+4DdjL7S2e7I+9iP+cPL6OGH5dMnHxDasdKGneWX7tuLo9OI1+GNgZPVt56J2YaS+v+J07yG6ceJ0YbVpInf/MEnWVKB5t/I0/2K5tHKvIDWjuGFgdWX5OuEl8iL1OeDp7DXpo2I/o9+X0mJ656G3P6E7JfVvoLS2ePL2NOB5sbK59qH1NvIuJjUvveLkNia08pmAEOK5uqCrprVuJ6F3rGRwviJ7KGG6+mGyoPdjL7S2e7F98+N2N3L78llTEvIvrXRtuCFpP+a7uOPreKJy9WOoqPUiruJ4JCd59aH+5uK+9uI6oPUvJPQ/e7F1/eA5uHK4dVlTEvFtqrUm8SEseuXx/+Ko8aJ89GEkb7UiruJ4JCSyfiHwYhpQU+F06DalrPTxdvIyNKP8OrL6OGM4erFhYPavv+ArfWU4MyErsyP7+CMuZvVloKC46yR+tKH6KKL2d+GzK04OteK4YaxzpfjyYiQ/4Toy4KtsNWIoonEqZH68I7Qt2mJyeONs67VroyH+oKQysSH8KSFzeOJ1ZTRsLPTw/rE6dCK4e3E9MSJwO3OsrHUlu6FsPKR6eCKsv+JwvGIrbPYj5CI9IWX8uiHyKiL7+OGxqTXv53T4fnE6dKO6MXC3+CL29HKu5nXuc6HltGa1NqFsMOI1+GPlbnfjrqE3o+S+vmJ64eE6NmE163XrIjV4eEnfpfP44qz/4nz2420ndSKm4fRjJLu4ITjgobs9Yj2jdW5m9nd78nM/4HH7cjf1ofA58qmr9S+8YWM+JfE8Y+t4onN+IOKoNOyt4fDopLv74LsrIvRyYj8hdS4pNPF+cnJ64Dg/8jm24zh6cumidWiyYeW0ZbR6oSqyYvr146RstWujITphZDP9Y7Qt2ldQUGPl4jXu5+GyLSR7sGE4rKG8N+O16HWjbzTxdfFycmB3NfL9tiI8e3Fk5PUp+eArfWaysWEqNOP7+CDj6TVvZWH67uR/uyE1IuA7O1rWQMS1IiMhuqEkMnnhviWivHNhdOt1o6V3ubJyvDEgdTcyObJgN3nxYeA177RhLnPm/TDiJXOhfjVjr281qaIh+aPnPbzh8GIgOzta1gDEtSIjIbqhJPZ8ITCt4zQ44nWltqNid7R4MvhxoHbx8ne/4bm5siNs92K7YeV9Jfmy4Sp+YToy4yphNWip4TqoJH/44fBiIDs7WtfAxLUiIyG6oSS+MWH5aaL0dSJ1pbUu5rT3ePI0MaM7v3C3+CI5d3Ior7VquqGveWW18aJpO6K+diIrbA6BxhBh5fOleDIiJDticvVjLG51Iq2hv+RnNPKh/CgjNDjhO2g2reY0eXVy/7ejv3QzuPuZVdFDdaKiNHoysv9+YDm4Mvo04j868i+tdS+94Wk/5T124OR74Toy4yphNWstIT/hZzIwoXSiozQ44XToNuxnNDtwsvo/4HC6c7j7mVrg4KF1r6/hdiIkMrihte+hfLridW+17eI2d35J35RSkGEiuWFzfCOg6jUj7trTg1eWIHG6sTB/YjQ0Misuxgcjt+3nPXDhuibhMXQh/uA14Gn0cXZDVtSjObWxPTEiujmypuP1KbMi4PEl9T0TAJDi/v+jZmJ1b6gh/+gnNHshsugi+Hma0YNGBrUltmGkveU7f6EiupGRY7Xt9q3mNHl1c7084/80sjf94zh6siLgtex4YCt9ZX1/omD/Y/v4IOtoteuvWtODV5YjND5ysfWhubmyrCJGByO37eS592F0b6Fw/uF1abRsLPS2enI+fiB28fO4+2H5NvKiI/RtuCLju2U+OdDxcDIiv/gzrKx26vDhbvtl+PJiq3ij+/gjb2f2be7h9O2kenda0ENSUaG4enIorjXqtuFtNtYQ47Qt4r7x4TlqNGws9/k8cjO5YHU3MjY5ozh6siclNew5ISj8Jfs0o+t4on99464k9WIoYj0hZH9yoLsrIbV3YTsrdeSq9/8wcvj84rh7cXM+YfAyMSlhNeS94eT05Hp4ISM9InL1Yits9WIoYjwl53lwYTjjmlmTEJLyL2y2rbii4rym8vwiafLiNL9jJah1qyya2kOV1FJUUEehMv9jte32reY0eXVyMjyjP3WJ05MRUuMuYnZr5RLScLI6I3b1srqxYrm0cq8gNeqyYaUxpfu4Yu5/Irb2o6hpNWujIf6gpDKxILsr4bK7Yf1sdesiND4zMvo+4zuw8jj9ob8y8q7md2K7YeXzpXgyImizIjUxIOQidmvlofCoZzM0ILsrIbO9onVlNGws9/2y8vV9Irh7cv88Iff0su6ptqLx4q63J3V+omL4Yrx/Y2fk9auv4TsgpHy84jxjYTlxo7XodaKiNHoysXz2I7l2srI9YjK4Mu6ptaN74S5z5v0w4iV44jRxoOYgtW3k4Ljr35fSUtGydnWiOjCyLiY1ov9SQebzvOF1peE5caF1qPXlIbe3NjFycmP9NjK8+qHwMjLo7bRtuCLjtCa7NGPreKEzfeOopHWuqCE76iRys+O0LaH1fCE5ILWi5fe3NjFycmP6sTI3+yKxd/IvaHdiu2LnfeU/NWEl8iI0vKCqr/VjbWO36GQyumE44eL6PWJ7IfVtITT8fLI/f+M7ObLzsmM4eknHxAYHIj2sZHW3UtGwt/2i9nGxY2s1K/OhaXimtbwiajLhNXKhJG+15qFhM23k9n/hN2ijNDjhO6l2p6b3sbhycjljv3ny9vpifTfyY+j1Z/ehb3ZkenjZgBDRkWE2rjVlIjf5u7K9stDS4OR+Yrz7IOOt9angoXevpLd/YXSpoDs7ojJsdq5gNXh4sXJ3Iza/8jx4Ivb0cq7mdSG9YuZ3JHp42YAQ0ZFhOGF1o2u3sfiy8XwQ0uDkfmI1+yDi7PVjoyJwqGSxdKE5o2FzeOExr3RsLPQwezL6fSK4e3IwfWHxvnOsrHai8eKutyVxOiFrPCJ6taIrbDVuJ6F3rGRy+yE1ouG3OCO16HXs73R/fzI2uyM5tbE9MSK6ObEqL/Uv+qFuMCV+eePreFmZUJIDhIDHwCGxL+bzvOF1KeG4eWJ0Ybat5jR5dXL4caO8eonTkxFS4y5idmvlEtJwsjogPTwyMfYh9zQyIye1LjJi5Lvl+HRiYnXiefRg6iC2bGeguOvfl9JS0bJ2daI6MLIuJjWi/1JB5vO84XWl4TlxonWltqNidD018rk9IHAz8TB6ozh6sWQpte5woCt9ZbR6oq85Yrn946ht9WKkI7foZ3o5oT8o4Xmw4b3kdWsudPx8snK1Yzo4cv11Yzh6ScfEBgciPaxkdbdS0bC3/aH3NDIjJ7UuMmLkuWd1e2Ikv6K4+CMhYHVnKyC469+X0lLRsjS+YjF0cS1vdW02EkHm87ziM6rhuPMguus2rKb0dvczvTzgcP6yP3njOHqxK+S1KD4i5nclO3+j63ihOrRjJeN07K0a04NXliM68TJ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lP/4hJnXif/pjpeU1aC6h/OAnffkh8O5h9LkguuvODrXkOOFs+iU8c6JifWJyvaEkag627HshK/Nl9j0i4nZidTyjpCQ07K3ieGEk8jWguyshtDvhPul1bqE0OHizvTzjNDuy8/NiuTYyoGL16Tti4z4mtzRirrVi/Xljby01bieh+eyl/Lra2YOQEyK7sTKqYTUuMSEudyW0++EiuWFzfCMua3WuqaG+amS/fmGyJeLw+JrYcWdh9Wi/oWl5JbR4YqwwkxWW1obEteZoITSopLu5InPqIbd+obPl9qXtN/D8sLI/o/22sT204jbzQ0DAh8HVEPK0+CG3eDI5fWKz/XFtZrVsteKjvqUyd2Dke+J7O6Msa3VnKiG97KSxtKF1ICG69WI/IXXub/Q6fXFw92B3uvL9NqHw8DEqL/Uv+qLg8SX1PSLt+eI1+GNg4fXm4mH84Cc1e+IzryA7O1rYcqmi9urw4eV2Zfmy4qx6on/7Y+VstSPu4XZl5P7wI7QoYfW1YbihNaIl9DB38j78IHh78j40l6O16HWj6/Q7eLJzuaMz/TO4+2H5dPIrLvRtuCGouWX9+qPreKJyeeOg4vTsreJ4Ymc+9uC7KyL1sSH9r3Un6bS3+jO9POM2NjE3eiJ5fTIoLzUhvWLmdyW0eGEqteP7+ONsb/YkbOF24iS0tWE46+L7OyE8JMA3466hdywkv7oiM6xi+Xdguus1JyM093szvTzjPrSy8LkjOHqyru416jqgK31m/TDirv6j+/ggo+01b2VguOsnND/hPKmgOzuie6d1YqN1eHixdfrgPTTAovPy4j+kteivtDxzsTx/4zk38rQ14vZ68W1hNG242knnNXviM68h9fhhNKf17ey0fX8y8DJjO36yP/WifjEyI6w15HqgK32l8/jirP/ifPbjbSd1q6/h8KhnMzQguyshs72iPaP0bCz3/bLy9X0iuHty/zwisz7zrKx1JbuhbDykenghJDFhfjJjIC71b2ZhOO3ne/JhuWEjNDjhdGX1bmb0+7Myc/XgdzXxP7Mi9nryYq73Yrth5D6l83VhKrJi+vXjbiG16KwicKOku7kh+S7huDqhNOL3Yyp08fhy+rujP3Wy/rDidPKy66517nOhq3um/TBi6TKg9Ptj5eI17ufhdugnNTohNCXi83jhOu3262S2d3vycz/gcfty/XcisP1yJaq1ov4iqznl+zWg5HvivvYj5WI2LWchuebk9nwhsemgOzuidaW1KWG0fHlxdXRj/3hzuPth9Hoy6eE27HshpL3kengiJbti/vagrCQ1Iq2hd2KnMfZhOmIheT5idaW2o2J0OrLyPvjjN3syP/WjOHpJzjZp6qEx5mR9+GG+IWL0/6E7oXaipnR9djE6dCM0PnKx9aJ9N/Jj6PVn96FvdmR6eOFt+yJ/++CuK7VloKJ3paRzMeH4oWL0/SE453WiLjT7OnFztmG3eDJ2daI6MLFj4vai9qFuMCV+eeEjMCFzeeIrbPYkKCE7I6S+v+JzY6F/emO16HXuprS3P/IzfeM28rI0+OA3efLu7vbtcmHlfmb/N6KutWF+NWCrJzWvpeH/6Cc0eyI66CE7taC66/UvpfR/OPJzsiO6MXF5MaI5d3LuZjXiuGGicCX5vCDke+E1cqPkKHYj5qH672QyuCE5KuH1eSF0aHWjpXe28jCyP6M0PnKx9aL38zEr5Lai8+GlueR6eCEqNOL1d6Ov77Zr5SH9bSR7OuE8Y2F6PCC66/VtITT8e3JzsiO6MXL5s6J5MnFh4DWjsWGpcSW0eiKgMaD0+2CuK7VloKJ3paRzMeE/KOK7O+H47vXq4jTz/nFw+2A++PC3+CK0P7KloralfiFvPJdgcLIxebTiuvDy7Kx16TthqjcmtPKioL3iNHqiK2w1q62hPOjkMjThuWEi+vFhu+b17Gu38Dcwsj+jv7By/nuiP3gyKKh1ojGhqT5lP/YiqX1hfr9jomG3466hveWne/LhdeIhsLjh/6Z1ZmN0PHOy+DEjNHSzuPuZWuNuIbUj6WE6YWQz/WJ07OE18KC66zUrYzT3fjO9POO/fPIzfKA3efJir3Xte6FvPKU4uyPreGI1duMpJvYsJ+J5a2S5teH8ZOM0OOJyoXUs7fT5OjI/MSB5sbK59qA3efKrozVk/+GotuW0sSIkO2Jy9WIrbPUjJGG/6aX8uiG84CF9u2G96bbpa7TxdfO9PCP6OfE4MSK68PJj6zXhvCLrfiX7ueLjM2D0+2DqajWn5OG/7KR3PeH4oiG8N+O16HUrL/ewubJzMmN3P/IxOeI2uPLirXUr9GGotuazuCPreGF+v2OiYbXmoWEzbebzuWE6aSE1tCH9LnXor7Z3e/F9/6P+MPI2t6K5uvCjrzUquyLjvGU8c6LudiF8sOCqr/XsI+C469+eEpCTMXX84b8ycu9oNWS24uC+Xhjh+GPi+jXjteh1KSL0+77yM3GgN/oy+fzgN3ny6aJ17n5i5fflPTxioL3iNHqhJG+1qaPh8+Tm87lh/iUi+Xdjteh1KSL0+77y+j/gcLpyPjSicDjwo682pfChbH5l+b5iZDBg9PtjbG/2JGzideZk/vuh+iyjNDjhdGX1bmb0+LWytXeht3gy/Lqiermy7av2onmiqr5ndXtiYnbidPBjaSf2LGZjt+hkdbRhNCNhPjGhM+Z3Yy+3tbQxfzsjOvEyd7wgN3ny7u727XJh5TFl+PJg5HvieDsjom/1qOOicKOku7kjtChheXkieyv27Gc0O3Cy+j/gcLpwt/giu3uxLOe1LrAi6jEldPeg5HvicvVjqKj2bOYh++MndDvhOOOjNDjhv6V142Q0Ojoy/j1ht3gyMf2i9zyy7u71LrmjJH4l837iJD6hO3Dj5Ch3466idmGkM/6h8O5h9LkhNev14iK2d3vxcHCgdbDydvhh+bByraG3Yrti6nulMTEipbyieXJhJG+2LashdugkvzMhPCdjNDjie+V27Oa09XKyOn9ht3gxcLEieLuyJaI14rBjJH4mtbmiZfFi9Hvgo+u3466hd6jksrshviWi9jHjteh2rO+0PjMy+nwjdjdwt/gi9nQyY+j1J7AhJ7+ndXtiZLIhe/+j5SD1bqxjt+hnef1hMiZhfXshOGF3Yy+093ZxdX+j/fcyMHyicDnyJ+g3YrthpHOmsjtirvTic3/jY291q+wjt+hkc7Tic2hhfrfhMmz2o2U3/bLwsj+jN3WxcLgiuHxxK+Q1o7shoDsl/XJi7fni+bIj5Ch3466h/Wqkd/+h9yZhuHfjteh1omD0cHiyNnljNj5wt/gitjYyL2A1Jbmi4Lykenj",
+          "result": "",
+          "model": "gemini-3.1-pro-preview",
+          "provider": "jijing",
+          "_resultStale": false,
+          "_locked": true,
+          "_label": "提示词",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      },
+      {
+        "type": "ai_video",
+        "title": "视频",
+        "relativeX": 1576,
+        "relativeY": 40,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::h8OUkv/HhOSrivnzhM+Z2rSo0P3Pwsj+jOnqxPbwivrVyKmOABaO36GT5vaH5L2H1O+H9owDBdWR84S38JT17ISO5one9IyJiNiVsIjBvJvO5YnKrIXd7YXRl9W5m9nd78vo/4HC6cXU84ve9su+sdaO4YuqwJHp44u52IXyw4Kwq9aflITkl5P82YTBuobV+oLrrw==",
+          "seedanceTier": "standard",
+          "provider": "jijing",
+          "size": "9:16",
+          "model": "seedance-v2",
+          "seedanceVipResolution": "720p",
+          "duration": 15,
+          "seedanceV2Version": "standard",
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/c278b8bc0cc2b54b.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/d88f33a996bf3f01.jpg",
+          "_locked": true,
+          "_label": "视频",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceIndex": 0,
+        "targetIndex": 2
+      },
+      {
+        "sourceIndex": 0,
+        "targetIndex": 1
+      },
+      {
+        "sourceIndex": 2,
+        "targetIndex": 1
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 3
+      },
+      {
+        "sourceIndex": 2,
+        "targetIndex": 3
+      },
+      {
+        "sourceIndex": 0,
+        "targetIndex": 3
+      }
+    ]
+  },
+  {
+    "id": "wf-content-replace-video-trial",
+    "name": "视频画面内容替换模板（试用）",
+    "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
+    "icon": "Video",
+    "category": "trial-video",
+    "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/4ea2ebaf9cc1e23e.jpg",
+    "cards": [
+      {
+        "type": "ai_video",
+        "title": "视频",
+        "relativeX": 74,
+        "relativeY": 296,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/7aaa8caa5c3ab655.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/636e16e69295e8f9.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图1",
+        "relativeX": 14,
+        "relativeY": 692,
+        "width": 313.0,
+        "height": 340.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/b2b911e7bedf88c3.jpg",
+          "content": "",
+          "model": "gpt-image-2-official",
+          "provider": "jijing"
+        }
+      },
+      {
+        "type": "ai_image",
+        "title": "参考图2",
+        "relativeX": 0,
+        "relativeY": 0,
+        "width": 340.0,
+        "height": 139.0,
+        "data": {
+          "imageUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/6bca30326591063e.jpg",
+          "content": ""
+        }
+      },
+      {
+        "type": "ai_video",
+        "title": "视频2",
+        "relativeX": 490,
+        "relativeY": 296,
+        "width": 191.0,
+        "height": 340.0,
+        "data": {
+          "content": "ENC1::h+mnnNXviM68h9TChvGp2pOW08zzy+/Nj+zOy+v8gN3nyom22rzjhrbKkenj",
+          "provider": "jijing",
+          "duration": 15,
+          "size": "9:16",
+          "imageMode": "reference",
+          "model": "seedance-v2",
+          "generateAudio": false,
+          "seedanceV2Resolution": "480p",
+          "videoUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/bd928444d1ef7c1d.mp4",
+          "posterUrl": "https://www.jjowo.com/aicanvas-static/templates/imported/dd2fcdda9adbfa73.jpg",
+          "_locked": true,
+          "_label": "视频2",
+          "_description": "试用模板：提示词已封装，升级正式版后可查看与编辑"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceIndex": 2,
+        "targetIndex": 3
+      },
+      {
+        "sourceIndex": 1,
+        "targetIndex": 3
+      },
+      {
+        "sourceIndex": 0,
+        "targetIndex": 3
+      }
+    ]
   },
   {
     "id": "wf-kv-poster-trial",
     "name": "kv海报模板（试用）",
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
-    "category": "trial",
+    "category": "trial-detail",
     "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/bf430d7a2603c3e6.jpg",
     "cards": [
       {
@@ -8249,15 +10484,14 @@
         "sourceIndex": 0,
         "targetIndex": 1
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-detail-cn-trial",
     "name": "详情页模板（试用）",
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
-    "category": "trial",
+    "category": "trial-detail",
     "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/572e415b2573e796.jpg",
     "cards": [
       {
@@ -8748,15 +10982,14 @@
         "sourceIndex": 17,
         "targetIndex": 15
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-detail-overseas-trial",
     "name": "海外电商详情页模板（试用）",
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
-    "category": "trial",
+    "category": "trial-detail",
     "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/4af266f3637b376e.jpg",
     "cards": [
       {
@@ -9081,15 +11314,14 @@
         "sourceIndex": 10,
         "targetIndex": 9
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-hot-replica-main-trial",
     "name": "爆款复刻主图模板（试用）",
     "description": "试用版：提示词已封装，升级正式版后可查看与编辑",
     "icon": "ImageIcon",
-    "category": "trial",
+    "category": "trial-detail",
     "coverImage": "https://www.jjowo.com/aicanvas-static/templates/imported/d2fe81797d42b3e8.jpg",
     "cards": [
       {
@@ -9175,8 +11407,7 @@
         "sourceIndex": 1,
         "targetIndex": 0
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   },
   {
     "id": "wf-face-outfit-swap-trial",
@@ -9271,7 +11502,6 @@
         "sourceIndex": 0,
         "targetIndex": 4
       }
-    ],
-    "min_app_version": "1.3.8"
+    ]
   }
 ]

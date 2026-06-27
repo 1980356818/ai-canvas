@@ -168,6 +168,32 @@ export const selectLatestTaskForCard =
     return latest;
   };
 
+/**
+ * 该卡「当前尝试」(supersededAt 为空中 createdAt 最新的那个)——
+ * 它是唯一驱动画布卡进度/错误/结果的任务。被「重新生成」替换的不算。
+ */
+export const selectCurrentTaskForCard =
+  (cardId: string) => (s: TasksState) => {
+    let cur: AsyncTask | undefined;
+    for (const t of s.tasks.values()) {
+      if (t.cardId !== cardId || t.supersededAt) continue;
+      if (!cur || t.createdAt > cur.createdAt) cur = t;
+    }
+    return cur;
+  };
+
+/**
+ * 该卡的全部生成尝试(含被替换的),按 attemptNo 倒序 —— 每卡任务面板用。
+ * 需先 hydrateForCard(cardId) 把历史灌进内存。
+ */
+export const selectAttemptsForCard =
+  (cardId: string) => (s: TasksState) => {
+    const list: AsyncTask[] = [];
+    for (const t of s.tasks.values()) if (t.cardId === cardId) list.push(t);
+    list.sort((a, b) => b.attemptNo - a.attemptNo || b.createdAt.localeCompare(a.createdAt));
+    return list;
+  };
+
 export function isTaskTerminal(status: TaskStatus): boolean {
   return TERMINAL_STATUSES.has(status);
 }

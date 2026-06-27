@@ -4,8 +4,8 @@
  * ─── 两段式,纯核心可单测 ──────────────────────────────────────
  *  • {@link planGroupRun}  —— 不纯边界:从 store 取组成员 / 组内子图 / 失败卡,组装后
  *    调纯核心。诊断日志也在这层(debug-gated)。
- *  • {@link buildRunPlan}  —— 纯函数:拓扑分层 + 环检测 + 部分运行闭包过滤。只吃普通
- *    数据、不碰 store/React/UI,单测零 mock。
+ *  • {@link buildRunPlan}  —— 纯函数:环检测 + 部分运行闭包过滤 + 产出运行集的邻接/入度
+ *    (供数据流调度器按依赖驱动)。只吃普通数据、不碰 store/React/UI,单测零 mock。
  *
  * 产出 {@link RunPlan}(可调度)或 {@link RunPlanRejected}(前置失败,带可读原因 →
  * 门面据此出 toast)。规划层**不出 toast、不动状态机** —— UI 反馈归门面,调度归 executor。
@@ -22,12 +22,13 @@ import { createLogger } from "@/lib/debug";
 const log = createLogger("GroupRun");
 
 /**
- * 组并发上限(安全闸,P3 限流)。同层最多同时跑这么多张,其余在 runWithLimit 排队。
+ * 组并发上限(安全闸,P3 限流)。**全局**最多同时在途这么多张,其余在数据流调度器的就绪
+ * 队列里排队(取代旧「同层」概念 —— 数据流不分层,峰值并发仍由这一个数兜底)。
  *
- * 取 8 的理由:既给常规工作流(几张~十几张)足够并行,又挡住「极端大组同层几十上百张
- * 瞬间发同等数量 aiProxy IPC + 轮询」打崩 WebView2 的历史风险(本仓 IPC 层对并发无兜底,
- * 见 lib/ipcLimits.ts),同时压住对上游的瞬时并发降低 429。要更激进/更保守只动这一处,
- * executor 拿 `plan.concurrency` 不感知;日后可升级为按 provider RPM 取值。
+ * 取 8 的理由:既给常规工作流(几张~十几张)足够并行,又挡住「极端大组几十上百张瞬间发
+ * 同等数量 aiProxy IPC + 轮询」打崩 WebView2 的历史风险(本仓 IPC 层对并发无兜底,见
+ * lib/ipcLimits.ts),同时压住对上游的瞬时并发降低 429。要更激进/更保守只动这一处,
+ * executor / 调度器拿 `plan.concurrency` 不感知;日后可升级为按 provider RPM 取值。
  */
 export const DEFAULT_GROUP_CONCURRENCY = 8;
 
@@ -65,14 +66,25 @@ export interface RunGroupOptions {
 
 export interface RunPlan {
   groupId: string;
-  /** 实际要调度的拓扑分层(已按 startNodeIds/onlyFailed 过滤)。同层无依赖、可并发。 */
-  layers: string[][];
-  /** 本次调度的卡总数(= layers 展平长度)。 */
+  /**
+   * 本次实际要跑的全部节点(已按 startNodeIds/onlyFailed 过滤),按 id 字典序排列 ——
+   * 既是调度集,也是数据流调度器的**确定性派发序**。
+   */
+  nodes: string[];
+  /** 本次调度的卡总数(= nodes.length)。 */
   total: number;
-  /** 同层并发上限。 */
+  /** 同时在途上限。 */
   concurrency: number;
-  /** 组内子图正向邻接表。executor 的失败隔离剪枝 / 级联传播(P2/P3)复用,免重算。 */
+  /**
+   * 运行集内的正向邻接表(src→[target...])。调度器据此在节点完成后释放后继;
+   * 失败节点不放行后继 → 下游闭包天然不再就绪(失败隔离)。
+   */
   adjacency: Map<string, string[]>;
+  /**
+   * 运行集内各节点入度。调度器据此判定「前驱全部完成 → 该节点就绪可跑」。
+   * **限定在运行集内**:部分运行时,运行集外的前驱不会跑,绝不计入入度,否则该节点死等。
+   */
+  indegree: Map<string, number>;
   /** 运行模式。 */
   mode: RunMode;
   /** 单卡可重试失败的最大重试次数。 */
@@ -107,8 +119,8 @@ export function describeCard(cid: string): string {
 }
 
 /**
- * 纯核心:给定节点集 + 组内子图边集 + 参数 → 拓扑分层并按起点闭包过滤。
- * 不读 store、不出 toast、不打日志 —— 完全可单测。
+ * 纯核心:给定节点集 + 组内子图边集 + 参数 → 环检测、按起点闭包过滤运行集,产出运行集内的
+ * 邻接表 + 入度(数据流调度器据此按依赖驱动)。不读 store、不出 toast、不打日志 —— 完全可单测。
  */
 export function buildRunPlan(
   groupId: string,
@@ -123,6 +135,8 @@ export function buildRunPlan(
     retryBackoffMs?: number;
   },
 ): RunPlanResult {
+  // 环检测:拓扑排序顺带分层,但**分层结果此处仅用于判环** —— 调度已改由数据流按
+  // 各节点入度驱动(见 {@link runDataflow}),不再消费这些「层」。
   const sorted = topoSort(cardIds, edges);
   if (isCycle(sorted)) {
     return {
@@ -133,42 +147,66 @@ export function buildRunPlan(
     };
   }
 
-  // 组内子图正向邻接表 —— 闭包过滤 + executor 复用
-  const adjacency = new Map<string, string[]>();
+  const cardSet = new Set(cardIds);
+
+  // 组内子图全量正向邻接表 —— 仅用于部分运行的「起点 + 拓扑后继」闭包 BFS。
+  const fullAdjacency = new Map<string, string[]>();
   for (const [s, t] of edges) {
-    const arr = adjacency.get(s);
+    if (!cardSet.has(s) || !cardSet.has(t)) continue;
+    const arr = fullAdjacency.get(s);
     if (arr) arr.push(t);
-    else adjacency.set(s, [t]);
+    else fullAdjacency.set(s, [t]);
   }
 
-  let layers = sorted.layers;
+  // 解析运行集:部分运行 = startSet ∩ 成员 + 其所有拓扑后继(正向 BFS);否则 = 全体成员。
+  let runSet: Set<string>;
   if (params.startSet) {
-    // 从 startSet 沿正向边 BFS,取「起点 + 所有拓扑后继」,过滤每层(空层剔除,同层序不变)
-    const reachable = new Set<string>(params.startSet);
-    const queue = [...params.startSet];
+    runSet = new Set<string>();
+    const queue: string[] = [];
+    for (const id of params.startSet) {
+      if (cardSet.has(id) && !runSet.has(id)) {
+        runSet.add(id);
+        queue.push(id);
+      }
+    }
     while (queue.length > 0) {
       const cur = queue.shift()!;
-      for (const nxt of adjacency.get(cur) ?? []) {
-        if (!reachable.has(nxt)) {
-          reachable.add(nxt);
+      for (const nxt of fullAdjacency.get(cur) ?? []) {
+        if (!runSet.has(nxt)) {
+          runSet.add(nxt);
           queue.push(nxt);
         }
       }
     }
-    layers = sorted.layers
-      .map((layer) => layer.filter((cid) => reachable.has(cid)))
-      .filter((layer) => layer.length > 0);
-    if (layers.length === 0) return { ok: false, reason: "empty-range" };
+    if (runSet.size === 0) return { ok: false, reason: "empty-range" };
+  } else {
+    runSet = cardSet;
   }
 
-  const total = layers.reduce((sum, l) => sum + l.length, 0);
+  // 限定在运行集内重建邻接 + 入度:部分运行时,运行集外的前驱不会跑,绝不能算进入度 ——
+  // 否则该节点入度永不归零、永远不就绪(死等一个根本不跑的前驱)。
+  const adjacency = new Map<string, string[]>();
+  const indegree = new Map<string, number>();
+  for (const id of runSet) indegree.set(id, 0);
+  for (const [s, t] of edges) {
+    if (!runSet.has(s) || !runSet.has(t)) continue;
+    const arr = adjacency.get(s);
+    if (arr) arr.push(t);
+    else adjacency.set(s, [t]);
+    indegree.set(t, (indegree.get(t) ?? 0) + 1);
+  }
+
+  // 节点按 id 字典序 → 调度器确定性派发序(沿用旧 topoSort 同层 sort 的稳定性习惯)。
+  const nodes = [...runSet].sort();
+
   return {
     ok: true,
     groupId,
-    layers,
-    total,
+    nodes,
+    total: nodes.length,
     concurrency: params.concurrency,
     adjacency,
+    indegree,
     mode: params.mode,
     maxRetries: params.maxRetries ?? DEFAULT_MAX_RETRIES,
     retryBackoffMs: params.retryBackoffMs ?? DEFAULT_RETRY_BACKOFF_MS,

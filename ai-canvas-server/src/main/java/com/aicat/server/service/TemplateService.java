@@ -30,11 +30,17 @@ public class TemplateService {
     /**
      * 客户端:全部上架模板按 sort 升序,返回解析后的 definition(整个 WorkflowTemplate JSON)。
      * appVersion 非空时,过滤掉 min_app_version 高于客户端的模板(版本守卫)。
-     * tier 非空时,按该等级的 templateCategories 过滤(只下发有权分类);
-     * tier 为 null(匿名 / 旧客户端)或 templates="*" 的 VIP → 全量下发。
+     * tier 非空时:
+     *   · templateCategories(allow-list)→ 只下发这些分类(用于试用档:仅可见有权分类);
+     *   · hiddenCategories(deny-list)→ 从下发列表剔除这些分类,**即使 templates="*" 也生效**
+     *     (用于正式版/付费档:可用全部真模板,但不下发试用副本分类 trial/trial-video/trial-detail。
+     *      之所以服务端剔除而非靠客户端隐藏:旧客户端 < v1.4.3 无 templateCategories 门禁,
+     *      若改用 allow-list 会把 vip1 的全部模板判为锁定;deny-list 保留 templates="*" 故旧端不回归)。
+     * tier 为 null(匿名 / 旧客户端无 tier 声明)→ 全量下发。
      */
     public List<JsonNode> listForClient(String appVersion, String tier) {
         Set<String> allowedCategories = resolveAllowedCategories(tier);
+        Set<String> hiddenCategories = resolveHiddenCategories(tier);
 
         List<Template> rows = mapper.selectList(new LambdaQueryWrapper<Template>()
                 .eq(Template::getIsActive, 1)
@@ -43,6 +49,7 @@ public class TemplateService {
         for (Template t : rows) {
             if (!versionAllows(appVersion, t.getMinAppVersion())) continue;
             if (allowedCategories != null && !allowedCategories.contains(t.getCategory())) continue;
+            if (hiddenCategories != null && hiddenCategories.contains(t.getCategory())) continue;
             try {
                 JsonNode node = objectMapper.readTree(t.getDefinition());
                 if (node.isObject() && t.getCategory() != null && !t.getCategory().isBlank()) {
@@ -71,6 +78,24 @@ public class TemplateService {
         if ("*".equals(templates)) return null;
         Object cats = map.get("templateCategories");
         if (cats instanceof List<?> list && !list.isEmpty()) {
+            Set<String> set = new HashSet<>(list.size());
+            for (Object c : list) set.add(String.valueOf(c));
+            return set;
+        }
+        return null;
+    }
+
+    /**
+     * 解析该等级要隐藏的分类(deny-list)。null = 不隐藏。
+     * 与 templates="*" 正交:即便全量可用,也从下发列表剔除这些分类(如试用副本分类)。
+     */
+    @SuppressWarnings("unchecked")
+    private Set<String> resolveHiddenCategories(String tier) {
+        if (tier == null || tier.isBlank()) return null;
+        Object features = tierService.featuresObject(tier);
+        if (!(features instanceof Map)) return null;
+        Object hidden = ((Map<String, Object>) features).get("hiddenCategories");
+        if (hidden instanceof List<?> list && !list.isEmpty()) {
             Set<String> set = new HashSet<>(list.size());
             for (Object c : list) set.add(String.valueOf(c));
             return set;

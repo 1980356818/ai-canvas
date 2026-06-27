@@ -17,7 +17,9 @@
 
 import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
+import { useTasksStore } from "@/stores/tasksStore";
 import { hasApiKey } from "@/platform";
+import { SupersededError } from "@/services/taskOutcome";
 import { friendlyError } from "@/lib/errors";
 import { diagInfo, diagWarn, diagError } from "@/lib/diag";
 
@@ -67,13 +69,28 @@ export async function runEditorGeneration(
   try {
     await opts.run();
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const errMsg = friendlyError(msg);
-    diagError("editor-gen", err, { cardId: card.id, friendly: errMsg, phase: "run() 抛错→红框" });
-    opts.setError(errMsg);
-    useUIStore.getState().setCardError(card.id, errMsg);
+    // 良性:被「重新生成」取代(SupersededError)/ 主动取消(AbortError)——
+    // 新尝试已接管该卡 UI;被替换的旧任务(已计费)会在后台跑完进任务面板。不报错、不写卡。
+    if (
+      err instanceof SupersededError ||
+      (err instanceof DOMException && err.name === "AbortError")
+    ) {
+      diagInfo("editor-gen", "run() 被替换/取消(良性,跳过红框)", { cardId: card.id });
+    } else {
+      const msg = err instanceof Error ? err.message : String(err);
+      const errMsg = friendlyError(msg);
+      diagError("editor-gen", err, { cardId: card.id, friendly: errMsg, phase: "run() 抛错→红框" });
+      opts.setError(errMsg);
+      useUIStore.getState().setCardError(card.id, errMsg);
+    }
   } finally {
-    diagInfo("editor-gen", "⑩ finally：清除进度(generating→false，解除生成中锁)", { cardId: card.id });
-    useUIStore.getState().setCardProgress(card.id, null);
+    // 仅当该卡已无活跃任务时才清进度。放开「生成中再生成」后,同一卡会有并发的
+    // runEditorGeneration —— 旧 invocation 的收尾绝不能清掉新当前任务的进度条。
+    // task 路径的常态进度清理由 taskBridge 在终态做;这里只兜非 task 路径(chat)与早退场景。
+    const stillActive = useTasksStore.getState().getActiveByCard(card.id);
+    if (!stillActive) {
+      diagInfo("editor-gen", "⑩ finally:无活跃任务,清除进度(解除生成中锁)", { cardId: card.id });
+      useUIStore.getState().setCardProgress(card.id, null);
+    }
   }
 }

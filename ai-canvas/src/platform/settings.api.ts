@@ -2,6 +2,10 @@ import { isTauri, ensureTauriAPIs, getInvoke } from "./runtime";
 import { lsGet, lsSet } from "./storage";
 import { isPlatformVisible } from "@/config/platforms";
 
+// ── hasApiKey cache ────────────────────────────────────────
+// setSetting 写 api_key 相关 key 时自动清除，调用方无需手动 invalidate。
+let _apiKeyCache: boolean | undefined;
+
 export async function getSetting(key: string): Promise<string | null> {
   if (isTauri) {
     await ensureTauriAPIs();
@@ -14,9 +18,10 @@ export async function setSetting(key: string, value: string): Promise<void> {
   if (isTauri) {
     await ensureTauriAPIs();
     await getInvoke()("set_setting", { key, value });
-    return;
+  } else {
+    lsSet("setting_" + key, value);
   }
-  lsSet("setting_" + key, value);
+  if (key.includes("_api_key")) _apiKeyCache = undefined;
 }
 
 // ── Provider key helpers ────────────────────────────────────
@@ -27,10 +32,6 @@ interface KeyEntry {
   key: string;
 }
 
-/**
- * Check whether a provider has at least one non-empty API key configured.
- * Checks the multi-key JSON array first, then falls back to legacy single-key.
- */
 async function providerHasKey(providerId: string): Promise<boolean> {
   const keysJson = await getSetting(`${providerId}_api_keys`);
   if (keysJson) {
@@ -45,12 +46,7 @@ async function providerHasKey(providerId: string): Promise<boolean> {
   return !!legacyKey?.trim();
 }
 
-// `getProviderFirstKey` / `readProviderFirstKey` 已统一搬到 `platform/auth.ts`，
-// 该模块是全应用 API key 读取的唯一入口（支持 keyTag、双后端透明）。
-
-// ── hasApiKey (cached) ──────────────────────────────────────
-
-let _apiKeyCache: boolean | undefined;
+// ── hasApiKey ──────────────────────────────────────────────
 
 export async function hasApiKey(): Promise<boolean> {
   if (_apiKeyCache === undefined) {
@@ -74,8 +70,6 @@ export async function migrateApiConfig(): Promise<void> {
     await setSetting("openai_base_url", COMFLY_BASE_URL);
     return;
   }
-  // Comfly 域名搬家 (.chat → .org)：把仍是旧默认值的存量配置升级到新域名，
-  // 用户自定义过的 base_url 不动。Tauri/sqlite 端同款迁移见 db/migrations.rs::migrate_v10。
   if (currentUrl === "https://ai.comfly.chat") {
     await setSetting("openai_base_url", COMFLY_BASE_URL);
   }

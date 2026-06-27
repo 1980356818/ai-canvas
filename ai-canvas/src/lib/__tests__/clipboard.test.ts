@@ -148,6 +148,41 @@ describe("普通复制 → 粘贴 = 复制(回归,不受剪切改动影响)", ()
   });
 });
 
+describe("按组复制:副本避让源框(避免框叠框)", () => {
+  it("整组复制粘贴 → 副本整体落在源右侧,水平不与源重叠", async () => {
+    useCardStore.getState().addCard(makeCard("a", 0, 0)); // x: 0..200
+    useCardStore.getState().addCard(makeCard("b", 300, 0)); // x: 300..500
+    useGroupStore.getState().addGroup({
+      id: "g1",
+      projectId: "p1",
+      cardIds: ["a", "b"],
+      title: "工作流",
+      color: "#7C3AED",
+      collapsed: false,
+      x: -16,
+      y: -60,
+      width: 532,
+      height: 240,
+      createdAt: "t0",
+      updatedAt: "t0",
+    });
+
+    await copyCards(new Set(["a", "b"]));
+    // 故意把落点设在源外接框正中(中心 (250,60))—— 旧逻辑会把整组叠在源上。
+    const newIds = await pasteCards("p1", { worldX: 250, worldY: 60 });
+    expect(newIds.length).toBe(2);
+
+    // 副本最左 x > 源最右 x(500)→ 水平完全分离,两框不重叠。
+    const newMinX = Math.min(
+      ...newIds.map((id) => useCardStore.getState().getCard(id)!.x),
+    );
+    expect(newMinX).toBeGreaterThan(500);
+
+    // 且确实生成了副本组(源组 + 副本组 = 2)。
+    expect(useGroupStore.getState().getGroupsByProject("p1").length).toBe(2);
+  });
+});
+
 describe("复制带「上游输入连线」(incoming)", () => {
   function connect(id: string, source: string, target: string) {
     useConnectionStore.getState().addConnection({

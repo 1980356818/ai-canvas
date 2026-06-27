@@ -113,8 +113,10 @@ describe("canUseTemplate", () => {
 });
 
 describe("canSeeTemplate (展示可见性,独立于能否使用)", () => {
-  const trialTpl = { category: "trial" };
-  const flatTpl = { category: "flat" };
+  const trialTpl = { id: "wf-white-bg-trial", category: "trial" };
+  const flatTpl = { id: "wf-pose-fission", category: "flat" };
+  const videoTpl = { id: "wf-clothing-fixed-video", category: "video" };
+  const videoTrialTpl = { id: "wf-clothing-fixed-video-trial", category: "video" };
 
   it("正式版 → 隐藏 trial 模板(已有完整模板,不看重复试用副本),其它分类可见", () => {
     const ent = entitlementsFromUser(makeUser("vip1", VIP_FEATURES));
@@ -122,16 +124,24 @@ describe("canSeeTemplate (展示可见性,独立于能否使用)", () => {
     expect(canSeeTemplate(ent, flatTpl)).toBe(true);
   });
 
-  it("试用版 → trial 模板可见", () => {
+  it("正式版 → 视频分组:正式版可见,试用版(-trial 后缀)隐藏", () => {
+    const ent = entitlementsFromUser(makeUser("vip1", VIP_FEATURES));
+    expect(canSeeTemplate(ent, videoTpl)).toBe(true);
+    expect(canSeeTemplate(ent, videoTrialTpl)).toBe(false);
+  });
+
+  it("试用版 → trial 模板可见,视频试用版也可见", () => {
     const ent = entitlementsFromUser(makeUser("trial", TRIAL_FEATURES));
     expect(canSeeTemplate(ent, trialTpl)).toBe(true);
     expect(canSeeTemplate(ent, flatTpl)).toBe(true);
+    expect(canSeeTemplate(ent, videoTrialTpl)).toBe(true);
   });
 
   it("过期/无会员(非正式版) → 仍能看到 trial(引导体验),边界=只对正式版隐藏", () => {
     const ent = entitlementsFromUser(makeUser(null, null));
     expect(canSeeTemplate(ent, trialTpl)).toBe(true);
     expect(canSeeTemplate(ent, flatTpl)).toBe(true);
+    expect(canSeeTemplate(ent, videoTrialTpl)).toBe(true);
   });
 });
 

@@ -93,7 +93,8 @@ describe("reconcileFrameMembership", () => {
     expect(idsOf("F")).toEqual(["A", "B"]); // B 被吸收,C 不在
   });
 
-  it("重叠框:卡片归属最上层(渲染顺序靠后)的框", () => {
+  it("重叠框:自由卡归属最上层(渲染顺序靠后)的框", () => {
+    // X 不属任何框(自由卡)→ 走空间吸收,归命中它的最上层框 F2。
     useCardStore.getState().setCards([mkCard("X", 150, 150)]); // center (200,200)
     useGroupStore.getState().setGroups([
       mkFrame("F1", { x: 0, y: 0, width: 300, height: 300 }), // 底层
@@ -104,6 +105,40 @@ describe("reconcileFrameMembership", () => {
 
     expect(idsOf("F2")).toEqual(["X"]);
     expect(idsOf("F1")).toEqual([]);
+  });
+
+  it("重叠框:既有成员留守原框,不被最上层框抢走(按组复制核心修复)", () => {
+    // M 是底层框 F1 的成员,几何上同时落在顶层框 F2 内
+    //(模拟「按组复制」出的同位副本框压在源框上)。
+    // 成员粘性:M 仍在 F1 内 → 留在 F1,不被最上层 F2 吸走 → 拖 F1 时 M 跟走。
+    useCardStore.getState().setCards([mkCard("M", 150, 150)]); // center (200,200) ∈ 两框
+    useGroupStore.getState().setGroups([
+      mkFrame("F1", { x: 0, y: 0, width: 300, height: 300 }, ["M"]), // 底层,M 的原属框
+      mkFrame("F2", { x: 100, y: 100, width: 300, height: 300 }), // 顶层,后绘制
+    ]);
+
+    reconcileFrameMembership(P);
+
+    expect(idsOf("F1")).toEqual(["M"]); // 留在原框
+    expect(idsOf("F2")).toEqual([]); // 顶层框没抢走
+  });
+
+  it("重叠框:各框留守自己的成员,只有自由卡归最上层", () => {
+    // a∈F1、b∈F2 各为既有成员;f 是自由卡。三者中心都落在两框重叠区。
+    useCardStore.getState().setCards([
+      mkCard("a", 150, 150), // center (200,200)
+      mkCard("b", 160, 160), // center (210,210)
+      mkCard("f", 170, 170), // center (220,220)
+    ]);
+    useGroupStore.getState().setGroups([
+      mkFrame("F1", { x: 0, y: 0, width: 400, height: 400 }, ["a"]), // 底层
+      mkFrame("F2", { x: 50, y: 50, width: 400, height: 400 }, ["b"]), // 顶层
+    ]);
+
+    reconcileFrameMembership(P);
+
+    expect(idsOf("F1")).toEqual(["a"]); // a 留守 F1(不被 F2 抢)
+    expect(idsOf("F2")).toEqual(["b", "f"]); // b 留守 F2;自由卡 f 归最上层 F2
   });
 
   it("折叠框冻结:成员不变,且其成员不被其它框吸走;框内非冻结卡仍按空间归属", () => {

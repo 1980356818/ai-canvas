@@ -9,7 +9,7 @@
 旧模型:`card_groups.card_ids` 是用户手填清单,组矩形是成员卡的外接框。导入(`transfer::remap_group_card_ids` 静默丢弃未映射 id)/整组拖动/粘贴/打开项目都不做空间核对 → 「卡视觉在框里但不是成员」→ 连到框内非成员卡的连线被判跨组、画虚线。
 
 ## 2. 架构:边界为真相 + 成员派生缓存 + 单一校准权威
-**唯一真相 = Frame 自存矩形 `{x,y,width,height}` + 卡片坐标;成员 = 中心点落在框内的卡。** `cardIds` 降级为派生缓存,由 `reconcileFrameMembership` 在每次几何提交时从边界重算。规则:中心点命中、重叠取最上层、折叠框成员冻结。不选纯派生:折叠会丢成员 + 多处消费点需可枚举成员集。
+**唯一真相 = Frame 自存矩形 `{x,y,width,height}` + 卡片坐标;成员 = 中心点落在框内的卡。** `cardIds` 降级为派生缓存,由 `reconcileFrameMembership` 在每次几何提交时从边界重算。规则:中心点命中、重叠时成员粘性优先(既有成员留守原框,仅自由卡归最上层框)、折叠框成员冻结。不选纯派生:折叠会丢成员 + 多处消费点需可枚举成员集。
 
 ## 3. 数据模型(迁移 v12)
 `card_groups` 加 `x/y/width/height REAL NOT NULL DEFAULT 0`(width=0 哨兵)。**打开项目回填**(`hooks/useProjectLifecycle.ts`):width===0 → 用成员外接框写回 + 落库(视觉零变化),随即 `reconcileFrameMembership` 自愈(导入掉组当场归位)。`card_ids` 列保留。

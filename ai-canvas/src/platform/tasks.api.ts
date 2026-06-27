@@ -25,6 +25,30 @@ export async function upsertTask(task: AsyncTask): Promise<void> {
   lsSet(BROWSER_LS_KEY, all);
 }
 
+/**
+ * 开启该卡的一次新生成尝试:把所有「当前(superseded_at 为空)」的旧任务标记为被替换,
+ * 返回下一个 attempt_no。前端 TaskManager.startTask 据此创建新的「当前」任务。
+ *
+ * 只动「被替换」标记,不中止任何在跑的任务 —— 保活策略由 TaskManager 决定。
+ */
+export async function beginAttempt(cardId: string): Promise<number> {
+  if (isTauri) {
+    await ensureTauriAPIs();
+    return getInvoke()<number>("tasks_begin_attempt", { cardId });
+  }
+  // 浏览器降级:localStorage 里把本卡未替换的行标记 superseded,返回 max(attempt_no)+1
+  const all = lsGet<AsyncTaskRow[]>(BROWSER_LS_KEY, []);
+  const now = new Date().toISOString();
+  let max = 0;
+  for (const t of all) {
+    if (t.card_id !== cardId) continue;
+    max = Math.max(max, t.attempt_no ?? 1);
+    if (t.superseded_at == null) t.superseded_at = now;
+  }
+  lsSet(BROWSER_LS_KEY, all);
+  return max + 1;
+}
+
 export async function getTask(id: string): Promise<AsyncTask | null> {
   if (isTauri) {
     await ensureTauriAPIs();

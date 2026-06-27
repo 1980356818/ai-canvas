@@ -7,6 +7,7 @@ import {
   FAILED_STATUSES,
   NO_RESULT_URL_MESSAGE,
   TASK_FAILED_MESSAGE,
+  SupersededError,
 } from "./taskOutcome";
 
 function info(partial: Partial<TaskInfo>): TaskInfo {
@@ -81,5 +82,15 @@ describe("isTerminalStatus", () => {
 describe("constants", () => {
   it("兜底文案稳定(UI / 排障依赖该字面量)", () => {
     expect(NO_RESULT_URL_MESSAGE).toBe("任务完成但未返回结果地址");
+  });
+});
+
+describe("SupersededError", () => {
+  // 卡片任务面板:被「重新生成」替换的任务,extractMediaResult 抛此良性信号,
+  // runEditorGeneration / cardRunner 据 name 静默吞掉(不报错、不写卡)。
+  it("是 Error 子类,name 稳定为 SupersededError(吞错按 name 判定)", () => {
+    const e = new SupersededError();
+    expect(e).toBeInstanceOf(Error);
+    expect(e.name).toBe("SupersededError");
   });
 });

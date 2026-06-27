@@ -5,10 +5,7 @@ import { apiGetTemplates } from "@/platform/templates.api";
 import { syncTemplateAssets } from "@/platform/templateAssets";
 import { registerTemplateAssetCache, initMediaService } from "@/lib/media";
 import { lsGet, lsSet } from "@/platform/storage";
-import fallbackTemplates from "@/config/templatesFallback.json";
-
 const CACHE_KEY = "templates_cache_v1";
-const FALLBACK = fallbackTemplates as unknown as WorkflowTemplate[];
 /** 极境 NAS 模板图 URL 的识别片段。 */
 const ASSET_MARK = "/aicanvas-static/templates/";
 /**
@@ -44,7 +41,7 @@ interface TemplateState {
  * 模板来源(服务端化)。定义在画布 server `aicat.template`;图在极境 NAS
  * (`www.jjowo.com/aicanvas-static/templates/`,**内容哈希命名**)。
  *
- *   初始 = 本地缓存(上次拉的定义,公网 URL) → 没有就内置 fallback
+ *   初始 = 本地缓存(上次拉的定义,公网 URL) → 没有就空数组(服务端为唯一权威)
  *   load() = 拉定义 → Rust `sync_template_assets` 把图下到 `{data_dir}/template-assets/`
  *            (内容哈希:换图=换名=换URL,存在即跳过=下载一次,清孤儿) → 注册「公网 URL→本地副本」
  *            显示缓存(registerTemplateAssetCache),**不改写定义里的 URL**
@@ -57,7 +54,7 @@ interface TemplateState {
  * 非 Tauri 环境(dev 浏览器)拿不到 Rust → 数据层公网 URL 照样显示 + 可直接送上游。
  */
 export const useTemplateStore = create<TemplateState>((set) => ({
-  templates: lsGet<WorkflowTemplate[] | null>(CACHE_KEY, null) ?? FALLBACK,
+  templates: lsGet<WorkflowTemplate[] | null>(CACHE_KEY, null) ?? [],
   loaded: false,
   load: async () => {
     let version = "";

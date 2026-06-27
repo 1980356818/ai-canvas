@@ -24,13 +24,16 @@ describe("buildRunPlan — 纯函数规划", () => {
         { startSet: null, mode: "rerun", concurrency: Infinity },
       ),
     );
-    expect(r.layers).toEqual([["A"], ["B"], ["C"]]);
+    expect(r.nodes).toEqual(["A", "B", "C"]); // id 字典序 = 确定性派发序
+    expect(r.indegree.get("A")).toBe(0); // 根
+    expect(r.indegree.get("B")).toBe(1);
+    expect(r.indegree.get("C")).toBe(1);
     expect(r.total).toBe(3);
     expect(r.mode).toBe("rerun");
     expect(r.concurrency).toBe(Infinity);
   });
 
-  it("两条独立链 A→B、C→D:同层并发 [[A,C],[B,D]]、total=4", () => {
+  it("两条独立链 A→B、C→D:两个根 A、C 入度 0(可同时起跑)、total=4", () => {
     const r = okPlan(
       buildRunPlan(
         "g",
@@ -42,11 +45,12 @@ describe("buildRunPlan — 纯函数规划", () => {
         { startSet: null, mode: "rerun", concurrency: 8 },
       ),
     );
-    // topoSort 同层按 id 字典序排
-    expect(r.layers).toEqual([
-      ["A", "C"],
-      ["B", "D"],
-    ]);
+    expect(r.nodes).toEqual(["A", "B", "C", "D"]);
+    // 两条独立链:A、C 是根(入度 0,同时就绪),B、D 各等一个前驱。
+    expect(r.indegree.get("A")).toBe(0);
+    expect(r.indegree.get("C")).toBe(0);
+    expect(r.indegree.get("B")).toBe(1);
+    expect(r.indegree.get("D")).toBe(1);
     expect(r.total).toBe(4);
     expect(r.concurrency).toBe(8);
   });
@@ -80,7 +84,10 @@ describe("buildRunPlan — 纯函数规划", () => {
         { startSet: new Set(["B"]), mode: "rerun", concurrency: Infinity },
       ),
     );
-    expect(r.layers).toEqual([["B"], ["C"]]);
+    expect(r.nodes).toEqual(["B", "C"]); // A 被过滤
+    // 关键:运行集外的前驱 A 不算入度 → B 是本次运行的根(入度 0),否则会死等不跑的 A。
+    expect(r.indegree.get("B")).toBe(0);
+    expect(r.indegree.get("C")).toBe(1);
     expect(r.total).toBe(2);
   });
 
@@ -158,11 +165,11 @@ function mkFrame(
   };
 }
 
-/** 计划里实际要跑的全部卡(layers 展平 + 排序),方便断言。 */
+/** 计划里实际要跑的全部卡(nodes 已按 id 序),方便断言。 */
 function plannedCards(gid: string): string[] {
   const plan = planGroupRun(gid);
   if (!plan.ok) throw new Error(`plan rejected: ${plan.reason}`);
-  return plan.layers.flat().sort();
+  return [...plan.nodes].sort();
 }
 
 describe("planGroupRun — 运行前 reconcile 成员", () => {

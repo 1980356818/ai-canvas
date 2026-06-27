@@ -5,6 +5,7 @@ import { useCardStore } from "@/stores/cardStore";
 import { useGroupStore } from "@/stores/groupStore";
 import { computeGroupBounds } from "@/lib/groupBounds";
 import { reconcileFrameMembership } from "@/lib/frameMembership";
+import { recordGroupUpdate } from "@/lib/history";
 import { saveGroupsBatch } from "@/platform";
 import { groupToRow } from "@/lib/mappers";
 
@@ -105,6 +106,20 @@ export function useGroupResize(
 
         // 提交存储边界 → 重算成员(缩放纳入/排除卡) → 落库。
         const gs = useGroupStore.getState();
+        const changed =
+          next.x !== start.x ||
+          next.y !== start.y ||
+          next.width !== start.width ||
+          next.height !== start.height;
+        if (changed) {
+          // 框缩放记历史(仅几何),撤销可还原框尺寸/位置;成员由 undo 末尾 reconcile 重算。
+          recordGroupUpdate(groupId, {
+            x: start.x,
+            y: start.y,
+            width: start.width,
+            height: start.height,
+          });
+        }
         gs.updateGroup(groupId, {
           x: next.x,
           y: next.y,

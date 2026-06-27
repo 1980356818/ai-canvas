@@ -26,7 +26,9 @@ function modelCategoryForCardType(type: string): ModelCategory | null {
       return "multiangle";
     case "ai_video":
       return "video";
+    // ai_script（帮我写）的分析/生成都走对话模型（须视觉），与 ai_chat 同分类。
     case "ai_chat":
+    case "ai_script":
       return "chat";
     default:
       // text / sticky_note / audio / frame_extractor:无生成模型
@@ -43,6 +45,7 @@ function systemDefaultModel(type: string): Promise<ModelRef> | null {
     case "ai_video":
       return modelService.getDefaultVideoModel();
     case "ai_chat":
+    case "ai_script":
       return modelService.getDefaultChatModel();
     case "ai_multiangle":
       // 与 ImageToolbar 创建多角度卡时用的硬默认保持一致。

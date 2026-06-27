@@ -15,6 +15,10 @@ interface UIState {
   agentPanelVisible: boolean;
   chatPanelVisible: boolean;
   taskRecordVisible: boolean;
+  /** 每卡任务面板(生成尝试抽屉)当前展示的 cardId;null = 关闭。 */
+  cardTaskPanelCardId: string | null;
+  /** 「帮我写」分镜脚本向导当前作用的 ai_script 卡 id;null = 关闭。 */
+  scriptWizardCardId: string | null;
   settingsVisible: boolean;
   priceListVisible: boolean;
   saveStatus: SaveStatus;
@@ -44,6 +48,10 @@ interface UIState {
   toggleAgentPanel: () => void;
   toggleChatPanel: () => void;
   toggleTaskRecord: () => void;
+  openCardTaskPanel: (cardId: string) => void;
+  closeCardTaskPanel: () => void;
+  openScriptWizard: (cardId: string) => void;
+  closeScriptWizard: () => void;
   toggleSettings: () => void;
   togglePriceList: () => void;
   setSaveStatus: (status: SaveStatus) => void;
@@ -79,6 +87,8 @@ export const useUIStore = create<UIState>((set) => ({
   agentPanelVisible: false,
   chatPanelVisible: false,
   taskRecordVisible: false,
+  cardTaskPanelCardId: null,
+  scriptWizardCardId: null,
   settingsVisible: false,
   priceListVisible: false,
   saveStatus: "saved",
@@ -101,6 +111,10 @@ export const useUIStore = create<UIState>((set) => ({
     })),
   toggleTaskRecord: () =>
     set((s) => ({ taskRecordVisible: !s.taskRecordVisible })),
+  openCardTaskPanel: (cardId) => set({ cardTaskPanelCardId: cardId }),
+  closeCardTaskPanel: () => set({ cardTaskPanelCardId: null }),
+  openScriptWizard: (cardId) => set({ scriptWizardCardId: cardId }),
+  closeScriptWizard: () => set({ scriptWizardCardId: null }),
   toggleSettings: () =>
     set((s) => ({ settingsVisible: !s.settingsVisible })),
   togglePriceList: () =>

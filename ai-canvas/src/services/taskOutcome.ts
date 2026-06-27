@@ -35,6 +35,20 @@ export const NO_RESULT_URL_MESSAGE = "任务完成但未返回结果地址";
 export const TASK_FAILED_MESSAGE = "任务失败";
 
 /**
+ * 「被替换」良性信号:用户在生成中又点了「重新生成」,旧任务被新尝试取代。
+ *
+ * 旧任务已计费,会在后台跑完、结果只进任务面板(不写画布)。编辑器 / 组运行
+ * 那条 `await` 路径检出它后**静默吞掉**(不报错、不写卡)——因为画布卡此刻已由
+ * 新当前任务接管。详见 docs/卡片任务面板-生成尝试可观测与可恢复-设计施工图.md §写闸门。
+ */
+export class SupersededError extends Error {
+  constructor(message = "任务已被新的生成尝试取代") {
+    super(message);
+    this.name = "SupersededError";
+  }
+}
+
+/**
  * 成功态但结果 URL 尚未就绪时,允许的最大额外轮询次数。
  *
  * 配合轮询退避(1s→10s),~10 次约 75s 宽限,足够覆盖极境的落库 / 转存 CDN 窗口;

@@ -8,6 +8,7 @@ import { modelService } from "@/services/models";
 import { resolveDefaultModelForCardType } from "@/services/modelDefaults";
 import { buildTryonRequest } from "@/services/generation/buildTryonRequest";
 import { runEditorGeneration } from "@/services/generation/runEditorGeneration";
+import { normalizeImageCardGeometry } from "@/services/imageCardGeometry";
 import { cn } from "@/lib/utils";
 import { isStandardImageModel, type RefImageEntry } from "@/config/model-ref-images";
 import ModelSelector from "./ModelSelector";
@@ -145,6 +146,8 @@ export default function TryOnEditor({ card }: TryOnEditorProps) {
 
         updateCardData(card.id, { resultImageUrl: result.url });
         autoSave.markDirty(card.id);
+        // 几何归一(与落卡统一收口):换装结果比例可能与默认 3:4 卡不同 → 按真实图定卡尺寸。
+        void normalizeImageCardGeometry(card.id, result.url);
         useUIStore.getState().addToast({
           type: "success",
           title: "换装完成",

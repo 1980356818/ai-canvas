@@ -1,68 +1,21 @@
-import { Image, Video, Music, AlertTriangle, MapPin, RefreshCw } from "lucide-react";
+import { AlertTriangle, MapPin, RefreshCw } from "lucide-react";
 import type { AsyncTask } from "@/types";
 import { ACTIVE_STATUSES } from "@/types";
-import { getDisplayUrl } from "@/lib/media";
 import { cn } from "@/lib/utils";
+import {
+  STATUS_CFG,
+  KIND_CFG,
+  relativeTime,
+  getPrompt,
+  getResultDisplayUrl,
+  formatElapsed,
+} from "./taskPresentation";
 
 interface Props {
   task: AsyncTask;
   projectName?: string;
   onLocate: (cardId: string) => void;
   onRetry: (taskId: string) => void;
-}
-
-const STATUS_CFG: Record<string, { label: string; color: string; dot: string }> = {
-  queued:     { label: "排队中", color: "text-blue-500",           dot: "bg-blue-500" },
-  submitting: { label: "提交中", color: "text-blue-500",           dot: "bg-blue-500" },
-  polling:    { label: "生成中", color: "text-blue-500",           dot: "bg-blue-500" },
-  success:    { label: "成功",   color: "text-emerald-500",        dot: "bg-emerald-500" },
-  failed:     { label: "失败",   color: "text-red-500",            dot: "bg-red-500" },
-  canceled:   { label: "已取消", color: "text-muted-foreground",   dot: "bg-muted-foreground" },
-  orphaned:   { label: "已废弃", color: "text-muted-foreground",   dot: "bg-muted-foreground" },
-};
-
-const KIND_CFG: Record<string, { icon: typeof Image; label: string }> = {
-  image_gen: { icon: Image, label: "图片" },
-  video_gen: { icon: Video, label: "视频" },
-  audio_gen: { icon: Music, label: "音频" },
-};
-
-function relativeTime(iso: string): string {
-  const d = new Date(iso + (iso.endsWith("Z") ? "" : "Z"));
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  if (diffMs < 60_000) return "刚刚";
-  const min = Math.floor(diffMs / 60_000);
-  if (min < 60) return `${min}分钟前`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}小时前`;
-  const day = Math.round(
-    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
-      new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) /
-      86_400_000,
-  );
-  if (day === 1) return "昨天";
-  return `${day}天前`;
-}
-
-function getPrompt(task: AsyncTask): string {
-  const p = (task.request as Record<string, unknown>)?.prompt;
-  return typeof p === "string" ? p : "";
-}
-
-function getResultDisplayUrl(task: AsyncTask): string {
-  if (task.status !== "success" || !task.result) return "";
-  const url = (task.result as Record<string, unknown>).url;
-  return typeof url === "string" ? getDisplayUrl(url) : "";
-}
-
-function formatElapsed(task: AsyncTask): string | null {
-  if (ACTIVE_STATUSES.has(task.status)) return null;
-  const start = new Date(task.createdAt + (task.createdAt.endsWith("Z") ? "" : "Z"));
-  const end = new Date(task.updatedAt + (task.updatedAt.endsWith("Z") ? "" : "Z"));
-  const sec = Math.max(0, (end.getTime() - start.getTime()) / 1000);
-  if (sec < 60) return `${sec.toFixed(1)}s`;
-  return `${Math.floor(sec / 60)}m${Math.round(sec % 60)}s`;
 }
 
 export default function TaskRecordCard({ task, projectName, onLocate, onRetry }: Props) {

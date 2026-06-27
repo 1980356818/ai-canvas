@@ -5,6 +5,7 @@ import MediaEditor from "./MediaEditor";
 import MultiangleEditor from "./MultiangleEditor";
 import TryOnEditor from "./TryOnEditor";
 import VideoEditor from "./VideoEditor";
+import ScriptEditor from "@/features/script/ScriptEditor";
 
 export default function EditorSwitch({ card }: { card: CanvasCard }) {
   // 每张卡片必须拿到独立的编辑器实例:各编辑器把尺寸/比例/分辨率/画质/时长/档位等
@@ -31,6 +32,8 @@ function EditorBody({ card }: { card: CanvasCard }) {
       return <MultiangleEditor card={card} />;
     case "ai_tryon":
       return <TryOnEditor card={card} />;
+    case "ai_script":
+      return <ScriptEditor card={card} />;
     case "audio":
       return (
         <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">

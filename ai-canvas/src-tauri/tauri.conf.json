@@ -4,9 +4,9 @@
   "version": "1.4.4",
   "identifier": "com.ai-canvas.desktop",
   "build": {
-    "beforeDevCommand": "npm run check:ipc-guards && npm run version:sync && npm run dev",
-    "devUrl": "http://127.0.0.1:1620",
-    "beforeBuildCommand": "npm run check:ipc-guards && npm run version:sync && npm run build",
+    "beforeDevCommand": "npm run check:ipc-guards && npm run check:image-landing && npm run version:sync && npm run dev",
+    "devUrl": "http://127.0.0.1:1630",
+    "beforeBuildCommand": "npm run check:ipc-guards && npm run check:image-landing && npm run version:sync && npm run build",
     "frontendDist": "../dist"
   },
   "app": {

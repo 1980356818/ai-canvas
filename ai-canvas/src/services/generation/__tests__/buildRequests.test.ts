@@ -130,6 +130,49 @@ describe("buildVideoRequest — 五族 tier→真实 SKU", () => {
     expect(r.request.resolution).toBe("720p");
   });
 
+  it("V2 alias(火山): mini 无视频 → seedance-2-0-mini + resolution 720p", async () => {
+    const r = assertOk(await video({ model: "seedance-v2", seedanceV2Version: "mini" }));
+    expect(r.request.model).toBe("seedance-2-0-mini");
+    expect(r.request.resolution).toBe("720p");
+  });
+
+  it("V2 alias(火山): standard + 4k → resolution 4k", async () => {
+    const r = assertOk(
+      await video({ model: "seedance-v2", seedanceV2Version: "standard", seedanceV2Resolution: "4k" }),
+    );
+    expect(r.request.model).toBe("seedance-2-0");
+    expect(r.request.resolution).toBe("4k");
+  });
+
+  it("V2 alias(火山): mini + 4k(非法)→ 钳回 720p", async () => {
+    const r = assertOk(
+      await video({ model: "seedance-v2", seedanceV2Version: "mini", seedanceV2Resolution: "4k" }),
+    );
+    expect(r.request.model).toBe("seedance-2-0-mini");
+    expect(r.request.resolution).toBe("720p");
+  });
+
+  it("V2 alias(火山): fast + 4k(非法)→ 钳回 720p", async () => {
+    const r = assertOk(
+      await video({ model: "seedance-v2", seedanceV2Version: "fast", seedanceV2Resolution: "4k" }),
+    );
+    expect(r.request.model).toBe("seedance-2-0-fast");
+    expect(r.request.resolution).toBe("720p");
+  });
+
+  it("V2 alias(火山): mini + 含视频参考 → seedance-2-0-mini-video-ref", async () => {
+    const r = assertOk(
+      await video({
+        model: "seedance-v2",
+        seedanceV2Version: "mini",
+        imageMode: "reference",
+        refImages: { refImage0: { url: "http://r0", sourceType: "card" } },
+        refVideos: [{ url: "http://v0" }],
+      }),
+    );
+    expect(r.request.model).toBe("seedance-2-0-mini-video-ref");
+  });
+
   it("V2 alias: standard + 含视频参考 → seedance-2-0-video-ref", async () => {
     const r = assertOk(
       await video({

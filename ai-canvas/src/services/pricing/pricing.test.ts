@@ -39,6 +39,8 @@ const FIXTURE: RawPriceModel[] = [
   { id: "seedance-2-0-fast", capability: "VIDEO", output_cost_per_1m: 40.7, lines: [{ tag: "v", cost_type: "PER_TOKEN_PREPAID" }] },
   { id: "seedance-2-0-video-ref", capability: "VIDEO", output_cost_per_1m: 30.8, lines: [{ tag: "v", cost_type: "PER_TOKEN_PREPAID" }] },
   { id: "seedance-2-0-fast-video-ref", capability: "VIDEO", output_cost_per_1m: 24.2, lines: [{ tag: "v", cost_type: "PER_TOKEN_PREPAID" }] },
+  { id: "seedance-2-0-mini", capability: "VIDEO", output_cost_per_1m: 25.3, lines: [{ tag: "v", cost_type: "PER_TOKEN_PREPAID" }] },
+  { id: "seedance-2-0-mini-video-ref", capability: "VIDEO", output_cost_per_1m: 15.4, lines: [{ tag: "v", cost_type: "PER_TOKEN_PREPAID" }] },
 ];
 
 const map = buildPriceMap(FIXTURE);
@@ -112,15 +114,18 @@ describe("buildPriceCatalog", () => {
     }
   });
 
-  it("expands seedance-v2 into a 版本×视频参考 matrix (4 rows) with token rates", () => {
+  it("expands seedance-v2 into a 版本×视频参考 matrix (6 rows, incl. mini) with token rates", () => {
     const v = rows.filter((r) => r.modelName === "Seedance 2.0 官方");
-    expect(v).toHaveLength(4);
-    const std = bySku("seedance-2-0", "标准 · 不带视频");
-    expect(std?.quality).toBe("标准");
+    expect(v).toHaveLength(6); // V163: standard/fast/mini × 不带/带视频
+    const std = bySku("seedance-2-0", "standard · 不带视频");
+    expect(std?.quality).toBe("standard");
     expect(std?.resolution).toBe("不带视频");
     expect(std?.price?.costType).toBe("PER_TOKEN_PREPAID");
     expect(std?.price?.outputPer1m).toBe(50.6);
-    expect(bySku("seedance-2-0-fast-video-ref", "快速 · 带视频参考")?.price?.outputPer1m).toBe(24.2);
+    expect(bySku("seedance-2-0-fast-video-ref", "fast · 带视频参考")?.price?.outputPer1m).toBe(24.2);
+    // V163: mini 档自动出 2 行 (mini 最便宜)
+    expect(bySku("seedance-2-0-mini", "mini · 不带视频")?.price?.outputPer1m).toBe(25.3);
+    expect(bySku("seedance-2-0-mini-video-ref", "mini · 带视频参考")?.price?.outputPer1m).toBe(15.4);
   });
 
   it("prices chat models (gpt-5.5-medium alias resolves to gpt-5.5)", () => {

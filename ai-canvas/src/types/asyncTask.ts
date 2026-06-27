@@ -76,6 +76,8 @@ export interface AsyncTaskRow {
   created_at: string;
   updated_at: string;
   last_polled_at: string | null;
+  attempt_no: number;
+  superseded_at: string | null;
 }
 
 /** 内存中的反序列化版本（camelCase，payload 已解析为对象） */
@@ -99,6 +101,10 @@ export interface AsyncTask {
   createdAt: string;
   updatedAt: string;
   lastPolledAt?: string;
+  /** 该卡内尝试序号(1,2,3…)。新任务由 TaskManager.beginAttempt 赋值。 */
+  attemptNo: number;
+  /** 被「重新生成」替换的时刻;undefined = 当前尝试(唯一驱动画布卡)。 */
+  supersededAt?: string;
 }
 
 export function rowToTask(row: AsyncTaskRow): AsyncTask {
@@ -122,6 +128,8 @@ export function rowToTask(row: AsyncTaskRow): AsyncTask {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastPolledAt: row.last_polled_at ?? undefined,
+    attemptNo: row.attempt_no ?? 1,
+    supersededAt: row.superseded_at ?? undefined,
   };
 }
 
@@ -146,6 +154,8 @@ export function taskToRow(task: AsyncTask): AsyncTaskRow {
     created_at: task.createdAt,
     updated_at: task.updatedAt,
     last_polled_at: task.lastPolledAt ?? null,
+    attempt_no: task.attemptNo ?? 1,
+    superseded_at: task.supersededAt ?? null,
   };
 }
 

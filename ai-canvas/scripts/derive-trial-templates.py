@@ -34,14 +34,19 @@ EXCLUDE_SRC = {"wf-face-swap"}
 EXCLUDE_FLAT = EXCLUDE_SRC  # 向后兼容(legacy 脚本仍 import 此名)
 
 # 允许派生 trial 的源类别。detail(详情页)与 flat 共享同一套客户端解码钩子,可一并派生。
-ALLOWED_SOURCE_CATEGORIES = {"flat", "detail"}
+ALLOWED_SOURCE_CATEGORIES = {"flat", "detail", "video"}
 
+
+# 源分类 → trial 双胞胎的独立分组。video/detail 各自落进专属 trial 分组,正式版/付费档
+# 按分类整组隐藏(服务端 tier_def.templateCategories 过滤,见 TemplateService.listForClient),
+# 试用档按分类授予;其余源(flat 等)归通用 trial 组。
+TRIAL_CATEGORY_MAP = {"video": "trial-video", "detail": "trial-detail"}
 
 def make_trial_twin(src, min_app_version):
-    """源模板(flat/detail)→ trial 双胞胎(深拷贝改 id/category/name + result 处理 + 封装提示词 + 复用封面)。"""
+    """源模板(flat/detail/video)→ trial 双胞胎(深拷贝改 id/category/name + result 处理 + 封装提示词 + 复用封面)。"""
     twin = copy.deepcopy(src)
     twin["id"] = src["id"] + TRIAL_SUFFIX
-    twin["category"] = "trial"
+    twin["category"] = TRIAL_CATEGORY_MAP.get(src.get("category"), "trial")
     name = src.get("name") or src["id"]
     if "试用" not in name:
         twin["name"] = f"{name}（试用）"
@@ -67,7 +72,7 @@ def main():
 
     templates = json.load(open(SEED, encoding="utf-8"))
     existing_ids = {t["id"] for t in templates}
-    all_src = [t for t in templates if t.get("category") in ALLOWED_SOURCE_CATEGORIES]
+    all_src = [t for t in templates if t.get("category") in ALLOWED_SOURCE_CATEGORIES and not t["id"].endswith(TRIAL_SUFFIX)]
     srcs = [t for t in all_src if t["id"] not in EXCLUDE_SRC]
     by_cat = {}
     for t in srcs:
@@ -116,7 +121,7 @@ def main():
                 print(f"  ~补封装   {t['id']:<34} 封装 {c:>2} 条  (保留的手作 trial)")
     merged.extend(twins)
 
-    trial_total = sum(1 for t in merged if t.get("category") == "trial")
+    trial_total = sum(1 for t in merged if t.get("category") == "trial" or t["id"].endswith(TRIAL_SUFFIX))
     print(
         f"[derive] 完成:派生 {len(twins)} + 保留手作补封装 {kept_cloaked} 条 → "
         f"trial 共 {trial_total} 个 / 模板总 {len(merged)} 个;新派生封装 {total_locked} 条提示词"
@@ -130,7 +135,7 @@ def main():
         print("[derive] dry-run(未写盘)。确认无误后加 --write --min-app-version <发布版本> 落盘。")
         # dry-run 也产出 trial id 列表预览(给 tier_def 白名单用)
         print("[derive] trial id 列表(白名单用):")
-        print("  " + json.dumps(sorted(t["id"] for t in merged if t.get("category") == "trial"), ensure_ascii=False))
+        print("  " + json.dumps(sorted(t["id"] for t in merged if t.get("category") == "trial" or t["id"].endswith(TRIAL_SUFFIX)), ensure_ascii=False))
         return
 
     for path in (SEED, FALLBACK):
@@ -139,7 +144,7 @@ def main():
         print(f"[derive] 写回 {os.path.relpath(path, _HERE)} ({len(merged)} 个模板)")
 
     ids_path = os.path.join(_HERE, "trial-template-ids.json")
-    trial_ids = sorted(t["id"] for t in merged if t.get("category") == "trial")
+    trial_ids = sorted(t["id"] for t in merged if t.get("category") == "trial" or t["id"].endswith(TRIAL_SUFFIX))
     with open(ids_path, "w", encoding="utf-8") as fp:
         json.dump(trial_ids, fp, ensure_ascii=False, indent=2)
     print(f"[derive] 写出 trial 白名单 id → {os.path.relpath(ids_path, _HERE)} ({len(trial_ids)} 个)")

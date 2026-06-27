@@ -38,9 +38,11 @@ import { buildTryonRequest } from "@/services/generation/buildTryonRequest";
 import { buildChatRequest } from "@/services/generation/buildChatRequest";
 import { streamChatToCard } from "@/services/generation/streamChatToResult";
 import { runFrameExtraction } from "@/lib/frameExtraction";
+import { SupersededError } from "@/services/taskOutcome";
 import { hasApiKey } from "@/platform";
 import { scheduleCardMediaLocalization } from "@/lib/mediaLocalize";
 import { autoSave } from "@/lib/autoSave";
+import { normalizeImageCardGeometry } from "@/services/imageCardGeometry";
 import type { CanvasCard } from "@/types";
 import type { ImageGenResponse } from "@/providers/types";
 
@@ -111,6 +113,8 @@ async function runImageCard(card: CanvasCard, count = 1): Promise<RunCardResult>
     imageUrl: results[0]!.url, results, selectedIndex: 0,
   });
   autoSave.markDirty(card.id);
+  // 几何归一(与 taskBridge 单图路径同一收口):批量出图后卡框按结果图真实比例定尺寸。
+  void normalizeImageCardGeometry(card.id, results[0]!.url);
   // 批量结果可能残留远端 URL(saveMedia 当时失败)——整卡交给统一收敛模块,
   // imageUrl 与 results[].url 一起补,无远端时是 no-op。
   scheduleCardMediaLocalization(card.id);
@@ -230,7 +234,11 @@ export async function runCard(
   // chat 经 request.signal 中断(见 runChatCard)。仅 forceAbortGroup 触发,排空式停止不走这里。
   const onAbort = () => {
     const active = useTasksStore.getState().getActiveByCard(card.id);
-    if (active) void taskManager.cancel(active.id);
+    if (!active) return;
+    // forceAbort 也保活:已计费(有 externalTaskId)的任务不浪费 —— 标记被替换,
+    // 后台跑完进任务面板;尚未提交上游(未计费)的才真中止。
+    if (active.externalTaskId) void taskManager.supersede(active.id);
+    else void taskManager.cancel(active.id);
   };
   opts?.signal?.addEventListener("abort", onAbort, { once: true });
 
@@ -256,12 +264,22 @@ export async function runCard(
         return { outcome: "skipped", reason: "未识别的节点类型" };
     }
   } catch (err) {
+    // 被替换(forceAbort 保活)/ 主动取消 → 良性,当跳过处理(不计为失败)。
+    if (
+      err instanceof SupersededError ||
+      (err instanceof DOMException && err.name === "AbortError")
+    ) {
+      return { outcome: "skipped", reason: "已取消/被替换" };
+    }
     const msg = err instanceof Error ? err.message : String(err);
     return { outcome: "failed", reason: msg };
   } finally {
     opts?.signal?.removeEventListener("abort", onAbort);
-    // 幂等清:task 路径下 taskBridge 在终态已 set null,这里再清无害;
-    // 非 task 路径(ai_chat / frame_extractor)靠这里收尾。
-    ui.setCardProgress(card.id, null);
+    // 仅当该卡已无活跃任务时才清进度。放开「生成中再生成」后,同一卡可能有并发的 runCard
+    // (面板「重新生成」连点)—— 旧 runCard 的收尾绝不能清掉新当前任务的进度条。
+    // task 路径常态清理由 taskBridge 在终态做;这里兜非 task 路径(ai_chat / frame_extractor)。
+    if (!useTasksStore.getState().getActiveByCard(card.id)) {
+      ui.setCardProgress(card.id, null);
+    }
   }
 }

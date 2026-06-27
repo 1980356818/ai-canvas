@@ -176,6 +176,9 @@ export const CARD_DEFAULTS: Record<CardType, CardDefaults> = {
   text:        { ...sizeFromRatio(4 / 3), label: "文本", data: { content: "" } },
   sticky_note: { ...sizeFromRatio(5 / 4), label: "便签", data: { content: "" } },
   frame_extractor: { width: 300, height: 220, label: "关键帧提取", data: {} },
+  // 帮我写（分镜脚本）：连入图/视频素材 → 视觉分析 → 三步向导 → 生成分镜脚本。
+  // I/O 与 ai_chat 同构（dataFlow 镜像处理），最终脚本写入 data.result 向下游输出文本。
+  ai_script: { width: 460, height: 360, label: "帮我写", data: {} },
 };
 
 export const TYPE_COLORS: Record<CardType, string> = {
@@ -188,6 +191,7 @@ export const TYPE_COLORS: Record<CardType, string> = {
   sticky_note: "#F59E0B",
   audio: "#F97316",
   frame_extractor: "#10B981",
+  ai_script: "#0EA5E9",
 };
 
 export const CARD_COLOR_PRESETS = [

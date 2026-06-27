@@ -26,6 +26,10 @@ import { useCardStore } from "@/stores/cardStore";
 import { autoSave } from "@/lib/autoSave";
 import { scheduleCardMediaLocalization } from "@/lib/mediaLocalize";
 import {
+  isImageResultCardType,
+  normalizeImageCardGeometry,
+} from "@/services/imageCardGeometry";
+import {
   beginGeneration,
   confirmGeneration,
   failGeneration,
@@ -99,6 +103,13 @@ function flushAll(tasks: ReadonlyMap<string, AsyncTask>): void {
 }
 
 function handleTask(task: AsyncTask, ui: ReturnType<typeof useUIStore.getState>): void {
+  // 写闸门:被「重新生成」替换的尝试只进任务面板(面板直接读 tasksStore),
+  // 绝不驱动画布卡的进度/错误/结果,也不动溯源戳 —— 画布卡只被「当前尝试」
+  // (supersededAt 为空)驱动。这根治「已计费旧任务后台晚完成,盖掉新画布卡」的竞态。
+  // 注意:必须放在最顶端(在盖 pending 溯源戳、写进度之前),因为进度/错误 UI 是按
+  // cardId 存的(generatingCards.get(cardId)),保活旧任务若不拦会和新任务抢同一个槽。
+  if (task.supersededAt) return;
+
   switch (task.status) {
     case "queued":
     case "submitting":
@@ -206,6 +217,14 @@ function applyResultToCard(task: AsyncTask): void {
 
   cardStore.updateCardData(task.cardId, patch);
   autoSave.markDirty(task.cardId);
+
+  // 统一几何归一收口:图片产物卡(单图/换装/多角度)落图后,卡框按结果图真实比例定尺寸
+  // (3:4 图 → 3:4 卡),不再停留在导入/默认的方框被 object-cover 裁切成「方形」。fire-and-forget,
+  // 不阻塞上面的图片字段即时落库。这是组运行/编辑器 await/崩溃恢复共用的唯一落卡闸口。
+  // 见 services/imageCardGeometry。
+  if (isImageResultCardType(card.type)) {
+    void normalizeImageCardGeometry(task.cardId, url);
+  }
 
   // finalize(saveMedia)失败时 url 仍是远端 http(s) —— 远端地址不可靠(时效签名 /
   // 境外站国内不可达),交给统一收敛模块退避补救。本地路径时这里是 no-op。

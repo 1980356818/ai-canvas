@@ -93,6 +93,7 @@ export type { BackupInfo } from "./backup.api";
 
 export {
   upsertTask,
+  beginAttempt,
   getTask,
   listPendingTasks,
   listTasksByCard,

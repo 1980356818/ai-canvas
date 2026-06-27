@@ -10,7 +10,7 @@ import { makeSmoothProgressTracker } from "./progress";
 import type { GenerationProgress } from "../types";
 import { getComflyKeyTag } from "../comfly/models";
 import { taskManager } from "@/services/taskManager";
-import { NO_RESULT_URL_MESSAGE } from "@/services/taskOutcome";
+import { NO_RESULT_URL_MESSAGE, SupersededError } from "@/services/taskOutcome";
 import type { AsyncTask } from "@/types";
 
 /**
@@ -162,6 +162,12 @@ function extractMediaResult(
   finalTask: AsyncTask,
   req: AsyncMediaTaskRequest,
 ): AsyncMediaTaskResult {
+  // 写闸门②:本任务已被「重新生成」取代(可能仍在后台保活跑)。它的结果由后台任务
+  // 自身落库进任务面板;编辑器这条 await 绝不能再把(旧)结果写回画布卡 —— 抛良性
+  // SupersededError,由 runEditorGeneration 静默吞掉。
+  if (finalTask.supersededAt) {
+    throw new SupersededError();
+  }
   if (finalTask.status === "success" && finalTask.result) {
     const r = finalTask.result;
     const url = typeof r.url === "string" ? r.url : "";

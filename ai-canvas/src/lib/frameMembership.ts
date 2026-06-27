@@ -7,7 +7,10 @@
  *
  * 规则:
  *   - 命中判定:卡片中心点 ∈ 框 rect(与 hitGroupAt 同源)。
- *   - 单成员:一卡只属一框;重叠时**最上层框赢**(沿 getGroupsByProject 渲染顺序,后者覆盖前者)。
+ *   - 单成员:一卡只属一框。重叠时**成员粘性优先**:已属某框、且中心仍落在该框内的卡
+ *     保持原归属(重叠框**不互相吞并**对方的既有成员);只有**自由卡**(无主 / 新建 /
+ *     导入掉组 / 掉出原框)才被命中它的**最上层框**吸收(沿 getGroupsByProject 渲染顺序,
+ *     后者覆盖前者)。粘性是「按组复制出同位副本框后,拖框成员仍跟走」的关键。
  *   - 折叠冻结:折叠框的成员保持不变,且其成员不参与其它框的空间吸收
  *     (折叠后 rect 缩成胶囊,无法再靠空间判定,必须冻结)。
  *
@@ -76,14 +79,43 @@ export function reconcileFrameMembership(projectId: string): boolean {
     if (g.collapsed) for (const cid of g.cardIds) frozen.add(cid);
   }
 
-  // 每张卡 → 命中的最上层展开框(渲染顺序后者覆盖前者 → 最上层赢)。
-  const owner = new Map<string, string>();
+  // 每张卡 → 归属的展开框。分两轮,体现「成员粘性优先于空间吸收」:
+  //   轮1(粘性):已是某框成员、且中心仍落在该框 rect 内的卡,保持原归属 —— 这样
+  //     **重叠框不会把对方的既有成员抢走**。否则「按组复制」出的同位副本框会和源框
+  //     互相吞并成员,导致拖框时框里的卡不跟走(本次修复的根因)。
+  //   轮2(吸收):仍无主的「自由卡」(新建 / 导入掉组 / 移入框 / 掉出原框)归命中它的
+  //     **最上层框**(渲染顺序后者覆盖前者 → 最上层赢)。
+  // 先把各展开框的 rect 算好,两轮共用(折叠框不入 rects;computeGroupBounds 自带兜底)。
+  const rects = new Map<string, GroupBounds>();
   for (const g of groups) {
     if (g.collapsed) continue;
     const rect = computeGroupBounds(g, cards);
+    if (rect) rects.set(g.id, rect);
+  }
+
+  const owner = new Map<string, string>();
+  const sticky = new Set<string>();
+
+  // 轮1:成员粘性 —— 既有成员只要没离开自己的框,就留在原框,不被重叠的上层框吸走。
+  for (const g of groups) {
+    const rect = rects.get(g.id);
+    if (!rect) continue;
+    for (const cid of g.cardIds) {
+      if (frozen.has(cid) || sticky.has(cid)) continue;
+      const c = cards.get(cid);
+      if (c && centerInRect(c, rect)) {
+        owner.set(cid, g.id);
+        sticky.add(cid);
+      }
+    }
+  }
+
+  // 轮2:空间吸收 —— 只认还无主的自由卡;最上层框赢(后者覆盖前者)。
+  for (const g of groups) {
+    const rect = rects.get(g.id);
     if (!rect) continue;
     for (const cid of cardsInFrame(rect, cards)) {
-      if (frozen.has(cid)) continue;
+      if (frozen.has(cid) || sticky.has(cid)) continue;
       owner.set(cid, g.id);
     }
   }

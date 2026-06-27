@@ -428,6 +428,12 @@ function ContextMenuPanel({
             disabled: noProject,
             onSelect: (e) => addCardAtClick("ai_video", e),
           },
+          {
+            type: "item",
+            label: "帮我写",
+            disabled: noProject,
+            onSelect: (e) => addCardAtClick("ai_script", e),
+          },
           ...(!HIDDEN_FEATURES.multiangle ? [{
             type: "item" as const,
             label: "多角度",
@@ -527,6 +533,23 @@ function ContextMenuPanel({
               disabled: !id,
               onSelect: () => {
                 if (id) void runGroup(cardOwnerGroup.id, { startNodeIds: [id] });
+                hide();
+              },
+            },
+          ]
+        : []),
+      ...(card &&
+      (card.type === "ai_image" ||
+        card.type === "ai_multiangle" ||
+        card.type === "ai_tryon" ||
+        card.type === "ai_video")
+        ? [
+            {
+              type: "item" as const,
+              label: "查看生成记录",
+              disabled: !id,
+              onSelect: () => {
+                if (id) useUIStore.getState().openCardTaskPanel(id);
                 hide();
               },
             },

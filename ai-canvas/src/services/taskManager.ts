@@ -18,6 +18,7 @@
  */
 
 import { useTasksStore } from "@/stores/tasksStore";
+import { beginAttempt as beginAttemptDb } from "@/platform";
 import { TaskError } from "./httpClient";
 import type { AsyncTask, TaskErrorKind } from "@/types";
 import { ACTIVE_STATUSES } from "@/types";
@@ -90,7 +91,14 @@ export interface TaskSpec {
 
 interface RunningTask {
   controller: AbortController;
-  promise: Promise<void>;
+  /** 后台状态机循环。它跑到终态(success/failed/canceled)才 settle。 */
+  loop: Promise<void>;
+  /**
+   * 「脱钩」当前任务的 `completion` 等待者:resolve 后,await completion 的调用方
+   * (编辑器 / 组运行)立刻拿到控制权,而 `loop` **继续**在后台跑到出图。
+   * 用于「保活式取代」—— 旧任务已计费,不中止,后台跑完进任务面板。
+   */
+  detach: () => void;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -149,6 +157,10 @@ class TaskManager {
       );
     }
 
+    // 开启新尝试:把该卡现有「当前」任务标记被替换(已计费的保活后台跑完、未计费的中止省钱),
+    // 并拿到本卡下一个 attempt_no。这让「生成中再点生成」「重试」走同一条保活路径。
+    const attemptNo = await this.beginAttempt(spec.cardId);
+
     const now = new Date().toISOString();
     const task: AsyncTask = {
       id: crypto.randomUUID(),
@@ -170,6 +182,8 @@ class TaskManager {
       createdAt: now,
       updatedAt: now,
       lastPolledAt: undefined,
+      attemptNo,
+      supersededAt: undefined, // 新任务即「当前尝试」
     };
 
     await useTasksStore.getState().upsert(task);
@@ -184,7 +198,7 @@ class TaskManager {
   async resume(taskId: string): Promise<AsyncTask | null> {
     if (this.running.has(taskId)) {
       // 已经在跑，等它结束
-      await this.running.get(taskId)!.promise;
+      await this.running.get(taskId)!.loop;
       return useTasksStore.getState().getById(taskId) ?? null;
     }
 
@@ -235,7 +249,7 @@ class TaskManager {
       r.controller.abort();
       // 等待 run() 把状态写为 canceled
       try {
-        await r.promise;
+        await r.loop;
       } catch {
         /* run() 自己处理状态，吞掉异常 */
       }
@@ -253,22 +267,33 @@ class TaskManager {
   }
 
   /**
-   * 重试：把旧任务标为 orphaned，用同样的 request 起一个新 task。
-   * 老 result/error 保留在 orphaned 记录里供追溯。
+   * 保活式取代:把任务标记为「被替换」(supersededAt),并**不中止**后台轮询 ——
+   * 它已计费,让它在后台跑到出图、结果进任务面板。同时「脱钩」当前的 completion
+   * 等待者,让 await 它的调用方(编辑器 / 组运行)立刻拿到控制权。
+   *
+   * 与 cancel 的区别:cancel 是真中止(abort,适合未计费的任务);supersede 是保活。
+   */
+  async supersede(taskId: string): Promise<void> {
+    const t = useTasksStore.getState().getById(taskId);
+    if (!t) return;
+    if (!t.supersededAt) {
+      await useTasksStore.getState().upsert({
+        ...t,
+        supersededAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    // 释放 completion 等待者;后台 loop 继续(不 abort)。
+    this.running.get(taskId)?.detach();
+  }
+
+  /**
+   * 重试:用同样的 request 起一个新尝试。
+   * 旧任务的保活/中止/标记统一由 startTask → beginAttempt 处理(不再 cancel + orphaned)。
    */
   async retry(taskId: string): Promise<AsyncTask> {
     const old = useTasksStore.getState().getById(taskId);
     if (!old) throw new Error(`task ${taskId} not found`);
-
-    if (ACTIVE_STATUSES.has(old.status)) {
-      await this.cancel(taskId);
-    }
-
-    await useTasksStore.getState().upsert({
-      ...old,
-      status: "orphaned",
-      updatedAt: new Date().toISOString(),
-    });
 
     return await this.submit({
       cardId: old.cardId,
@@ -282,20 +307,58 @@ class TaskManager {
     });
   }
 
+  /**
+   * 开启新尝试的内部步骤:把该卡所有「当前」旧任务让位给即将创建的新任务。
+   *   • 未计费(queued / submitting 且无 externalTaskId)→ 真中止,省一次扣费;
+   *   • 已计费且在跑 → 保活:标记被替换 + 脱钩等待者,后台跑完进面板;
+   *   • 已终态 → 仅标记被替换(纳入历史尝试)。
+   * 返回本卡下一个 attempt_no(DB 权威)。
+   */
+  private async beginAttempt(cardId: string): Promise<number> {
+    const store = useTasksStore.getState();
+    const now = new Date().toISOString();
+    const priors = [...store.tasks.values()].filter(
+      (t) => t.cardId === cardId && !t.supersededAt,
+    );
+
+    for (const t of priors) {
+      // 先在内存打 superseded 标记 → 写闸门立刻生效(旧任务不再驱动画布卡)。
+      store.upsertLocalOnly({ ...t, supersededAt: now });
+
+      if (ACTIVE_STATUSES.has(t.status) && !t.externalTaskId) {
+        await this.cancel(t.id); // 未计费 → 真中止(canceled,已带 superseded)
+      } else if (ACTIVE_STATUSES.has(t.status)) {
+        this.running.get(t.id)?.detach(); // 已计费在跑 → 保活,仅释放等待者
+      }
+      // 已终态:打了 superseded 即可
+    }
+
+    // DB 权威:原子标记所有「当前」行 + 返回下一个 attempt_no。
+    return await beginAttemptDb(cardId);
+  }
+
   // ──────────────────────────────────────────────────────────────
   // 内部：状态机驱动
   // ──────────────────────────────────────────────────────────────
 
-  private async run(task: AsyncTask, handler: TaskHandler): Promise<AsyncTask> {
+  private run(task: AsyncTask, handler: TaskHandler): Promise<AsyncTask> {
     const controller = new AbortController();
-    const promise = this.driveStateMachine(task.id, handler, controller.signal);
-    this.running.set(task.id, { controller, promise });
-    try {
-      await promise;
-    } finally {
-      this.running.delete(task.id);
-    }
-    return useTasksStore.getState().getById(task.id) ?? task;
+    const loop = this.driveStateMachine(task.id, handler, controller.signal);
+
+    // detached:被 supersede() resolve,用于「保活式取代」时提前释放等待者。
+    let detach!: () => void;
+    const detached = new Promise<void>((resolve) => {
+      detach = resolve;
+    });
+
+    this.running.set(task.id, { controller, loop, detach });
+    // loop 跑完(终态)才从 running 移除 —— 保活任务即使已 detach,仍留在 running 直到出图。
+    void loop.catch(() => {}).finally(() => this.running.delete(task.id));
+
+    // completion = loop 终态 或 被 supersede 脱钩,谁先到算谁。
+    return Promise.race([loop, detached]).then(
+      () => useTasksStore.getState().getById(task.id) ?? task,
+    );
   }
 
   private async driveStateMachine(

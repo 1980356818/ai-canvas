@@ -56,8 +56,12 @@ export function canUseTemplate(
  * trial 分类是正式模板的试用副本(同封面),正式版用户已有完整模板,不该再看到重复的试用版
  * → 仅对非正式版用户展示 trial;其余分类对所有人可见。
  */
-export function canSeeTemplate(ent: Entitlements, tpl: { category: string }): boolean {
+export function canSeeTemplate(
+  ent: Entitlements,
+  tpl: { id: string; category: string },
+): boolean {
   if (tpl.category === "trial") return !ent.isOfficial;
+  if (tpl.id.endsWith("-trial")) return !ent.isOfficial;
   return true;
 }
 

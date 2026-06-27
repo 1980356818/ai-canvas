@@ -539,18 +539,19 @@ export function toVeoAspectRatio(size: string | undefined): string | undefined {
 //   seedance-2-0-fast-video-ref  fast + 含视频参考                                         (上游 22/M, 售价 25/M, 预扣 40)
 //
 // 火山真实计费维度只有"是否含视频参考"; 纯文本 + 图片参考 同算 no_video 档.
-// version (standard/fast) 是画质 / 速度档, 影响 token 单价, 不影响预扣金额.
+// version (standard/fast/mini) 是画质 / 速度档, 影响 token 单价; 预扣按 (model × resolution).
 // ═════════════════════════════════════════════════════════════════════
 
-/** 画质 / 速度档 (用户在 UI 上选, 不影响预扣金额). */
-export type SeedanceV2Version = "standard" | "fast";
+/** 画质 / 速度档 (用户在 UI 上选, 不影响预扣金额). mini = 火山最低价档 (V163 新增). */
+export type SeedanceV2Version = "standard" | "fast" | "mini";
 
 /** UI button-group 选项 — VideoEditor 通过此数组渲染版本切换胶囊.
- *  label 风格跟老 SEEDANCE_TIERS 一致 (快速 / 标准) — 画质胶囊只需表达档位,
+ *  label 用火山官方档名 (mini / fast / standard), 按"便宜→好"排序;
  *  不重复 "Seedance 2.0" 字样 (model 名已在 ModelSelector 显示). */
 export const SEEDANCE_V2_VERSION_TIERS: readonly { value: SeedanceV2Version; label: string }[] = [
-  { value: "fast",     label: "快速" },
-  { value: "standard", label: "标准" },
+  { value: "mini",     label: "mini" },
+  { value: "fast",     label: "fast" },
+  { value: "standard", label: "standard" },
 ];
 
 /** 聚合 alias model id (UI 显示这一项, 提交时按 resolve 函数转成 4 个具体 model). */
@@ -562,6 +563,9 @@ const SEEDANCE_V2_MODEL_IDS = new Set<string>([
   "seedance-2-0-fast",
   "seedance-2-0-video-ref",
   "seedance-2-0-fast-video-ref",
+  // V163 mini 档 (后端 route 2247/2248, 上游 doubao-seedance-2-0-mini-260615).
+  "seedance-2-0-mini",
+  "seedance-2-0-mini-video-ref",
 ]);
 
 /** 整个 V161 火山方舟体系 (alias + 4 个具体 model) 的判定. */
@@ -578,13 +582,15 @@ export function isSeedanceV2AliasModel(modelId: string | undefined | null): bool
 /**
  * V161 火山方舟原生 Seedance 2.0 聚合 — 按 (version × 是否传视频参考) 选 4 个具体 model.
  *
- * 计费提示 (元/百万 token):
- *   standard + no_video   → seedance-2-0                  上游 46 / 售价 51 / 预扣 20
- *   fast     + no_video   → seedance-2-0-fast             上游 37 / 售价 41 / 预扣 20
- *   standard + with_video → seedance-2-0-video-ref        上游 28 / 售价 31 / 预扣 40
- *   fast     + with_video → seedance-2-0-fast-video-ref   上游 22 / 售价 25 / 预扣 40
+ * 计费提示 (上游单价 元/百万 token, V163):
+ *   standard + no_video   → seedance-2-0                  上游 46 / 预扣按分辨率
+ *   fast     + no_video   → seedance-2-0-fast             上游 37 / 预扣按分辨率
+ *   mini     + no_video   → seedance-2-0-mini             上游 23 / 预扣按分辨率
+ *   standard + with_video → seedance-2-0-video-ref        上游 28
+ *   fast     + with_video → seedance-2-0-fast-video-ref   上游 22
+ *   mini     + with_video → seedance-2-0-mini-video-ref   上游 14
  *
- * 火山按 token 计费, 提交时按 hasVideos 固定预扣, 完成后按上游
+ * 火山按 token 计费, 提交时按 (model × resolution × hasVideos) 预扣, 完成后按上游
  * usage.completion_tokens × 单价多退少补.
  *
  * 注意: 纯文本 + 图片参考 同算 no_video 档 (火山只看 content 数组里是否有
@@ -595,36 +601,46 @@ export function resolveSeedanceV2ModelId(
   hasVideos: boolean,
 ): string {
   if (hasVideos) {
-    return version === "fast" ? "seedance-2-0-fast-video-ref" : "seedance-2-0-video-ref";
+    if (version === "fast") return "seedance-2-0-fast-video-ref";
+    if (version === "mini") return "seedance-2-0-mini-video-ref";
+    return "seedance-2-0-video-ref";
   }
-  return version === "fast" ? "seedance-2-0-fast" : "seedance-2-0";
+  if (version === "fast") return "seedance-2-0-fast";
+  if (version === "mini") return "seedance-2-0-mini";
+  return "seedance-2-0";
 }
 
 /**
- * V161 火山原生 Seedance 2.0 分辨率档。火山官方 doubao-seedance-2-0 支持 480p/720p/1080p;
- * fast 上游不支持 1080p,故 fast 档只放 480p/720p(见 {@link isSeedanceV2ResolutionAllowed})。
+ * 火山原生 Seedance 2.0 分辨率档 (V163)。官方 doubao-seedance-2-0(standard) 支持
+ * 480p/720p/1080p/4k; fast 与 mini 上游不支持 1080p/4k, 只放 480p/720p
+ * (见 {@link isSeedanceV2ResolutionAllowed})。
  *
- * 注意: resolution 是独立的 body 字段,不编码在 model 名里 —— 还是那 4 个 model
- * (standard/fast × 有无视频参考),resolution 单独透传给火山, 后端 VolcanoArkVideoAdapter
- * 原样转发。计费按 token 实结(per-token 单价与分辨率无关),不需要为 1080p 单独配价。
+ * 注意: resolution 是独立的 body 字段,不编码在 model 名里 —— 还是那 6 个 model
+ * (standard/fast/mini × 有无视频参考),resolution 单独透传给火山, 后端
+ * VolcanoArkVideoAdapter 原样转发。计费按 token 实结,后端按 (model × resolution × hasVideo)
+ * 查单价 (standard 的 per-token 单价随分辨率变: 720p=46 / 1080p=51 / 4k=26, 4k 反而最低
+ * 因 token 量大), 前端不配价、只透传分辨率。
  */
-export type SeedanceV2Resolution = "480p" | "720p" | "1080p";
+export type SeedanceV2Resolution = "480p" | "720p" | "1080p" | "4k";
 
 export const SEEDANCE_V2_RESOLUTION_TIERS: readonly { value: SeedanceV2Resolution; label: string }[] = [
   { value: "480p",  label: "480P" },
   { value: "720p",  label: "720P" },
   { value: "1080p", label: "1080P" },
+  { value: "4k",    label: "4K" },
 ];
 
-/** fast 不支持 1080p — 判某分辨率在当前 version 下是否可选(UI 置灰 + 提交前钳制都用它)。 */
+/** 1080p/4k 仅 standard 支持; fast/mini 上限 720p — 判某分辨率在当前 version 下是否可选
+ *  (UI 置灰 + 提交前钳制都用它)。 */
 export function isSeedanceV2ResolutionAllowed(
   version: SeedanceV2Version,
   resolution: SeedanceV2Resolution,
 ): boolean {
-  return !(version === "fast" && resolution === "1080p");
+  if (resolution === "1080p" || resolution === "4k") return version === "standard";
+  return true; // 480p / 720p 所有档都支持
 }
 
-/** 把(version, 期望分辨率)钳到合法值: fast + 1080p → 720p,其余原样。 */
+/** 把(version, 期望分辨率)钳到合法值: 非 standard 选了 1080p/4k → 720p,其余原样。 */
 export function clampSeedanceV2Resolution(
   version: SeedanceV2Version,
   resolution: SeedanceV2Resolution,

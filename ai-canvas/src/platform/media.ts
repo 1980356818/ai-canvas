@@ -36,6 +36,7 @@ import {
   httpUploadBytes,
   type UploadResult as HttpUploadResult,
 } from "./httpAdapter";
+import { migrateAssetDomain } from "@/lib/media";
 
 /**
  * Rust 端 `upload_to_server` / `upload_bytes_to_server` 返回结构。跟
@@ -77,6 +78,7 @@ export async function mediaToApiRef(
   opts?: MediaToApiRefOptions
 ): Promise<string> {
   if (!input) return "";
+  input = migrateAssetDomain(input);
 
   // ⚠ Tauri 本地 asset 显示 URL 必须先归一回本地路径再真上传 —— 不能命中下面
   // 的「http(s):// → 远端直传」快路径。Windows/Android 的 `convertFileSrc`

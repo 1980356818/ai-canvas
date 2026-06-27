@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_VERSION: u32 = 12;
+const CURRENT_VERSION: u32 = 13;
 
 pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     let version: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -39,6 +39,9 @@ pub fn run(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
     // 注:本仓没有 v11 —— bounds 迁移用 v12(原因见 migrate_v12 注释)。
     if version < 12 {
         migrate_v12(conn)?;
+    }
+    if version < 13 {
+        migrate_v13(conn)?;
     }
 
     Ok(())
@@ -362,5 +365,57 @@ fn migrate_v12(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
         ",
     )?;
 
+    Ok(())
+}
+
+fn migrate_v13(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::info!("running migration v13: task generation attempts (keep-alive + per-card panel)");
+
+    // 「卡片任务面板」:让一张卡的每一次生成尝试(含被「重新生成」替换掉的)都可观测、可存图。
+    //
+    //   attempt_no    —— 该卡内尝试序号(1,2,3…),用于面板展示「尝试 #N」与排序。
+    //   superseded_at —— 单轴「被替换」标记。NULL = 当前尝试(**唯一**驱动画布卡的进度/错误/结果);
+    //                    非空 = 被后来的「重新生成」替换。已计费的被替换任务会保活后台跑完、
+    //                    结果只进任务面板不写画布(根治「旧任务晚完成盖掉新卡」竞态)。
+    //
+    // 不加 cost 列 —— App 端不参与计费、本地无价格源,产品上也不展示费用数字。
+    conn.execute_batch(
+        "
+        ALTER TABLE tasks ADD COLUMN attempt_no    INTEGER NOT NULL DEFAULT 1;
+        ALTER TABLE tasks ADD COLUMN superseded_at TEXT;
+
+        CREATE INDEX IF NOT EXISTS idx_tasks_card_superseded
+            ON tasks(card_id, superseded_at);
+        ",
+    )?;
+
+    // 回填 attempt_no:按 card 内 created_at 升序编号(相关子查询,无窗口函数,移植性好)。
+    conn.execute_batch(
+        "
+        UPDATE tasks SET attempt_no = 1 + (
+            SELECT COUNT(*) FROM tasks t2
+            WHERE t2.card_id = tasks.card_id
+              AND (t2.created_at <  tasks.created_at
+                OR (t2.created_at = tasks.created_at AND t2.id < tasks.id))
+        );
+        ",
+    )?;
+
+    // 回填 superseded_at:每张卡只保留「最新一条」为当前,其余标记被替换。
+    // 既消化历史 orphaned 行,又保证「每卡至多一个当前尝试」的不变量在迁移后即成立。
+    conn.execute_batch(
+        "
+        UPDATE tasks SET superseded_at = updated_at
+        WHERE superseded_at IS NULL
+          AND EXISTS (
+            SELECT 1 FROM tasks t2
+            WHERE t2.card_id = tasks.card_id
+              AND (t2.created_at >  tasks.created_at
+                OR (t2.created_at = tasks.created_at AND t2.id > tasks.id))
+          );
+        ",
+    )?;
+
+    conn.execute_batch("PRAGMA user_version = 13;")?;
     Ok(())
 }

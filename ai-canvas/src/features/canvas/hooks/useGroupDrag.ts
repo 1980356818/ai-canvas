@@ -4,7 +4,7 @@ import { useCardStore } from "@/stores/cardStore";
 import { useGroupStore } from "@/stores/groupStore";
 import type { CanvasCard } from "@/types";
 import { autoSave } from "@/lib/autoSave";
-import { recordUpdate } from "@/lib/history";
+import { recordUpdate, recordGroupUpdate, history } from "@/lib/history";
 import { reconcileFrameMembership } from "@/lib/frameMembership";
 import { saveGroupsBatch } from "@/platform";
 import { groupToRow } from "@/lib/mappers";
@@ -136,14 +136,19 @@ export function useGroupTitleDrag(groupId: string) {
 
         // 提交到 store + history + autoSave —— 批量一次 bump layoutVersion,
         // 空间索引单次增量 diff(替代 N 次 updateCard 的 O(N×总数))。
+        // 历史侧:整框移动 = N 张卡坐标 + 框边界,用 transact 合成**一次**原子撤销,
+        // 一次 Ctrl+Z 让卡和框一起回原位(此前框边界根本没记历史 → 撤销后框不动)。
         const updates: Array<{ id: string; partial: Partial<CanvasCard> }> = [];
-        for (const [cid, peer] of startCards) {
-          const card = cardStore.getCard(cid);
-          if (!card) continue;
-          recordUpdate(cid, { x: peer.cx, y: peer.cy });
-          updates.push({ id: cid, partial: { x: peer.cx + dx, y: peer.cy + dy } });
-          autoSave.markDirty(cid);
-        }
+        history.transact(() => {
+          for (const [cid, peer] of startCards) {
+            const card = cardStore.getCard(cid);
+            if (!card) continue;
+            recordUpdate(cid, { x: peer.cx, y: peer.cy });
+            updates.push({ id: cid, partial: { x: peer.cx + dx, y: peer.cy + dy } });
+            autoSave.markDirty(cid);
+          }
+          recordGroupUpdate(groupId, { x: group.x, y: group.y });
+        });
         if (updates.length > 0) useCardStore.getState().updateCards(updates);
 
         // Frame 容器化:整框移动 = 同步平移框的存储边界(成员卡已随之移动,仍在框内),

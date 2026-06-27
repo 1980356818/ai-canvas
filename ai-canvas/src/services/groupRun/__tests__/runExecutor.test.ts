@@ -33,16 +33,35 @@ function canvasCard(id: string, data: Record<string, unknown>): CanvasCard {
 
 const mockRunCard = vi.mocked(runCard);
 
+/**
+ * 从 `nodes` + `edges` 造一份 plan(数据流形态)。
+ * adjacency / indegree 由 edges 推导(限定在 nodes 内),与 buildRunPlan 同口径。
+ * 说明:旧版用「人工 layers」隐式表达「先后/独立」;数据流下这些必须落到**真实的边或并发数**上。
+ */
 function makePlan(
-  partial: Partial<RunPlan> & { groupId: string; layers: string[][] },
+  partial: {
+    groupId: string;
+    nodes: string[];
+    edges?: [string, string][];
+  } & Partial<Pick<RunPlan, "concurrency" | "mode" | "maxRetries" | "retryBackoffMs">>,
 ): RunPlan {
-  const total = partial.layers.reduce((s, l) => s + l.length, 0);
+  const edges = partial.edges ?? [];
+  const nodeSet = new Set(partial.nodes);
+  const adjacency = new Map<string, string[]>();
+  const indegree = new Map<string, number>();
+  for (const id of partial.nodes) indegree.set(id, 0);
+  for (const [s, t] of edges) {
+    if (!nodeSet.has(s) || !nodeSet.has(t)) continue;
+    (adjacency.get(s) ?? adjacency.set(s, []).get(s)!).push(t);
+    indegree.set(t, (indegree.get(t) ?? 0) + 1);
+  }
   return {
     groupId: partial.groupId,
-    layers: partial.layers,
-    total,
+    nodes: [...partial.nodes].sort(),
+    total: partial.nodes.length,
     concurrency: partial.concurrency ?? Infinity,
-    adjacency: partial.adjacency ?? new Map(),
+    adjacency,
+    indegree,
     mode: partial.mode ?? "rerun",
     maxRetries: partial.maxRetries ?? 0,
     retryBackoffMs: partial.retryBackoffMs ?? 0,
@@ -57,11 +76,11 @@ beforeEach(() => {
   useCardStore.getState().setCards([]); // 隔离:避免上个用例的卡污染 resume 新鲜度判定
 });
 
-describe("executePlan — 调度 + 终结态", () => {
+describe("executePlan — 数据流调度 + 终结态", () => {
   it("全部成功 → completed,ok 计数 + 状态机 completed", async () => {
     mockRunCard.mockResolvedValue({ outcome: "ok" });
     const report = await executePlan(
-      makePlan({ groupId: "g1", layers: [["A"], ["B"]] }),
+      makePlan({ groupId: "g1", nodes: ["A", "B"], edges: [["A", "B"]] }),
       new GroupRunControl(),
     );
     expect(report.endState).toBe("completed");
@@ -71,10 +90,26 @@ describe("executePlan — 调度 + 终结态", () => {
     expect(mockRunCard).toHaveBeenCalledTimes(2);
   });
 
+  it("两条独立链各自跑完(根治层屏障:互不阻塞)", async () => {
+    mockRunCard.mockResolvedValue({ outcome: "ok" });
+    // A1→A2 与 B1→B2 完全独立。数据流下两链各自推进,4 张全 ok。
+    const report = await executePlan(
+      makePlan({
+        groupId: "g-indep",
+        nodes: ["A1", "A2", "B1", "B2"],
+        edges: [["A1", "A2"], ["B1", "B2"]],
+      }),
+      new GroupRunControl(),
+    );
+    expect(report.ok).toBe(4);
+    expect(report.endState).toBe("completed");
+    expect(mockRunCard).toHaveBeenCalledTimes(4);
+  });
+
   it("skipped 计入 done(不计 failed),全跳过仍 completed", async () => {
     mockRunCard.mockResolvedValue({ outcome: "skipped", reason: "text 节点" });
     const report = await executePlan(
-      makePlan({ groupId: "g5", layers: [["A", "B"]] }),
+      makePlan({ groupId: "g5", nodes: ["A", "B"] }), // 独立两根
       new GroupRunControl(),
     );
     expect(report.skipped).toBe(2);
@@ -82,14 +117,13 @@ describe("executePlan — 调度 + 终结态", () => {
     expect(report.endState).toBe("completed");
   });
 
-  it("失败隔离:失败卡的下游剪枝(notDispatched),独立分支照跑", async () => {
+  it("失败隔离:失败卡的下游不放行(notDispatched),独立分支照跑", async () => {
     mockRunCard.mockImplementation(async (cid) =>
       cid === "A" ? { outcome: "failed", reason: "boom" } : { outcome: "ok" },
     );
-    // A→B(B 是 A 下游),C 独立。layer0=[A,C],layer1=[B]。A 失败 → B 剪枝,C 照跑。
-    const adjacency = new Map<string, string[]>([["A", ["B"]]]);
+    // A→B(B 是 A 下游),C 独立。A 失败 → B 不放行(下游天然不就绪 = 剪枝),C 照跑。
     const report = await executePlan(
-      makePlan({ groupId: "g2", layers: [["A", "C"], ["B"]], adjacency }),
+      makePlan({ groupId: "g2", nodes: ["A", "B", "C"], edges: [["A", "B"]] }),
       new GroupRunControl(),
     );
     expect(report.failed).toBe(1); // A
@@ -102,15 +136,15 @@ describe("executePlan — 调度 + 终结态", () => {
     expect(mockRunCard).not.toHaveBeenCalledWith("B", expect.anything());
   });
 
-  it("排空式停止(闸门①层间):停止后续层不派发,在途跑完 → stopped", async () => {
+  it("排空式停止:停止后下游不派发,在途跑完 → stopped", async () => {
     const ctrl = new GroupRunControl();
-    // A 在途时用户点停止 → 下一层 B 不该开
+    // A→B。A 在途时用户点停止 → A 完成也不放行派发 B。
     mockRunCard.mockImplementation(async (cid) => {
       if (cid === "A") ctrl.requestStop();
       return { outcome: "ok" };
     });
     const report = await executePlan(
-      makePlan({ groupId: "g3", layers: [["A"], ["B"]] }),
+      makePlan({ groupId: "g3", nodes: ["A", "B"], edges: [["A", "B"]] }),
       ctrl,
     );
     expect(report.endState).toBe("stopped");
@@ -120,15 +154,15 @@ describe("executePlan — 调度 + 终结态", () => {
     expect(mockRunCard).toHaveBeenCalledTimes(1);
   });
 
-  it("排空式停止(闸门②层内,并发=1):本层没轮到的卡不调 runCard(不扣费)", async () => {
+  it("排空式停止(并发=1):没轮到的卡不调 runCard(不扣费)", async () => {
     const ctrl = new GroupRunControl();
-    // 同层 [A,B] 并发=1 顺序:A 跑时停止 → B 的 thunk 被闸门②拦下,runCard 不调
+    // 两根 [A,B] 并发=1:A 先跑时停止 → B 在派发闸被拦,runCard 不调。
     mockRunCard.mockImplementation(async (cid) => {
       if (cid === "A") ctrl.requestStop();
       return { outcome: "ok" };
     });
     const report = await executePlan(
-      makePlan({ groupId: "g4", layers: [["A", "B"]], concurrency: 1 }),
+      makePlan({ groupId: "g4", nodes: ["A", "B"], concurrency: 1 }),
       ctrl,
     );
     expect(report.endState).toBe("stopped");
@@ -147,10 +181,10 @@ describe("executePlan — 调度 + 终结态", () => {
     });
     ctrl.forceAbort(); // 跑之前就强制中止
     const report = await executePlan(
-      makePlan({ groupId: "g6", layers: [["A"]] }),
+      makePlan({ groupId: "g6", nodes: ["A"] }),
       ctrl,
     );
-    // forceAbort 后闸门②直接拦下(shouldDispatch=false),A 不派发 → runCard 没被调
+    // forceAbort 后派发闸直接拦下(shouldDispatch=false),A 不派发 → runCard 没被调
     expect(report.notDispatched).toBe(1);
     expect(report.endState).toBe("stopped");
     expect(seenAborted).toBeNull(); // 没进 runCard
@@ -169,7 +203,7 @@ describe("executePlan — 调度 + 终结态", () => {
     useCardStore.getState().setCards([freshA, bCard]);
 
     const report = await executePlan(
-      makePlan({ groupId: "gr1", layers: [["A", "B"]], mode: "resume" }),
+      makePlan({ groupId: "gr1", nodes: ["A", "B"], mode: "resume" }),
       new GroupRunControl(),
     );
     expect(report.skipped).toBe(1); // A 新鲜 → 跳过
@@ -186,7 +220,7 @@ describe("executePlan — 调度 + 终结态", () => {
     const fresh = canvasCard("A", { ...data, _run: { fp, at: "t", pending: false } });
     useCardStore.getState().setCards([fresh]);
     const report = await executePlan(
-      makePlan({ groupId: "gr2", layers: [["A"]], mode: "resume" }),
+      makePlan({ groupId: "gr2", nodes: ["A"], mode: "resume" }),
       new GroupRunControl(),
     );
     expect(report.ok).toBe(0);
@@ -203,7 +237,7 @@ describe("executePlan — 调度 + 终结态", () => {
         : { outcome: "ok" as const };
     });
     const report = await executePlan(
-      makePlan({ groupId: "gr-retry", layers: [["A"]], maxRetries: 2, retryBackoffMs: 0 }),
+      makePlan({ groupId: "gr-retry", nodes: ["A"], maxRetries: 2, retryBackoffMs: 0 }),
       new GroupRunControl(),
     );
     expect(calls).toBe(2); // 失败一次 + 重试一次
@@ -219,7 +253,7 @@ describe("executePlan — 调度 + 终结态", () => {
       return { outcome: "failed" as const, reason: "content policy violation" };
     });
     const report = await executePlan(
-      makePlan({ groupId: "gr-noretry", layers: [["A"]], maxRetries: 2, retryBackoffMs: 0 }),
+      makePlan({ groupId: "gr-noretry", nodes: ["A"], maxRetries: 2, retryBackoffMs: 0 }),
       new GroupRunControl(),
     );
     expect(calls).toBe(1); // 永久错误不重试

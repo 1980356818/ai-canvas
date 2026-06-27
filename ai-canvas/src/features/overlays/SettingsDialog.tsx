@@ -37,7 +37,6 @@ import {
   getSetting,
   setSetting,
   validateConnection,
-  invalidateApiKeyCache,
   pickDirectory,
   listBackups,
   getBackupDir,
@@ -362,7 +361,6 @@ export default function SettingsDialog() {
       await setSetting("file_auto_save_path", autoSavePath.trim());
       await setSetting("file_export_path", exportPath.trim());
 
-      invalidateApiKeyCache();
       modelService.invalidateCache();
       toggleSettings();
       useUIStore.getState().addToast({

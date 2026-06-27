@@ -21,7 +21,12 @@ import { computeEnvelopeBounds } from "@/lib/groupBounds";
 import { saveGroupsBatch, deleteGroup, updateProjectMeta } from "@/platform";
 import { groupToRow } from "@/lib/mappers";
 import { autoSave } from "@/lib/autoSave";
-import { recordUpdate } from "@/lib/history";
+import {
+  recordUpdate,
+  recordGroupCreate,
+  recordGroupDelete,
+  history,
+} from "@/lib/history";
 
 /** 节点类型 → 用户可读名(用于自动命名)。统计组里"多张图片节点"用。 */
 const TYPE_LABEL: Record<CardType, string> = {
@@ -34,6 +39,7 @@ const TYPE_LABEL: Record<CardType, string> = {
   text: "文本",
   sticky_note: "便签",
   frame_extractor: "关键帧",
+  ai_script: "帮我写",
 };
 
 function autoTitleFor(cardIds: string[]): string {
@@ -170,6 +176,7 @@ export function groupCards(cardIds: string[]): GroupCardsResult | null {
       updatedAt: now,
     };
     useGroupStore.getState().addGroup(group);
+    recordGroupCreate(group.id); // 撤销可删掉拆出的新组(原组成员由 reconcile 回收)
     const all = useGroupStore.getState().getGroupsByProject(projectId);
     void saveGroupsBatch(all.map(groupToRow)).catch((e) =>
       console.warn("[groupActions] groupCards split persist failed:", e),
@@ -199,6 +206,7 @@ export function groupCards(cardIds: string[]): GroupCardsResult | null {
   };
 
   useGroupStore.getState().addGroup(group);
+  recordGroupCreate(group.id); // 撤销可删掉新建的组(被并入的原组成员由 reconcile 回收)
 
   // 持久化:本组 + 所有受影响的原组(maintainSingleMembership 内可能改了它们的 cardIds)
   // 简单做法:把项目所有组都 saveGroupsBatch 一次,组数量小,不会有性能问题。
@@ -226,6 +234,7 @@ export function groupCards(cardIds: string[]): GroupCardsResult | null {
 export function ungroup(groupId: string): boolean {
   const group = useGroupStore.getState().getGroup(groupId);
   if (!group) return false;
+  recordGroupDelete(group); // 撤销可把组按快照建回(含原成员 / 边界 / 颜色 / 折叠态)
   useGroupStore.getState().removeGroup(groupId);
   void deleteGroup(groupId).catch((e) =>
     console.warn(`[groupActions] deleteGroup(${groupId}) failed:`, e),
@@ -253,9 +262,12 @@ export function ungroupFromSelection(): number {
     if (g) groupsToRemove.add(g.id);
   }
   let removed = 0;
-  for (const gid of groupsToRemove) {
-    if (ungroup(gid)) removed++;
-  }
+  // 多个组一并解组 → 合成一次原子撤销(一次 Ctrl+Z 把它们全部建回)。
+  history.transact(() => {
+    for (const gid of groupsToRemove) {
+      if (ungroup(gid)) removed++;
+    }
+  });
   return removed;
 }
 

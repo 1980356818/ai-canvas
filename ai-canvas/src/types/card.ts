@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 
-export type CardType = "ai_chat" | "ai_image" | "ai_video" | "ai_tryon" | "ai_multiangle" | "audio" | "text" | "sticky_note" | "frame_extractor";
+export type CardType = "ai_chat" | "ai_image" | "ai_video" | "ai_tryon" | "ai_multiangle" | "audio" | "text" | "sticky_note" | "frame_extractor" | "ai_script";
 
 export interface CanvasCard {
   id: string;

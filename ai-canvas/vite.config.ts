@@ -101,10 +101,10 @@ export default defineConfig({
   },
   clearScreen: false,
   server: {
-    port: 1620,
+    port: 1630,
     strictPort: true,
     host: host || "127.0.0.1",
-    hmr: host ? { protocol: "ws", host, port: 1621 } : undefined,
+    hmr: host ? { protocol: "ws", host, port: 1631 } : undefined,
     watch: {
       ignored: ["**/src-tauri/**"],
     },

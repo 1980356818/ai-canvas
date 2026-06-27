@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from "react";
-import { MessageSquare, ImageIcon, Video } from "lucide-react";
+import { MessageSquare, ImageIcon, Video, Clapperboard } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
 import { autoSave } from "@/lib/autoSave";
@@ -11,6 +11,7 @@ const QUICK_CREATE_ITEMS: QuickCreateItem[] = [
   { type: "ai_chat", icon: MessageSquare, label: "文本" },
   { type: "ai_image", icon: ImageIcon, label: "图片" },
   { type: "ai_video", icon: Video, label: "视频" },
+  { type: "ai_script", icon: Clapperboard, label: "帮我写" },
 ];
 
 export interface QuickMenuPosition {

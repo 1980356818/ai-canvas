@@ -9,10 +9,10 @@ import { useGroupStore } from "@/stores/groupStore";
 import { useUIStore } from "@/stores/uiStore";
 import { clipboardWriteText, clipboardReadText, updateProjectMeta, saveGroupsBatch, deleteCard } from "@/platform";
 import { autoSave } from "@/lib/autoSave";
-import { recordBatchCreate, recordMove } from "@/lib/history";
+import { recordBatchCreate, recordMove, recordGroupCreate, history } from "@/lib/history";
 import { injectOnConnect } from "@/lib/dataFlow";
 import { groupToRow } from "@/lib/mappers";
-import { DEFAULT_GROUP_COLOR } from "@/types/group";
+import { DEFAULT_GROUP_COLOR, GROUP_PADDING } from "@/types/group";
 import { computeEnvelopeBounds } from "@/lib/groupBounds";
 import type { CardGroup } from "@/types";
 import {
@@ -28,6 +28,14 @@ const CLIPBOARD_KIND_V2 = "ai-canvas-card/v2";
 const CLIPBOARD_KIND_V1 = "ai-canvas-card/v1";
 
 let inMemoryClipboard: string | null = null;
+
+/**
+ * 「按组复制」副本相对源框的水平让位间隙(world px)。
+ * 当粘贴落点会让副本外接框压在源外接框上时,把副本整体推到源右侧、与源框留出这个间隙,
+ * 避免两个 Frame 几乎同位(同位虽不再丢成员——见 frameMembership 的成员粘性——但用户
+ * 难以分辨、拖框体验割裂)。取 4×GROUP_PADDING 以保证两框边界之间留出 >2×padding 的可视空隙。
+ */
+const PASTE_GROUP_CLEAR_GAP = GROUP_PADDING * 4;
 
 /** 剪贴板上承载的组快照(去掉 id/时间戳/projectId,粘贴时新建)。 */
 interface ClipboardGroup {
@@ -387,21 +395,33 @@ function materialize(
   const idMap = new Map<string, string>();
   const newCardIds: string[] = [];
 
-  // Compute offset: either fixed +30px or reposition group center to click point
+  // ── 落点偏移 ────────────────────────────────────────────────────────────────
+  // 源卡外接框(居中落点 + 组副本避让都要用),先算一次。
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const c of srcCards) {
+    minX = Math.min(minX, c.x);
+    minY = Math.min(minY, c.y);
+    maxX = Math.max(maxX, c.x + c.width);
+    maxY = Math.max(maxY, c.y + c.height);
+  }
+  const bboxW = maxX - minX;
+  const bboxH = maxY - minY;
+
+  // 基准偏移:有落点 → 外接框中心对齐落点;否则固定 +30。
   let offsetX = 30;
   let offsetY = 30;
   if (position) {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const c of srcCards) {
-      minX = Math.min(minX, c.x);
-      minY = Math.min(minY, c.y);
-      maxX = Math.max(maxX, c.x + c.width);
-      maxY = Math.max(maxY, c.y + c.height);
-    }
-    const cx = (minX + maxX) / 2;
-    const cy = (minY + maxY) / 2;
-    offsetX = position.worldX - cx;
-    offsetY = position.worldY - cy;
+    offsetX = position.worldX - (minX + maxX) / 2;
+    offsetY = position.worldY - (minY + maxY) / 2;
+  }
+
+  // 「按组复制」避让:副本带组时,若基准偏移会让副本外接框与源外接框相交
+  //(两个等尺寸框相距 < 各自宽且 < 各自高时相交),把副本整体推到源右侧并留出间隙。
+  // 于是组副本默认落在源框旁边而非压在源框上 —— 与 frameMembership 的成员粘性互补:
+  // 粘性保证「即便重叠也不丢成员」,这里保证「默认就不重叠」。
+  const hasGroups = (payload.groups?.length ?? 0) > 0;
+  if (hasGroups && Math.abs(offsetX) < bboxW && Math.abs(offsetY) < bboxH) {
+    offsetX = bboxW + PASTE_GROUP_CLEAR_GAP;
   }
 
   // Sort source cards by zIndex to preserve relative ordering
@@ -464,6 +484,7 @@ function materialize(
 
   // Recreate groups with remapped IDs(只重建 selection 完整包住的组,parseClipboard 已保证)
   const srcGroups = payload.groups ?? [];
+  const newGroupIds: string[] = [];
   if (srcGroups.length > 0) {
     const groupStore = useGroupStore.getState();
     for (const sg of srcGroups) {
@@ -484,6 +505,7 @@ function materialize(
         updatedAt: now,
       };
       groupStore.addGroup(newGroup);
+      newGroupIds.push(newGroup.id);
     }
     const all = groupStore.getGroupsByProject(projectId);
     void saveGroupsBatch(all.map(groupToRow)).catch((e) =>
@@ -493,8 +515,14 @@ function materialize(
 
   syncNodeCount(projectId);
   useCanvasStore.getState().setSelectedCardIds(newCardIds);
-  // 移动路径(recordHistory=false)由调用方用 recordMove 合成「新建+删除」单步撤销。
-  if (recordHistory) recordBatchCreate(newCardIds);
+  // 复制粘贴:卡片创建 + 组创建合成**一次**原子撤销 —— 一次 Ctrl+Z 退掉整组(卡 + 框),
+  // 不再「卡没了框还在」。移动路径(recordHistory=false)由调用方用 recordMove 合成单步撤销。
+  if (recordHistory) {
+    history.transact(() => {
+      recordBatchCreate(newCardIds);
+      for (const gid of newGroupIds) recordGroupCreate(gid);
+    });
+  }
 
   // Defense-in-depth: refs are already stripped at copy time by collectSelected(),
   // but external clipboard payloads or older formats may still carry stale refs.

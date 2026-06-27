@@ -498,6 +498,20 @@ function templateCacheDisplayUrl(url: string): string | null {
 }
 
 /**
+ * 域名迁移重映射：旧域名 `ai.snoworangekeji.cn` 已停服,存量卡片数据里的 URL
+ * 透明替换成新域名 `www.jjowo.com`(路径不变,同一份静态文件)。
+ */
+export function migrateAssetDomain(url: string): string {
+  if (url.includes("snoworangekeji.cn/aicanvas-static/")) {
+    return url.replace(
+      /https?:\/\/[^/]*snoworangekeji\.cn\//,
+      "https://www.jjowo.com/",
+    );
+  }
+  return url;
+}
+
+/**
  * Convert a stored URL/path to a URL that `<img src>` can display.
  * - 模板公网 URL 命中本地缓存 → 本机文件(离线 / 秒开)
  * - 相对存储路径 → Tauri asset 协议零拷贝
@@ -505,6 +519,7 @@ function templateCacheDisplayUrl(url: string): string | null {
  */
 export function getDisplayUrl(storedPath: string): string {
   if (!storedPath) return "";
+  storedPath = migrateAssetDomain(storedPath);
 
   // 防御：如果入参是 asset:// 显示 URL，直接原样返回（不二次转换）
   if (storedPath.startsWith("asset://")) return storedPath;

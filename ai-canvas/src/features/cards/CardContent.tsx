@@ -13,6 +13,7 @@ import AIChatCard from "./AIChatCard";
 import TextCard from "./TextCard";
 import StickyNoteCard from "./StickyNoteCard";
 import FrameExtractorCard from "./FrameExtractorCard";
+import ScriptCard from "@/features/script/ScriptCard";
 import { CardErrorWithRetry } from "./CardErrorWithRetry";
 
 const IMG_DEFER_MS = 50;
@@ -532,6 +533,8 @@ export default memo(function CardContent({ card }: { card: CanvasCard }) {
       return <AudioCardPreview card={card} />;
     case "frame_extractor":
       return <FrameExtractorCard card={card} />;
+    case "ai_script":
+      return <ScriptCard card={card} />;
     default:
       return (
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

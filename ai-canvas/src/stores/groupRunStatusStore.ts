@@ -51,11 +51,21 @@ interface GroupRunStatusState {
   runningGroups: Map<string, GroupRunStatus>;
 
   start(groupId: string, totalCount: number): void;
-  setCurrent(groupId: string, currentCardIds: Iterable<string>): void;
+  /**
+   * 标记单张卡「开始运行」:加入 currentCardIds(幂等)。
+   * 数据流调度按节点逐个派发,每个节点起跑时调一次 —— 取代旧的「整层一次性 setCurrent」。
+   */
+  addCurrent(groupId: string, cardId: string): void;
   /**
    * 标记单张卡完成。`cardId` 加入 doneCardIds、doneCount + 1,并从 currentCardIds 移除。
    */
   incrementDone(groupId: string, cardId: string): void;
+  /**
+   * 标记单张卡「不再运行」但**不计入 done**:仅从 currentCardIds 移除。
+   * 失败卡落定用 —— 让它即时停止「正在跑」高亮;失败锚点由终态 {@link fail} 统一标红。
+   * 维持不变量:currentCardIds = 当前真正在途的卡。
+   */
+  removeCurrent(groupId: string, cardId: string): void;
   /** 用户点「停止」:转 stopping,保留 currentCardIds(在途卡仍在跑、仍显示)。 */
   markStopping(groupId: string): void;
   /** 在途收尾完毕:转 stopped,清 currentCardIds,doneCount 保留(已完成进度)。 */
@@ -85,12 +95,14 @@ export const useGroupRunStatusStore = create<GroupRunStatusState>((set, get) => 
     });
   },
 
-  setCurrent(groupId, currentCardIds) {
+  addCurrent(groupId, cardId) {
     const cur = get().runningGroups.get(groupId);
-    if (!cur) return;
+    if (!cur || cur.currentCardIds.has(cardId)) return; // 幂等
     set((s) => {
       const next = new Map(s.runningGroups);
-      next.set(groupId, { ...cur, currentCardIds: new Set(currentCardIds) });
+      const currentCardIds = new Set(cur.currentCardIds);
+      currentCardIds.add(cardId);
+      next.set(groupId, { ...cur, currentCardIds });
       return { runningGroups: next };
     });
   },
@@ -111,6 +123,18 @@ export const useGroupRunStatusStore = create<GroupRunStatusState>((set, get) => 
         doneCardIds,
         currentCardIds,
       });
+      return { runningGroups: next };
+    });
+  },
+
+  removeCurrent(groupId, cardId) {
+    const cur = get().runningGroups.get(groupId);
+    if (!cur || !cur.currentCardIds.has(cardId)) return;
+    set((s) => {
+      const next = new Map(s.runningGroups);
+      const currentCardIds = new Set(cur.currentCardIds);
+      currentCardIds.delete(cardId);
+      next.set(groupId, { ...cur, currentCardIds });
       return { runningGroups: next };
     });
   },
@@ -212,7 +236,7 @@ export const selectCardRunPhaseInGroup =
  * 单卡是否"正被某个组运行处理"(命中任一运行组的 currentCardIds)。
  *
  * 编辑器据此在组运行经过本卡的整个窗口内禁用「生成」按钮:该窗口从
- * groupRunner.setCurrent 持续到 incrementDone,完整覆盖"准备参考图 → 调
+ * groupRun 的 addCurrent 持续到 incrementDone,完整覆盖"准备参考图 → 调
  * provider → 任务 polling"全过程,补上 uiStore.generatingCards(仅 task
  * polling 阶段才有值)前后的空档,避免用户对正被组运行的卡重复点「生成」。
  *
