@@ -160,9 +160,9 @@ class HistoryManager {
     switch (action.type) {
       case "delete": {
         store.addCard(action.card);
-        for (const conn of action.connections) {
-          connStore.addConnection(conn);
-        }
+        // 批量恢复连线:逐条加会让 onConnectionsAdded 的兜底清理在「只看到部分连线」时把卡上
+        // 尚未恢复连线的参考图当悬挂误删 → 撤销删卡后参考图/视频顺序被打乱。批量加只清理一次。
+        connStore.addConnections(action.connections);
         autoSave.markDirty(action.card.id);
         return { type: "create", cardId: action.card.id };
       }

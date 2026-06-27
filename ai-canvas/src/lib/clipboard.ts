@@ -20,6 +20,7 @@ import {
   cleanupDanglingReferencesInStore,
   removeConnectionsForCardIdsAndCleanup,
 } from "@/lib/referenceConsistency";
+import { remapCardSourceIds } from "@/lib/cardSourceRefs";
 import { pruneGroupsForRemovedCards } from "@/lib/groupConsistency";
 
 // v3 增加 groups 字段;v2/v1 仍可读(无 groups)
@@ -427,15 +428,22 @@ function materialize(
   // Sort source cards by zIndex to preserve relative ordering
   const sorted = [...srcCards].sort((a, b) => a.zIndex - b.zIndex);
 
+  // Pass 1:先给所有源卡分配新 id,建好**完整** idMap。卡片 data 里互相引用的源卡 id
+  // (参考图 / 参考视频 / 上游文字…)粘贴时要全部改写到新卡,而被引用的源卡未必在 sorted
+  // 里排在引用者之前,故必须先建全表再改写(见 cardSourceRefs.remapCardSourceIds)。
+  for (const src of sorted) idMap.set(src.id, crypto.randomUUID());
+
+  // Pass 2:落卡。data 里指向源卡的 id 按 idMap 重映射 —— 否则副本仍带旧 id,重建连线时注入
+  // 管线按 sourceCardId 找不到槽,会把参考图 / 视频按连线插入序整体重建,打乱用户拖动的顺序。
   for (const src of sorted) {
-    const newId = crypto.randomUUID();
-    idMap.set(src.id, newId);
+    const newId = idMap.get(src.id)!;
 
     const { maxZIndex } = useCardStore.getState();
     const card: CanvasCard = {
       ...src,
       id: newId,
       projectId,
+      data: remapCardSourceIds(src.data, idMap),
       x: src.x + offsetX,
       y: src.y + offsetY,
       zIndex: maxZIndex + 1,
@@ -462,6 +470,11 @@ function materialize(
     const neighbor = useCardStore.getState().getCard(originalId);
     return neighbor && neighbor.projectId === projectId ? originalId : undefined;
   };
+  // 一次性批量加,让 onConnectionsAdded 的注入 + 兜底清理在**所有**连线就位后只跑一次。
+  // 逐条加会触发逐条清理:某条上游连线还没重建时,下游对应参考图被当悬挂引用误删 → 等连线补上
+  // 又被注入到队尾,顺序按连线序重建、用户拖动的顺序丢失。批量加 + data 里 id 已重映射 →
+  // 注入原位命中(no-op)、清理判定全部有效,参考图/视频顺序原样保留。
+  const newConns: Connection[] = [];
   for (const src of srcConns) {
     const mappedSource = idMap.get(src.sourceCardId);
     const mappedTarget = idMap.get(src.targetCardId);
@@ -472,15 +485,15 @@ function materialize(
     const targetCardId = resolveEnd(mappedTarget, src.targetCardId);
     if (!sourceCardId || !targetCardId) continue;
 
-    const conn: Connection = {
+    newConns.push({
       id: crypto.randomUUID(),
       projectId,
       sourceCardId,
       targetCardId,
       createdAt: now,
-    };
-    useConnectionStore.getState().addConnection(conn);
+    });
   }
+  useConnectionStore.getState().addConnections(newConns);
 
   // Recreate groups with remapped IDs(只重建 selection 完整包住的组,parseClipboard 已保证)
   const srcGroups = payload.groups ?? [];

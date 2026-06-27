@@ -203,7 +203,7 @@ export async function splitCompositeImage(
     await saveCardsBatch(newCards.map(cardToRow));
     await saveConnections(card.projectId, newConns.map(connectionToRow));
     for (const c of newCards) cardStore.addCard(c);
-    for (const cn of newConns) connStore.addConnection(cn);
+    connStore.addConnections(newConns);
 
     // 在合成卡上挂派生 id,避免下次重生
     const updatedDerivedIds = [

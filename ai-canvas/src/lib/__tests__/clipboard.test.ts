@@ -284,6 +284,93 @@ describe("复制带「上游输入连线」(incoming)", () => {
   });
 });
 
+describe("按组复制:参考图/视频顺序保留(不被注入管线按连线序重建)", () => {
+  function connect(id: string, source: string, target: string) {
+    useConnectionStore.getState().addConnection({
+      id,
+      projectId: "p1",
+      sourceCardId: source,
+      targetCardId: target,
+      createdAt: "t0",
+    });
+  }
+
+  const refsInSlotOrder = (id: string) => {
+    const refImages =
+      ((useCardStore.getState().getCard(id)!.data as Record<string, unknown>)
+        .refImages as Record<string, { url: string; sourceCardId?: string }>) ?? {};
+    return Object.keys(refImages)
+      .sort((a, b) => parseInt(a.replace("refImage", ""), 10) - parseInt(b.replace("refImage", ""), 10))
+      .map((k) => refImages[k]!);
+  };
+
+  it("整组复制 → 副本参考图顺序与源一致(用户拖动的非连线序不被打乱)", async () => {
+    // 三个源 + 一个下游 t,全部连入 t;注入按连线序填成 [s0,s1,s2]。
+    useCardStore.getState().addCard(makeCard("s0", 0, 0));
+    useCardStore.getState().addCard(makeCard("s1", 0, 200));
+    useCardStore.getState().addCard(makeCard("s2", 0, 400));
+    useCardStore.getState().addCard(makeCard("t", 400, 200));
+    connect("c0", "s0", "t");
+    connect("c1", "s1", "t");
+    connect("c2", "s2", "t");
+
+    // 连线注入后的自然顺序 = [s0,s1,s2]
+    expect(refsInSlotOrder("t").map((r) => r.sourceCardId)).toEqual(["s0", "s1", "s2"]);
+
+    // 模拟用户在编辑器里把顺序拖成 [s2,s0,s1](与连线插入序不同)。
+    useCardStore.getState().updateCardData("t", {
+      refImages: {
+        refImage0: { url: "img-s2", sourceCardId: "s2", sourceType: "card" },
+        refImage1: { url: "img-s0", sourceCardId: "s0", sourceType: "card" },
+        refImage2: { url: "img-s1", sourceCardId: "s1", sourceType: "card" },
+      },
+    });
+
+    useGroupStore.getState().addGroup({
+      id: "g1",
+      projectId: "p1",
+      cardIds: ["s0", "s1", "s2", "t"],
+      title: "工作流",
+      color: "#7C3AED",
+      collapsed: false,
+      x: -16,
+      y: -60,
+      width: 600,
+      height: 600,
+      createdAt: "t0",
+      updatedAt: "t0",
+    });
+
+    await copyCards(new Set(["s0", "s1", "s2", "t"]));
+    const newIds = await pasteCards("p1", { worldX: 1200, worldY: 200 });
+    expect(newIds.length).toBe(4);
+
+    // 找到副本里的下游卡 t'(唯一带 refImages 的)。
+    const tPrime = newIds.find(
+      (id) => (useCardStore.getState().getCard(id)!.data as Record<string, unknown>).refImages,
+    )!;
+    expect(tPrime).toBeDefined();
+
+    // 关键:url 顺序必须原样保留 [s2,s0,s1],而不是被重建成连线序 [s0,s1,s2]。
+    expect(refsInSlotOrder(tPrime).map((r) => r.url)).toEqual(["img-s2", "img-s0", "img-s1"]);
+
+    // 且 sourceCardId 已重映射到副本里的新源卡(不再指向原 s0/s1/s2)。
+    const newSrcByUrl = new Map(
+      newIds.map((id) => [
+        (useCardStore.getState().getCard(id)!.data as Record<string, unknown>).imageUrl as string,
+        id,
+      ]),
+    );
+    expect(refsInSlotOrder(tPrime).map((r) => r.sourceCardId)).toEqual([
+      newSrcByUrl.get("img-s2"),
+      newSrcByUrl.get("img-s0"),
+      newSrcByUrl.get("img-s1"),
+    ]);
+    // 原卡 id 不应残留在副本引用里。
+    expect(refsInSlotOrder(tPrime).some((r) => ["s0", "s1", "s2"].includes(r.sourceCardId!))).toBe(false);
+  });
+});
+
 describe("剪切移动保留全部连线(all)", () => {
   function connect(id: string, source: string, target: string) {
     useConnectionStore.getState().addConnection({

@@ -6,19 +6,10 @@ import { useCardStore } from "@/stores/cardStore";
 import { useConnectionStore, setConnectionLifecycleHooks } from "@/stores/connectionStore";
 import { autoSave } from "@/lib/autoSave";
 import { injectOnConnections } from "@/lib/dataFlow";
+import { SOURCE_REF_FIELDS } from "@/lib/cardSourceRefs";
 
 interface SourceRef {
   sourceCardId?: string;
-}
-
-interface VideoFrameRef extends SourceRef {
-  url: string;
-}
-
-interface MediaEntry extends SourceRef {
-  url: string;
-  displayUrl?: string;
-  kind?: string;
 }
 
 interface CleanupResult {
@@ -182,23 +173,8 @@ export function cleanupDanglingReferencesForCard(
     }
   }
 
-  if (isPlainObject(data.upstreamTexts)) {
-    const upstreamTexts = { ...(data.upstreamTexts as Record<string, string>) };
-    let removed = false;
-
-    for (const sourceCardId of Object.keys(upstreamTexts)) {
-      if (!hasValidConnection(validConnectionKeys, sourceCardId, card.id)) {
-        delete upstreamTexts[sourceCardId];
-        removed = true;
-      }
-    }
-
-    if (removed) {
-      data.upstreamTexts = Object.keys(upstreamTexts).length > 0 ? upstreamTexts : undefined;
-      changed = true;
-    }
-  }
-
+  // upstreamCardId 是单值上游卡 id:断连后连同它的伴随产物(upstreamText/upstreamImageUrl)一并清。
+  // (其余单值 id sourceVideoCardId/upstreamChatCardId 不纳入断连清理——它们只在复制时随 remap 改 id。)
   if (typeof data.upstreamCardId === "string" && !hasValidConnection(validConnectionKeys, data.upstreamCardId, card.id)) {
     data.upstreamCardId = undefined;
     data.upstreamText = undefined;
@@ -206,47 +182,35 @@ export function cleanupDanglingReferencesForCard(
     changed = true;
   }
 
-  if (Array.isArray(data.refFrames)) {
-    const frames = data.refFrames as VideoFrameRef[];
-    const filtered = frames.filter(
-      (frame) => !frame.sourceCardId || hasValidConnection(validConnectionKeys, frame.sourceCardId, card.id),
-    );
-    if (filtered.length !== frames.length) {
-      data.refFrames = filtered.length > 0 ? filtered : undefined;
-      changed = true;
-    }
-  }
-
-  if (Array.isArray(data.refAudios)) {
-    const audios = data.refAudios as SourceRef[];
-    const filtered = audios.filter(
-      (audio) => !audio.sourceCardId || hasValidConnection(validConnectionKeys, audio.sourceCardId, card.id),
-    );
-    if (filtered.length !== audios.length) {
-      data.refAudios = filtered.length > 0 ? filtered : undefined;
-      changed = true;
-    }
-  }
-
-  if (Array.isArray(data.refVideos)) {
-    const videos = data.refVideos as SourceRef[];
-    const filtered = videos.filter(
-      (video) => !video.sourceCardId || hasValidConnection(validConnectionKeys, video.sourceCardId, card.id),
-    );
-    if (filtered.length !== videos.length) {
-      data.refVideos = filtered.length > 0 ? filtered : undefined;
-      changed = true;
-    }
-  }
-
-  if (Array.isArray(data.directMedia)) {
-    const media = data.directMedia as MediaEntry[];
-    const filtered = media.filter(
-      (item) => !item.sourceCardId || hasValidConnection(validConnectionKeys, item.sourceCardId, card.id),
-    );
-    if (filtered.length !== media.length) {
-      data.directMedia = filtered.length > 0 ? filtered : undefined;
-      changed = true;
+  // 机械型源引用字段(有序数组 / 以源卡 id 为键的 record)统一按 SOURCE_REF_FIELDS 清理——字段清单
+  // 与复制重映射(cardSourceRefs.remapCardSourceIds)**共用同一张表**,新增字段两处自动覆盖、不再各写一份。
+  // (refImages 走 removeSources 的 compact+keyMap 特例,inlineRefs 走 pruneInlineReferences,均在表外单独处理。)
+  for (const { field, kind } of SOURCE_REF_FIELDS) {
+    if (kind === "sourceArray") {
+      const arr = data[field];
+      if (!Array.isArray(arr)) continue;
+      const filtered = (arr as SourceRef[]).filter(
+        (item) => !item?.sourceCardId || hasValidConnection(validConnectionKeys, item.sourceCardId, card.id),
+      );
+      if (filtered.length !== arr.length) {
+        data[field] = filtered.length > 0 ? filtered : undefined;
+        changed = true;
+      }
+    } else if (kind === "idKeyedRecord") {
+      const rec = data[field];
+      if (!isPlainObject(rec)) continue;
+      const nextRec = { ...(rec as Record<string, unknown>) };
+      let removed = false;
+      for (const sourceCardId of Object.keys(nextRec)) {
+        if (!hasValidConnection(validConnectionKeys, sourceCardId, card.id)) {
+          delete nextRec[sourceCardId];
+          removed = true;
+        }
+      }
+      if (removed) {
+        data[field] = Object.keys(nextRec).length > 0 ? nextRec : undefined;
+        changed = true;
+      }
     }
   }
 

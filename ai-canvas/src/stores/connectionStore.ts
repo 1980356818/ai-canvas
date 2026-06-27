@@ -47,6 +47,7 @@ interface ConnectionState {
 
   setConnections: (list: Connection[]) => void;
   addConnection: (conn: Connection) => void;
+  addConnections: (conns: Connection[]) => void;
   removeConnection: (id: string) => void;
   removeConnectionsForCard: (cardId: string) => void;
   getConnectionsByProject: (projectId: string) => Connection[];
@@ -95,6 +96,22 @@ export const useConnectionStore = create<ConnectionState>((set, get) => ({
       return { connections: next, connectionsVersion: s.connectionsVersion + 1 };
     });
     lifecycleHooks.onConnectionsAdded?.([conn]);
+  },
+
+  // 批量加连线:**一次性**写入并只触发**一次** onConnectionsAdded(携带全部新连线)。
+  // 关键于「复制/粘贴一组卡」:逐条 addConnection 会让 onConnectionsAdded 的兜底清理在
+  // 「只看到已加入的前几条连线」时,把尚未重建连线的参考图当悬挂引用误删 → 顺序被重建打乱。
+  // 批量加保证清理在所有连线就位后只跑一次,参考图/视频原位保留(配合 materialize 的 id 重映射)。
+  addConnections: (conns) => {
+    const prev = get().connections;
+    const toAdd = conns.filter((c) => !prev.has(c.id));
+    if (toAdd.length === 0) return;
+    set((s) => {
+      const next = new Map(s.connections);
+      for (const c of toAdd) next.set(c.id, c);
+      return { connections: next, connectionsVersion: s.connectionsVersion + 1 };
+    });
+    lifecycleHooks.onConnectionsAdded?.(toAdd);
   },
 
   removeConnection: (id) => {

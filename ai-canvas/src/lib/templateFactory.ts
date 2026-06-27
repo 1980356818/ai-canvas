@@ -114,9 +114,9 @@ export async function instantiateWorkflowTemplate(
   }
 
   for (const card of cards) cardStore.addCard(card);
-  // addConnection 会触发 onConnectionsAdded 钩子，自动把上游已有输出
-  // （图片/文字）注入到下游卡片对应字段，无需在此处手动调 injectOnConnect。
-  for (const conn of connections) connStore.addConnection(conn);
+  // 批量加连线:onConnectionsAdded 钩子一次性把上游已有输出（图片/文字）注入下游对应字段,
+  // 无需手动调 injectOnConnect。逐条加会让兜底清理在部分连线时误删多源卡的参考图、打乱顺序。
+  connStore.addConnections(connections);
 
   if (persistError) {
     throw persistError;
