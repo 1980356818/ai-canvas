@@ -1,14 +1,22 @@
 /**
  * 把结构化分镜脚本序列化成 markdown 文本，写入 `data.result`。
  * 这是该节点的下游唯一真相（extractOutput 当 text 下发，下游视频/图片卡读取）。
+ *
+ * @图1/@视频1 等素材标签**原样透传**（不转义），让下游视频卡能识别要配哪些素材。
  */
 
 import type { ProductInsights, StoryboardScript } from "@/lib/scriptModel";
 
 export function scriptToMarkdown(script: StoryboardScript, insights?: ProductInsights): string {
   const lines: string[] = [];
-  const title = insights?.productName ? `${insights.productName} · 视频脚本` : "视频脚本";
+  const title =
+    script.title || (insights?.productName ? `${insights.productName} · 视频脚本` : "视频脚本");
   lines.push(`# ${title}`);
+
+  if (script.summary) {
+    lines.push("");
+    lines.push(`> ${script.summary}`);
+  }
 
   lines.push("");
   lines.push("## 视频总览");
@@ -17,11 +25,16 @@ export function scriptToMarkdown(script: StoryboardScript, insights?: ProductIns
   }
   if (script.overview.note) lines.push(`- 说明：${script.overview.note}`);
 
-  if (script.sceneLighting.scene || script.sceneLighting.lighting) {
+  if (script.scenes.length > 0) {
     lines.push("");
     lines.push("## 场景与光线");
-    if (script.sceneLighting.scene) lines.push(`- 拍摄场景：${script.sceneLighting.scene}`);
-    if (script.sceneLighting.lighting) lines.push(`- 布光与质感：${script.sceneLighting.lighting}`);
+    script.scenes.forEach((sc, i) => {
+      const head = sc.name || `场景${i + 1}`;
+      const parts: string[] = [];
+      if (sc.setup) parts.push(sc.setup);
+      if (sc.lighting) parts.push(`光线：${sc.lighting}`);
+      lines.push(`- ${head}${parts.length ? `：${parts.join("；")}` : ""}`);
+    });
   }
 
   lines.push("");
@@ -32,7 +45,7 @@ export function scriptToMarkdown(script: StoryboardScript, insights?: ProductIns
     if (s.shotType) lines.push(`- 景别/角度：${s.shotType}`);
     if (s.cameraMove) lines.push(`- 运镜：${s.cameraMove}`);
     if (s.sceneDialogue) lines.push(`- 场景与对白：${s.sceneDialogue}`);
-    if (s.voiceover) lines.push(`- 口播旁白：${s.voiceover}`);
+    if (s.voiceover) lines.push(`- 口播旁白${s.tone ? `（${s.tone}）` : ""}：${s.voiceover}`);
     if (s.audioBgm) lines.push(`- 音效/BGM：${s.audioBgm}`);
   });
 

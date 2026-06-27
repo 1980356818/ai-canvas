@@ -2,11 +2,18 @@
  * 防御式解析模型输出的 JSON（商品洞察 / 分镜脚本）。
  *
  * 模型常把 JSON 包在 ```json 代码块里、或前后带解释文字、或字段类型不稳（字符串当数组）。
- * 这里统一：抽取首个平衡 JSON 块 → JSON.parse → 逐字段强制 coerce + 兜底。
+ * 这里统一：抽取首个平衡 JSON 块 → JSON.parse → 交给 scriptModel 的 coerce（强制 coerce + 迁移老结构）。
  * 解析不出有效内容抛 `ScriptParseError`，由服务层重试一次再上抛。
+ *
+ * coerce 逻辑（elements/scenes 迁移、@标签抽取）集中在 scriptModel，供解析与持久化恢复共用单一口径。
  */
 
-import type { ProductInsights, StoryboardScript, ShotBreakdown } from "@/lib/scriptModel";
+import {
+  type ProductInsights,
+  type StoryboardScript,
+  coerceInsights,
+  coerceScript,
+} from "@/lib/scriptModel";
 
 export class ScriptParseError extends Error {
   constructor(message: string) {
@@ -77,88 +84,73 @@ function parseJsonLoose(raw: string): Record<string, unknown> {
   }
 }
 
-function str(v: unknown): string {
-  if (typeof v === "string") return v.trim();
-  if (v == null) return "";
-  if (typeof v === "number" || typeof v === "boolean") return String(v);
-  return "";
-}
-
-function arr(v: unknown): string[] {
-  if (Array.isArray(v)) {
-    return v
-      .map((x) => (typeof x === "string" ? x.trim() : str(x)))
-      .filter((x) => x.length > 0);
-  }
-  const single = str(v);
-  return single ? [single] : [];
-}
-
-function materialArr(v: unknown): { ref: string; description: string }[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .map((item, i) => {
-      if (typeof item === "string") return { ref: `素材${i + 1}`, description: item.trim() };
-      const o = (item ?? {}) as Record<string, unknown>;
-      return { ref: str(o.ref) || `素材${i + 1}`, description: str(o.description) };
-    })
-    .filter((m) => m.description.length > 0);
-}
-
 export function parseInsights(raw: string): ProductInsights {
-  const o = parseJsonLoose(raw);
-  const insights: ProductInsights = {
-    productName: str(o.productName),
-    category: str(o.category),
-    features: arr(o.features),
-    sellingPoints: arr(o.sellingPoints),
-    targetAudience: arr(o.targetAudience),
-    usageScenarios: arr(o.usageScenarios),
-    materials: materialArr(o.materials),
-  };
+  const insights = coerceInsights(parseJsonLoose(raw));
   // 全空 = 基本是垃圾输出，触发重试。
   const hasAny =
     insights.productName ||
     insights.category ||
     insights.features.length ||
-    insights.sellingPoints.length;
+    insights.sellingPoints.length ||
+    insights.elements.length;
   if (!hasAny) throw new ScriptParseError("商品洞察内容为空");
   return insights;
 }
 
-function shotFrom(item: unknown): ShotBreakdown {
-  const o = (item ?? {}) as Record<string, unknown>;
-  return {
-    timeRange: str(o.timeRange ?? o.time ?? o.range),
-    shotType: str(o.shotType ?? o.shot ?? o.framing),
-    cameraMove: str(o.cameraMove ?? o.camera ?? o.movement),
-    sceneDialogue: str(o.sceneDialogue ?? o.scene ?? o.dialogue ?? o.action),
-    voiceover: str(o.voiceover ?? o.narration ?? o.voice),
-    audioBgm: str(o.audioBgm ?? o.audio ?? o.bgm ?? o.sound),
-  };
+export function parseScript(raw: string): StoryboardScript {
+  const script = coerceScript(parseJsonLoose(raw));
+  if (script.shots.length === 0) throw new ScriptParseError("分镜脚本缺少有效镜头");
+  return script;
 }
 
-export function parseScript(raw: string): StoryboardScript {
-  const o = parseJsonLoose(raw);
-  const overview = (o.overview ?? {}) as Record<string, unknown>;
-  const scene = (o.sceneLighting ?? o.scene ?? {}) as Record<string, unknown>;
-  const shotsRaw = Array.isArray(o.shots) ? o.shots : [];
+// ── 校验门（非阻断）：返回 warnings[]，由向导黄条提示，用户可选「重新生成」──
 
-  const shots = shotsRaw
-    .map(shotFrom)
-    .filter((s) => s.timeRange || s.shotType || s.sceneDialogue || s.voiceover);
+/** 解析 "0-6s" / "6-13" → {start,end}（秒）；解析不出返回 null。 */
+function parseTimeRange(s: string): { start: number; end: number } | null {
+  const m = s.match(/(\d+(?:\.\d+)?)\s*[-~—]\s*(\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  const start = Number(m[1]);
+  const end = Number(m[2]);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  return { start, end };
+}
 
-  if (shots.length === 0) throw new ScriptParseError("分镜脚本缺少有效镜头");
+/**
+ * 校验脚本质量（不抛错，返回提示列表）：
+ *  - 每镜时长落在 4-15s（视频模型单段范围）；
+ *  - 时间轴连续不断裂；
+ *  - 引用的 @标签必须属于素材清单（白名单）。
+ */
+export function validateScriptWarnings(
+  script: StoryboardScript,
+  insights?: ProductInsights | null,
+): string[] {
+  const warnings: string[] = [];
 
-  return {
-    overview: {
-      styleKeywords: arr(overview.styleKeywords ?? overview.keywords),
-      note: str(overview.note ?? overview.description),
-    },
-    sceneLighting: {
-      scene: str(scene.scene ?? scene.location),
-      lighting: str(scene.lighting ?? scene.light),
-    },
-    shots,
-  };
+  let prevEnd: number | null = null;
+  script.shots.forEach((s, i) => {
+    const span = parseTimeRange(s.timeRange);
+    if (!span) return;
+    const dur = Math.round((span.end - span.start) * 10) / 10;
+    if (dur < 4 || dur > 15) {
+      warnings.push(`镜头 ${i + 1}（${s.timeRange}）时长约 ${dur}s，超出 4–15s 区间`);
+    }
+    if (prevEnd !== null && Math.abs(span.start - prevEnd) > 0.05) {
+      warnings.push(`镜头 ${i + 1}（${s.timeRange}）时间轴与上一镜不连续`);
+    }
+    prevEnd = span.end;
+  });
+
+  const allowed = new Set((insights?.elements ?? []).map((e) => e.mention));
+  if (allowed.size > 0) {
+    const used = new Set<string>();
+    script.shots.forEach((s) => (s.mentionRefs ?? []).forEach((m) => used.add(m)));
+    script.scenes.forEach((sc) => (sc.mentionRefs ?? []).forEach((m) => used.add(m)));
+    const bad = [...used].filter((m) => !allowed.has(m));
+    if (bad.length > 0) {
+      warnings.push(`脚本引用了不在素材清单中的标签：${bad.map((b) => "@" + b).join("、")}`);
+    }
+  }
+
+  return warnings;
 }

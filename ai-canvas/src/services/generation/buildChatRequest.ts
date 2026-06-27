@@ -71,6 +71,12 @@ export interface ChatGenRequest {
 export interface BuildChatRequestOptions {
   /** 上传进度回调(编辑器写 setCardProgress;cardRunner 传 undefined)。 */
   onUploadProgress?: (kind: string, progress: { uploaded: number; total: number }) => void;
+  /**
+   * 在每个参考媒体前插入一个文本标记(如 `【图1】`/`【视频1】`),让模型知道"这张是图几"。
+   * 标签取自 computeImageRefSources(与编辑器 @引用同口径)。**默认 false → ai_chat 零影响**。
+   * 仅作用于无内联 ref 的分支(「帮我写」分析/生成步用)。
+   */
+  labelMedia?: boolean;
 }
 
 export type BuildChatRequestResult =
@@ -174,10 +180,23 @@ export async function buildChatRequest(
         ...directImageItems.map((m) => m.url),
         ...refVideoEntries.map((v) => v.url),
       ];
+      // labelMedia: 与 allMedia 同序的标签数组(取自 computeImageRefSources;查不到留空 = 不插标记)。
+      const labelOfUrl = (url: string): string =>
+        imageOptions.find((o) => o.resolvedUrl === url)?.label ?? "";
+      const mediaLabels = opts?.labelMedia
+        ? [
+            ...imageEntries.map((e) => labelOfUrl(e.url)),
+            ...directImageItems.map(() => ""),
+            ...refVideoEntries.map((v) => labelOfUrl(v.url)),
+          ]
+        : [];
       const uploaded = await uploadMediaBatch(allMedia, {
         onProgress: reportUpload("媒体"),
       });
-      uploaded.forEach((url) => {
+      uploaded.forEach((url, i) => {
+        // labelMedia 关闭时 mediaLabels 为空 → 逐字节等价旧行为(ai_chat 零回归)。
+        const label = mediaLabels[i];
+        if (label) userContent.push({ type: "text", text: `【${label}】` });
         userContent.push({ type: "image_url", image_url: { url } });
       });
     } else if (totalMedia > 0) {

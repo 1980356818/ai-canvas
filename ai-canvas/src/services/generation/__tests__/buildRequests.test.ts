@@ -501,6 +501,41 @@ describe("buildChatRequest", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.outcome).toBe("skipped");
   });
+
+  // labelMedia(「帮我写」用):默认关 = 与旧行为逐字节一致;开 = 每张图前插【图N】。
+  it("labelMedia 默认关: 参考图不带标记(ai_chat 零回归)", async () => {
+    const r = assertOk(
+      await buildChatRequest(
+        makeCard("ai_chat", {
+          model: "gemini-3.1-pro-preview",
+          content: "分析",
+          refImages: { refImage0: { url: "http://r0", sourceType: "card" } },
+        }),
+      ),
+    );
+    expect(r.request.messages[0]!.content).toEqual([
+      { type: "image", url: "http://r0" },
+      { type: "text", text: "分析" },
+    ]);
+  });
+
+  it("labelMedia=true: 图前插【图1】标记(取 computeImageRefSources 标签)", async () => {
+    const r = assertOk(
+      await buildChatRequest(
+        makeCard("ai_chat", {
+          model: "gemini-3.1-pro-preview",
+          content: "分析",
+          refImages: { refImage0: { url: "http://r0", sourceType: "card" } },
+        }),
+        { labelMedia: true },
+      ),
+    );
+    expect(r.request.messages[0]!.content).toEqual([
+      { type: "text", text: "【图1】" },
+      { type: "image", url: "http://r0" },
+      { type: "text", text: "分析" },
+    ]);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────

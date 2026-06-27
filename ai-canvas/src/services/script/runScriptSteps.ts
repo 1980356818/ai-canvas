@@ -5,25 +5,34 @@
  * <upstream_context> 前缀）—— 用一张**合成卡**把 content/_systemPrompt/参考媒体临时改写，
  * 喂给 buildChatRequest，对该共享层零改动、零风险。
  *
- * 走流式 `streamChatToResult`（而非 provider.chat）以规避反代 524（见该文件注释）；
+ * @素材标签闭环：分析/生成都开 `labelMedia`（buildChatRequest 在每个媒体前插【图N】标记），
+ * 标签口径 = computeImageRefSources（与编辑器 @引用一致）。分析后把 elements 与真实素材清单
+ * **对账**（丢弃模型瞎编的标签、补齐遗漏），保证 elements 恰好对应连入素材。
+ *
+ * 走流式 `streamChatToResult`（而非 provider.chat）以规避反代 524；
  * JSON 步骤解析失败自动重试一次（提示词已强约束「只返回 JSON」）。
  */
 
 import type { CanvasCard } from "@/types";
-import { buildChatRequest } from "@/services/generation/buildChatRequest";
+import { buildChatRequest, type BuildChatRequestOptions } from "@/services/generation/buildChatRequest";
 import { streamChatToResult } from "@/services/generation/streamChatToResult";
 import { modelService } from "@/services/models";
+import { computeImageRefSources } from "@/hooks/useImageRefSources";
+import { getRefSlotsForChatModel } from "@/config/model-ref-images";
 import { parseInsights, parseScript, ScriptParseError } from "@/lib/scriptParse";
 import {
-  ANALYZE_SYSTEM_PROMPT,
-  ANALYZE_TRIGGER,
   REF_VIDEO_BREAKDOWN_SYSTEM_PROMPT,
   REF_VIDEO_BREAKDOWN_TRIGGER,
+  buildAnalyzeUserPrompt,
   buildGenerateSystemPrompt,
   buildGenerateUserPrompt,
+  ANALYZE_SYSTEM_PROMPT,
+  type MaterialManifestItem,
 } from "@/lib/scriptPrompts";
 import type {
+  MaterialElement,
   ProductInsights,
+  ScriptCardData,
   ScriptConfig,
   StoryboardScript,
 } from "@/lib/scriptModel";
@@ -41,8 +50,8 @@ function synthCard(card: CanvasCard, dataOverride: Record<string, unknown>): Can
   return { ...card, data: { ...card.data, ...dataOverride } };
 }
 
-async function resolveBuilt(card: CanvasCard) {
-  const built = await buildChatRequest(card);
+async function resolveBuilt(card: CanvasCard, buildOpts?: BuildChatRequestOptions) {
+  const built = await buildChatRequest(card, buildOpts);
   if (!built.ok) throw new Error(built.reason);
   const provider = modelService.resolveProvider(built.request.model, built.providerId);
   return { request: built.request, provider };
@@ -53,8 +62,9 @@ async function runChatJson<T>(
   card: CanvasCard,
   parse: (raw: string) => T,
   opts?: RunScriptStepOptions,
+  buildOpts?: BuildChatRequestOptions,
 ): Promise<T> {
-  const { request, provider } = await resolveBuilt(card);
+  const { request, provider } = await resolveBuilt(card, buildOpts);
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     const { content } = await streamChatToResult(provider, request, {
@@ -74,17 +84,52 @@ async function runChatJson<T>(
     : new ScriptParseError("模型输出无法解析");
 }
 
-/** ① 分析素材 → 商品洞察。视觉调用：保留连入的图/视频/文本。 */
+/** 从连入素材构建标签清单（与 buildChatRequest labelMedia 同一份 computeImageRefSources 口径）。 */
+export function buildMaterialManifest(card: CanvasCard): MaterialManifestItem[] {
+  const data = card.data as ScriptCardData;
+  const model = (data.model ?? "").trim();
+  const refSlots = getRefSlotsForChatModel(model);
+  const options = computeImageRefSources(
+    card.id,
+    refSlots,
+    data.refImages,
+    undefined,
+    data.refVideos,
+  );
+  return options
+    .filter((o) => o.category === "slot" || o.category === "upstream" || o.category === "video")
+    .map((o) => ({ mention: o.label, type: o.category === "video" ? "video" : "image" }));
+}
+
+/** 把模型产出的 elements 与真实素材清单对账：丢弃越界标签、补齐遗漏、type 以清单为准。 */
+export function reconcileElements(
+  parsed: MaterialElement[],
+  manifest: MaterialManifestItem[],
+): MaterialElement[] {
+  if (manifest.length === 0) return parsed;
+  const byMention = new Map(parsed.map((e) => [e.mention, e]));
+  return manifest.map((m) => {
+    const e = byMention.get(m.mention);
+    return e
+      ? { ...e, type: m.type }
+      : { mention: m.mention, type: m.type, description: "" };
+  });
+}
+
+/** ① 分析素材 → 商品洞察。视觉调用：保留连入的图/视频/文本，并带【图N】标签。 */
 export async function runScriptAnalyze(
   card: CanvasCard,
   opts?: RunScriptStepOptions,
 ): Promise<ProductInsights> {
+  const manifest = buildMaterialManifest(card);
   const synth = synthCard(card, {
-    content: ANALYZE_TRIGGER,
+    content: buildAnalyzeUserPrompt(manifest),
     _systemPrompt: ANALYZE_SYSTEM_PROMPT,
     inlineRefs: undefined,
   });
-  return runChatJson(synth, parseInsights, opts);
+  const insights = await runChatJson(synth, parseInsights, opts, { labelMedia: true });
+  insights.elements = reconcileElements(insights.elements, manifest);
+  return insights;
 }
 
 /** ①.5 参考视频拆解 → 文本。仅喂连入的视频。 */
@@ -108,7 +153,10 @@ export async function runRefVideoBreakdown(
   return content.trim();
 }
 
-/** ② 生成分镜脚本。纯文本调用：丢弃参考媒体，只喂商品洞察 + 配置（+ 可选拆解）。 */
+/**
+ * ② 生成分镜脚本。视觉调用：**保留带标签的参考素材**（让模型"看着图"按 @标签精准引用），
+ * 喂商品洞察 + 配置（+ 可选拆解）。丢弃 directMedia/upstreamTexts，只带 refImages/refVideos 控成本。
+ */
 export async function runScriptGenerate(
   card: CanvasCard,
   insights: ProductInsights,
@@ -116,15 +164,16 @@ export async function runScriptGenerate(
   breakdown: string | undefined,
   opts?: RunScriptStepOptions,
 ): Promise<StoryboardScript> {
-  // 不 spread card.data：刻意丢弃 refImages/refVideos/directMedia/upstreamTexts → 纯文本更省更稳。
   const synth: CanvasCard = {
     ...card,
     data: {
       model: card.data.model,
       provider: card.data.provider,
+      refImages: card.data.refImages,
+      refVideos: card.data.refVideos,
       content: buildGenerateUserPrompt(insights, config, breakdown),
       _systemPrompt: buildGenerateSystemPrompt(config),
     },
   };
-  return runChatJson(synth, parseScript, opts);
+  return runChatJson(synth, parseScript, opts, { labelMedia: true });
 }

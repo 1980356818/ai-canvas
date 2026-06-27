@@ -19,7 +19,7 @@ vi.mock("@/services/generation/buildChatRequest", () => ({ buildChatRequest: bui
 vi.mock("@/services/generation/streamChatToResult", () => ({ streamChatToResult: streamMock }));
 vi.mock("@/services/models", () => ({ modelService: { resolveProvider: vi.fn(() => ({})) } }));
 
-import { runScriptAnalyze, runScriptGenerate } from "@/services/script/runScriptSteps";
+import { runScriptAnalyze, runScriptGenerate, reconcileElements } from "@/services/script/runScriptSteps";
 
 function makeCard(data: Record<string, unknown>): CanvasCard {
   return {
@@ -31,21 +31,22 @@ function makeCard(data: Record<string, unknown>): CanvasCard {
 }
 
 const INSIGHTS_JSON = JSON.stringify({
-  productName: "朗菲风扇", category: "便携风扇",
+  detected: true, productName: "朗菲风扇", category: "便携风扇",
   features: ["香薰", "Type-C"], sellingPoints: ["清凉"],
-  targetAudience: ["白领"], usageScenarios: ["露营"], materials: [],
+  targetAudience: ["白领"], usageScenarios: ["露营"], elements: [],
 });
 
 const SCRIPT_JSON = JSON.stringify({
+  title: "便携香薰风扇", summary: "夏日降温",
   overview: { styleKeywords: ["清爽"], note: "一镜到底" },
-  sceneLighting: { scene: "户外", lighting: "自然光" },
-  shots: [{ timeRange: "0-3s", shotType: "特写", cameraMove: "推", sceneDialogue: "展示", voiceover: "太凉快了", audioBgm: "轻快" }],
+  scenes: [{ name: "户外", setup: "野餐布", lighting: "自然光" }],
+  shots: [{ timeRange: "0-6s", shotType: "特写", cameraMove: "推", sceneDialogue: "展示", voiceover: "太凉快了", tone: "轻快", audioBgm: "轻快" }],
 });
 
 const card = makeCard({ model: "test-model", provider: "test" });
 const insights: ProductInsights = {
-  productName: "朗菲风扇", category: "便携风扇", features: [], sellingPoints: [],
-  targetAudience: [], usageScenarios: [], materials: [],
+  detected: true, productName: "朗菲风扇", category: "便携风扇", features: [], sellingPoints: [],
+  targetAudience: [], usageScenarios: [], elements: [],
 };
 
 beforeEach(() => {
@@ -85,5 +86,27 @@ describe("runScriptGenerate", () => {
     expect(s.shots).toHaveLength(1);
     expect(s.shots[0]!.voiceover).toBe("太凉快了");
     expect(s.overview.styleKeywords).toEqual(["清爽"]);
+  });
+});
+
+describe("reconcileElements", () => {
+  it("丢弃越界标签、按清单补齐遗漏、type 以清单为准", () => {
+    const parsed = [
+      { mention: "图1", type: "image" as const, description: "正面", productRelated: true },
+      { mention: "图9", type: "image" as const, description: "瞎编的" }, // 不在清单 → 丢弃
+    ];
+    const manifest = [
+      { mention: "图1", type: "image" as const },
+      { mention: "视频1", type: "video" as const }, // 模型漏了 → 补空
+    ];
+    const r = reconcileElements(parsed, manifest);
+    expect(r.map((e) => e.mention)).toEqual(["图1", "视频1"]);
+    expect(r[0]!.description).toBe("正面");
+    expect(r[1]!.description).toBe("");
+    expect(r[1]!.type).toBe("video");
+  });
+  it("清单为空 → 原样返回", () => {
+    const parsed = [{ mention: "图1", type: "image" as const, description: "x" }];
+    expect(reconcileElements(parsed, [])).toEqual(parsed);
   });
 });
