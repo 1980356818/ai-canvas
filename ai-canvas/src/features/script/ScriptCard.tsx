@@ -4,6 +4,7 @@ import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { ElapsedTimer } from "@/features/cards/CardContent";
 import { TYPE_COLORS } from "@/shared/constants";
+import MarkdownContent from "@/shared/MarkdownContent";
 import type { ScriptCardData } from "@/lib/scriptModel";
 
 /**
@@ -61,11 +62,11 @@ export default memo(function ScriptCard({ card }: { card: CanvasCard }) {
       {hasResult ? (
         <>
           <div
-            className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap rounded-lg border border-input bg-transparent px-3 py-2 text-[13px] leading-relaxed text-card-foreground"
+            className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-input bg-transparent px-3 py-2 text-card-foreground"
             onPointerDown={stop}
             onWheel={stop}
           >
-            {data.result}
+            <MarkdownContent content={data.result ?? ""} compact />
           </div>
           <button
             onClick={open}
