@@ -11,6 +11,7 @@ import { friendlyError } from "@/lib/errors";
 import { resolveDefaultModelForCardType } from "@/services/modelDefaults";
 import ModelSelector from "@/features/editor/ModelSelector";
 import { runScriptSeedance } from "@/services/script/runScriptSteps";
+import { spawnVideoLineFromScript } from "@/services/script/spawnVideoLine";
 import MarkdownContent from "@/shared/MarkdownContent";
 import { getSkipCostConfirm, setSkipCostConfirm } from "@/lib/scriptPrefs";
 import {
@@ -60,6 +61,7 @@ function WizardBody({ cardId }: { cardId: string }) {
   const [config, setConfig] = useState<ScriptConfig>({ ...DEFAULT_SCRIPT_CONFIG, ...liveData.config });
   // 生成出的 markdown（下游真相）；初始化为上次已落库的 result。
   const [md, setMd] = useState<string>(liveData.result ?? "");
+  const [spawning, setSpawning] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   // runEpoch 取代防护——慢返回的过期结果不写回；stepRef 给失败记录用。
   const epochRef = useRef(0);
@@ -169,6 +171,38 @@ function WizardBody({ cardId }: { cardId: string }) {
   }, [cardId, config, runStep, persist]);
 
   const finish = useCallback(() => { persist({ _wizardStep: undefined }); close(); }, [persist, close]);
+
+  // P2: 把脚本逐镜铺成下游 ai_video 生产线(每镜一卡 + 连参考图)。
+  const spawnLine = useCallback(async () => {
+    const c = useCardStore.getState().getCard(cardId);
+    if (!c || spawning) return;
+    setSpawning(true);
+    try {
+      const r = await spawnVideoLineFromScript(c);
+      if (r.created === 0) {
+        useUIStore.getState().addToast({
+          type: "warning", title: "未识别到分镜",
+          description: "脚本里没找到逐镜 Seedance 提示词，无法铺卡。可重新生成。",
+          duration: 6000,
+        });
+      } else {
+        useUIStore.getState().addToast({
+          type: "success", title: `已铺 ${r.created} 张视频卡`,
+          description: `连了 ${r.connected} 条参考图，见画布下方。`,
+          duration: 5000,
+        });
+        close();
+      }
+    } catch (e) {
+      useUIStore.getState().addToast({
+        type: "error", title: "铺卡失败",
+        description: friendlyError(e instanceof Error ? e.message : String(e)),
+        duration: 6000,
+      });
+    } finally {
+      setSpawning(false);
+    }
+  }, [cardId, spawning, close]);
 
   // ── 计费确认(step 0)= 独立小弹窗 ──
   if (step === 0) {
@@ -286,6 +320,12 @@ function WizardBody({ cardId }: { cardId: string }) {
                       <button onClick={doGenerate}
                         className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-1.5 text-sm text-foreground transition-colors hover:bg-muted">
                         <RefreshCw className="h-3.5 w-3.5" /> 重新生成
+                      </button>
+                    )}
+                    {md && (
+                      <button onClick={spawnLine} disabled={spawning}
+                        className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-1.5 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40">
+                        <Clapperboard className="h-3.5 w-3.5" /> {spawning ? "铺卡中…" : "铺视频生产线"}
                       </button>
                     )}
                     <button onClick={finish} disabled={!md}
