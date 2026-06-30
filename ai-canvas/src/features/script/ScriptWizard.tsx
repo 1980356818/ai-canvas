@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
-  X, Loader2, Sparkles, RefreshCw, AlertCircle, Check, Clapperboard, AlertTriangle,
+  X, Loader2, Sparkles, RefreshCw, Plus, Trash2, AlertCircle, Check, Clapperboard, AlertTriangle,
 } from "lucide-react";
 import { useCardStore } from "@/stores/cardStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -10,13 +10,13 @@ import { hasApiKey } from "@/platform";
 import { friendlyError } from "@/lib/errors";
 import { resolveDefaultModelForCardType } from "@/services/modelDefaults";
 import ModelSelector from "@/features/editor/ModelSelector";
-import { runScriptSeedance } from "@/services/script/runScriptSteps";
+import { runScriptAnalyze, runScriptSeedance } from "@/services/script/runScriptSteps";
 import { spawnVideoLineFromScript } from "@/services/script/spawnVideoLine";
 import MarkdownContent from "@/shared/MarkdownContent";
 import { getSkipCostConfirm, setSkipCostConfirm } from "@/lib/scriptPrefs";
 import {
-  type ScriptConfig, type ScriptCardData,
-  DEFAULT_SCRIPT_CONFIG, extractMentions,
+  type ProductInsights, type ScriptConfig, type ScriptCardData, type MaterialElement,
+  DEFAULT_SCRIPT_CONFIG, normalizeInsights, extractMentions,
   BUSINESS_OPTIONS, LANGUAGE_OPTIONS, CONTENT_TYPE_OPTIONS, DURATION_OPTIONS,
 } from "@/lib/scriptModel";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ function materialCount(d: ScriptCardData): number {
   return imgs + vids + txt;
 }
 
-/** 连入素材的指纹（url 集合）；用于判断生成后素材是否变化。 */
+/** 连入素材的指纹（url 集合）；用于判断分析后素材是否变化。 */
 function materialFingerprint(d: ScriptCardData): string {
   const imgs = Object.values(d.refImages ?? {}).map((e) => e.url).sort();
   const direct = (d.directMedia ?? []).map((m) => m.url).sort();
@@ -43,7 +43,7 @@ export default function ScriptWizard() {
   return <WizardBody key={cardId} cardId={cardId} />;
 }
 
-const STEPS = ["脚本配置", "生成脚本"];
+const STEPS = ["分析我的素材", "脚本配置", "生成脚本"];
 
 function WizardBody({ cardId }: { cardId: string }) {
   const close = useUIStore((s) => s.closeScriptWizard);
@@ -57,7 +57,8 @@ function WizardBody({ cardId }: { cardId: string }) {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [streamText, setStreamText] = useState("");
-  // 合并默认值: 老卡片的 config 可能缺新字段, 用默认补齐。
+  // normalize: 兼容老卡持久化的旧结构。
+  const [insights, setInsights] = useState<ProductInsights | null>(() => normalizeInsights(liveData.insights));
   const [config, setConfig] = useState<ScriptConfig>({ ...DEFAULT_SCRIPT_CONFIG, ...liveData.config });
   // 生成出的 markdown（下游真相）；初始化为上次已落库的 result。
   const [md, setMd] = useState<string>(liveData.result ?? "");
@@ -68,11 +69,10 @@ function WizardBody({ cardId }: { cardId: string }) {
   const stepRef = useRef(step);
   useEffect(() => { stepRef.current = step; }, [step]);
 
-  // 生成后素材是否变化（指纹比对）→ 提示「建议重新生成」。
+  // 分析后素材是否变化（指纹比对）→ 提示「建议重新分析」。
   const materialsChanged =
-    !!md && !!liveData._analyzedFingerprint &&
+    !!insights && !!liveData._analyzedFingerprint &&
     liveData._analyzedFingerprint !== materialFingerprint(liveData);
-  // 上次某步失败（关弹窗重开时提示）。
   const lastStepError = liveData._lastStepError;
   // 脚本里引用到的素材标签（驱动预览底部的 @标签 chip）。
   const usedMentions = useMemo(() => (md ? extractMentions(md) : []), [md]);
@@ -99,9 +99,7 @@ function WizardBody({ cardId }: { cardId: string }) {
     return () => { cancelled = true; };
   }, [model, persist]);
 
-  // 关闭/卸载时中止在飞的调用。
   useEffect(() => () => abortRef.current?.abort(), []);
-
   const handleClose = useCallback(() => { abortRef.current?.abort(); close(); }, [close]);
 
   useEffect(() => {
@@ -121,7 +119,7 @@ function WizardBody({ cardId }: { cardId: string }) {
     [persist],
   );
 
-  /** API Key 预检 + 进度/错误骨架(仿 runEditorGeneration) + runEpoch 取代防护。 */
+  /** API Key 预检 + 进度/错误骨架 + runEpoch 取代防护。 */
   const runStep = useCallback(async (fn: (signal: AbortSignal, isCurrent: () => boolean) => Promise<void>) => {
     if (!(await hasApiKey())) {
       useUIStore.getState().addToast({
@@ -135,7 +133,6 @@ function WizardBody({ cardId }: { cardId: string }) {
     abortRef.current?.abort();
     abortRef.current = ac;
     const myEpoch = ++epochRef.current;
-    // 仅当本次仍是最新一轮且未被取消时，结果/错误才允许写回（防慢返回覆盖新一轮）。
     const isCurrent = () => epochRef.current === myEpoch && !ac.signal.aborted;
     setRunning(true); setError(null); setStreamText("");
     try {
@@ -152,23 +149,33 @@ function WizardBody({ cardId }: { cardId: string }) {
     }
   }, [persist]);
 
+  const doAnalyze = useCallback(() => {
+    const c = useCardStore.getState().getCard(cardId);
+    if (!c) return;
+    void runStep(async (signal, isCurrent) => {
+      const res = await runScriptAnalyze(c, { signal, onText: setStreamText });
+      if (!isCurrent()) return;
+      setInsights(res);
+      persist({
+        insights: res,
+        _analyzedAt: new Date().toISOString(),
+        _analyzedFingerprint: materialFingerprint(c.data as ScriptCardData),
+        _lastStepError: undefined,
+      });
+    });
+  }, [cardId, runStep, persist]);
+
   const doGenerate = useCallback(() => {
     const c = useCardStore.getState().getCard(cardId);
     if (!c) return;
     void runStep(async (signal, isCurrent) => {
-      const text = await runScriptSeedance(c, config, { signal, onText: setStreamText });
+      const text = await runScriptSeedance(c, config, insights ?? undefined, { signal, onText: setStreamText });
       if (!isCurrent()) return;
       setMd(text);
       // markdown 原文即真相：直接落 result（提交 + 触发下游传播）。
-      persist({
-        result: text,
-        _resultStale: false,
-        _analyzedFingerprint: materialFingerprint(c.data as ScriptCardData),
-        config,
-        _lastStepError: undefined,
-      });
+      persist({ result: text, _resultStale: false, config, _lastStepError: undefined });
     });
-  }, [cardId, config, runStep, persist]);
+  }, [cardId, config, insights, runStep, persist]);
 
   const finish = useCallback(() => { persist({ _wizardStep: undefined }); close(); }, [persist, close]);
 
@@ -204,7 +211,7 @@ function WizardBody({ cardId }: { cardId: string }) {
     }
   }, [cardId, spawning, close]);
 
-  // ── 计费确认(step 0)= 独立小弹窗 ──
+  // ── 计费确认(step 0) ──
   if (step === 0) {
     return (
       <Overlay onBackdrop={running ? undefined : handleClose}>
@@ -229,17 +236,18 @@ function WizardBody({ cardId }: { cardId: string }) {
           </div>
           {STEPS.map((label, i) => {
             const n = i + 1;
-            const done = (n === 1 && step > 1) || (n === 2 && !!md);
+            const done = (n === 1 && !!insights) || (n === 2 && step > 2) || (n === 3 && !!md);
             const active = step === n;
+            const reachable = n <= step || (n === 2 && !!insights) || (n === 3 && !!insights);
             return (
               <button
                 key={label}
-                disabled={running}
+                disabled={running || !reachable}
                 onClick={() => goStep(n)}
                 className={cn(
                   "flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-colors",
                   active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent",
-                  running && "cursor-not-allowed opacity-50",
+                  (running || !reachable) && "cursor-not-allowed opacity-50",
                 )}
               >
                 <span className={cn(
@@ -283,17 +291,24 @@ function WizardBody({ cardId }: { cardId: string }) {
               <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                 <p className="flex-1 text-[13px] text-amber-700 dark:text-amber-300">
-                  连入素材自上次生成后已变化，建议重新生成以保持脚本与素材一致。
+                  连入素材自上次分析后已变化，建议在第 1 步重新分析以保持脚本与素材一致。
                 </p>
               </div>
             )}
 
             {running ? (
-              <RunningView streamText={streamText} />
+              <RunningView label={step === 1 ? "正在分析素材…" : "正在生成脚本…"} streamText={streamText} />
             ) : step === 1 ? (
-              <Step1 config={config} hasMaterial={hasMaterial} onChange={(c) => { setConfig(c); persist({ config: c }); }} />
+              <Step1
+                hasMaterial={hasMaterial}
+                insights={insights}
+                onAnalyze={doAnalyze}
+                onChange={(next) => { setInsights(next); persist({ insights: next }); }}
+              />
+            ) : step === 2 ? (
+              <Step2 config={config} onChange={(c) => { setConfig(c); persist({ config: c }); }} />
             ) : (
-              <Step2 md={md} usedMentions={usedMentions} hasMaterial={hasMaterial} onGenerate={doGenerate} />
+              <Step3 md={md} usedMentions={usedMentions} canGenerate={!!insights} onGenerate={doGenerate} />
             )}
           </div>
 
@@ -301,7 +316,7 @@ function WizardBody({ cardId }: { cardId: string }) {
           {!running && (
             <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-border px-5 py-3">
               <button
-                onClick={() => goStep(1)}
+                onClick={() => goStep(Math.max(1, step - 1))}
                 disabled={step <= 1}
                 className="rounded-lg border border-border px-4 py-1.5 text-sm text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -309,12 +324,18 @@ function WizardBody({ cardId }: { cardId: string }) {
               </button>
               <div className="flex items-center gap-2">
                 {step === 1 && (
-                  <button onClick={() => { goStep(2); doGenerate(); }} disabled={!hasMaterial}
+                  <button onClick={() => goStep(2)} disabled={!insights}
+                    className="rounded-lg bg-primary px-5 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40">
+                    下一步
+                  </button>
+                )}
+                {step === 2 && (
+                  <button onClick={() => { goStep(3); doGenerate(); }} disabled={!insights}
                     className="flex items-center gap-1.5 rounded-lg bg-primary px-5 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40">
                     <Sparkles className="h-4 w-4" /> 生成脚本
                   </button>
                 )}
-                {step === 2 && (
+                {step === 3 && (
                   <>
                     {md && (
                       <button onClick={doGenerate}
@@ -359,17 +380,23 @@ function Overlay({ children, onBackdrop }: { children: React.ReactNode; onBackdr
 
 function CostConfirmCard({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: (skip: boolean) => void }) {
   const [skip, setSkip] = useState(false);
+  const ITEMS = [
+    { n: 1, label: "分析我的素材" },
+    { n: 2, label: "生成视频脚本" },
+  ];
   return (
     <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-xl" onMouseDown={(e) => e.stopPropagation()}>
       <h3 className="text-base font-semibold">立即「帮我写」</h3>
-      <p className="mt-1 text-[13px] text-muted-foreground">将调用视觉对话模型一次，按网关实际用量计费。</p>
+      <p className="mt-1 text-[13px] text-muted-foreground">以下步骤将调用视觉对话模型，按网关实际用量计费。</p>
       <div className="mt-4 rounded-xl border border-border bg-muted/20 p-4">
-        <div className="mb-2.5 text-[13px] font-medium">本次任务</div>
+        <div className="mb-2.5 text-[13px] font-medium">计费明细</div>
         <ul className="space-y-2 text-[13px] text-foreground/80">
-          <li className="flex items-center gap-2.5">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[11px] text-muted-foreground">1</span>
-            分析产品图并生成分镜脚本 + Seedance 提示词
-          </li>
+          {ITEMS.map((it) => (
+            <li key={it.n} className="flex items-center gap-2.5">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[11px] text-muted-foreground">{it.n}</span>
+              {it.label}
+            </li>
+          ))}
         </ul>
       </div>
       <p className="mt-3 text-[12px] text-muted-foreground">实际扣费以任务成功结果为准，失败不计费。</p>
@@ -385,12 +412,12 @@ function CostConfirmCard({ onCancel, onConfirm }: { onCancel: () => void; onConf
   );
 }
 
-function RunningView({ streamText }: { streamText: string }) {
+function RunningView({ label, streamText }: { label: string; streamText: string }) {
   const tail = streamText.length > 1200 ? "…" + streamText.slice(-1200) : streamText;
   return (
     <div className="flex flex-col items-center gap-4 py-10">
       <Loader2 className="h-8 w-8 animate-spin text-primary/70" />
-      <p className="text-sm font-medium text-muted-foreground">正在分析素材并生成脚本…</p>
+      <p className="text-sm font-medium text-muted-foreground">{label}</p>
       {tail && (
         <pre className="max-h-80 w-full max-w-xl overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/20 p-3 text-[11px] leading-relaxed text-muted-foreground/80">
           {tail}
@@ -400,14 +427,70 @@ function RunningView({ streamText }: { streamText: string }) {
   );
 }
 
-function Step1({ config, hasMaterial, onChange }: { config: ScriptConfig; hasMaterial: boolean; onChange: (c: ScriptConfig) => void }) {
+function Step1({
+  hasMaterial, insights, onAnalyze, onChange,
+}: {
+  hasMaterial: boolean;
+  insights: ProductInsights | null;
+  onAnalyze: () => void;
+  onChange: (next: ProductInsights) => void;
+}) {
+  if (!insights) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-12 text-center">
+        <Sparkles className="h-10 w-10 text-primary/50" />
+        <p className="text-sm font-medium">分析连入的图片 / 视频素材，自动提炼商品洞察</p>
+        {!hasMaterial && <p className="text-[13px] text-amber-600 dark:text-amber-400">尚未连入素材，请先把图片/视频卡片连到本卡。</p>}
+        <button onClick={onAnalyze} disabled={!hasMaterial}
+          className="mt-2 flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40">
+          <Sparkles className="h-4 w-4" /> 分析素材
+        </button>
+      </div>
+    );
+  }
+  const set = (patch: Partial<ProductInsights>) => onChange({ ...insights, ...patch });
   return (
     <div className="space-y-5">
-      {!hasMaterial && (
-        <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[13px] text-amber-700 dark:text-amber-300">
-          尚未连入素材，请先把产品图片卡片连到本卡，再生成脚本。
+      {insights.elements.length > 0 && (
+        <div>
+          <div className="mb-2 text-xs font-semibold text-muted-foreground">素材分析</div>
+          <div className="space-y-2">
+            {insights.elements.map((el, i) => (
+              <ElementRow
+                key={el.mention + i}
+                el={el}
+                onChange={(description) => {
+                  const next = insights.elements.slice();
+                  next[i] = { ...el, description };
+                  set({ elements: next });
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      {!insights.detected && (
+        <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-700 dark:text-amber-300">
+          未识别到明确的主推商品，将按通用叙事生成脚本。
         </p>
       )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <LabeledInput label="商品名称" value={insights.productName} onChange={(v) => set({ productName: v })} />
+        <LabeledInput label="商品类目" value={insights.category} onChange={(v) => set({ category: v })} />
+      </div>
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <ChipGroup title="产品特性" items={insights.features} onChange={(v) => set({ features: v })} />
+        <ChipGroup title="核心卖点" items={insights.sellingPoints} onChange={(v) => set({ sellingPoints: v })} />
+        <ChipGroup title="目标人群" items={insights.targetAudience} onChange={(v) => set({ targetAudience: v })} />
+        <ChipGroup title="使用场景" items={insights.usageScenarios} onChange={(v) => set({ usageScenarios: v })} />
+      </div>
+    </div>
+  );
+}
+
+function Step2({ config, onChange }: { config: ScriptConfig; onChange: (c: ScriptConfig) => void }) {
+  return (
+    <div className="space-y-5">
       <PillRow label="业务场景" options={BUSINESS_OPTIONS} value={config.business} onChange={(business) => onChange({ ...config, business })} />
       <PillRow label="语言" options={LANGUAGE_OPTIONS} value={config.language} onChange={(language) => onChange({ ...config, language })} />
       <PillRow label="内容类型" options={CONTENT_TYPE_OPTIONS} value={config.contentType} onChange={(contentType) => onChange({ ...config, contentType })} />
@@ -429,12 +512,12 @@ function Step1({ config, hasMaterial, onChange }: { config: ScriptConfig; hasMat
   );
 }
 
-function Step2({
-  md, usedMentions, hasMaterial, onGenerate,
+function Step3({
+  md, usedMentions, canGenerate, onGenerate,
 }: {
   md: string;
   usedMentions: string[];
-  hasMaterial: boolean;
+  canGenerate: boolean;
   onGenerate: () => void;
 }) {
   if (!md) {
@@ -442,8 +525,8 @@ function Step2({
       <div className="flex flex-col items-center gap-3 py-12 text-center">
         <Sparkles className="h-10 w-10 text-primary/50" />
         <p className="text-sm font-medium">点击生成分镜脚本与 Seedance 2.0 提示词</p>
-        {!hasMaterial && <p className="text-[13px] text-amber-600 dark:text-amber-400">尚未连入素材，请先连入产品图片。</p>}
-        <button onClick={onGenerate} disabled={!hasMaterial}
+        {!canGenerate && <p className="text-[13px] text-amber-600 dark:text-amber-400">请先在第 1 步分析素材。</p>}
+        <button onClick={onGenerate} disabled={!canGenerate}
           className="mt-2 flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40">
           <Sparkles className="h-4 w-4" /> 生成脚本
         </button>
@@ -462,6 +545,68 @@ function Step2({
       )}
       <div className="rounded-lg border border-border bg-muted/10 p-4">
         <MarkdownContent content={md} />
+      </div>
+    </div>
+  );
+}
+
+function ElementRow({ el, onChange }: { el: MaterialElement; onChange: (description: string) => void }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 px-3 py-2">
+      <div className="mb-1 flex flex-wrap items-center gap-1.5">
+        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">@{el.mention}</span>
+        {el.role && <span className="text-[11px] text-muted-foreground">{el.role}</span>}
+        {el.productRelated && (
+          <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-600 dark:text-emerald-400">关联商品</span>
+        )}
+      </div>
+      <textarea
+        value={el.description}
+        onChange={(e) => onChange(e.target.value)}
+        rows={2}
+        placeholder="素材描述"
+        className="w-full resize-none rounded-md border border-input bg-transparent px-2 py-1 text-[12.5px] leading-relaxed outline-none ring-ring placeholder:text-muted-foreground/40 focus:ring-1"
+      />
+    </div>
+  );
+}
+
+function LabeledInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <div className="mb-1.5 text-xs font-medium text-muted-foreground">{label}</div>
+      <input value={value} onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-[13px] outline-none ring-ring focus:ring-1" />
+    </div>
+  );
+}
+
+function ChipGroup({ title, items, onChange }: { title: string; items: string[]; onChange: (next: string[]) => void }) {
+  const [draft, setDraft] = useState("");
+  const add = () => { if (draft.trim()) { onChange([...items, draft.trim()]); setDraft(""); } };
+  return (
+    <div>
+      <div className="mb-1.5 text-xs font-medium text-foreground">{title}</div>
+      <div className="space-y-1.5">
+        {items.map((it, i) => (
+          <div key={i} className="flex items-center gap-2 rounded-md border border-input bg-background px-2.5 py-1.5">
+            <input value={it} onChange={(e) => { const n = [...items]; n[i] = e.target.value; onChange(n); }}
+              className="min-w-0 flex-1 bg-transparent text-[13px] outline-none" />
+            <button onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+              className="shrink-0 text-muted-foreground transition-colors hover:text-destructive">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+        <div className="flex items-center gap-2">
+          <input value={draft} onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+            placeholder="添加一项，回车确认"
+            className="min-w-0 flex-1 rounded-md border border-dashed border-border bg-transparent px-2.5 py-1.5 text-[13px] outline-none placeholder:text-muted-foreground/40" />
+          <button onClick={add} className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground">
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </div>
   );

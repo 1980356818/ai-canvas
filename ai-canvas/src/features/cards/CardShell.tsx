@@ -2,7 +2,7 @@ import { useRef, useCallback, useState, memo } from "react";
 import { GripVertical, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useCardStore } from "@/stores/cardStore";
-import type { CanvasCard, Connection } from "@/types";
+import type { CanvasCard } from "@/types";
 import { useUIStore } from "@/stores/uiStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useProjectStore } from "@/stores/projectStore";
@@ -20,9 +20,7 @@ import {
   CARD_REF_MIME,
   type CardRefPayload,
 } from "@/config/model-ref-images";
-import {
-  canAcceptConnection,
-} from "@/lib/dataFlow";
+import { connectSourcesToTarget } from "@/lib/connectActions";
 import { hitGroupAt } from "@/lib/groupBounds";
 import { useGroupStore } from "@/stores/groupStore";
 import { reconcileFrameMembership } from "@/lib/frameMembership";
@@ -117,37 +115,55 @@ const Port = memo(function Port({
         const wire = useConnectionStore.getState().draftWire;
         useConnectionStore.getState().setDraftWire(null);
 
+        // 扇入:若拉线的这张卡正处于多选(且不止一张),把所有选中卡都作为「源」一起
+        // 连到目标;否则仅连这一张(完全保持单连行为)。拉线卡排首位 —— 容量有限的
+        // 目标(如图片卡参考位)按此顺序优先填,行为可预期。
+        const { selectedCardIds } = useCanvasStore.getState();
+        const sources =
+          selectedCardIds.has(cardId) && selectedCardIds.size > 1
+            ? [cardId, ...[...selectedCardIds].filter((id) => id !== cardId)]
+            : [cardId];
+
         const target = findInputPortAt(ev.clientX, ev.clientY, cardId);
         if (target) {
           const targetCardId = target.dataset.cardId;
           const projectId = useProjectStore.getState().currentProjectId;
-          if (
-            targetCardId &&
-            projectId &&
-            !useConnectionStore
-              .getState()
-              .hasConnection(cardId, targetCardId)
-          ) {
-            const reject = canAcceptConnection(targetCardId, cardId);
-            if (reject !== true) {
+          if (!targetCardId || !projectId) return;
+
+          const { connected, rejected, firstReject } = connectSourcesToTarget(
+            sources,
+            targetCardId,
+            projectId,
+          );
+          if (connected > 0) autoSave.markDirty();
+
+          if (sources.length === 1) {
+            // 单连:沿用原来的精确拒绝提示(成功则静默,与历史行为一致)。
+            if (connected === 0 && firstReject) {
               useUIStore.getState().addToast({
                 type: "warning",
-                title: reject.title,
-                description: reject.description,
+                title: firstReject.title,
+                description: firstReject.description,
                 duration: 3000,
               });
-              return;
             }
-
-            const conn: Connection = {
-              id: crypto.randomUUID(),
-              projectId,
-              sourceCardId: cardId,
-              targetCardId,
-              createdAt: new Date().toISOString(),
-            };
-            useConnectionStore.getState().addConnection(conn);
-            autoSave.markDirty();
+          } else if (connected > 0) {
+            useUIStore.getState().addToast({
+              type: "info",
+              title: `已连接 ${connected} 个卡片`,
+              description:
+                rejected > 0
+                  ? `${rejected} 个无法连接（类型不兼容或参考位已满）`
+                  : undefined,
+              duration: 2500,
+            });
+          } else if (rejected > 0) {
+            useUIStore.getState().addToast({
+              type: "warning",
+              title: "选中的卡片都无法连接到该目标",
+              description: firstReject?.description ?? "类型不兼容或参考位已满",
+              duration: 3000,
+            });
           }
         } else if (wire) {
           const vp = useCanvasStore.getState().viewport;
@@ -157,6 +173,7 @@ const Port = memo(function Port({
           const top = rect?.top ?? 0;
           useConnectionStore.getState().setPendingDrop({
             sourceCardId: cardId,
+            sourceCardIds: sources,
             screenX: ev.clientX,
             screenY: ev.clientY,
             canvasX: (ev.clientX - left - vp.x) / vp.zoom,

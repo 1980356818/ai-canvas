@@ -53,6 +53,7 @@ import {
   isSeedanceV2AliasModel,
   // V188 极境 DSF/甜甜圈 Omni (Veo Omni Flash) 生成 + 视频编辑
   isOmniModel,
+  videoSupportsReferenceMode,
   SEEDANCE_V2_VERSION_TIERS,
   SEEDANCE_V2_RESOLUTION_TIERS,
   isSeedanceV2ResolutionAllowed,
@@ -216,8 +217,10 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
   const isSeedanceV2 = isSeedanceV2AliasModel(currentModel);
   const isOmni = isOmniModel(currentModel);
   const allowedVideoSizes = useMemo(() => getAllowedVideoSizesForModel(currentModel), [currentModel]);
-  const availableModes: VideoImageMode[] = (isSeedance || isVeo || isGrok || isSeedanceVip || isSeedanceV2 || isOmni)
-    ? ["firstLastFrame", "reference"]
+  // 「参考」胶囊是否可用,与 dataFlow 的自动切参考逻辑共用同一判定(单一真相)。
+  // 顺序「参考」在前(左)、「首尾帧」在后(右) —— 与默认模式 = 参考 对齐。
+  const availableModes: VideoImageMode[] = videoSupportsReferenceMode(currentModel)
+    ? ["reference", "firstLastFrame"]
     : ["firstLastFrame"];
   const imageMode: VideoImageMode = resolveVideoImageMode(data.imageMode);
   // Veo 6 档 tier (画质 × 分辨率) 不再因 imageMode 切换列表; 三模式 (text/i2v/ref)
@@ -321,6 +324,15 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
       return { imageMode: "reference" };
     };
 
+    // 新卡片默认 reference(见 CARD_DEFAULTS.ai_video)。若当前模型不支持参考模式
+    // (基础 i2v),回落到首尾帧,避免出现「胶囊只剩首尾帧、却处于参考空态」的别扭情形。
+    const migrateUnsupportedReference = (modelId: string): { imageMode?: VideoImageMode } => {
+      if (resolveVideoImageMode(data.imageMode) === "reference" && !videoSupportsReferenceMode(modelId)) {
+        return { imageMode: "firstLastFrame" };
+      }
+      return {};
+    };
+
     // 卡片里残留的 size 不在新模型 allow 列表里就 fallback (handleModelChange 已处理
     // 主动切换路径, 这里专治 mount 时 model+size 不自洽的存档 — 如 21:9 卡切到 VIP)。
     const migrateSize = (modelId: string): { size?: string } => {
@@ -338,6 +350,7 @@ export default function VideoEditor({ card }: { card: CanvasCard }) {
         ...migrateSeedanceVipFields(modelId),
         ...migrateGrokFields(modelId),
         ...migrateOmniFields(modelId),
+        ...migrateUnsupportedReference(modelId),
         ...migrateSize(modelId),
       };
       const nextModel = (patch.model as string) ?? modelId;

@@ -24,7 +24,11 @@ vi.mock("@/lib/mappers", () => ({ cardToRow: (c: unknown) => c, connectionToRow:
 vi.mock("@/services/modelDefaults", () => ({
   resolveDefaultModelForCardType: vi.fn(async () => ({ modelId: "seedance-v2", providerId: "jijing" })),
 }));
-vi.mock("@/config/model-ref-images", () => ({ getRefSlotsForChatModel: vi.fn(() => []) }));
+vi.mock("@/config/model-ref-images", () => ({
+  getRefSlotsForChatModel: vi.fn(() => []),
+  // constants.ts (CARD_DEFAULTS) imports this; spawnVideoLine pulls in constants.
+  DEFAULT_NEW_VIDEO_IMAGE_MODE: "reference",
+}));
 vi.mock("@/hooks/useImageRefSources", () => ({
   computeImageRefSources: vi.fn(() => [
     { id: "slot:refImage0", label: "图1", category: "slot", thumbnailUrl: "", resolvedUrl: "u1", source: { type: "refSlot", slotKey: "refImage0" } },

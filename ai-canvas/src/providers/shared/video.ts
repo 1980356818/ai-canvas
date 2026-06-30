@@ -681,6 +681,26 @@ export function isOmniEditModel(modelId: string | undefined | null): boolean {
 }
 
 /**
+ * 视频模型是否支持「参考」模式 (reference / r2v)。
+ *
+ * **单一真相**:VideoEditor 的 `availableModes`(是否渲染「参考」胶囊)与 dataFlow 的
+ * 「首尾帧满 2 帧后自动切参考」逻辑都从这里取,口径必须一致、禁止各写一份布尔表达式,
+ * 否则会出现「UI 能切但连线被拒」或反之的漂移。
+ *
+ * 不支持的(基础 i2v 模型)只有首尾帧模式,最多 2 张图(首帧 + 尾帧)。
+ */
+export function videoSupportsReferenceMode(modelId: string | undefined | null): boolean {
+  return (
+    isSeedanceModel(modelId) ||
+    isVeoModel(modelId) ||
+    isGrokVideoModel(modelId) ||
+    isSeedanceVipModel(modelId) ||
+    isSeedanceV2AliasModel(modelId) ||
+    isOmniModel(modelId)
+  );
+}
+
+/**
  * omni 提交分流:连了源视频 → omni-edit (视频编辑),否则 → omni (生成)。
  * 与 {@link resolveSeedanceV2ModelId} 同构,只有 hasVideos 一维。
  */

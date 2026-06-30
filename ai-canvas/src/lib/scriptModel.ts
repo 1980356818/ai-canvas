@@ -10,6 +10,29 @@
 
 import type { RefImageEntry } from "@/config/model-ref-images";
 
+// ── 第 1 步：商品洞察（视觉分析产物，可在向导中编辑，校对后喂给脚本生成）──
+
+/** 单个参考素材的分析结果。mention=画布一致的稳定标签(图1/视频1,来自 computeImageRefSources)。 */
+export interface MaterialElement {
+  mention: string;
+  type: "image" | "video" | "audio";
+  description: string;
+  role?: string;
+  productRelated?: boolean;
+  sourceCardId?: string;
+}
+
+export interface ProductInsights {
+  detected: boolean;
+  productName: string;
+  category: string;
+  features: string[];
+  sellingPoints: string[];
+  targetAudience: string[];
+  usageScenarios: string[];
+  elements: MaterialElement[];
+}
+
 // ── 脚本配置（用户输入：业务/语言/内容类型/时长/补充说明）──
 export type ScriptBusiness = "ecommerce" | "local_store" | "on_site" | "education";
 export type ScriptLanguage = "auto" | "zh" | "en" | "ja" | "de" | "fr";
@@ -46,8 +69,10 @@ export interface ScriptCardData {
   result?: string;
 
   // 帮我写专属态（落库，支持关弹窗后恢复）
+  insights?: ProductInsights;   // 第1步产物，可编辑
   config?: ScriptConfig;
   _wizardStep?: number;
+  _analyzedAt?: string;
   _resultStale?: boolean;
   /** 生成时连入素材的指纹（url 集合）；与当前不一致 → 提示「素材已变化，建议重新生成」。 */
   _analyzedFingerprint?: string;
@@ -118,4 +143,82 @@ export function extractMentions(text: string): string[] {
     }
   }
   return out;
+}
+
+// ── 商品洞察 coerce（模型 JSON / 持久化对象 → ProductInsights，防御式，不抛错）──
+
+function str(v: unknown): string {
+  if (typeof v === "string") return v.trim();
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  return "";
+}
+
+function arr(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map((x) => str(x)).filter((x) => x.length > 0);
+  const single = str(v);
+  return single ? [single] : [];
+}
+
+function obj(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
+function mentionType(mention: string): MaterialElement["type"] {
+  if (mention.startsWith("视频")) return "video";
+  if (mention.startsWith("音频")) return "audio";
+  return "image";
+}
+
+function coerceElements(v: unknown): MaterialElement[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((item, i): MaterialElement => {
+      if (typeof item === "string") {
+        return { mention: `图${i + 1}`, type: "image", description: item.trim() };
+      }
+      const o = obj(item);
+      // 兼容模型可能输出的 ref/desc/product_related 等别名。
+      const mention = normalizeMention(str(o.mention) || str(o.ref)) || `图${i + 1}`;
+      const typeRaw = str(o.type);
+      const type =
+        typeRaw === "video" || typeRaw === "audio" || typeRaw === "image"
+          ? (typeRaw as MaterialElement["type"])
+          : mentionType(mention);
+      const role = str(o.role);
+      const related = o.product_related ?? o.productRelated;
+      return {
+        mention,
+        type,
+        description: str(o.description) || str(o.desc),
+        ...(role ? { role } : {}),
+        ...(typeof related === "boolean" ? { productRelated: related } : {}),
+        ...(str(o.sourceCardId) ? { sourceCardId: str(o.sourceCardId) } : {}),
+      };
+    })
+    .filter((e) => e.description.length > 0 || e.mention.length > 0);
+}
+
+/** 模型输出 / 持久化对象 → ProductInsights（best-effort）。 */
+export function coerceInsights(o: Record<string, unknown>): ProductInsights {
+  const elements = coerceElements(o.elements ?? o.materials);
+  const productName = str(o.productName);
+  const detected = typeof o.detected === "boolean" ? o.detected : productName.length > 0;
+  return {
+    detected,
+    productName,
+    category: str(o.category),
+    features: arr(o.features),
+    sellingPoints: arr(o.sellingPoints),
+    targetAudience: arr(o.targetAudience),
+    usageScenarios: arr(o.usageScenarios),
+    elements,
+  };
+}
+
+/** 持久化的 insights（可能 undefined/老结构）→ 规范结构；无有效内容返回 null。 */
+export function normalizeInsights(v: unknown): ProductInsights | null {
+  if (!v || typeof v !== "object") return null;
+  const ins = coerceInsights(v as Record<string, unknown>);
+  const has = ins.productName || ins.elements.length || ins.features.length || ins.sellingPoints.length;
+  return has ? ins : null;
 }

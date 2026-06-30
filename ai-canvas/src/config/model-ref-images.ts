@@ -135,7 +135,19 @@ export function getRefSlotsForChatModel(modelId: string): RefImageSlot[] {
 
 export type VideoImageMode = "firstLastFrame" | "reference";
 
+/**
+ * 解析旧卡片**缺失 / 非法** imageMode 字段时的兜底值。
+ * 历史视频卡多为首尾帧(首帧 + 尾帧),其图存在 `refFrames` —— 兜底必须保持 firstLastFrame,
+ * 否则老卡片会被当成参考模式、首尾帧图不显示。**这是「读旧卡」口径,不要拿它当「新卡默认」改。**
+ */
 export const DEFAULT_VIDEO_IMAGE_MODE: VideoImageMode = "firstLastFrame";
+
+/**
+ * **新建**视频卡片出生时写入的默认模式(产品默认:参考)。
+ * 与 {@link DEFAULT_VIDEO_IMAGE_MODE} 区分:那个是「读旧卡兜底」,这个是「造新卡默认」。
+ * 所有创建路径(CARD_DEFAULTS 及各创建菜单)统一引用此常量 —— 要改新卡默认,只改这一处。
+ */
+export const DEFAULT_NEW_VIDEO_IMAGE_MODE: VideoImageMode = "reference";
 
 export function resolveVideoImageMode(raw: string | undefined | null): VideoImageMode {
   if (raw === "firstLastFrame" || raw === "reference") return raw;

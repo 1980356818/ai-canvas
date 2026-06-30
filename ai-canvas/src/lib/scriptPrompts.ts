@@ -12,6 +12,7 @@
 
 import {
   type ScriptConfig,
+  type ProductInsights,
   businessLabel,
   contentTypeLabel,
   languageLabel,
@@ -27,6 +28,40 @@ function typeLabel(t: "image" | "video" | "audio"): string {
   return t === "video" ? "视频" : t === "audio" ? "音频" : "图片";
 }
 
+// ── ① 分析素材（视觉，带【图N】标签，出商品洞察 JSON，供向导编辑后喂给生成）──
+export const ANALYZE_SYSTEM_PROMPT = `你是资深电商短视频策划与商品分析师。用户会提供一组参考素材（图片/视频帧，可能附带文字补充），**每个素材在画面前已用【图1】【视频1】这样的标签标注**。请仅依据可见素材客观提炼，不要臆造素材中不存在的参数、品牌或卖点。
+
+要求：
+1. 全部用中文。
+2. 严格只返回一个 JSON 对象，不要任何解释文字，不要用 markdown 代码块包裹。
+3. detected：是否存在明确的主推商品（电商带货类为 true；纯生活记录/无明确商品为 false）。
+4. elements 必须逐一覆盖每个素材；mention **必须复用给定标签**（如 "图1"/"视频1"，不带 @，不要新造编号）；type 取 image/video/audio；role 描述素材角色（主体参考/动态参考/氛围/细节…）；product_related 标识是否与主推商品相关。
+5. JSON 结构如下（字段都必须有；无法判断的数组给空数组、字符串给空串、布尔给 false）：
+{
+  "detected": true,
+  "productName": "商品名称（含品牌/型号，若可见）",
+  "category": "商品类目（如：女装-连衣裙）",
+  "features": ["产品特性，3-6 条，客观描述外观/材质/结构"],
+  "sellingPoints": ["核心卖点，3-5 条，面向消费者的利益点"],
+  "targetAudience": ["目标人群，2-4 类"],
+  "usageScenarios": ["典型使用场景，3-5 个"],
+  "elements": [
+    {"mention": "图1", "type": "image", "role": "主体参考", "product_related": true, "description": "该素材画面内容的一句话客观描述"}
+  ]
+}`;
+
+/** 分析触发词：列出本次素材清单，要求模型在 elements[].mention 复用相同标签。 */
+export function buildAnalyzeUserPrompt(manifest: MaterialManifestItem[]): string {
+  if (manifest.length === 0) {
+    return "请分析以上参考素材，并严格按系统指令返回商品洞察 JSON。";
+  }
+  const lines = ["本次参考素材（已按标签标注，请逐一分析，elements[].mention 用相同标签）："];
+  for (const m of manifest) lines.push(`- ${m.mention}（${typeLabel(m.type)}）`);
+  lines.push("");
+  lines.push("请严格按系统指令返回商品洞察 JSON。");
+  return lines.join("\n");
+}
+
 export const SEEDANCE_SCRIPT_SYSTEM_PROMPT = `你是一个电商短视频策划助手，擅长根据产品图片反推商品卖点、人群、使用场景，并生成适合 Seedance 2.0 图生视频使用的分镜提示词。
 
 用户会提供：
@@ -38,6 +73,8 @@ export const SEEDANCE_SCRIPT_SYSTEM_PROMPT = `你是一个电商短视频策划�
 6. 补充说明
 
 产品图片以多模态形式随消息一起提供，并已用【图1】【图2】等标签逐张标注。在你的所有输出中，请统一用「@图1」「@图2」这样带 @ 的标签指代对应参考图（便于系统识别与下游自动配图），不要新造编号，也不要引用没有提供的图片。
+
+若消息里随附了【已确认的商品洞察】（用户已校对的商品名/类目/卖点/人群/场景/素材清单），第一步「产品分析结果」须以其为准、不得与之矛盾，可补充图中可见的新增细节。
 
 你的任务：
 先分析产品图，再根据用户选择生成一条适合电商转化的视频分镜脚本和 Seedance 2.0 视频生成提示词。
@@ -301,13 +338,39 @@ export const SEEDANCE_SCRIPT_SYSTEM_PROMPT = `你是一个电商短视频策划�
 - 不建议使用的夸张表达
 - 不建议进入视频画面的内容`;
 
-/** 用户输入区：把 config + 素材清单填入【用户输入】，喂给模型。 */
-export function buildSeedanceUserPrompt(config: ScriptConfig, manifest: MaterialManifestItem[]): string {
+/** 把用户校对过的商品洞察拼成「已确认洞察」块,生成时以其为准。 */
+function formatInsights(ins: ProductInsights): string {
+  const lines = ["【已确认的商品洞察（用户已校对，请据此创作，产品分析须与之一致，可补充图中细节但不得矛盾）】"];
+  if (!ins.detected) lines.push("（未识别到明确主推商品，请按通用叙事创作。）");
+  if (ins.productName) lines.push(`商品名称：${ins.productName}`);
+  if (ins.category) lines.push(`商品类目：${ins.category}`);
+  if (ins.features.length) lines.push(`产品特性：${ins.features.join("；")}`);
+  if (ins.sellingPoints.length) lines.push(`核心卖点：${ins.sellingPoints.join("；")}`);
+  if (ins.targetAudience.length) lines.push(`目标人群：${ins.targetAudience.join("、")}`);
+  if (ins.usageScenarios.length) lines.push(`使用场景：${ins.usageScenarios.join("、")}`);
+  if (ins.elements.length) {
+    lines.push("素材清单：");
+    for (const el of ins.elements) {
+      const meta = [typeLabel(el.type)];
+      if (el.role) meta.push(el.role);
+      lines.push(`- @${el.mention}（${meta.join("·")}）${el.description ? "：" + el.description : ""}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+/** 用户输入区：把（可选已确认洞察 +）config + 素材清单填入，喂给模型。 */
+export function buildSeedanceUserPrompt(
+  config: ScriptConfig,
+  manifest: MaterialManifestItem[],
+  insights?: ProductInsights,
+): string {
   const imgLines = manifest.length
     ? manifest.map((m) => `- @${m.mention}（${typeLabel(m.type)}）`).join("\n")
     : "（已在随附图片中按【图N】标注，请逐张分析）";
   const notes = config.notes?.trim() || "（无）";
-  return `【用户输入】
+  const insightsBlock = insights ? `${formatInsights(insights)}\n\n` : "";
+  return `${insightsBlock}【用户输入】
 
 产品图片：
 ${imgLines}

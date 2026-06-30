@@ -5,7 +5,7 @@ import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
 import { getRefSlotsForModel, getRefSlotsForChatModel, getRefSlotsForVideoModel, resolveVideoImageMode, type RefImageEntry } from "@/config/model-ref-images";
 import { upsertBySource, type RefImages } from "@/lib/refImageSlots";
-import { isSeedanceModel, isOmniModel } from "@/providers/shared/video";
+import { isSeedanceModel, isOmniModel, videoSupportsReferenceMode } from "@/providers/shared/video";
 import { createLogger } from "@/lib/debug";
 
 const log = createLogger("DataFlow");
@@ -138,9 +138,15 @@ export function canAcceptConnection(
     const frames = (td.refFrames as FrameRef[]) || [];
     if (frames.some((f) => f.sourceCardId === sourceCardId)) return true;
     if (frames.length < 2) return true;
-    // omni: 首尾帧满 2 帧后再连图 → 允许, 注入时自动切到参考模式 (P4-A, 见 injectIntoCard)。
-    if (isOmniModel((td.model as string) || "")) return true;
-    return { title: "参考帧已满", description: "最多 2 帧，请先断开已有连线" };
+    // 满 2 帧后再连图:只要模型支持参考模式就**一律接受** —— 注入时会自动切到参考模式、
+    // 把已有帧迁成参考图(见 injectIntoCard,omni 也走这条统一路径)。参考模式自身的容量
+    // (「参考图已满」)由上面 reference 分支兜底,这里不做帧/槽数量拦截。
+    // 只有「压根没有参考模式」的基础 i2v 模型才在这里拒绝。
+    if (videoSupportsReferenceMode((td.model as string) || "")) return true;
+    return {
+      title: "该模型仅支持首尾帧",
+      description: "最多 2 张(首帧 + 尾帧),该模型没有参考模式",
+    };
   }
 
   // video → ai_chat / ai_script
@@ -502,9 +508,11 @@ function injectIntoCard(
             d.refFrames = frames;
             d.upstreamCardId = sourceCardId;
             changed = true;
-          } else if (isOmniModel((d.model as string) || "")) {
-            // omni P4-A: 首尾帧已满 2 帧 (i2v 上游仅吃首+尾), 第 3 张图 → 自动切参考模式 (r2v),
-            // 把已有 2 帧 + 新图都迁到 refImages, 清空 refFrames。reference 槽位足够 (OMNI 7 张)。
+          } else if (videoSupportsReferenceMode((d.model as string) || "")) {
+            // 首尾帧已满 2 帧后再来图:模型支持参考模式 → 自动切到参考 (r2v),把已有 2 帧 + 新图
+            // 全迁到 refImages、清空 refFrames。原 omni P4-A 现作为所有「支持参考」视频模型的统一路径
+            // (Seedance / Veo / Grok / SeedanceVip / SeedanceV2 / Omni)。迁移恒为「2 帧 + 1 图」共 3 张,
+            // 所有支持参考的模型参考槽都 ≥3,够放;后续更多图走上面 reference 分支按真实容量收口。
             const slots = getRefSlotsForVideoModel((d.model as string) || "", "reference");
             const migrated: Record<string, RefImageEntry> = {};
             [...frames, { url: payload.url, sourceCardId }].forEach((f, i) => {

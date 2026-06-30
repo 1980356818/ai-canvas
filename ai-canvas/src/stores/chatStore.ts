@@ -123,7 +123,6 @@ async function historyToUnified(history: ChatHistoryMessage[]): Promise<UnifiedM
   for (const msg of history) {
     const parts: UnifiedContentPart[] = [];
     for (const p of msg.content) {
-      // 占位、待生成、模型思考都不发给下一轮
       if (
         p.type === "loading" ||
         p.type === "image_pending" ||
@@ -135,11 +134,22 @@ async function historyToUnified(history: ChatHistoryMessage[]): Promise<UnifiedM
       if (p.type === "text") {
         parts.push({ type: "text", text: p.text });
       } else if (p.type === "image") {
-        const url = await mediaToApiRef(p.url);
-        parts.push({ type: "image", url });
+        try {
+          const url = await mediaToApiRef(p.url);
+          parts.push({ type: "image", url });
+        } catch {
+          console.warn("[chatStore] historyToUnified: image file missing, skipped:", p.url);
+          parts.push({ type: "text", text: "[图片文件已丢失]" });
+        }
       } else if (p.type === "video") {
-        const url = p.url ? await mediaToApiRef(p.url) : "";
-        parts.push({ type: "video", url });
+        if (!p.url) continue;
+        try {
+          const url = await mediaToApiRef(p.url);
+          parts.push({ type: "video", url });
+        } catch {
+          console.warn("[chatStore] historyToUnified: video file missing, skipped:", p.url);
+          parts.push({ type: "text", text: "[视频文件已丢失]" });
+        }
       }
     }
     result.push({ role: msg.role as UnifiedMessage["role"], content: parts });

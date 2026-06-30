@@ -1,11 +1,13 @@
 import { useEffect, useRef, useCallback } from "react";
 import { MessageSquare, ImageIcon, Video, Clapperboard } from "lucide-react";
 import { useConnectionStore } from "@/stores/connectionStore";
-import type { CardType, Connection } from "@/types";
+import type { CardType } from "@/types";
 import { useCardStore } from "@/stores/cardStore";
 import { useCanvasStore } from "@/stores/canvasStore";
 import { useProjectStore } from "@/stores/projectStore";
+import { useUIStore } from "@/stores/uiStore";
 import { autoSave } from "@/lib/autoSave";
+import { connectSourcesToTarget } from "@/lib/connectActions";
 import { cn } from "@/lib/utils";
 import { CARD_DEFAULTS } from "@/shared/constants";
 
@@ -71,19 +73,34 @@ export default function WireDropMenu() {
 
       useCardStore.getState().addCard(card);
 
-      const conn: Connection = {
-        id: crypto.randomUUID(),
+      // 扇入:把发起拖拽时选中的所有源卡都连到新建卡(单选时即原来的一条)。
+      // 新卡为空,首条必然连上;若多选超出新卡容量,多出的按顺序自动跳过。
+      const sourceIds =
+        pendingDrop.sourceCardIds && pendingDrop.sourceCardIds.length > 0
+          ? pendingDrop.sourceCardIds
+          : [pendingDrop.sourceCardId];
+      const { connected, rejected } = connectSourcesToTarget(
+        sourceIds,
+        card.id,
         projectId,
-        sourceCardId: pendingDrop.sourceCardId,
-        targetCardId: card.id,
-        createdAt: now,
-      };
-      useConnectionStore.getState().addConnection(conn);
+      );
 
       useCanvasStore.getState().setSelectedCardIds([card.id]);
       useCanvasStore.getState().setEditingCardId(card.id);
 
       autoSave.markDirty(card.id);
+
+      if (sourceIds.length > 1 && connected > 0) {
+        useUIStore.getState().addToast({
+          type: "info",
+          title: `已连接 ${connected} 个卡片到新卡片`,
+          description:
+            rejected > 0
+              ? `${rejected} 个无法连接（类型不兼容或参考位已满）`
+              : undefined,
+          duration: 2500,
+        });
+      }
       close();
     },
     [pendingDrop, close],

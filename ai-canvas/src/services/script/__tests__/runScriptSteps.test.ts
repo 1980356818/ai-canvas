@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { CanvasCard } from "@/types";
-import { DEFAULT_SCRIPT_CONFIG } from "@/lib/scriptModel";
+import { DEFAULT_SCRIPT_CONFIG, type ProductInsights } from "@/lib/scriptModel";
 import { buildSeedanceUserPrompt, SEEDANCE_SCRIPT_SYSTEM_PROMPT } from "@/lib/scriptPrompts";
 
 const { streamMock, buildMock } = vi.hoisted(() => ({
@@ -22,7 +22,7 @@ vi.mock("@/services/models", () => ({ modelService: { resolveProvider: vi.fn(() 
 vi.mock("@/hooks/useImageRefSources", () => ({ computeImageRefSources: vi.fn(() => []) }));
 vi.mock("@/config/model-ref-images", () => ({ getRefSlotsForChatModel: vi.fn(() => []) }));
 
-import { runScriptSeedance } from "@/services/script/runScriptSteps";
+import { runScriptSeedance, runScriptAnalyze } from "@/services/script/runScriptSteps";
 
 function makeCard(data: Record<string, unknown>): CanvasCard {
   return {
@@ -66,6 +66,38 @@ describe("runScriptSeedance · markdown 直出", () => {
   });
 });
 
+const INSIGHTS_JSON = JSON.stringify({
+  detected: true, productName: "朗菲风扇", category: "便携风扇",
+  features: ["香薰", "Type-C"], sellingPoints: ["清凉"], targetAudience: ["白领"],
+  usageScenarios: ["露营"], elements: [{ mention: "图1", type: "image", description: "正面" }],
+});
+
+describe("runScriptAnalyze · JSON 商品洞察", () => {
+  it("解析出商品洞察 + labelMedia", async () => {
+    streamMock.mockResolvedValue({ content: INSIGHTS_JSON, finishReason: "stop" });
+    const r = await runScriptAnalyze(card);
+    expect(r.productName).toBe("朗菲风扇");
+    expect(r.features).toEqual(["香薰", "Type-C"]);
+    expect(streamMock).toHaveBeenCalledTimes(1);
+    expect(buildMock).toHaveBeenCalledWith(expect.anything(), { labelMedia: true });
+  });
+
+  it("首次非法 JSON → 自动重试一次成功", async () => {
+    streamMock
+      .mockResolvedValueOnce({ content: "抱歉，我先解释一下……", finishReason: "stop" })
+      .mockResolvedValueOnce({ content: INSIGHTS_JSON, finishReason: "stop" });
+    const r = await runScriptAnalyze(card);
+    expect(r.productName).toBe("朗菲风扇");
+    expect(streamMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("两次都非法 → 抛错且只重试一次", async () => {
+    streamMock.mockResolvedValue({ content: "没有 JSON", finishReason: "stop" });
+    await expect(runScriptAnalyze(card)).rejects.toThrow();
+    expect(streamMock).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("buildSeedanceUserPrompt", () => {
   it("把配置 + 素材清单填入用户输入", () => {
     const p = buildSeedanceUserPrompt(
@@ -83,6 +115,19 @@ describe("buildSeedanceUserPrompt", () => {
 
   it("无素材时给兜底说明", () => {
     expect(buildSeedanceUserPrompt(DEFAULT_SCRIPT_CONFIG, [])).toContain("【图N】");
+  });
+
+  it("带已确认洞察 → 前置「已确认的商品洞察」块", () => {
+    const insights: ProductInsights = {
+      detected: true, productName: "碎花连衣裙", category: "女装-连衣裙",
+      features: ["碎花"], sellingPoints: ["显瘦"], targetAudience: ["女生"],
+      usageScenarios: ["约会"], elements: [{ mention: "图1", type: "image", description: "正面" }],
+    };
+    const p = buildSeedanceUserPrompt(DEFAULT_SCRIPT_CONFIG, [{ mention: "图1", type: "image" }], insights);
+    expect(p).toContain("已确认的商品洞察");
+    expect(p).toContain("碎花连衣裙");
+    expect(p).toContain("@图1");
+    expect(p.indexOf("已确认的商品洞察")).toBeLessThan(p.indexOf("【用户输入】")); // 前置
   });
 
   it("系统提示词含关键约束", () => {

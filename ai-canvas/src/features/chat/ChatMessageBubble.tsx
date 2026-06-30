@@ -179,6 +179,14 @@ function MediaLoadingCard({ mediaType }: { mediaType: "image" | "video" }) {
 
 function UserImageThumb({ url }: { url: string }) {
   const displayUrl = getDisplayUrl(url);
+  const [broken, setBroken] = useState(false);
+  if (broken) {
+    return (
+      <div className="flex h-16 w-16 items-center justify-center rounded-md border border-white/20 bg-muted/40">
+        <ImageIcon className="h-4 w-4 text-muted-foreground/50" />
+      </div>
+    );
+  }
   return (
     <img
       src={displayUrl}
@@ -186,6 +194,7 @@ function UserImageThumb({ url }: { url: string }) {
       className="h-16 w-16 rounded-md border border-white/20 object-cover"
       loading="lazy"
       decoding="async"
+      onError={() => setBroken(true)}
     />
   );
 }
@@ -200,6 +209,7 @@ function ImageBlock({
   prompt?: string;
 }) {
   const displayUrl = getDisplayUrl(url);
+  const [broken, setBroken] = useState(false);
 
   const handleCopyPrompt = useCallback(() => {
     if (prompt) navigator.clipboard.writeText(prompt);
@@ -226,6 +236,24 @@ function ImageBlock({
     }
   }, [url]);
 
+  if (broken) {
+    return (
+      <div className="mt-1.5 mb-1 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-4 text-xs text-muted-foreground">
+        <ImageIcon className="h-4 w-4 shrink-0" />
+        <span>图片文件已丢失</span>
+        {prompt && (
+          <button
+            onClick={handleCopyPrompt}
+            className="ml-auto text-[10px] text-primary hover:underline"
+            title="复制 Prompt"
+          >
+            复制 Prompt
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="group relative mt-1.5 mb-1 overflow-hidden rounded-lg">
       <img
@@ -236,6 +264,7 @@ function ImageBlock({
         onDragStart={handleDragStart}
         loading="lazy"
         decoding="async"
+        onError={() => setBroken(true)}
       />
       <div className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
         {prompt && (
@@ -269,6 +298,7 @@ function VideoBlock({
   prompt?: string;
 }) {
   const [playing, setPlaying] = useState(false);
+  const [broken, setBroken] = useState(false);
   const displayUrl = getDisplayUrl(url);
 
   const handleCopyPrompt = useCallback(() => {
@@ -286,6 +316,24 @@ function VideoBlock({
     [url, prompt],
   );
 
+  if (broken) {
+    return (
+      <div className="mt-1.5 mb-1 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-4 text-xs text-muted-foreground">
+        <Video className="h-4 w-4 shrink-0" />
+        <span>视频文件已丢失</span>
+        {prompt && (
+          <button
+            onClick={handleCopyPrompt}
+            className="ml-auto text-[10px] text-primary hover:underline"
+            title="复制 Prompt"
+          >
+            复制 Prompt
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className="group relative mt-1.5 mb-1 overflow-hidden rounded-lg bg-black/5"
@@ -299,6 +347,7 @@ function VideoBlock({
         preload="none"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
+        onError={() => setBroken(true)}
         onClick={(e) => {
           if (!playing) {
             (e.target as HTMLVideoElement).play();

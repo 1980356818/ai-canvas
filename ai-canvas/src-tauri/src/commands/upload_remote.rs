@@ -186,7 +186,21 @@ pub async fn upload_to_server(
     let prewarm = prewarm.unwrap_or(false);
 
     let data_dir = state.data_dir.clone();
-    let abs_path = resolve_input_path(&path, &data_dir)?;
+    let abs_path = match resolve_input_path(&path, &data_dir) {
+        Ok(p) => p,
+        Err(err) => {
+            if err.contains("文件不存在") {
+                if let Some(cached) = lookup_cache_by_path_hint(&state, &path, &data_dir, &provider)? {
+                    tracing::info!(
+                        "[upload_to_server] file missing but cache hit via path_hint: path={}, url={}",
+                        path, cached.url
+                    );
+                    return Ok(cached);
+                }
+            }
+            return Err(err);
+        }
+    };
 
     let size = tokio::fs::metadata(&abs_path)
         .await
@@ -717,6 +731,101 @@ fn lookup_cache(
     )
     .optional()
     .map_err(|e| format!("查询上传缓存失败: {}", e))
+}
+
+/// 本地文件已丢失时,用 `local_path_hint` 反查 `uploaded_files` 缓存。
+///
+/// 文件名含 UUID 全局唯一,用 `LIKE '%<filename>'` 匹配,无视路径前缀差异
+/// (canonicalize `\\?\` 前缀 / data_dir 迁移等)。命中则直接返回已上传的
+/// server URL,省去一次重新上传。
+fn lookup_cache_by_path_hint(
+    state: &State<'_, AppState>,
+    input: &str,
+    _data_dir: &std::path::Path,
+    provider: &str,
+) -> Result<Option<UploadResult>, String> {
+    let rel = input.strip_prefix("local://").unwrap_or(input);
+    let filename = std::path::Path::new(rel)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("");
+    if filename.is_empty() {
+        return Ok(None);
+    }
+
+    let (base_url, _) = {
+        let db = state.db.lock().map_err(|e| format!("db lock: {}", e))?;
+        let config = read_full_api_config(&db, provider)?;
+        (config.base_url, ())
+    };
+    if base_url.is_empty() {
+        return Ok(None);
+    }
+
+    let pattern = format!("%{}", filename);
+    let db = state.db.lock().map_err(|e| format!("db lock: {}", e))?;
+    let result = db.query_row(
+        "SELECT remote_url, content_type, sha256, size_bytes FROM uploaded_files \
+         WHERE local_path_hint LIKE ?1 AND server_origin = ?2 \
+         ORDER BY last_used_at DESC LIMIT 1",
+        rusqlite::params![pattern, base_url],
+        |row| {
+            Ok(UploadResult {
+                url: row.get(0)?,
+                sha256: row.get(2)?,
+                content_type: row.get(1)?,
+                size: row.get::<_, i64>(3)? as u64,
+                cached: true,
+            })
+        },
+    );
+    match result {
+        Ok(r) => {
+            let now = now_unix_secs();
+            let _ = db.execute(
+                "UPDATE uploaded_files SET last_used_at = ?1 \
+                 WHERE sha256 = ?2 AND server_origin = ?3",
+                rusqlite::params![now, r.sha256, base_url],
+            );
+            Ok(Some(r))
+        }
+        Err(rusqlite::Error::QueryReturnedNoRows) => {
+            // 也试一下不限 server_origin — 换过 provider 但文件还是同一份
+            let fallback = db.query_row(
+                "SELECT remote_url, content_type, sha256, size_bytes, server_origin \
+                 FROM uploaded_files \
+                 WHERE local_path_hint LIKE ?1 \
+                 ORDER BY last_used_at DESC LIMIT 1",
+                rusqlite::params![pattern],
+                |row| {
+                    Ok((
+                        UploadResult {
+                            url: row.get(0)?,
+                            sha256: row.get(2)?,
+                            content_type: row.get(1)?,
+                            size: row.get::<_, i64>(3)? as u64,
+                            cached: true,
+                        },
+                        row.get::<_, String>(4)?,
+                    ))
+                },
+            );
+            match fallback {
+                Ok((r, origin)) => {
+                    let now = now_unix_secs();
+                    let _ = db.execute(
+                        "UPDATE uploaded_files SET last_used_at = ?1 \
+                         WHERE sha256 = ?2 AND server_origin = ?3",
+                        rusqlite::params![now, r.sha256, origin],
+                    );
+                    Ok(Some(r))
+                }
+                Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                Err(e) => Err(format!("查询上传缓存失败: {}", e)),
+            }
+        }
+        Err(e) => Err(format!("查询上传缓存失败: {}", e)),
+    }
 }
 
 fn touch_last_used(
